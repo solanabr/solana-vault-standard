@@ -1,0 +1,8 @@
+[fuzz.metrics]
+enabled = true
+
+
+[[fuzz.programs]]
+address = "SVS1VauLt1111111111111111111111111111111111"
+program = "../target/deploy/svs_1.so"
+ 
