@@ -1,5 +1,10 @@
 import { BN, Program, AnchorProvider } from "@coral-xyz/anchor";
-import { PublicKey, SystemProgram, SYSVAR_RENT_PUBKEY } from "@solana/web3.js";
+import {
+  PublicKey,
+  SystemProgram,
+  SYSVAR_RENT_PUBKEY,
+  Connection,
+} from "@solana/web3.js";
 import {
   TOKEN_PROGRAM_ID,
   TOKEN_2022_PROGRAM_ID,
@@ -10,6 +15,42 @@ import {
 
 import { deriveVaultAddresses } from "./pda";
 import * as math from "./math";
+
+/**
+ * Detect which token program owns a mint account.
+ * Returns TOKEN_PROGRAM_ID for SPL Token or TOKEN_2022_PROGRAM_ID for Token-2022.
+ */
+export async function getTokenProgramForMint(
+  connection: Connection,
+  mint: PublicKey,
+): Promise<PublicKey> {
+  const accountInfo = await connection.getAccountInfo(mint);
+  if (!accountInfo) {
+    throw new Error(`Mint account not found: ${mint.toBase58()}`);
+  }
+
+  if (accountInfo.owner.equals(TOKEN_2022_PROGRAM_ID)) {
+    return TOKEN_2022_PROGRAM_ID;
+  }
+  if (accountInfo.owner.equals(TOKEN_PROGRAM_ID)) {
+    return TOKEN_PROGRAM_ID;
+  }
+
+  throw new Error(
+    `Unknown token program for mint: ${accountInfo.owner.toBase58()}`,
+  );
+}
+
+/**
+ * Check if a mint uses Token-2022 program
+ */
+export async function isToken2022Mint(
+  connection: Connection,
+  mint: PublicKey,
+): Promise<boolean> {
+  const program = await getTokenProgramForMint(connection, mint);
+  return program.equals(TOKEN_2022_PROGRAM_ID);
+}
 
 export interface VaultState {
   authority: PublicKey;
@@ -62,6 +103,8 @@ export class SolanaVault {
   readonly assetMint: PublicKey;
   readonly assetVault: PublicKey;
   readonly vaultId: BN;
+  /** Token program for the asset mint (SPL Token or Token-2022) */
+  readonly assetTokenProgram: PublicKey;
 
   private _state: VaultState | null = null;
 
@@ -73,6 +116,7 @@ export class SolanaVault {
     assetMint: PublicKey,
     assetVault: PublicKey,
     vaultId: BN,
+    assetTokenProgram: PublicKey,
   ) {
     this.program = program;
     this.provider = provider;
@@ -81,6 +125,7 @@ export class SolanaVault {
     this.assetMint = assetMint;
     this.assetVault = assetVault;
     this.vaultId = vaultId;
+    this.assetTokenProgram = assetTokenProgram;
   }
 
   /**
@@ -91,25 +136,33 @@ export class SolanaVault {
     assetMint: PublicKey,
     vaultId: BN | number,
   ): Promise<SolanaVault> {
+    const provider = program.provider as AnchorProvider;
     const id = typeof vaultId === "number" ? new BN(vaultId) : vaultId;
     const addresses = deriveVaultAddresses(program.programId, assetMint, id);
+
+    // Detect asset mint's token program (SPL Token or Token-2022)
+    const assetTokenProgram = await getTokenProgramForMint(
+      provider.connection,
+      assetMint,
+    );
 
     const assetVault = getAssociatedTokenAddressSync(
       assetMint,
       addresses.vault,
       true,
-      TOKEN_PROGRAM_ID,
+      assetTokenProgram,
       ASSOCIATED_TOKEN_PROGRAM_ID,
     );
 
     const vault = new SolanaVault(
       program,
-      program.provider as AnchorProvider,
+      provider,
       addresses.vault,
       addresses.sharesMint,
       assetMint,
       assetVault,
       id,
+      assetTokenProgram,
     );
 
     await vault.refresh();
@@ -134,11 +187,17 @@ export class SolanaVault {
       id,
     );
 
+    // Detect asset mint's token program (SPL Token or Token-2022)
+    const assetTokenProgram = await getTokenProgramForMint(
+      provider.connection,
+      params.assetMint,
+    );
+
     const assetVault = getAssociatedTokenAddressSync(
       params.assetMint,
       addresses.vault,
       true,
-      TOKEN_PROGRAM_ID,
+      assetTokenProgram,
       ASSOCIATED_TOKEN_PROGRAM_ID,
     );
 
@@ -150,7 +209,7 @@ export class SolanaVault {
         assetMint: params.assetMint,
         sharesMint: addresses.sharesMint,
         assetVault: assetVault,
-        assetTokenProgram: TOKEN_PROGRAM_ID,
+        assetTokenProgram: assetTokenProgram,
         token2022Program: TOKEN_2022_PROGRAM_ID,
         associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
@@ -205,7 +264,7 @@ export class SolanaVault {
       this.assetMint,
       owner,
       false,
-      TOKEN_PROGRAM_ID,
+      this.assetTokenProgram,
       ASSOCIATED_TOKEN_PROGRAM_ID,
     );
   }
@@ -229,7 +288,7 @@ export class SolanaVault {
         assetVault: this.assetVault,
         sharesMint: this.sharesMint,
         userSharesAccount,
-        assetTokenProgram: TOKEN_PROGRAM_ID,
+        assetTokenProgram: this.assetTokenProgram,
         token2022Program: TOKEN_2022_PROGRAM_ID,
         associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
@@ -254,7 +313,7 @@ export class SolanaVault {
         assetVault: this.assetVault,
         sharesMint: this.sharesMint,
         userSharesAccount,
-        assetTokenProgram: TOKEN_PROGRAM_ID,
+        assetTokenProgram: this.assetTokenProgram,
         token2022Program: TOKEN_2022_PROGRAM_ID,
         associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
@@ -279,7 +338,7 @@ export class SolanaVault {
         assetVault: this.assetVault,
         sharesMint: this.sharesMint,
         userSharesAccount,
-        assetTokenProgram: TOKEN_PROGRAM_ID,
+        assetTokenProgram: this.assetTokenProgram,
         token2022Program: TOKEN_2022_PROGRAM_ID,
       })
       .rpc();
@@ -302,7 +361,7 @@ export class SolanaVault {
         assetVault: this.assetVault,
         sharesMint: this.sharesMint,
         userSharesAccount,
-        assetTokenProgram: TOKEN_PROGRAM_ID,
+        assetTokenProgram: this.assetTokenProgram,
         token2022Program: TOKEN_2022_PROGRAM_ID,
       })
       .rpc();
@@ -497,5 +556,12 @@ export class SolanaVault {
   async getDecimalsOffset(): Promise<number> {
     const state = await this.getState();
     return state.decimalsOffset;
+  }
+
+  /**
+   * Check if the asset uses Token-2022 program
+   */
+  isAssetToken2022(): boolean {
+    return this.assetTokenProgram.equals(TOKEN_2022_PROGRAM_ID);
   }
 }

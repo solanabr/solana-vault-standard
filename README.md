@@ -26,10 +26,12 @@ SVS-1 provides a secure, standardized way to build tokenized vaults on Solana. D
 
 | Component | Program | Reason |
 |-----------|---------|--------|
-| Asset Mint | SPL Token | Existing tokens (USDC, SOL, etc.) |
-| Asset Vault | SPL Token | Holds deposited assets |
+| Asset Mint | SPL Token or Token-2022 | Auto-detected from mint |
+| Asset Vault | Matches asset mint | Must use same program as asset |
 | Shares Mint | **Token-2022** | Metadata extension for name/symbol/uri |
 | User Shares | **Token-2022** | Must match shares mint |
+
+The SDK automatically detects whether the asset mint uses SPL Token or Token-2022 and configures all accounts accordingly. This enables vaults for both legacy SPL tokens (USDC, etc.) and Token-2022 assets (future privacy tokens, transfer fees, etc.).
 
 ## Installation
 
