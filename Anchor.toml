@@ -6,9 +6,11 @@ skip-lint = false
 
 [programs.localnet]
 svs_1 = "SVS1VauLt1111111111111111111111111111111111"
+svs_2 = "SVS2VauLt2222222222222222222222222222222222"
 
 [programs.devnet]
 svs_1 = "SVS1VauLt1111111111111111111111111111111111"
+svs_2 = "SVS2VauLt2222222222222222222222222222222222"
 
 [registry]
 url = "https://api.apr.dev"

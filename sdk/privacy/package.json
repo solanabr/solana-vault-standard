@@ -1,0 +1,46 @@
+{
+  "name": "@stbr/svs-privacy-sdk",
+  "version": "0.1.0",
+  "description": "Privacy SDK for SVS-2 Confidential Vault with Token-2022 Confidential Transfers. Provides ElGamal/AES encryption, ZK proof structures, and Privacy Cash integration for full transactional privacy.",
+  "keywords": [
+    "solana",
+    "token-2022",
+    "confidential-transfer",
+    "elgamal",
+    "zk-proofs",
+    "privacy",
+    "vault"
+  ],
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "NODE_OPTIONS='--no-experimental-strip-types' mocha -r ts-node/register tests/**/*.ts",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@coral-xyz/anchor": "^0.31.1",
+    "@solana/spl-token": "^0.4.10",
+    "@solana/web3.js": "^1.98.0",
+    "@stbr/svs-core-sdk": "*",
+    "tweetnacl": "^1.0.3"
+  },
+  "devDependencies": {
+    "@types/chai": "^4.3.20",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^22.10.0",
+    "chai": "^4.5.0",
+    "mocha": "^10.8.2",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.7.3"
+  },
+  "peerDependencies": {
+    "@coral-xyz/anchor": ">=0.31.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

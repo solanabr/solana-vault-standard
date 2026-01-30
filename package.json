@@ -1,10 +1,18 @@
 {
-  "name": "@stbr/svs-1-tests",
+  "name": "@stbr/tokenized-vault-standard",
   "version": "0.1.0",
-  "description": "Tests for SVS-1 Solana Vault Standard",
+  "private": true,
+  "description": "Solana Vault Standards - SVS-1 (public) and SVS-2 (confidential)",
+  "workspaces": [
+    "sdk/core",
+    "sdk/privacy"
+  ],
   "scripts": {
+    "build": "yarn workspaces foreach -A run build",
     "test": "anchor test",
-    "test:local": "anchor test --skip-local-validator"
+    "test:local": "anchor test --skip-local-validator",
+    "test:sdk": "yarn workspaces foreach -A run test",
+    "clean": "yarn workspaces foreach -A run clean"
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.31.1",
