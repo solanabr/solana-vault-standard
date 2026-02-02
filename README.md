@@ -1,12 +1,89 @@
-# SVS-1: Solana Vault Standard
+# Solana Vault Standard (SVS)
 
-ERC-4626 equivalent for Solana - a standardized tokenized vault interface for SPL tokens.
+ERC-4626 equivalent for Solana - standardized tokenized vault interfaces with optional privacy.
 
-## Overview
+## SVS Roadmap
 
-SVS-1 provides a secure, standardized way to build tokenized vaults on Solana. Deposit assets, receive proportional shares (LP tokens), and redeem shares back for assets. The standard includes built-in inflation attack protection and a predictable rounding strategy that favors vault solvency.
+| Version | Name | Privacy | Backend Required | Status |
+|---------|------|---------|------------------|--------|
+| **SVS-1** | Public Vault | None | No | Production-ready |
+| **SVS-2** | Confidential Vault | Encrypted balances | Yes (Rust backend) | Beta |
+| **SVS-3** | Native Confidential | Encrypted balances | No (WASM) | Planned (mid-2026) |
+| **SVS-4+** | Privacy Stack Variants | Full unlinkability | Varies | Planned |
 
-**Program ID:** `SVS1VauLt1111111111111111111111111111111111`
+### SVS-1: Simple Public Vault
+
+Standard tokenized vault with visible balances. Deposits assets, mints proportional share tokens, redeems shares for assets. All balances visible on-chain. Production-ready implementation of ERC-4626 on Solana.
+
+### SVS-2: Confidential Vault with Backend Proxy
+
+The first privacy-preserving vault implementation. Uses a three-layer stack:
+
+1. **Token-2022 Confidential Transfers Extension** - ElGamal encryption for share balances
+2. **Privacy Cash Integration** - Shielded pool for address unlinkability
+3. **Rust Proof Backend** - Server-side ZK proof generation
+
+**Why a backend?** Token-2022's Confidential Transfers require ZK proofs (PubkeyValidityProof, EqualityProof, RangeProof) that use elliptic curve operations on curve25519 (Ristretto). These cannot be performed in JavaScript - the `solana-zk-sdk` has no WASM bindings (expected mid-2026). The Rust backend bridges this gap by exposing proof generation as REST endpoints.
+
+```
+┌─────────────────┐     ┌────────────────────┐     ┌─────────────────┐
+│   JS Frontend   │────▶│  Rust Proof Backend│────▶│  Solana Network │
+│  (Privacy SDK)  │     │  (solana-zk-sdk)   │     │  (ZK ElGamal)   │
+└─────────────────┘     └────────────────────┘     └─────────────────┘
+        │                        │
+        │ 1. Sign message        │ 2. Generate ZK proof
+        │ 2. Request proof       │    (curve25519/Ristretto)
+        │ 3. Get proof bytes     │
+        └────────────────────────┘
+```
+
+### SVS-3: Native Confidential (Planned)
+
+Once `solana-zk-sdk` WASM bindings ship (expected mid-2026), SVS-3 will provide the same confidential vault functionality entirely client-side. No backend required - all proof generation happens in the browser/wallet.
+
+### SVS-4+: Privacy Stack Variations (Planned)
+
+Future variants may include:
+- Stealth addresses for recipient privacy
+- Distros with Cloak.xyz integrated
+- Cross-chain private bridges
+- etc
+
+---
+
+## Program IDs
+
+| Program | ID |
+|---------|-----|
+| SVS-1 | `SVS1VauLt1111111111111111111111111111111111` |
+| SVS-2 | `SVS2VauLt2222222222222222222222222222222222` |
+
+## Three-Tier Privacy Architecture
+
+| Level | Program | SDK | What's Hidden |
+|-------|---------|-----|---------------|
+| **None** | SVS-1 | `@stbr/svs-sdk` | Nothing |
+| **Amount** | SVS-2 | `@stbr/svs-privacy-sdk` | Share balances (encrypted) |
+| **Full** | SVS-2 + Privacy Cash | `@stbr/svs-privacy-sdk` | Addresses + amounts |
+
+## Installation
+
+```bash
+# Core SDK (SVS-1)
+npm install @stbr/svs-sdk
+
+# Privacy SDK (SVS-2 + Privacy Cash)
+npm install @stbr/svs-privacy-sdk
+
+# Backend (for SVS-2 proof generation)
+cd proof-backend && cargo run
+```
+
+---
+
+# SVS-1: Public Vault
+
+Standard tokenized vault with visible balances.
 
 ## Features
 
@@ -19,132 +96,202 @@ SVS-1 provides a secure, standardized way to build tokenized vaults on Solana. D
 | **Multi-Vault Support** | Multiple vaults per asset via `vault_id` |
 | **Emergency Controls** | Pause/unpause and authority transfer |
 | **CPI-Composable Views** | Preview functions callable from other programs |
-| **SPL Token Assets** | Works with any SPL token (up to 9 decimals) |
-| **Token-2022 Shares** | LP tokens use Token-2022 with on-chain metadata |
-
-## Token Programs
-
-| Component | Program | Reason |
-|-----------|---------|--------|
-| Asset Mint | SPL Token or Token-2022 | Auto-detected from mint |
-| Asset Vault | Matches asset mint | Must use same program as asset |
-| Shares Mint | **Token-2022** | Metadata extension for name/symbol/uri |
-| User Shares | **Token-2022** | Must match shares mint |
-
-The SDK automatically detects whether the asset mint uses SPL Token or Token-2022 and configures all accounts accordingly. This enables vaults for both legacy SPL tokens (USDC, etc.) and Token-2022 assets (future privacy tokens, transfer fees, etc.).
-
-## Installation
-
-```bash
-# Anchor
-anchor add svs_1
-
-# npm
-npm install @svs-1/sdk
-
-# yarn
-yarn add @svs-1/sdk
-```
 
 ## Quick Start
 
-### Initialize a Vault
-
 ```typescript
-import { Program, AnchorProvider } from "@coral-xyz/anchor";
-import { PublicKey, SystemProgram } from "@solana/web3.js";
-import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
-import { SVS1 } from "@svs-1/sdk";
+import { SolanaVault } from "@stbr/svs-sdk";
 
-const program = new Program(idl, provider);
-const vaultId = new BN(1);
+// Initialize vault wrapper
+const vault = new SolanaVault(program, vaultPda);
 
-// Derive vault PDA
-const [vaultPda] = PublicKey.findProgramAddressSync(
-  [
-    Buffer.from("vault"),
-    assetMint.toBuffer(),
-    vaultId.toArrayLike(Buffer, "le", 8)
-  ],
-  program.programId
-);
+// Deposit assets
+const shares = await vault.deposit(assets, minSharesOut);
 
-// Derive shares mint PDA
-const [sharesMint] = PublicKey.findProgramAddressSync(
-  [Buffer.from("shares"), vaultPda.toBuffer()],
-  program.programId
-);
+// Redeem shares
+const assetsReceived = await vault.redeem(shares, minAssetsOut);
 
-await program.methods
-  .initialize(
-    vaultId,
-    "Vault USDC",
-    "vUSDC",
-    "https://metadata.uri"
-  )
-  .accounts({
-    vault: vaultPda,
-    authority: wallet.publicKey,
-    assetMint: usdcMint,
-    sharesMint,
-    assetVault: assetVaultAta,
-    tokenProgram: TOKEN_PROGRAM_ID,
-    systemProgram: SystemProgram.programId,
-  })
-  .rpc();
+// Preview operations
+const expectedShares = await vault.previewDeposit(assets);
 ```
 
-### Deposit Assets
+## Core Operations
+
+| Operation | User Action | Rounding | Favors |
+|-----------|-------------|----------|--------|
+| **deposit** | Pay exact assets -> receive shares | Floor | Vault |
+| **mint** | Receive exact shares -> pay assets | Ceiling | Vault |
+| **withdraw** | Receive exact assets -> burn shares | Ceiling | Vault |
+| **redeem** | Burn exact shares -> receive assets | Floor | Vault |
+
+---
+
+# SVS-2: Confidential Vault
+
+Privacy-preserving vault with encrypted share balances.
+
+## Features
+
+All SVS-1 features plus:
+
+| Feature | Description |
+|---------|-------------|
+| **Encrypted Balances** | Share balances encrypted with ElGamal |
+| **Owner Decryption** | Only owner can decrypt their balance (AES-GCM) |
+| **Optional Auditor** | Compliance-friendly auditor key support |
+| **ZK Proof Verification** | Native ZK ElGamal Proof program integration |
+| **Privacy Cash Ready** | Full address unlinkability with Privacy Cash |
+
+## How It Works
+
+1. **Vault Creation**: Shares mint initialized with ConfidentialTransferMint extension
+2. **Account Setup**: Users configure their account with ElGamal keypair (requires backend proof)
+3. **Deposits**: Assets deposited, shares minted to encrypted pending balance
+4. **Apply Pending**: User moves pending balance to available (encrypted)
+5. **Withdrawals**: User proves balance ownership via ZK proofs (requires backend), receives assets
+
+## SDK Usage with Backend
 
 ```typescript
-const assets = new BN(1_000_000); // 1 USDC (6 decimals)
-const minSharesOut = new BN(900_000); // Allow 10% slippage
+import {
+  configureProofBackend,
+  createPubkeyValidityProofViaBackend,
+  isProofBackendAvailable,
+} from "@stbr/svs-privacy-sdk";
 
-await program.methods
-  .deposit(assets, minSharesOut)
-  .accounts({
-    vault: vaultPda,
-    sharesMint,
-    assetVault,
-    depositorAssets: userUsdcAta,
-    depositorShares: userSharesAta,
-    depositor: wallet.publicKey,
-    tokenProgram: TOKEN_PROGRAM_ID,
-  })
-  .rpc();
+// Configure backend URL (call once at startup)
+configureProofBackend("http://localhost:3001", "your-api-key");
+
+// Check backend availability
+if (await isProofBackendAvailable()) {
+  // Generate PubkeyValidityProof for ConfigureAccount
+  const { proofData, elgamalPubkey } = await createPubkeyValidityProofViaBackend(
+    wallet,
+    tokenAccount
+  );
+
+  // Use proof in instruction
+  const configureIx = createConfigureAccountInstruction(
+    tokenAccount,
+    mint,
+    owner,
+    elgamalPubkey,
+    proofData,
+  );
+}
 ```
 
-### Redeem Shares
+## Proof Backend Setup
 
-```typescript
-const shares = new BN(500_000); // Redeem 0.5 shares
-const minAssetsOut = new BN(450_000); // Slippage protection
+The Rust backend generates ZK proofs for Token-2022 Confidential Transfers.
 
-await program.methods
-  .redeem(shares, minAssetsOut)
-  .accounts({
-    vault: vaultPda,
-    sharesMint,
-    assetVault,
-    redeemerShares: userSharesAta,
-    redeemerAssets: userUsdcAta,
-    redeemer: wallet.publicKey,
-    tokenProgram: TOKEN_PROGRAM_ID,
-  })
-  .rpc();
+```bash
+# Development
+cd proof-backend && cargo run
+
+# Production (Docker)
+cd proof-backend && docker compose up -d
+
+# With API keys
+API_KEYS=your-secret-key docker compose up -d
 ```
 
-### Preview Operations
+See [proof-backend/README.md](proof-backend/README.md) for full API documentation.
+
+### Backend Endpoints
+
+| Endpoint | Proof Type | Required For |
+|----------|------------|--------------|
+| `POST /api/proofs/pubkey-validity` | PubkeyValidityProof | ConfigureAccount |
+| `POST /api/proofs/equality` | CiphertextCommitmentEqualityProof | Withdraw, Redeem |
+| `POST /api/proofs/range` | BatchedRangeProofU64 | Batched operations |
+
+### Security Model
+
+| Layer | Purpose |
+|-------|---------|
+| API Key | Prevents unauthorized access |
+| Wallet Signature | Proves request authenticity |
+| Timestamp | Prevents replay attacks (5 min window) |
+| Request Limit | 64KB body size limit |
+
+## Feature Availability
+
+| Feature | JS SDK Only | With Backend |
+|---------|-------------|--------------|
+| Key derivation (ElGamal, AES) | Works | Works |
+| Instruction builders | Works | Works |
+| Confidential deposits | Works | Works |
+| ConfigureAccount | Blocked | Works |
+| Withdraw / Redeem | Blocked | Works |
+| Transfer | Blocked | Works |
+| ApplyPendingBalance | Partial | Works |
+
+## Full Privacy with Privacy Cash
+
+For complete address unlinkability, combine SVS-2 with Privacy Cash:
 
 ```typescript
-// Preview shares from deposit (off-chain)
-const previewTx = await program.methods
-  .previewDeposit(new BN(1_000_000))
-  .accounts({ vault: vaultPda })
-  .simulate();
+import { PrivacySolanaVault } from "@stbr/svs-privacy-sdk";
 
-// Check return data for shares amount
-const returnData = previewTx.returnData;
+const vault = new PrivacySolanaVault(connection, vaultPda);
+
+// Private deposit: shields assets, breaks address link, deposits to vault
+await vault.privateDeposit({
+  assets: 1000_000000,
+  wallet,
+});
+
+// Private withdraw: reverse flow
+await vault.privateWithdraw({
+  shares: 500_000000000,
+  wallet,
+});
+```
+
+---
+
+## Architecture
+
+```
++--------------------------------------------------------------------+
+|                    Solana Vault Standard                           |
++--------------------------------------------------------------------+
+|                                                                    |
+|   SVS-1 (Public)              SVS-2 (Confidential)                 |
+|   +------------------+        +------------------+                 |
+|   | Vault Account    |        | Confidential     |                 |
+|   | - authority      |        | Vault Account    |                 |
+|   | - asset_mint     |        | - authority      |                 |
+|   | - shares_mint    |        | - asset_mint     |                 |
+|   | - total_assets   |        | - shares_mint    |<-- Token-2022   |
+|   +--------+---------+        |   + CT Mint Ext  |    + CT Ext     |
+|            |                  | - auditor_key    |                 |
+|            v                  +--------+---------+                 |
+|   +------------------+                 |                           |
+|   |  User Shares     |                 v                           |
+|   |  (public u64)    |        +------------------+                 |
+|   +------------------+        |  User Shares     |                 |
+|                               |  (encrypted)     |                 |
+|                               |  - pending       |<-- ElGamal      |
+|                               |  - available     |                 |
+|                               |  - decryptable   |<-- AES-GCM      |
+|                               +------------------+                 |
+|                                        |                           |
+|                                        v                           |
+|                               +------------------+                 |
+|                               |  Proof Backend   |                 |
+|                               |  (Rust/Axum)     |                 |
+|                               +--------+---------+                 |
+|                                        |                           |
+|                                        v                           |
+|                               +------------------+                 |
+|                               |  ZK ElGamal      |                 |
+|                               |  Proof Program   |                 |
+|                               |  (Native)        |                 |
+|                               +------------------+                 |
+|                                                                    |
++--------------------------------------------------------------------+
 ```
 
 ## PDA Derivation
@@ -153,12 +300,8 @@ const returnData = previewTx.returnData;
 **Seeds:** `["vault", asset_mint, vault_id (u64 LE)]`
 
 ```typescript
-const [vault, bump] = PublicKey.findProgramAddressSync(
-  [
-    Buffer.from("vault"),
-    assetMint.toBuffer(),
-    vaultId.toArrayLike(Buffer, "le", 8)
-  ],
+const [vault] = PublicKey.findProgramAddressSync(
+  [Buffer.from("vault"), assetMint.toBuffer(), vaultId.toArrayLike(Buffer, "le", 8)],
   programId
 );
 ```
@@ -167,196 +310,39 @@ const [vault, bump] = PublicKey.findProgramAddressSync(
 **Seeds:** `["shares", vault_pubkey]`
 
 ```typescript
-const [sharesMint, bump] = PublicKey.findProgramAddressSync(
+const [sharesMint] = PublicKey.findProgramAddressSync(
   [Buffer.from("shares"), vault.toBuffer()],
   programId
 );
 ```
 
-## Architecture
-
-```
-┌─────────────────────────────────────────┐
-│           Solana Vault (SVS-1)          │
-├─────────────────────────────────────────┤
-│  Vault Account (PDA)                    │
-│  - authority                            │
-│  - asset_mint                           │
-│  - shares_mint (PDA)                    │
-│  - asset_vault (ATA)                    │
-│  - total_assets (cached)                │
-│  - decimals_offset (inflation protect)  │
-│  - paused flag                          │
-└─────────────────────────────────────────┘
-         │                    │
-         ▼                    ▼
-   ┌──────────┐        ┌──────────┐
-   │  Assets  │        │  Shares  │
-   │ (USDC)   │        │ (vUSDC)  │
-   └──────────┘        └──────────┘
-```
-
-### Core Operations
-
-| Operation | User Action | Rounding | Favors |
-|-----------|-------------|----------|--------|
-| **deposit** | Pay exact assets → receive shares | Floor | Vault |
-| **mint** | Receive exact shares → pay assets | Ceiling | Vault |
-| **withdraw** | Receive exact assets → burn shares | Ceiling | Vault |
-| **redeem** | Burn exact shares → receive assets | Floor | Vault |
-
-All rounding favors the vault to prevent share dilution attacks.
-
 ## Instructions
 
-### Core Operations
+### Core Operations (Both Programs)
 
-#### `initialize`
-Creates a new vault for an asset.
+| Instruction | Description |
+|-------------|-------------|
+| `initialize` | Create new vault |
+| `deposit` | Deposit assets, receive shares |
+| `mint` | Mint exact shares, pay assets |
+| `withdraw` | Withdraw exact assets, burn shares |
+| `redeem` | Burn shares, receive assets |
 
-**Accounts:**
-- `vault` (mut, init): Vault PDA
-- `authority` (signer): Vault admin
-- `asset_mint`: SPL token to accept (max 9 decimals)
-- `shares_mint` (mut, init): LP token mint (PDA)
-- `asset_vault` (mut, init): Token account holding assets
-- `token_program`: SPL Token Program
-- `system_program`: System Program
+### Admin Operations (Both Programs)
 
-**Arguments:**
-- `vault_id`: Unique identifier (allows multiple vaults per asset)
-- `name`: Shares token name
-- `symbol`: Shares token symbol
-- `uri`: Metadata URI
+| Instruction | Description |
+|-------------|-------------|
+| `pause` | Emergency pause vault |
+| `unpause` | Resume operations |
+| `transfer_authority` | Transfer admin rights |
+| `sync` | Sync total_assets with balance |
 
-**Security:**
-- Asset decimals must be ≤ 9
-- Shares mint always uses 9 decimals
-- Decimals offset calculated as `9 - asset_decimals`
+### SVS-2 Only
 
-#### `deposit`
-Deposit assets, receive shares (floor rounding).
-
-**Arguments:**
-- `assets`: Amount to deposit
-- `min_shares_out`: Minimum shares to receive (slippage protection)
-
-**Errors:**
-- `ZeroAmount`: assets = 0
-- `SlippageExceeded`: Shares received < min_shares_out
-- `VaultPaused`: Vault is paused
-- `DepositTooSmall`: assets < MIN_DEPOSIT_AMOUNT (1000)
-
-#### `mint`
-Mint exact shares by paying assets (ceiling rounding).
-
-**Arguments:**
-- `shares`: Exact shares to mint
-- `max_assets_in`: Maximum assets willing to pay
-
-**Errors:**
-- `ZeroAmount`: shares = 0
-- `SlippageExceeded`: Assets required > max_assets_in
-- `VaultPaused`: Vault is paused
-
-#### `withdraw`
-Withdraw exact assets by burning shares (ceiling rounding).
-
-**Arguments:**
-- `assets`: Exact assets to withdraw
-- `max_shares_in`: Maximum shares willing to burn
-
-**Errors:**
-- `ZeroAmount`: assets = 0
-- `SlippageExceeded`: Shares required > max_shares_in
-- `InsufficientShares`: User lacks required shares
-- `InsufficientAssets`: Vault lacks assets
-
-#### `redeem`
-Redeem shares for assets (floor rounding).
-
-**Arguments:**
-- `shares`: Amount to redeem
-- `min_assets_out`: Minimum assets to receive
-
-**Errors:**
-- `ZeroAmount`: shares = 0
-- `SlippageExceeded`: Assets received < min_assets_out
-- `InsufficientShares`: User lacks shares
-
-### Admin Operations
-
-#### `pause`
-Emergency pause all vault operations (deposit, mint, withdraw, redeem all blocked).
-
-**Accounts:**
-- `vault` (mut): Vault PDA
-- `authority` (signer): Current vault authority
-
-**Errors:**
-- `Unauthorized`: Caller is not authority
-
-#### `unpause`
-Resume normal vault operations.
-
-#### `transfer_authority`
-Transfer vault authority to new address.
-
-**Arguments:**
-- `new_authority`: New authority pubkey
-
-#### `sync`
-Sync `total_assets` with actual vault balance (useful after direct transfers).
-
-### View Functions
-
-All view functions return data via Solana return data (CPI-composable).
-
-#### `preview_deposit(assets: u64)`
-Calculate shares for deposit (floor).
-
-#### `preview_mint(shares: u64)`
-Calculate assets required for mint (ceiling).
-
-#### `preview_withdraw(assets: u64)`
-Calculate shares to burn for withdraw (ceiling).
-
-#### `preview_redeem(shares: u64)`
-Calculate assets received for redeem (floor).
-
-#### `convert_to_shares(assets: u64)`
-Convert assets to shares (floor).
-
-#### `convert_to_assets(shares: u64)`
-Convert shares to assets (floor).
-
-#### `total_assets()`
-Get total assets in vault.
-
-#### `max_deposit()`
-Maximum depositable assets (u64::MAX or 0 if paused).
-
-#### `max_mint()`
-Maximum mintable shares (u64::MAX or 0 if paused).
-
-#### `max_withdraw(owner: Pubkey)`
-Maximum assets owner can withdraw (based on share balance).
-
-#### `max_redeem(owner: Pubkey)`
-Maximum shares owner can redeem (their share balance).
-
-## Events
-
-All state changes emit events for indexing and monitoring:
-
-| Event | Fields |
-|-------|--------|
-| `VaultInitialized` | vault, authority, assetMint, sharesMint, vaultId |
-| `Deposit` | vault, caller, owner, assets, shares |
-| `Withdraw` | vault, caller, receiver, owner, assets, shares |
-| `VaultSynced` | vault, previousTotal, newTotal |
-| `VaultStatusChanged` | vault, paused |
-| `AuthorityTransferred` | vault, previousAuthority, newAuthority |
+| Instruction | Description |
+|-------------|-------------|
+| `configure_account` | Enable confidential mode on user account |
+| `apply_pending` | Move pending balance to available |
 
 ## Error Codes
 
@@ -371,7 +357,23 @@ All state changes emit events for indexing and monitoring:
 | 6006 | InsufficientShares | Not enough shares |
 | 6007 | InsufficientAssets | Not enough assets |
 | 6008 | Unauthorized | Not vault authority |
-| 6009 | DepositTooSmall | Below minimum deposit (1000) |
+| 6009 | DepositTooSmall | Below minimum deposit |
+| 6010 | AccountNotConfigured | Account not configured for confidential transfers (SVS-2) |
+| 6011 | PendingBalanceNotApplied | Pending balance not applied - call apply_pending first (SVS-2) |
+| 6012 | InvalidProof | Invalid ZK proof data (SVS-2) |
+| 6013 | ConfidentialTransferNotInitialized | CT extension not initialized (SVS-2) |
+| 6014 | InvalidCiphertext | Invalid ciphertext format (SVS-2) |
+
+## Events
+
+| Event | Description |
+|-------|-------------|
+| `VaultInitialized` | New vault created |
+| `Deposit` | Assets deposited |
+| `Withdraw` | Assets withdrawn |
+| `VaultSynced` | Total assets synced |
+| `VaultStatusChanged` | Pause/unpause |
+| `AuthorityTransferred` | Authority changed |
 
 ## Security
 
@@ -383,7 +385,6 @@ See [docs/SECURITY.md](docs/SECURITY.md) for detailed security information.
 - Slippage protection on all operations
 - Emergency pause mechanism
 - Checked arithmetic throughout
-- No `unwrap()` in program code
 - PDA bumps stored (not recalculated)
 
 **Audit Status:** Not audited. Use at your own risk.
@@ -391,80 +392,68 @@ See [docs/SECURITY.md](docs/SECURITY.md) for detailed security information.
 ## Testing
 
 ```bash
-# Build program
+# Build both programs
 anchor build
 
-# Run tests
+# Run all tests (97 passing)
 anchor test
 
-# Run fuzz tests
-cd trident-tests
-cargo test-sbf
+# Run SVS-1 tests only
+anchor test -- --grep "svs-1"
+
+# Run SVS-2 tests only
+anchor test -- --grep "svs-2"
+
+# Backend tests
+cd proof-backend && cargo test
 ```
 
-## Development
-
-### Project Structure
+## Project Structure
 
 ```
 tokenized-vault-standard/
-├── programs/svs-1/          # Anchor program
-│   └── src/
-│       ├── lib.rs           # Program entrypoint
-│       ├── state.rs         # Vault state
-│       ├── math.rs          # Share calculations
-│       ├── constants.rs     # Seeds and limits
-│       ├── error.rs         # Error codes
-│       └── instructions/    # Instruction handlers
-├── sdk/                     # TypeScript SDK
-├── tests/                   # Integration tests
-└── trident-tests/           # Fuzz tests
+├── programs/
+│   ├── svs-1/                    # Public vault program
+│   └── svs-2/                    # Confidential vault program
+├── sdk/
+│   ├── core/                     # @stbr/svs-sdk
+│   └── privacy/                  # @stbr/svs-privacy-sdk
+│       ├── src/
+│       │   ├── encryption.ts     # ElGamal/AES key derivation
+│       │   ├── proofs.ts         # ZK proof + backend integration
+│       │   ├── confidential-instructions.ts  # Token-2022 CT instructions
+│       │   ├── privacy-cash.ts   # Privacy Cash integration
+│       │   └── private-vault.ts  # Full privacy vault wrapper
+│       └── package.json
+├── proof-backend/                # Rust proof generation backend
+│   ├── src/
+│   │   ├── main.rs               # Axum server
+│   │   ├── routes/proofs.rs      # Proof endpoints
+│   │   └── services/proof_generator.rs  # ZK proof generation
+│   ├── Cargo.toml
+│   ├── Dockerfile
+│   └── README.md
+├── tests/
+│   ├── svs-1.ts                  # Public vault tests
+│   └── svs-2.ts                  # Confidential vault tests
+└── docs/
+    ├── ARCHITECTURE.md
+    ├── SECURITY.md
+    └── PRIVACY.md
 ```
 
-### Constants
+## Resources
 
-| Constant | Value | Description |
-|----------|-------|-------------|
-| `VAULT_SEED` | `"vault"` | Vault PDA seed prefix |
-| `SHARES_MINT_SEED` | `"shares"` | Shares mint PDA seed |
-| `MAX_DECIMALS` | 9 | Maximum asset decimals |
-| `SHARES_DECIMALS` | 9 | Fixed shares decimals |
-| `MIN_DEPOSIT_AMOUNT` | 1000 | Minimum deposit (prevents dust) |
-
-### Build
-
-```bash
-# Standard build
-anchor build
-
-# Verifiable build
-anchor build --verifiable
-
-# Check program size
-ls -lh target/deploy/svs_1.so
-```
+- [ERC-4626 Standard](https://eips.ethereum.org/EIPS/eip-4626)
+- [ERC-4626 on Solana](https://solana.com/pt/developers/evm-to-svm/erc4626)
+- [Token-2022 Confidential Transfers](https://solana.com/docs/tokens/extensions/confidential-transfer)
+- [ZK ElGamal Proof Program](https://docs.anza.xyz/runtime/zk-elgamal-proof)
+- [Anchor Documentation](https://www.anchor-lang.com/)
 
 ## License
 
 Apache 2.0
 
-## Contributing
-
-Contributions welcome. Please open an issue before submitting major changes.
-
-## Documentation
-
-- [Architecture](docs/ARCHITECTURE.md) - Technical deep-dive
-- [Security](docs/SECURITY.md) - Security analysis and audit status
-- [SDK Guide](docs/SDK.md) - TypeScript SDK documentation
-- [Testing Guide](docs/TESTING.md) - Test coverage and patterns
-
-## Resources
-
-- [ERC-4626 Standard](https://eips.ethereum.org/EIPS/eip-4626)
-- [Anchor Documentation](https://www.anchor-lang.com/)
-- [Solana Cookbook](https://solanacookbook.com/)
-
 ## Disclaimer
 
-This software is provided "as is" without warranty. Use at your own risk. Not audited.
+This software is provided "as is" without warranty. Use at your own risk. Not audited. SVS-2 requires the Rust proof backend for full functionality until WASM bindings are available (expected mid-2026).
