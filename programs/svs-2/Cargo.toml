@@ -1,0 +1,30 @@
+[package]
+name = "svs-2"
+version = "0.1.0"
+description = "SVS-2: Private Solana Vault Standard - Confidential tokenized vault with encrypted share balances"
+edition = "2021"
+license = "MIT"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "svs_2"
+
+[features]
+default = []
+cpi = ["no-entrypoint"]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
+
+[dependencies]
+anchor-lang = { version = "0.31.1", features = ["init-if-needed"] }
+anchor-spl = { version = "0.31.1", features = ["token", "associated_token", "metadata"] }
+spl-token-2022 = "6.0.0"
+spl-token-metadata-interface = "0.5.1"
+spl-token-confidential-transfer-proof-extraction = "0.2.1"
+spl-pod = "0.4"
+solana-zk-sdk = "2.1.0"
+bytemuck = "1.14"
+constant_time_eq = { workspace = true }
+blake3 = { workspace = true }

@@ -1,4 +1,15 @@
-# SVS-1 TypeScript SDK
+# Solana Vault Standard SDKs
+
+Complete guide to using the SVS TypeScript SDKs.
+
+| SDK | Package | Purpose |
+|-----|---------|---------|
+| Core | `@stbr/svs-sdk` | SVS-1 public vaults |
+| Privacy | `@stbr/svs-privacy-sdk` | SVS-2 confidential vaults + Privacy Cash |
+
+---
+
+# SVS-1 SDK (`@stbr/svs-sdk`)
 
 Complete guide to using the SVS-1 TypeScript SDK for interacting with Solana Vault Standard vaults.
 
@@ -580,3 +591,339 @@ function DepositButton({ vault, amount }: { vault: SolanaVault; amount: BN }) {
 - [Architecture](./ARCHITECTURE.md) - Technical deep-dive
 - [Security](./SECURITY.md) - Security considerations
 - [Testing](./TESTING.md) - Test coverage
+
+---
+
+# SVS-2 Privacy SDK (`@stbr/svs-privacy-sdk`)
+
+SDK for SVS-2 confidential vaults with Token-2022 Confidential Transfers.
+
+## Installation
+
+```bash
+npm install @stbr/svs-privacy-sdk
+```
+
+### Dependencies
+
+```json
+{
+  "dependencies": {
+    "@coral-xyz/anchor": "^0.31.1",
+    "@solana/spl-token": "^0.4.10",
+    "@solana/web3.js": "^1.98.0"
+  }
+}
+```
+
+## Exports
+
+```typescript
+// Encryption
+export {
+  deriveElGamalKeypair,
+  deriveAesKey,
+  createDecryptableZeroBalance,
+  createDecryptableBalance,
+  encryptAesGcmAsync,
+  decryptAesGcmAsync,
+} from "./encryption";
+
+// ZK Proofs (placeholder implementations)
+export {
+  createPubkeyValidityProofData,
+  createEqualityProofData,
+  createRangeProofData,
+  createVerifyPubkeyValidityInstruction,
+  createVerifyEqualityProofInstruction,
+  createVerifyRangeProofInstruction,
+  ZK_ELGAMAL_PROOF_PROGRAM_ID,
+} from "./proofs";
+
+// Token-2022 Confidential Transfer Instructions
+export {
+  createConfigureAccountInstruction,
+  createApplyPendingBalanceInstruction,
+  createConfidentialDepositInstruction,
+  createConfidentialWithdrawInstruction,
+  createEnableConfidentialCreditsInstruction,
+  createEnableNonConfidentialCreditsInstruction,
+} from "./confidential-instructions";
+
+// Types
+export {
+  ElGamalKeypair,
+  AesKey,
+  EncryptedBalance,
+  DecryptableBalance,
+  ProofType,
+  ProofLocation,
+  CRYPTO_SIZES,
+} from "./types";
+```
+
+## Key Derivation
+
+Derive encryption keys deterministically from wallet signatures:
+
+```typescript
+import { deriveElGamalKeypair, deriveAesKey } from "@stbr/svs-privacy-sdk";
+
+// ElGamal keypair for encrypted balances
+const elgamalKeypair = deriveElGamalKeypair(wallet.payer, tokenAccount);
+// elgamalKeypair.publicKey: Uint8Array (32 bytes)
+// elgamalKeypair.secretKey: Uint8Array (32 bytes)
+
+// AES key for decryptable balances
+const aesKey = deriveAesKey(wallet.payer, tokenAccount);
+// aesKey.key: Uint8Array (16 bytes)
+```
+
+## Decryptable Balances
+
+Create AES-encrypted balances for owner decryption:
+
+```typescript
+import {
+  createDecryptableZeroBalance,
+  createDecryptableBalance,
+} from "@stbr/svs-privacy-sdk";
+
+// Zero balance for initial account configuration
+const zeroBalance = createDecryptableZeroBalance(aesKey);
+// zeroBalance.ciphertext: Uint8Array (36 bytes)
+
+// Encrypt a specific balance
+const balance = createDecryptableBalance(aesKey, new BN(1000_000_000));
+```
+
+## Confidential Transfer Instructions
+
+Build Token-2022 Confidential Transfer instructions:
+
+### Configure Account
+
+```typescript
+import { createConfigureAccountInstruction } from "@stbr/svs-privacy-sdk";
+
+const configureIx = createConfigureAccountInstruction(
+  tokenAccount,           // Token account to configure
+  mint,                   // Token mint
+  owner,                  // Account owner
+  elgamalKeypair.publicKey, // ElGamal public key (32 bytes)
+  decryptableZero.ciphertext, // AES-encrypted zero (36 bytes)
+  new BN(65536),          // Max pending balance credits
+  -1,                     // Proof instruction offset
+);
+```
+
+### Apply Pending Balance
+
+```typescript
+import { createApplyPendingBalanceInstruction } from "@stbr/svs-privacy-sdk";
+
+const applyIx = createApplyPendingBalanceInstruction(
+  tokenAccount,
+  owner,
+  newDecryptableBalance.ciphertext,
+  expectedPendingCredits,
+);
+```
+
+### Confidential Deposit
+
+```typescript
+import { createConfidentialDepositInstruction } from "@stbr/svs-privacy-sdk";
+
+const depositIx = createConfidentialDepositInstruction(
+  tokenAccount,
+  mint,
+  amount,
+  decimals,
+  owner,
+);
+```
+
+### Confidential Withdraw
+
+```typescript
+import { createConfidentialWithdrawInstruction } from "@stbr/svs-privacy-sdk";
+
+const withdrawIx = createConfidentialWithdrawInstruction(
+  tokenAccount,
+  mint,
+  amount,
+  decimals,
+  newDecryptableBalance.ciphertext,
+  owner,
+  equalityProofOffset,  // Offset to equality proof instruction
+  rangeProofOffset,     // Offset to range proof instruction
+);
+```
+
+## ZK Proof Instructions
+
+Build instructions for the ZK ElGamal Proof program:
+
+```typescript
+import {
+  createPubkeyValidityProofData,
+  createVerifyPubkeyValidityInstruction,
+  ZK_ELGAMAL_PROOF_PROGRAM_ID,
+} from "@stbr/svs-privacy-sdk";
+
+// Generate proof data (PLACEHOLDER - see limitations)
+const proofData = createPubkeyValidityProofData(elgamalKeypair);
+
+// Create verification instruction
+const verifyIx = createVerifyPubkeyValidityInstruction(proofData);
+
+// Build transaction
+const tx = new Transaction()
+  .add(verifyIx)                    // Index 0: Verify proof
+  .add(configureAccountIx);          // Index 1: Configure account (offset -1)
+```
+
+## ZK ElGamal Proof Program
+
+The native program ID and instruction discriminators:
+
+```typescript
+import { ZK_ELGAMAL_PROOF_PROGRAM_ID } from "@stbr/svs-privacy-sdk";
+
+// Program ID
+// ZkE1Gama1Proof11111111111111111111111111111
+
+// Discriminators (Agave 3.0+)
+const DISCRIMINATORS = {
+  CloseContextState: 0,
+  VerifyZeroCiphertext: 1,
+  VerifyCiphertextCiphertextEquality: 2,
+  VerifyCiphertextCommitmentEquality: 3,
+  VerifyPubkeyValidity: 4,
+  VerifyPercentageWithCap: 5,
+  VerifyBatchedRangeProofU64: 6,
+  VerifyBatchedRangeProofU128: 7,
+  VerifyBatchedRangeProofU256: 8,
+};
+```
+
+## Crypto Constants
+
+```typescript
+import { CRYPTO_SIZES } from "@stbr/svs-privacy-sdk";
+
+CRYPTO_SIZES.ELGAMAL_PUBKEY        // 32 bytes
+CRYPTO_SIZES.ELGAMAL_SECRET_KEY   // 32 bytes
+CRYPTO_SIZES.ELGAMAL_CIPHERTEXT   // 64 bytes
+CRYPTO_SIZES.AES_KEY              // 16 bytes
+CRYPTO_SIZES.AES_NONCE            // 12 bytes
+CRYPTO_SIZES.AES_TAG              // 16 bytes
+CRYPTO_SIZES.DECRYPTABLE_BALANCE  // 36 bytes
+CRYPTO_SIZES.PUBKEY_VALIDITY_PROOF // 64 bytes
+CRYPTO_SIZES.EQUALITY_PROOF       // 192 bytes
+CRYPTO_SIZES.RANGE_PROOF_U64_BASE // 672 bytes
+```
+
+## Current Limitations
+
+### What Works
+
+| Feature | Status |
+|---------|--------|
+| Key derivation | ✅ |
+| AES encryption/decryption | ✅ |
+| Instruction builders | ✅ |
+| Confidential deposits | ✅ |
+| ZK discriminators | ✅ |
+
+### What Needs WASM Bindings
+
+| Feature | Status | Required For |
+|---------|--------|--------------|
+| PubkeyValidityProof | ❌ Placeholder | ConfigureAccount |
+| EqualityProof | ❌ Placeholder | Withdraw/Redeem |
+| RangeProof | ❌ Placeholder | Withdraw/Redeem |
+
+The proof generation functions currently return **placeholder data** that will not pass ZK verification. Real proof generation requires:
+
+1. **WASM bindings** (expected mid-2026)
+2. **Rust backend proxy** (available now)
+3. **CLI tools** (`spl-token` CLI)
+
+### Practical Impact
+
+**Users can deposit but cannot configure accounts or withdraw without Rust proof generation.**
+
+## Workaround: Rust Backend
+
+For production use before WASM bindings are available:
+
+```rust
+// Rust backend endpoint
+use solana_zk_sdk::encryption::elgamal::ElGamalKeypair;
+use solana_zk_sdk::zk_elgamal_proof_program::proof_data::PubkeyValidityProofData;
+
+pub fn generate_proof(signature: &[u8], account: &Pubkey) -> Vec<u8> {
+    let keypair = ElGamalKeypair::new_from_signer(signature, account).unwrap();
+    let proof = PubkeyValidityProofData::new(&keypair).unwrap();
+    proof.to_bytes()
+}
+```
+
+```typescript
+// Frontend calls backend
+const response = await fetch('/api/proofs/pubkey-validity', {
+  method: 'POST',
+  body: JSON.stringify({ signature, tokenAccount }),
+});
+const proofBytes = new Uint8Array(await response.arrayBuffer());
+
+// Use in instruction
+const verifyIx = createVerifyPubkeyValidityInstruction(proofBytes);
+```
+
+## Type Definitions
+
+```typescript
+interface ElGamalKeypair {
+  publicKey: Uint8Array;  // 32 bytes
+  secretKey: Uint8Array;  // 32 bytes
+}
+
+interface AesKey {
+  key: Uint8Array;  // 16 bytes
+}
+
+interface DecryptableBalance {
+  ciphertext: Uint8Array;  // 36 bytes
+}
+
+enum ProofType {
+  PubkeyValidity = "pubkey_validity",
+  CiphertextCommitmentEquality = "ciphertext_commitment_equality",
+  BatchedRangeProofU64 = "batched_range_proof_u64",
+}
+
+enum ProofLocation {
+  InstructionOffset = "instruction_offset",
+  ContextStateAccount = "context_state_account",
+}
+```
+
+## Building
+
+```bash
+cd sdk/privacy
+yarn build
+```
+
+Output in `dist/`:
+- `dist/index.js` - CommonJS build
+- `dist/index.d.ts` - TypeScript declarations
+
+## See Also
+
+- [Privacy Architecture](./PRIVACY.md) - Detailed privacy documentation
+- [Security](./SECURITY.md) - Security considerations
+- [Architecture](./ARCHITECTURE.md) - Technical deep-dive
