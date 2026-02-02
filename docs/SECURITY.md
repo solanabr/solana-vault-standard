@@ -2,7 +2,11 @@
 
 ## Overview
 
-SVS-1 (Solana Vault Standard) implements comprehensive security measures to protect against common vault attacks. This document details security features, attack mitigations, known limitations, and responsible disclosure procedures.
+The Solana Vault Standard (SVS-1 and SVS-2) implements comprehensive security measures to protect against common vault attacks. This document details security features, attack mitigations, known limitations, and responsible disclosure procedures.
+
+**Coverage:**
+- **SVS-1**: Public vault security (Sections 1-9)
+- **SVS-2**: Confidential vault privacy and security (Section 10+)
 
 ## Security Architecture
 
@@ -408,7 +412,9 @@ This program has not undergone professional security audit.
 
 **Scope:**
 - SVS-1 program code
-- SDK security issues
+- SVS-2 program code
+- Proof backend security
+- SDK security issues (core and privacy)
 - Documentation errors leading to insecure usage
 
 **Out of Scope:**
@@ -440,6 +446,280 @@ If building on SVS-1:
 - [ ] Don't rely on vault's cached `total_assets` for critical decisions
 - [ ] Don't bypass minimum deposit checks in your wrapper
 
+---
+
+## SVS-2: Privacy Security Considerations
+
+SVS-2 adds confidential transfers with encrypted balances. This introduces additional security considerations beyond SVS-1.
+
+### 10. Privacy Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                    SVS-2 Privacy Layers                              │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│  Layer 1: ElGamal Encryption (Homomorphic)                          │
+│  ─────────────────────────────────────────                          │
+│  • Encrypts share balances on-chain                                 │
+│  • Supports homomorphic addition (pending + available)              │
+│  • ZK proofs verify operations without revealing values             │
+│                                                                      │
+│  Layer 2: AES-128-GCM (Authenticated)                               │
+│  ────────────────────────────────────                               │
+│  • Owner-only decryption of balances                                │
+│  • Stored in decryptable_available_balance field                    │
+│  • Efficient balance lookup for wallet UIs                          │
+│                                                                      │
+│  Layer 3: ZK Proof Verification (Native Program)                    │
+│  ───────────────────────────────────────────────                    │
+│  • PubkeyValidityProof: Proves ElGamal key ownership                │
+│  • EqualityProof: Proves ciphertext contains claimed amount         │
+│  • RangeProof: Proves values are non-negative                       │
+│                                                                      │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### 11. Privacy Guarantees
+
+| Guarantee | Description | Limitation |
+|-----------|-------------|------------|
+| **Balance Privacy** | Share amounts encrypted on-chain | Deposit/withdraw amounts visible during TX |
+| **Owner-Only View** | Only owner can decrypt their balance | Auditor key can also decrypt if configured |
+| **Unlinkability** | With Privacy Cash, addresses unlinked | Requires additional shielded pool step |
+| **Forward Secrecy** | Key compromise doesn't reveal past | Only if keys properly rotated |
+
+### 12. Privacy Threats and Mitigations
+
+#### Threat: Key Compromise
+
+**Risk:** If user's ElGamal secret key is compromised, attacker can decrypt all balances.
+
+**Mitigation:**
+- Keys derived from wallet signature (not stored separately)
+- No network transmission of secret keys
+- Backend only receives signature, never the secret key
+
+```
+Key Derivation:
+wallet.sign("ElGamalSecretKey" || token_account) → signature
+hash(signature || token_account) → seed
+seed → ElGamal keypair
+
+Security: Key never leaves client; only signature transmitted.
+```
+
+#### Threat: Backend Trust
+
+**Risk:** Proof backend is a centralized service that could be compromised.
+
+**Mitigations:**
+| Protection | Implementation |
+|------------|----------------|
+| No secret key access | Backend derives keypair from signature |
+| Signature verification | Proves request authenticity |
+| Timestamp validation | 5-minute replay window |
+| API key + wallet sig | Dual-layer authentication |
+| Self-hostable | Open source, can run your own |
+
+**Trust Model:**
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ What Backend CANNOT Do:                                          │
+│ • Access user's secret key (only derives from signature)        │
+│ • Forge signatures (requires wallet private key)                │
+│ • Spend user's funds (no authority over vault)                  │
+│ • Decrypt balances (no AES key access)                          │
+├─────────────────────────────────────────────────────────────────┤
+│ What Backend CAN Do:                                             │
+│ • Deny service (refuse to generate proofs)                      │
+│ • Learn that user is making a withdrawal (timing)               │
+│ • Associate wallet pubkey with vault operations                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Recommendation:** For high-security use cases, self-host the proof backend.
+
+#### Threat: Timing Analysis
+
+**Risk:** Observer correlates deposit/withdrawal timing to deanonymize users.
+
+**Mitigations:**
+- Batch operations during high-traffic periods
+- Use Privacy Cash for deposit source anonymization
+- Variable delays between pending application and withdrawal
+
+#### Threat: Amount Inference
+
+**Risk:** Even with encrypted balances, amounts can be inferred from:
+- Transaction sizes
+- Gas costs
+- Timing patterns
+
+**Mitigations:**
+- Use fixed transaction padding (not implemented)
+- Avoid round numbers
+- Use Privacy Cash for full amount hiding
+
+### 13. ZK Proof Security
+
+#### Proof Validity
+
+All proofs are verified by the native ZK ElGamal Proof program before SVS-2 accepts them.
+
+```rust
+// SVS-2 Withdraw instruction
+pub equality_proof_context: UncheckedAccount<'info>,  // Pre-verified proof
+pub range_proof_context: UncheckedAccount<'info>,      // Pre-verified proof
+
+// Proofs MUST be verified by ZK ElGamal program before withdraw
+// Verification creates a "context state account" that SVS-2 reads
+```
+
+**Attack Prevention:**
+| Attack | Prevention |
+|--------|------------|
+| Fake proof submission | Native program verification required |
+| Proof replay | Context accounts are single-use, then closed |
+| Proof for wrong account | Proof binds to specific ciphertext + pubkey |
+
+#### Proof Generation Risks
+
+| Risk | Severity | Mitigation |
+|------|----------|------------|
+| Malformed proof data | Low | Native program rejects invalid proofs |
+| Wrong amount proved | Medium | Client must compute correct values |
+| Stale ciphertext | Medium | Always fetch fresh balance before proving |
+
+### 14. Auditor Key Considerations
+
+SVS-2 supports an optional auditor ElGamal public key for compliance:
+
+```rust
+pub auditor_elgamal_pubkey: Option<[u8; 32]>,
+```
+
+**Implications:**
+
+| Aspect | With Auditor | Without Auditor |
+|--------|--------------|-----------------|
+| Balance privacy | Auditor can decrypt all | Only owner can decrypt |
+| Regulatory compliance | Possible | Difficult |
+| Trust requirement | Auditor is trusted | No third-party trust |
+| Key rotation | Requires vault migration | N/A |
+
+**Security Considerations:**
+- Auditor key is set at vault initialization (immutable)
+- Auditor can only READ balances, not SPEND
+- Multiple auditors require multiple vault instances
+- Key compromise reveals all vault user balances to attacker
+
+### 15. Confidential Transfer Specific Attacks
+
+#### Homomorphic Addition Overflow
+
+**Risk:** ElGamal addition could overflow, corrupting balance.
+
+**Mitigation:** Range proofs verify values stay within u64 bounds.
+
+#### Pending Balance Accumulation
+
+**Risk:** Attacker spams small deposits to overflow pending balance.
+
+**Mitigation:**
+- Minimum deposit threshold
+- Pending balance counter limits
+- User controls when to apply pending
+
+#### Ciphertext Malleability
+
+**Risk:** Attacker modifies ciphertext to change encrypted value.
+
+**Mitigation:**
+- Ciphertexts are commitment-bound via ZK proofs
+- Any modification invalidates the proof
+- Token-2022 validates ciphertext format
+
+### 16. SVS-2 Attack Surface Analysis
+
+#### Fully Mitigated (SVS-2 Specific)
+
+| Attack | Vector | Mitigation | Status |
+|--------|--------|------------|--------|
+| Fake Proof | Submit invalid ZK proof | Native program verification | ✅ |
+| Key Extraction | Extract ElGamal secret from proof | ZK proofs are zero-knowledge | ✅ |
+| Balance Corruption | Modify encrypted balance | Signature + proof validation | ✅ |
+| Unauthorized Decrypt | Decrypt without key | ElGamal cryptographic hardness | ✅ |
+
+#### Partially Mitigated (SVS-2 Specific)
+
+| Risk | Description | Current Mitigation | Residual Risk |
+|------|-------------|-------------------|---------------|
+| Backend Unavailability | Can't generate proofs | Self-host option | Medium |
+| Timing Correlation | Link deposits to withdrawals | Privacy Cash | Low-Medium |
+| Auditor Key Leak | All balances exposed | Careful key management | Medium |
+
+### 17. SVS-2 Security Checklist for Integrators
+
+If building on SVS-2:
+
+#### Must Do
+- [ ] Self-host proof backend for production
+- [ ] Never log or store ElGamal signatures
+- [ ] Verify proof context accounts are valid before use
+- [ ] Handle backend unavailability gracefully
+- [ ] Encrypt all balance data in transit
+
+#### Should Do
+- [ ] Implement proof caching to reduce backend calls
+- [ ] Add retry logic for proof generation
+- [ ] Monitor for unusual proof generation patterns
+- [ ] Use Privacy Cash for sensitive deposits
+
+#### Don't Do
+- [ ] Don't transmit secret keys anywhere
+- [ ] Don't assume backend is always available
+- [ ] Don't store decrypted balances unencrypted
+- [ ] Don't skip proof verification steps
+- [ ] Don't use auditor key without clear compliance need
+
+### 18. Privacy Cash Integration Security
+
+When combining SVS-2 with Privacy Cash:
+
+```
+┌───────────────────────────────────────────────────────────────┐
+│              Full Privacy Flow Security                        │
+├───────────────────────────────────────────────────────────────┤
+│                                                                │
+│  1. Shield (Privacy Cash)                                      │
+│     • Assets enter shielded pool                               │
+│     • Address link broken                                      │
+│     • Amount hidden via commitment                             │
+│                                                                │
+│  2. Deposit (SVS-2)                                            │
+│     • From shielded pool to vault                              │
+│     • New address receives shares                              │
+│     • Shares encrypted immediately                             │
+│                                                                │
+│  3. Withdraw (SVS-2)                                           │
+│     • ZK proofs verify ownership                               │
+│     • Assets to new address                                    │
+│                                                                │
+│  4. Unshield (Privacy Cash)                                    │
+│     • Exit shielded pool                                       │
+│     • Original source fully unlinked                           │
+│                                                                │
+└───────────────────────────────────────────────────────────────┘
+```
+
+**Additional Risks:**
+- Privacy Cash protocol security
+- Cross-protocol timing analysis
+- Shielded pool liquidity (anonymity set size)
+
+---
+
 ## References
 
 - [ERC-4626 Security Considerations](https://eips.ethereum.org/EIPS/eip-4626#security-considerations)
@@ -447,12 +727,16 @@ If building on SVS-1:
 - [Solana Security Best Practices](https://docs.solana.com/developing/on-chain-programs/overview)
 - [Anchor Security Guidelines](https://www.anchor-lang.com/docs/security)
 - [Inflation Attack Analysis](https://blog.openzeppelin.com/a-novel-defense-against-erc4626-inflation-attacks)
+- [Token-2022 Confidential Transfers](https://solana.com/docs/tokens/extensions/confidential-transfer)
+- [ZK ElGamal Proof Program](https://docs.anza.xyz/runtime/zk-elgamal-proof)
+- [Twisted ElGamal Encryption](https://iacr.org/archive/asiacrypt2004/33290377/33290377.pdf)
 
 ## Version History
 
 | Version | Date | Changes |
 |---------|------|---------|
-| 1.0.0 | 2026-01 | Initial implementation |
+| 1.0.0 | 2026-01 | Initial SVS-1 implementation |
+| 1.1.0 | 2026-01 | Added SVS-2 confidential vault security documentation |
 
 ## Disclaimer
 
