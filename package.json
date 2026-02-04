@@ -12,7 +12,14 @@
     "test": "anchor test",
     "test:local": "anchor test --skip-local-validator",
     "test:sdk": "yarn workspaces foreach -A run test",
-    "clean": "yarn workspaces foreach -A run clean"
+    "clean": "yarn workspaces foreach -A run clean",
+    "test-svs1:basic": "npx ts-node scripts/svs-1/basic.ts",
+    "test-svs1:slippage": "npx ts-node scripts/svs-1/slippage.ts",
+    "test-svs1:multi-user": "npx ts-node scripts/svs-1/multi-user.ts",
+    "test-svs1:edge-cases": "npx ts-node scripts/svs-1/edge-cases.ts",
+    "test-svs1:inflation-attack": "npx ts-node scripts/svs-1/inflation-attack.ts",
+    "test-svs1:sync-exploit": "npx ts-node scripts/svs-1/sync.ts",
+    "test-svs1:all": "npm run test-svs1:basic && npm run test-svs1:slippage && npm run test-svs1:multi-user && npm run test-svs1:edge-cases && npm run test-svs1:inflation-attack && npm run test-svs1:sync-exploit"
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.31.1",

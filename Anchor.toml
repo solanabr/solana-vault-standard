@@ -4,11 +4,11 @@
 resolution = true
 skip-lint = false
 
-[programs.localnet]
-svs_1 = "SVS1VauLt1111111111111111111111111111111111"
-svs_2 = "SVS2VauLt2222222222222222222222222222222222"
-
 [programs.devnet]
+svs_1 = "Bv8aVSQ3DJUe3B7TqQZRZgrNvVTh8TjfpwpoeR1ckDMC"
+svs_2 = "3UrYrxh1HmVgq7WPygZ5x1gNEaWFwqTMs7geNqMnsrtD"
+
+[programs.localnet]
 svs_1 = "SVS1VauLt1111111111111111111111111111111111"
 svs_2 = "SVS2VauLt2222222222222222222222222222222222"
 
@@ -16,8 +16,8 @@ svs_2 = "SVS2VauLt2222222222222222222222222222222222"
 url = "https://api.apr.dev"
 
 [provider]
-cluster = "Localnet"
-wallet = "~/.config/solana/id.json"
+cluster = "devnet"
+wallet = "~/.config/solana/deployer.json"
 
 [scripts]
 test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts"
