@@ -287,7 +287,8 @@ tokenized-vault-standard/
 │   ├── Dockerfile
 │   └── README.md
 ├── tests/
-│   ├── svs-1.ts                  # Public vault tests
+│   ├── svs-1.ts                  # SVS-1 public vault tests
+│   ├── svs-2.ts                  # SVS-2 stored balance + sync tests
 │   ├── admin-extended.ts         # Admin function tests
 │   ├── decimals.ts               # Multi-decimal tests
 │   ├── edge-cases.ts             # Edge case tests

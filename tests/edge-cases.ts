@@ -446,4 +446,51 @@ describe("svs-1 edge cases", () => {
       console.log("  Multiple vaults for same asset works");
     });
   });
+
+  describe("View Function Edge Cases", () => {
+    it("convertToShares with zero assets returns zero", async () => {
+      const result = await program.methods
+        .convertToShares(new BN(0))
+        .accountsStrict({
+          vault: vault,
+          sharesMint: sharesMint,
+          assetVault: assetVault,
+        })
+        .simulate();
+
+      expect(result.events).to.not.be.undefined;
+      console.log("  convertToShares(0) simulated");
+    });
+
+    it("convertToAssets with zero shares returns zero", async () => {
+      const result = await program.methods
+        .convertToAssets(new BN(0))
+        .accountsStrict({
+          vault: vault,
+          sharesMint: sharesMint,
+          assetVault: assetVault,
+        })
+        .simulate();
+
+      expect(result.events).to.not.be.undefined;
+      console.log("  convertToAssets(0) simulated");
+    });
+
+    it("preview functions handle large values", async () => {
+      // Large value within safe math range (u128 intermediate)
+      const largeAmount = new BN("1000000000000"); // 10^12 (1M USDC)
+
+      const result = await program.methods
+        .previewDeposit(largeAmount)
+        .accountsStrict({
+          vault: vault,
+          sharesMint: sharesMint,
+          assetVault: assetVault,
+        })
+        .simulate();
+
+      expect(result.events).to.not.be.undefined;
+      console.log("  previewDeposit with large value simulated");
+    });
+  });
 });

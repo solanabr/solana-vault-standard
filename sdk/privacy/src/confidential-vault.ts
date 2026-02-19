@@ -42,10 +42,10 @@ import {
 import { ProofType } from "./types";
 
 /**
- * SVS-2 Program ID
+ * SVS-3 Program ID
  */
-export const SVS_2_PROGRAM_ID = new PublicKey(
-  "SVS2VauLt2222222222222222222222222222222222",
+export const SVS_3_PROGRAM_ID = new PublicKey(
+  "SVS3VauLt3333333333333333333333333333333333",
 );
 
 /**
@@ -54,10 +54,11 @@ export const SVS_2_PROGRAM_ID = new PublicKey(
 const VAULT_SEED = Buffer.from("vault");
 
 /**
- * ConfidentialSolanaVault - SDK for SVS-2 Confidential Vault
+ * ConfidentialSolanaVault - SDK for SVS-3 Confidential Vault (Live Balance)
  *
- * This class provides methods to interact with SVS-2 vaults that use
+ * This class provides methods to interact with SVS-3 vaults that use
  * Token-2022 Confidential Transfers for private share balances.
+ * SVS-3 uses live balance (reads asset_vault.amount directly).
  *
  * Key concepts:
  * - Shares are encrypted using ElGamal encryption
@@ -89,7 +90,7 @@ export class ConfidentialSolanaVault {
   ): [PublicKey, number] {
     return PublicKey.findProgramAddressSync(
       [VAULT_SEED, assetMint.toBuffer(), vaultId.toArrayLike(Buffer, "le", 8)],
-      SVS_2_PROGRAM_ID,
+      SVS_3_PROGRAM_ID,
     );
   }
 
@@ -471,12 +472,26 @@ export class ConfidentialSolanaVault {
   // ============ View Functions ============
 
   /**
+   * Get live total assets from asset_vault account on-chain.
+   * SVS-3 uses live balance — vault.total_assets is unused.
+   */
+  private async getLiveTotalAssets(vaultAddress: PublicKey): Promise<BN> {
+    const vaultState = await this.getVault(vaultAddress);
+    const accountInfo = await this.connection.getAccountInfo(
+      vaultState.assetVault,
+    );
+    if (!accountInfo) {
+      throw new Error("Asset vault not found");
+    }
+    // Parse amount from token account data (offset 64, 8 bytes LE)
+    const amount = accountInfo.data.readBigUInt64LE(64);
+    return new BN(amount.toString());
+  }
+
+  /**
    * Preview shares for deposit (floor rounding)
    */
   async previewDeposit(vault: PublicKey, assets: BN): Promise<BN> {
-    const vaultState = await this.getVault(vault);
-    // Call view function via simulate
-    // For simplicity, calculate client-side using same math
     return this.convertToShares(vault, assets);
   }
 
@@ -491,9 +506,9 @@ export class ConfidentialSolanaVault {
    * Preview shares for withdraw (ceiling rounding)
    */
   async previewWithdraw(vault: PublicKey, assets: BN): Promise<BN> {
-    // Ceiling rounding for withdrawals
     const vaultState = await this.getVault(vault);
     const totalShares = await this.getTotalShares(vault);
+    const totalAssets = await this.getLiveTotalAssets(vault);
 
     if (totalShares.isZero()) {
       return assets;
@@ -501,7 +516,7 @@ export class ConfidentialSolanaVault {
 
     const virtualOffset = new BN(10).pow(new BN(vaultState.decimalsOffset));
     const numerator = assets.mul(totalShares.add(virtualOffset));
-    const denominator = vaultState.totalAssets.add(new BN(1));
+    const denominator = totalAssets.add(new BN(1));
 
     // Ceiling: (a + b - 1) / b
     return numerator.add(denominator).sub(new BN(1)).div(denominator);
@@ -513,6 +528,7 @@ export class ConfidentialSolanaVault {
   async convertToShares(vault: PublicKey, assets: BN): Promise<BN> {
     const vaultState = await this.getVault(vault);
     const totalShares = await this.getTotalShares(vault);
+    const totalAssets = await this.getLiveTotalAssets(vault);
 
     if (totalShares.isZero()) {
       return assets;
@@ -521,7 +537,7 @@ export class ConfidentialSolanaVault {
     const virtualOffset = new BN(10).pow(new BN(vaultState.decimalsOffset));
     return assets
       .mul(totalShares.add(virtualOffset))
-      .div(vaultState.totalAssets.add(new BN(1)));
+      .div(totalAssets.add(new BN(1)));
   }
 
   /**
@@ -530,6 +546,7 @@ export class ConfidentialSolanaVault {
   async convertToAssets(vault: PublicKey, shares: BN): Promise<BN> {
     const vaultState = await this.getVault(vault);
     const totalShares = await this.getTotalShares(vault);
+    const totalAssets = await this.getLiveTotalAssets(vault);
 
     if (totalShares.isZero()) {
       return shares;
@@ -537,7 +554,7 @@ export class ConfidentialSolanaVault {
 
     const virtualOffset = new BN(10).pow(new BN(vaultState.decimalsOffset));
     return shares
-      .mul(vaultState.totalAssets.add(new BN(1)))
+      .mul(totalAssets.add(new BN(1)))
       .div(totalShares.add(virtualOffset));
   }
 

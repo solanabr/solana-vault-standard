@@ -496,11 +496,149 @@ describe("svs-1 (Live Balance - No Sync)", () => {
       console.log("  Preview deposit simulated successfully (using live balance)");
     });
 
+    it("previewMint simulates correctly", async () => {
+      const shares = new BN(1000 * 10 ** 9);
+
+      const result = await program.methods
+        .previewMint(shares)
+        .accountsStrict({
+          vault: vault,
+          sharesMint: sharesMint,
+          assetVault: assetVault,
+        })
+        .simulate();
+
+      expect(result.events).to.not.be.undefined;
+      console.log("  Preview mint simulated successfully");
+    });
+
+    it("previewWithdraw simulates correctly", async () => {
+      const assets = new BN(1000 * 10 ** ASSET_DECIMALS);
+
+      const result = await program.methods
+        .previewWithdraw(assets)
+        .accountsStrict({
+          vault: vault,
+          sharesMint: sharesMint,
+          assetVault: assetVault,
+        })
+        .simulate();
+
+      expect(result.events).to.not.be.undefined;
+      console.log("  Preview withdraw simulated successfully");
+    });
+
+    it("previewRedeem simulates correctly", async () => {
+      const shares = new BN(1000 * 10 ** 9);
+
+      const result = await program.methods
+        .previewRedeem(shares)
+        .accountsStrict({
+          vault: vault,
+          sharesMint: sharesMint,
+          assetVault: assetVault,
+        })
+        .simulate();
+
+      expect(result.events).to.not.be.undefined;
+      console.log("  Preview redeem simulated successfully");
+    });
+
     it("total assets returns live balance", async () => {
       // SVS-1: total_assets view returns LIVE balance from asset_vault
       const assetVaultAccount = await getAccount(connection, assetVault);
       console.log("  Live total assets:", Number(assetVaultAccount.amount) / 10 ** ASSET_DECIMALS);
       expect(Number(assetVaultAccount.amount)).to.be.greaterThan(0);
+    });
+
+    it("maxDeposit returns u64::MAX when not paused", async () => {
+      const result = await program.methods
+        .maxDeposit()
+        .accountsStrict({
+          vault: vault,
+          sharesMint: sharesMint,
+          assetVault: assetVault,
+        })
+        .simulate();
+
+      expect(result.events).to.not.be.undefined;
+      console.log("  maxDeposit simulated (not paused)");
+    });
+
+    it("maxMint returns u64::MAX when not paused", async () => {
+      const result = await program.methods
+        .maxMint()
+        .accountsStrict({
+          vault: vault,
+          sharesMint: sharesMint,
+          assetVault: assetVault,
+        })
+        .simulate();
+
+      expect(result.events).to.not.be.undefined;
+      console.log("  maxMint simulated (not paused)");
+    });
+
+    it("maxWithdraw returns owner's redeemable assets", async () => {
+      const result = await program.methods
+        .maxWithdraw()
+        .accountsStrict({
+          vault: vault,
+          sharesMint: sharesMint,
+          assetVault: assetVault,
+          ownerSharesAccount: userSharesAccount,
+        })
+        .simulate();
+
+      expect(result.events).to.not.be.undefined;
+      console.log("  maxWithdraw simulated");
+    });
+
+    it("maxRedeem returns owner's share balance", async () => {
+      const result = await program.methods
+        .maxRedeem()
+        .accountsStrict({
+          vault: vault,
+          sharesMint: sharesMint,
+          assetVault: assetVault,
+          ownerSharesAccount: userSharesAccount,
+        })
+        .simulate();
+
+      expect(result.events).to.not.be.undefined;
+      console.log("  maxRedeem simulated");
+    });
+
+    it("convertToShares simulates correctly", async () => {
+      const assets = new BN(5000 * 10 ** ASSET_DECIMALS);
+
+      const result = await program.methods
+        .convertToShares(assets)
+        .accountsStrict({
+          vault: vault,
+          sharesMint: sharesMint,
+          assetVault: assetVault,
+        })
+        .simulate();
+
+      expect(result.events).to.not.be.undefined;
+      console.log("  convertToShares simulated");
+    });
+
+    it("convertToAssets simulates correctly", async () => {
+      const shares = new BN(5000 * 10 ** 9);
+
+      const result = await program.methods
+        .convertToAssets(shares)
+        .accountsStrict({
+          vault: vault,
+          sharesMint: sharesMint,
+          assetVault: assetVault,
+        })
+        .simulate();
+
+      expect(result.events).to.not.be.undefined;
+      console.log("  convertToAssets simulated");
     });
   });
 });

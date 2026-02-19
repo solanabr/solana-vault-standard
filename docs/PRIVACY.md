@@ -25,6 +25,21 @@ The solana-zk-sdk library has no JavaScript/WASM bindings, so a Rust backend is 
 | POST /api/proofs/equality | CiphertextCommitmentEqualityProof | Withdraw, Redeem |
 | POST /api/proofs/range | BatchedRangeProofU64 | Batched operations |
 
+## Balance Models in Private Vaults
+
+### SVS-3 (Live Balance)
+- Reads `asset_vault.amount` directly for all calculations
+- Share price reflects real-time vault balance
+- No sync needed — yield is immediate
+- `total_assets` field unused on-chain (always 0)
+- Proof context accounts validated via owner check (`account.owner == zk_elgamal_proof_program::id()`)
+
+### SVS-4 (Stored Balance)
+- Reads `vault.total_assets` from state
+- Requires `sync()` to recognize external deposits
+- Authority controls yield distribution timing
+- Same proof requirements as SVS-3
+
 ## Privacy Limitations
 
 **Hidden:** Share balances, transfer amounts

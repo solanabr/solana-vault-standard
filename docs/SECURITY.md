@@ -21,6 +21,9 @@
 ### 5. Arithmetic Overflow
 **Mitigation:** All arithmetic uses checked operations with u128 intermediate calculations.
 
+### 6. Fake Proof Context Injection (SVS-3, SVS-4)
+**Mitigation:** Proof context accounts validated via owner check (`account.owner == zk_elgamal_proof_program::id()`). Prevents passing arbitrary accounts as "verified" proofs.
+
 ## Best Practices
 
 1. Always use slippage protection

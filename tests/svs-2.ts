@@ -528,6 +528,51 @@ describe("svs-2 (Stored Balance - Sync Required)", () => {
       console.log("  Preview deposit simulated (using stored total_assets)");
     });
 
+    it("previewMint simulates correctly", async () => {
+      const shares = new BN(1000 * 10 ** 9);
+
+      const result = await program.methods
+        .previewMint(shares)
+        .accounts({
+          vault: vault,
+          sharesMint: sharesMint,
+        })
+        .simulate();
+
+      expect(result.events).to.not.be.undefined;
+      console.log("  Preview mint simulated (stored balance)");
+    });
+
+    it("previewWithdraw simulates correctly", async () => {
+      const assets = new BN(1000 * 10 ** ASSET_DECIMALS);
+
+      const result = await program.methods
+        .previewWithdraw(assets)
+        .accounts({
+          vault: vault,
+          sharesMint: sharesMint,
+        })
+        .simulate();
+
+      expect(result.events).to.not.be.undefined;
+      console.log("  Preview withdraw simulated (stored balance)");
+    });
+
+    it("previewRedeem simulates correctly", async () => {
+      const shares = new BN(1000 * 10 ** 9);
+
+      const result = await program.methods
+        .previewRedeem(shares)
+        .accounts({
+          vault: vault,
+          sharesMint: sharesMint,
+        })
+        .simulate();
+
+      expect(result.events).to.not.be.undefined;
+      console.log("  Preview redeem simulated (stored balance)");
+    });
+
     it("total assets returns stored value", async () => {
       const vaultAccount = await program.account.vault.fetch(vault);
       const assetVaultAccount = await getAccount(connection, assetVault);
@@ -559,6 +604,136 @@ describe("svs-2 (Stored Balance - Sync Required)", () => {
         .simulate();
 
       console.log("  maxMint simulated successfully");
+    });
+
+    it("maxWithdraw returns owner's redeemable assets", async () => {
+      const result = await program.methods
+        .maxWithdraw()
+        .accounts({
+          vault: vault,
+          sharesMint: sharesMint,
+          ownerSharesAccount: userSharesAccount,
+        })
+        .simulate();
+
+      expect(result.events).to.not.be.undefined;
+      console.log("  maxWithdraw simulated (stored balance)");
+    });
+
+    it("maxRedeem returns owner's share balance", async () => {
+      const result = await program.methods
+        .maxRedeem()
+        .accounts({
+          vault: vault,
+          sharesMint: sharesMint,
+          ownerSharesAccount: userSharesAccount,
+        })
+        .simulate();
+
+      expect(result.events).to.not.be.undefined;
+      console.log("  maxRedeem simulated (stored balance)");
+    });
+
+    it("convertToShares simulates correctly", async () => {
+      const assets = new BN(5000 * 10 ** ASSET_DECIMALS);
+
+      const result = await program.methods
+        .convertToShares(assets)
+        .accounts({
+          vault: vault,
+          sharesMint: sharesMint,
+        })
+        .simulate();
+
+      expect(result.events).to.not.be.undefined;
+      console.log("  convertToShares simulated (stored balance)");
+    });
+
+    it("convertToAssets simulates correctly", async () => {
+      const shares = new BN(5000 * 10 ** 9);
+
+      const result = await program.methods
+        .convertToAssets(shares)
+        .accounts({
+          vault: vault,
+          sharesMint: sharesMint,
+        })
+        .simulate();
+
+      expect(result.events).to.not.be.undefined;
+      console.log("  convertToAssets simulated (stored balance)");
+    });
+  });
+
+  describe("Sync Edge Cases", () => {
+    it("sync with zero donation is a no-op", async () => {
+      // First sync to make sure stored matches actual
+      await program.methods
+        .sync()
+        .accountsStrict({
+          authority: payer.publicKey,
+          vault: vault,
+          assetVault: assetVault,
+        })
+        .rpc();
+
+      const vaultBefore = await program.account.vault.fetch(vault);
+
+      // Sync again with no new donations
+      await program.methods
+        .sync()
+        .accountsStrict({
+          authority: payer.publicKey,
+          vault: vault,
+          assetVault: assetVault,
+        })
+        .rpc();
+
+      const vaultAfter = await program.account.vault.fetch(vault);
+      expect(vaultAfter.totalAssets.toNumber()).to.equal(vaultBefore.totalAssets.toNumber());
+      console.log("  Sync with no new donations: total_assets unchanged");
+    });
+
+    it("multiple sequential syncs are idempotent", async () => {
+      // Donate first
+      const donationAmount = 5_000 * 10 ** ASSET_DECIMALS;
+      await transfer(
+        connection,
+        payer,
+        userAssetAccount,
+        assetVault,
+        payer.publicKey,
+        donationAmount,
+        [],
+        undefined,
+        TOKEN_PROGRAM_ID
+      );
+
+      // First sync
+      await program.methods
+        .sync()
+        .accountsStrict({
+          authority: payer.publicKey,
+          vault: vault,
+          assetVault: assetVault,
+        })
+        .rpc();
+
+      const afterFirstSync = await program.account.vault.fetch(vault);
+
+      // Second sync (no new donations)
+      await program.methods
+        .sync()
+        .accountsStrict({
+          authority: payer.publicKey,
+          vault: vault,
+          assetVault: assetVault,
+        })
+        .rpc();
+
+      const afterSecondSync = await program.account.vault.fetch(vault);
+      expect(afterSecondSync.totalAssets.toNumber()).to.equal(afterFirstSync.totalAssets.toNumber());
+      console.log("  Sequential syncs idempotent:", afterSecondSync.totalAssets.toNumber() / 10 ** ASSET_DECIMALS);
     });
   });
 

@@ -1,7 +1,7 @@
 /**
  * SVS Privacy SDK
  *
- * Privacy-enabled SDK for SVS-2 Confidential Vaults with Token-2022
+ * Privacy-enabled SDK for SVS-3/SVS-4 Confidential Vaults with Token-2022
  * Confidential Transfers and optional Privacy Cash integration.
  *
  * ## Privacy Levels
@@ -9,8 +9,8 @@
  * | Level | What's Hidden | SDK Class |
  * |-------|---------------|-----------|
  * | None (SVS-1) | Nothing | SolanaVault |
- * | Amount (SVS-2) | Share balances | ConfidentialSolanaVault |
- * | Full (SVS-2 + Privacy Cash) | Amounts + addresses | PrivacySolanaVault |
+ * | Amount (SVS-3/4) | Share balances | ConfidentialSolanaVault |
+ * | Full (SVS-3/4 + Privacy Cash) | Amounts + addresses | PrivacySolanaVault |
  *
  * ## Current Status (January 2026)
  *
@@ -85,9 +85,9 @@ export {
   createPubkeyValidityProofWasm,
 } from "./wasm-bridge";
 
-// Confidential Vault (SVS-2 wrapper)
+// Confidential Vault (SVS-3 wrapper)
 export {
-  SVS_2_PROGRAM_ID,
+  SVS_3_PROGRAM_ID,
   ConfidentialSolanaVault,
 } from "./confidential-vault";
 
@@ -102,7 +102,7 @@ export {
   type ShieldedNote,
 } from "./privacy-cash";
 
-// Full Privacy Vault (SVS-2 + Privacy Cash)
+// Full Privacy Vault (SVS-3/4 + Privacy Cash)
 export { PrivacySolanaVault } from "./private-vault";
 
 // Confidential Transfer Instructions (Token-2022)
