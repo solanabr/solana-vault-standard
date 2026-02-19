@@ -12,7 +12,7 @@ pub struct ConfidentialVault {
     pub shares_mint: Pubkey,
     /// Token account holding assets
     pub asset_vault: Pubkey,
-    /// Cached total assets (updated on deposit/withdraw, can be synced)
+    /// Unused in SVS-3 (live balance reads asset_vault.amount directly)
     pub total_assets: u64,
     /// Virtual offset exponent (9 - asset_decimals) for inflation attack protection
     pub decimals_offset: u8,

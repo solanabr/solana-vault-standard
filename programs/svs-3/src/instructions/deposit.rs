@@ -21,7 +21,6 @@ pub struct Deposit<'info> {
     pub user: Signer<'info>,
 
     #[account(
-        mut,
         constraint = !vault.paused @ VaultError::VaultPaused,
     )]
     pub vault: Account<'info, ConfidentialVault>,
@@ -79,10 +78,11 @@ pub fn handler(ctx: Context<Deposit>, assets: u64, min_shares_out: u64) -> Resul
     let vault = &ctx.accounts.vault;
     let total_shares = ctx.accounts.shares_mint.supply;
 
-    // Calculate shares to mint (floor rounding - favors vault)
+    // Calculate shares to mint using live balance (floor rounding - favors vault)
+    let total_assets = ctx.accounts.asset_vault.amount;
     let shares = convert_to_shares(
         assets,
-        vault.total_assets,
+        total_assets,
         total_shares,
         vault.decimals_offset,
         Rounding::Floor,
@@ -149,13 +149,6 @@ pub fn handler(ctx: Context<Deposit>, assets: u64, min_shares_out: u64) -> Resul
             ctx.accounts.user.to_account_info(),
         ],
     )?;
-
-    // Update cached total assets
-    let vault = &mut ctx.accounts.vault;
-    vault.total_assets = vault
-        .total_assets
-        .checked_add(assets)
-        .ok_or(VaultError::MathOverflow)?;
 
     emit!(DepositEvent {
         vault: ctx.accounts.vault.key(),

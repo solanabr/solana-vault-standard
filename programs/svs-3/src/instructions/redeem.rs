@@ -30,7 +30,6 @@ pub struct Redeem<'info> {
     pub user: Signer<'info>,
 
     #[account(
-        mut,
         constraint = !vault.paused @ VaultError::VaultPaused,
     )]
     pub vault: Account<'info, ConfidentialVault>,
@@ -66,10 +65,18 @@ pub struct Redeem<'info> {
     )]
     pub user_shares_account: InterfaceAccount<'info, TokenAccount>,
 
-    /// CHECK: Pre-verified CiphertextCommitmentEqualityProof context state account
+    /// CHECK: Pre-verified CiphertextCommitmentEqualityProof context state account.
+    /// Must be owned by the ZK ElGamal proof program.
+    #[account(
+        constraint = equality_proof_context.owner == &solana_zk_sdk::zk_elgamal_proof_program::id() @ VaultError::InvalidProof
+    )]
     pub equality_proof_context: UncheckedAccount<'info>,
 
-    /// CHECK: Pre-verified BatchedRangeProofU64 context state account
+    /// CHECK: Pre-verified BatchedRangeProofU64 context state account.
+    /// Must be owned by the ZK ElGamal proof program.
+    #[account(
+        constraint = range_proof_context.owner == &solana_zk_sdk::zk_elgamal_proof_program::id() @ VaultError::InvalidProof
+    )]
     pub range_proof_context: UncheckedAccount<'info>,
 
     pub asset_token_program: Interface<'info, TokenInterface>,
@@ -91,13 +98,14 @@ pub fn handler(
 ) -> Result<()> {
     require!(shares > 0, VaultError::ZeroAmount);
 
+    let total_assets = ctx.accounts.asset_vault.amount;
     let vault = &ctx.accounts.vault;
     let total_shares = ctx.accounts.shares_mint.supply;
 
-    // Calculate assets to receive (floor rounding - user gets less)
+    // Calculate assets to receive using live balance (floor rounding - user gets less)
     let assets = convert_to_assets(
         shares,
-        vault.total_assets,
+        total_assets,
         total_shares,
         vault.decimals_offset,
         Rounding::Floor,
@@ -107,7 +115,7 @@ pub fn handler(
     require!(assets >= min_assets_out, VaultError::SlippageExceeded);
 
     // Check vault has enough assets
-    require!(assets <= vault.total_assets, VaultError::InsufficientAssets);
+    require!(assets <= total_assets, VaultError::InsufficientAssets);
 
     // Convert bytes to PodAeCiphertext (safe conversion)
     let new_decryptable_balance: PodAeCiphertext =
@@ -177,13 +185,6 @@ pub fn handler(
         assets,
         ctx.accounts.asset_mint.decimals,
     )?;
-
-    // Update cached total assets
-    let vault = &mut ctx.accounts.vault;
-    vault.total_assets = vault
-        .total_assets
-        .checked_sub(assets)
-        .ok_or(VaultError::MathOverflow)?;
 
     emit!(WithdrawEvent {
         vault: ctx.accounts.vault.key(),

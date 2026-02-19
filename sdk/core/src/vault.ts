@@ -11,6 +11,7 @@ import {
   ASSOCIATED_TOKEN_PROGRAM_ID,
   getAssociatedTokenAddressSync,
   getMint,
+  getAccount,
 } from "@solana/spl-token";
 
 import { deriveVaultAddresses } from "./pda";
@@ -370,11 +371,16 @@ export class SolanaVault {
   // ============ View Functions (Off-chain) ============
 
   /**
-   * Get total assets in vault
+   * Get total assets in vault (reads live balance from asset vault token account)
    */
   async totalAssets(): Promise<BN> {
-    const state = await this.getState();
-    return state.totalAssets;
+    const account = await getAccount(
+      this.provider.connection,
+      this.assetVault,
+      undefined,
+      this.assetTokenProgram,
+    );
+    return new BN(account.amount.toString());
   }
 
   /**
@@ -395,10 +401,11 @@ export class SolanaVault {
    */
   async previewDeposit(assets: BN): Promise<BN> {
     const state = await this.refresh();
+    const totalAssets = await this.totalAssets();
     const totalShares = await this.totalShares();
     return math.previewDeposit(
       assets,
-      state.totalAssets,
+      totalAssets,
       totalShares,
       state.decimalsOffset,
     );
@@ -409,10 +416,11 @@ export class SolanaVault {
    */
   async previewMint(shares: BN): Promise<BN> {
     const state = await this.refresh();
+    const totalAssets = await this.totalAssets();
     const totalShares = await this.totalShares();
     return math.previewMint(
       shares,
-      state.totalAssets,
+      totalAssets,
       totalShares,
       state.decimalsOffset,
     );
@@ -423,10 +431,11 @@ export class SolanaVault {
    */
   async previewWithdraw(assets: BN): Promise<BN> {
     const state = await this.refresh();
+    const totalAssets = await this.totalAssets();
     const totalShares = await this.totalShares();
     return math.previewWithdraw(
       assets,
-      state.totalAssets,
+      totalAssets,
       totalShares,
       state.decimalsOffset,
     );
@@ -437,10 +446,11 @@ export class SolanaVault {
    */
   async previewRedeem(shares: BN): Promise<BN> {
     const state = await this.refresh();
+    const totalAssets = await this.totalAssets();
     const totalShares = await this.totalShares();
     return math.previewRedeem(
       shares,
-      state.totalAssets,
+      totalAssets,
       totalShares,
       state.decimalsOffset,
     );
@@ -450,11 +460,12 @@ export class SolanaVault {
    * Convert assets to shares
    */
   async convertToShares(assets: BN): Promise<BN> {
-    const state = await this.getState();
+    const state = await this.refresh();
+    const totalAssets = await this.totalAssets();
     const totalShares = await this.totalShares();
     return math.convertToShares(
       assets,
-      state.totalAssets,
+      totalAssets,
       totalShares,
       state.decimalsOffset,
     );
@@ -464,11 +475,12 @@ export class SolanaVault {
    * Convert shares to assets
    */
   async convertToAssets(shares: BN): Promise<BN> {
-    const state = await this.getState();
+    const state = await this.refresh();
+    const totalAssets = await this.totalAssets();
     const totalShares = await this.totalShares();
     return math.convertToAssets(
       shares,
-      state.totalAssets,
+      totalAssets,
       totalShares,
       state.decimalsOffset,
     );

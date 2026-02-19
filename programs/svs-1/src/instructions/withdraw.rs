@@ -64,10 +64,7 @@ pub fn handler(ctx: Context<Withdraw>, assets: u64, max_shares_in: u64) -> Resul
     // SVS-1: Use LIVE balance from asset_vault
     let total_assets = ctx.accounts.asset_vault.amount;
 
-    require!(
-        assets <= total_assets,
-        VaultError::InsufficientAssets
-    );
+    require!(assets <= total_assets, VaultError::InsufficientAssets);
 
     let vault = &ctx.accounts.vault;
     let total_shares = ctx.accounts.shares_mint.supply;

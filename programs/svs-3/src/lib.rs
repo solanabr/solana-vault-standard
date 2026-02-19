@@ -184,12 +184,12 @@ pub mod svs_3 {
     }
 
     /// Max assets owner can withdraw
-    pub fn max_withdraw(ctx: Context<VaultViewWithOwner>) -> Result<()> {
+    pub fn max_withdraw(ctx: Context<VaultView>) -> Result<()> {
         instructions::view::max_withdraw(ctx)
     }
 
     /// Max shares owner can redeem
-    pub fn max_redeem(ctx: Context<VaultViewWithOwner>) -> Result<()> {
+    pub fn max_redeem(ctx: Context<VaultView>) -> Result<()> {
         instructions::view::max_redeem(ctx)
     }
 }

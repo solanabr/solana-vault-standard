@@ -90,17 +90,6 @@ pub fn handler(
         &shares_mint_bump_bytes,
     ];
 
-    // Signer seeds for vault PDA (mint authority)
-    let asset_mint_key = ctx.accounts.asset_mint.key();
-    let vault_id_bytes = vault_id.to_le_bytes();
-    let vault_bump_bytes = [vault_bump];
-    let _vault_seeds: &[&[u8]] = &[
-        VAULT_SEED,
-        asset_mint_key.as_ref(),
-        &vault_id_bytes,
-        &vault_bump_bytes,
-    ];
-
     // Create shares mint account
     invoke_signed(
         &anchor_lang::solana_program::system_instruction::create_account(
