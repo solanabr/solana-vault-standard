@@ -28,12 +28,8 @@ pub struct Withdraw {
     pub shares: u64,
 }
 
-#[event]
-pub struct VaultSynced {
-    pub vault: Pubkey,
-    pub previous_total: u64,
-    pub new_total: u64,
-}
+// NOTE: No VaultSynced event in SVS-1 - uses live balance
+// For sync functionality, use SVS-2
 
 #[event]
 pub struct VaultStatusChanged {

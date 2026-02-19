@@ -1,18 +1,16 @@
 use anchor_lang::prelude::*;
-use anchor_lang::solana_program::program::invoke;
 use anchor_spl::{
     associated_token::AssociatedToken,
     token_2022::{self, MintTo, Token2022},
     token_interface::{transfer_checked, Mint, TokenAccount, TokenInterface, TransferChecked},
 };
-use spl_token_2022::extension::confidential_transfer::instruction::deposit as confidential_deposit;
 
 use crate::{
-    constants::{MIN_DEPOSIT_AMOUNT, SHARES_DECIMALS, VAULT_SEED},
+    constants::{MIN_DEPOSIT_AMOUNT, VAULT_SEED},
     error::VaultError,
     events::Deposit as DepositEvent,
     math::{convert_to_shares, Rounding},
-    state::ConfidentialVault,
+    state::Vault,
 };
 
 #[derive(Accounts)]
@@ -24,7 +22,7 @@ pub struct Deposit<'info> {
         mut,
         constraint = !vault.paused @ VaultError::VaultPaused,
     )]
-    pub vault: Account<'info, ConfidentialVault>,
+    pub vault: Account<'info, Vault>,
 
     #[account(
         constraint = asset_mint.key() == vault.asset_mint,
@@ -50,11 +48,12 @@ pub struct Deposit<'info> {
     )]
     pub shares_mint: InterfaceAccount<'info, Mint>,
 
-    /// The user's shares account (must already be configured for confidential transfers)
     #[account(
-        mut,
-        constraint = user_shares_account.mint == vault.shares_mint,
-        constraint = user_shares_account.owner == user.key(),
+        init_if_needed,
+        payer = user,
+        associated_token::mint = shares_mint,
+        associated_token::authority = user,
+        associated_token::token_program = token_2022_program,
     )]
     pub user_shares_account: InterfaceAccount<'info, TokenAccount>,
 
@@ -64,14 +63,6 @@ pub struct Deposit<'info> {
     pub system_program: Program<'info, System>,
 }
 
-/// Deposit assets and receive confidential shares
-///
-/// The shares are minted to the user's non-confidential balance, then
-/// immediately deposited into the confidential pending balance.
-/// User must call apply_pending after this to use the shares.
-///
-/// NOTE: User's shares account must be configured for confidential transfers
-/// (call configure_account first)
 pub fn handler(ctx: Context<Deposit>, assets: u64, min_shares_out: u64) -> Result<()> {
     require!(assets > 0, VaultError::ZeroAmount);
     require!(assets >= MIN_DEPOSIT_AMOUNT, VaultError::DepositTooSmall);
@@ -106,7 +97,7 @@ pub fn handler(ctx: Context<Deposit>, assets: u64, min_shares_out: u64) -> Resul
         ctx.accounts.asset_mint.decimals,
     )?;
 
-    // Mint shares to user's non-confidential balance (vault PDA is mint authority)
+    // Mint shares to user (vault PDA is mint authority)
     let asset_mint_key = ctx.accounts.vault.asset_mint;
     let vault_id_bytes = ctx.accounts.vault.vault_id.to_le_bytes();
     let bump = ctx.accounts.vault.bump;
@@ -128,26 +119,6 @@ pub fn handler(ctx: Context<Deposit>, assets: u64, min_shares_out: u64) -> Resul
             signer_seeds,
         ),
         shares,
-    )?;
-
-    // Move minted shares from non-confidential to confidential pending balance
-    let deposit_ix = confidential_deposit(
-        &ctx.accounts.token_2022_program.key(),
-        &ctx.accounts.user_shares_account.key(),
-        &ctx.accounts.shares_mint.key(),
-        shares,
-        SHARES_DECIMALS,
-        &ctx.accounts.user.key(),
-        &[],
-    )?;
-
-    invoke(
-        &deposit_ix,
-        &[
-            ctx.accounts.user_shares_account.to_account_info(),
-            ctx.accounts.shares_mint.to_account_info(),
-            ctx.accounts.user.to_account_info(),
-        ],
     )?;
 
     // Update cached total assets

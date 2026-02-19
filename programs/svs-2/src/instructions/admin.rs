@@ -4,7 +4,7 @@ use anchor_spl::token_interface::TokenAccount;
 use crate::{
     error::VaultError,
     events::{AuthorityTransferred, VaultStatusChanged, VaultSynced},
-    state::ConfidentialVault,
+    state::Vault,
 };
 
 #[derive(Accounts)]
@@ -15,7 +15,7 @@ pub struct Admin<'info> {
     pub authority: Signer<'info>,
 
     #[account(mut)]
-    pub vault: Account<'info, ConfidentialVault>,
+    pub vault: Account<'info, Vault>,
 }
 
 #[derive(Accounts)]
@@ -26,7 +26,7 @@ pub struct Sync<'info> {
     pub authority: Signer<'info>,
 
     #[account(mut)]
-    pub vault: Account<'info, ConfidentialVault>,
+    pub vault: Account<'info, Vault>,
 
     #[account(
         constraint = asset_vault.key() == vault.asset_vault,

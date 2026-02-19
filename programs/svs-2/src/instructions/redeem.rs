@@ -1,29 +1,17 @@
 use anchor_lang::prelude::*;
-use anchor_lang::solana_program::program::invoke;
 use anchor_spl::{
     token_2022::{self, Burn, Token2022},
     token_interface::{transfer_checked, Mint, TokenAccount, TokenInterface, TransferChecked},
 };
-use bytemuck::try_from_bytes;
-use solana_zk_sdk::encryption::pod::auth_encryption::PodAeCiphertext;
-use spl_token_2022::extension::confidential_transfer::instruction::inner_withdraw;
-use spl_token_confidential_transfer_proof_extraction::instruction::ProofLocation;
 
 use crate::{
-    constants::{SHARES_DECIMALS, VAULT_SEED},
+    constants::VAULT_SEED,
     error::VaultError,
     events::Withdraw as WithdrawEvent,
     math::{convert_to_assets, Rounding},
-    state::ConfidentialVault,
+    state::Vault,
 };
 
-/// Redeem confidential shares for assets
-///
-/// Requires pre-verified proof context accounts for:
-/// - CiphertextCommitmentEqualityProof
-/// - BatchedRangeProofU64
-///
-/// These proofs must be verified using the ZK ElGamal program before calling redeem.
 #[derive(Accounts)]
 pub struct Redeem<'info> {
     #[account(mut)]
@@ -33,7 +21,7 @@ pub struct Redeem<'info> {
         mut,
         constraint = !vault.paused @ VaultError::VaultPaused,
     )]
-    pub vault: Account<'info, ConfidentialVault>,
+    pub vault: Account<'info, Vault>,
 
     #[account(
         constraint = asset_mint.key() == vault.asset_mint,
@@ -66,30 +54,19 @@ pub struct Redeem<'info> {
     )]
     pub user_shares_account: InterfaceAccount<'info, TokenAccount>,
 
-    /// CHECK: Pre-verified CiphertextCommitmentEqualityProof context state account
-    pub equality_proof_context: UncheckedAccount<'info>,
-
-    /// CHECK: Pre-verified BatchedRangeProofU64 context state account
-    pub range_proof_context: UncheckedAccount<'info>,
-
     pub asset_token_program: Interface<'info, TokenInterface>,
     pub token_2022_program: Program<'info, Token2022>,
 }
 
 /// Redeem shares for assets (floor rounding - protects vault)
-///
-/// # Arguments
-/// * `shares` - Number of confidential shares to redeem
-/// * `min_assets_out` - Minimum assets to receive (slippage protection)
-/// * `new_decryptable_available_balance` - AE ciphertext of balance after withdrawal
-///   (computed client-side: current_balance - shares)
-pub fn handler(
-    ctx: Context<Redeem>,
-    shares: u64,
-    min_assets_out: u64,
-    new_decryptable_available_balance: [u8; 36],
-) -> Result<()> {
+pub fn handler(ctx: Context<Redeem>, shares: u64, min_assets_out: u64) -> Result<()> {
     require!(shares > 0, VaultError::ZeroAmount);
+
+    // Check user has enough shares
+    require!(
+        ctx.accounts.user_shares_account.amount >= shares,
+        VaultError::InsufficientShares
+    );
 
     let vault = &ctx.accounts.vault;
     let total_shares = ctx.accounts.shares_mint.supply;
@@ -109,37 +86,7 @@ pub fn handler(
     // Check vault has enough assets
     require!(assets <= vault.total_assets, VaultError::InsufficientAssets);
 
-    // Convert bytes to PodAeCiphertext (safe conversion)
-    let new_decryptable_balance: PodAeCiphertext =
-        *try_from_bytes::<PodAeCiphertext>(&new_decryptable_available_balance)
-            .map_err(|_| VaultError::InvalidCiphertext)?;
-
-    // Step 1: Withdraw from confidential to non-confidential balance
-    let withdraw_ix = inner_withdraw(
-        &ctx.accounts.token_2022_program.key(),
-        &ctx.accounts.user_shares_account.key(),
-        &ctx.accounts.shares_mint.key(),
-        shares,
-        SHARES_DECIMALS,
-        new_decryptable_balance,
-        &ctx.accounts.user.key(),
-        &[],
-        ProofLocation::ContextStateAccount(ctx.accounts.equality_proof_context.key),
-        ProofLocation::ContextStateAccount(ctx.accounts.range_proof_context.key),
-    )?;
-
-    invoke(
-        &withdraw_ix,
-        &[
-            ctx.accounts.user_shares_account.to_account_info(),
-            ctx.accounts.shares_mint.to_account_info(),
-            ctx.accounts.equality_proof_context.to_account_info(),
-            ctx.accounts.range_proof_context.to_account_info(),
-            ctx.accounts.user.to_account_info(),
-        ],
-    )?;
-
-    // Step 2: Burn shares from user's non-confidential balance
+    // Burn shares from user
     token_2022::burn(
         CpiContext::new(
             ctx.accounts.token_2022_program.to_account_info(),
@@ -152,7 +99,7 @@ pub fn handler(
         shares,
     )?;
 
-    // Step 3: Transfer assets from vault to user
+    // Transfer assets from vault to user
     let asset_mint_key = ctx.accounts.vault.asset_mint;
     let vault_id_bytes = ctx.accounts.vault.vault_id.to_le_bytes();
     let bump = ctx.accounts.vault.bump;

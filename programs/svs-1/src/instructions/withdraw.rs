@@ -18,7 +18,6 @@ pub struct Withdraw<'info> {
     pub user: Signer<'info>,
 
     #[account(
-        mut,
         constraint = !vault.paused @ VaultError::VaultPaused,
     )]
     pub vault: Account<'info, Vault>,
@@ -61,8 +60,12 @@ pub struct Withdraw<'info> {
 /// Withdraw exact assets, burning required shares (ceiling rounding - protects vault)
 pub fn handler(ctx: Context<Withdraw>, assets: u64, max_shares_in: u64) -> Result<()> {
     require!(assets > 0, VaultError::ZeroAmount);
+
+    // SVS-1: Use LIVE balance from asset_vault
+    let total_assets = ctx.accounts.asset_vault.amount;
+
     require!(
-        assets <= ctx.accounts.vault.total_assets,
+        assets <= total_assets,
         VaultError::InsufficientAssets
     );
 
@@ -72,7 +75,7 @@ pub fn handler(ctx: Context<Withdraw>, assets: u64, max_shares_in: u64) -> Resul
     // Calculate shares to burn (ceiling rounding - user burns more)
     let shares = convert_to_shares(
         assets,
-        vault.total_assets,
+        total_assets,
         total_shares,
         vault.decimals_offset,
         Rounding::Ceiling,
@@ -126,12 +129,7 @@ pub fn handler(ctx: Context<Withdraw>, assets: u64, max_shares_in: u64) -> Resul
         ctx.accounts.asset_mint.decimals,
     )?;
 
-    // Update cached total assets
-    let vault = &mut ctx.accounts.vault;
-    vault.total_assets = vault
-        .total_assets
-        .checked_sub(assets)
-        .ok_or(VaultError::MathOverflow)?;
+    // NOTE: No need to update total_assets - SVS-1 uses live balance
 
     emit!(WithdrawEvent {
         vault: ctx.accounts.vault.key(),

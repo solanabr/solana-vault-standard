@@ -7,10 +7,14 @@ skip-lint = false
 [programs.localnet]
 svs_1 = "SVS1VauLt1111111111111111111111111111111111"
 svs_2 = "SVS2VauLt2222222222222222222222222222222222"
+svs_3 = "SVS3VauLt3333333333333333333333333333333333"
+svs_4 = "SVS4VauLt4444444444444444444444444444444444"
 
 [programs.devnet]
 svs_1 = "SVS1VauLt1111111111111111111111111111111111"
 svs_2 = "SVS2VauLt2222222222222222222222222222222222"
+svs_3 = "SVS3VauLt3333333333333333333333333333333333"
+svs_4 = "SVS4VauLt4444444444444444444444444444444444"
 
 [registry]
 url = "https://api.apr.dev"
@@ -20,4 +24,7 @@ cluster = "Localnet"
 wallet = "~/.config/solana/id.json"
 
 [scripts]
+# Run all tests: anchor test
+# Run specific file: anchor test -- tests/svs-1.ts
+# Run by pattern: anchor test -- "tests/svs-*.ts"
 test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts"

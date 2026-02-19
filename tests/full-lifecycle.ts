@@ -159,8 +159,8 @@ describe("Full Lifecycle", () => {
     console.log("  Vault:", vault.toBase58());
   });
 
-  it("complete flow: init → deposit → yield → sync → redeem", async () => {
-    console.log("\n--- Complete Flow Test ---");
+  it("complete flow: init → deposit → yield → redeem (SVS-1 live balance)", async () => {
+    console.log("\n--- Complete Flow Test (SVS-1 Live Balance) ---");
 
     // 1. Initial deposit
     const depositAmount = 100_000 * 10 ** ASSET_DECIMALS;
@@ -181,7 +181,7 @@ describe("Full Lifecycle", () => {
       })
       .rpc();
 
-    let vaultState = await program.account.vault.fetch(vault);
+    let assetVaultAccount = await getAccount(connection, assetVault);
     let userShares = await getAccount(connection, userSharesAccount, undefined, TOKEN_2022_PROGRAM_ID);
     console.log("1. Deposited:", depositAmount / 10 ** ASSET_DECIMALS, "assets");
     console.log("   Shares received:", Number(userShares.amount) / 10 ** 9);
@@ -201,18 +201,9 @@ describe("Full Lifecycle", () => {
     );
     console.log("2. Yield added:", yieldAmount / 10 ** ASSET_DECIMALS, "assets");
 
-    // 3. Sync to recognize yield
-    await program.methods
-      .sync()
-      .accountsStrict({
-        authority: payer.publicKey,
-        vault: vault,
-        assetVault: assetVault,
-      })
-      .rpc();
-
-    vaultState = await program.account.vault.fetch(vault);
-    console.log("3. After sync - total_assets:", vaultState.totalAssets.toNumber() / 10 ** ASSET_DECIMALS);
+    // SVS-1: NO sync() needed - live balance immediately reflects yield
+    assetVaultAccount = await getAccount(connection, assetVault);
+    console.log("3. Live balance (no sync needed):", Number(assetVaultAccount.amount) / 10 ** ASSET_DECIMALS);
 
     // 4. Redeem all shares
     userShares = await getAccount(connection, userSharesAccount, undefined, TOKEN_2022_PROGRAM_ID);
@@ -242,19 +233,19 @@ describe("Full Lifecycle", () => {
 
     expect(assetsReceived).to.be.greaterThan(depositAmount);
 
-    // 5. Verify vault is nearly empty (may have minimal dust due to rounding)
-    vaultState = await program.account.vault.fetch(vault);
-    expect(vaultState.totalAssets.toNumber()).to.be.lessThan(10); // Allow minimal rounding dust
-    console.log("5. Vault empty - total_assets:", vaultState.totalAssets.toNumber());
+    // 5. Verify vault is nearly empty (SVS-1: check live balance)
+    assetVaultAccount = await getAccount(connection, assetVault);
+    expect(Number(assetVaultAccount.amount)).to.be.lessThan(10); // Allow minimal rounding dust
+    console.log("5. Vault empty - live balance:", Number(assetVaultAccount.amount));
   });
 
   it("vault survives complete exit and new deposits", async () => {
     console.log("\n--- Vault Survival Test ---");
 
-    // Vault should be nearly empty from previous test (may have minimal dust)
-    let vaultState = await program.account.vault.fetch(vault);
-    expect(vaultState.totalAssets.toNumber()).to.be.lessThan(10); // Allow minimal rounding dust
-    console.log("1. Starting with nearly empty vault, dust:", vaultState.totalAssets.toNumber());
+    // SVS-1: Check live balance instead of vault.totalAssets
+    let assetVaultAccount = await getAccount(connection, assetVault);
+    expect(Number(assetVaultAccount.amount)).to.be.lessThan(10); // Allow minimal rounding dust
+    console.log("1. Starting with nearly empty vault, dust:", Number(assetVaultAccount.amount));
 
     // New deposit after complete exit
     const newDeposit = 50_000 * 10 ** ASSET_DECIMALS;
@@ -275,11 +266,12 @@ describe("Full Lifecycle", () => {
       })
       .rpc();
 
-    vaultState = await program.account.vault.fetch(vault);
+    // SVS-1: Check live balance
+    assetVaultAccount = await getAccount(connection, assetVault);
     // Account for minimal rounding dust from previous test
-    expect(vaultState.totalAssets.toNumber()).to.be.closeTo(newDeposit, 10);
+    expect(Number(assetVaultAccount.amount)).to.be.closeTo(newDeposit, 10);
     console.log("2. New deposit successful:", newDeposit / 10 ** ASSET_DECIMALS, "assets");
-    console.log("   Vault total_assets:", vaultState.totalAssets.toNumber() / 10 ** ASSET_DECIMALS);
+    console.log("   Live balance:", Number(assetVaultAccount.amount) / 10 ** ASSET_DECIMALS);
   });
 
   it("sequential: deposit → mint → withdraw → redeem", async () => {
@@ -360,11 +352,10 @@ describe("Full Lifecycle", () => {
       .rpc();
     console.log("4. Redeem: 1,000 shares");
 
-    // Verify state is consistent
-    const vaultState = await program.account.vault.fetch(vault);
+    // SVS-1: Verify state is consistent using live balance
     const assetVaultAccount = await getAccount(connection, assetVault);
-    expect(vaultState.totalAssets.toNumber()).to.equal(Number(assetVaultAccount.amount));
-    console.log("5. State consistent - total_assets:", vaultState.totalAssets.toNumber() / 10 ** ASSET_DECIMALS);
+    expect(Number(assetVaultAccount.amount)).to.be.greaterThan(0);
+    console.log("5. State consistent - live balance:", Number(assetVaultAccount.amount) / 10 ** ASSET_DECIMALS);
   });
 
   it("stress: 10 deposits, 5 redeems, 3 withdraws, 2 mints", async () => {
@@ -491,17 +482,16 @@ describe("Full Lifecycle", () => {
     }
     console.log("   2 mints complete");
 
-    // Verify final state consistency
-    const finalVaultState = await program.account.vault.fetch(stressVault);
+    // SVS-1: Verify final state consistency using live balance
     const finalAssetVault = await getAccount(connection, stressAssetVault);
     const finalSharesMint = await getMint(connection, stressSharesMint, undefined, TOKEN_2022_PROGRAM_ID);
     const finalUserShares = await getAccount(connection, stressUserSharesAccount, undefined, TOKEN_2022_PROGRAM_ID);
 
-    expect(finalVaultState.totalAssets.toNumber()).to.equal(Number(finalAssetVault.amount));
+    expect(Number(finalAssetVault.amount)).to.be.greaterThan(0);
     expect(Number(finalSharesMint.supply)).to.equal(Number(finalUserShares.amount));
 
     console.log("5. Final state:");
-    console.log("   Total assets:", finalVaultState.totalAssets.toNumber() / 10 ** ASSET_DECIMALS);
+    console.log("   Live balance:", Number(finalAssetVault.amount) / 10 ** ASSET_DECIMALS);
     console.log("   Total shares:", Number(finalSharesMint.supply) / 10 ** 9);
     console.log("   State consistent: true");
   });
@@ -585,25 +575,24 @@ describe("Full Lifecycle", () => {
         })
         .rpc();
 
-      const vaultState = await program.account.vault.fetch(exitVault);
+      // SVS-1: Check live balance, not vault.total_assets
+      const assetVaultAfter = await getAccount(connection, exitAssetVault);
       const sharesAfter = await getAccount(connection, exitUserSharesAccount, undefined, TOKEN_2022_PROGRAM_ID);
 
-      expect(vaultState.totalAssets.toNumber()).to.equal(0);
+      expect(Number(assetVaultAfter.amount)).to.equal(0);
       expect(Number(sharesAfter.amount)).to.equal(0);
       console.log("  Single user complete exit successful");
     });
 
     it("vault state correct after all users exit", async () => {
-      const vaultState = await program.account.vault.fetch(exitVault);
+      // SVS-1: Check live balance, not vault.total_assets
       const assetVaultAccount = await getAccount(connection, exitAssetVault);
       const sharesMintInfo = await getMint(connection, exitSharesMint, undefined, TOKEN_2022_PROGRAM_ID);
 
-      expect(vaultState.totalAssets.toNumber()).to.equal(0);
       expect(Number(assetVaultAccount.amount)).to.equal(0);
       expect(Number(sharesMintInfo.supply)).to.equal(0);
       console.log("  Vault state correct after exit:");
-      console.log("    total_assets: 0");
-      console.log("    actual balance: 0");
+      console.log("    live balance: 0");
       console.log("    total shares: 0");
     });
 
@@ -626,13 +615,14 @@ describe("Full Lifecycle", () => {
         })
         .rpc();
 
-      const vaultState = await program.account.vault.fetch(exitVault);
+      // SVS-1: Check live balance, not vault.total_assets
+      const assetVaultAccount = await getAccount(connection, exitAssetVault);
       const userShares = await getAccount(connection, exitUserSharesAccount, undefined, TOKEN_2022_PROGRAM_ID);
 
-      expect(vaultState.totalAssets.toNumber()).to.equal(50_000 * 10 ** ASSET_DECIMALS);
+      expect(Number(assetVaultAccount.amount)).to.equal(50_000 * 10 ** ASSET_DECIMALS);
       expect(Number(userShares.amount)).to.be.greaterThan(0);
       console.log("  New deposit after exit successful");
-      console.log("    New total_assets:", vaultState.totalAssets.toNumber() / 10 ** ASSET_DECIMALS);
+      console.log("    Live balance:", Number(assetVaultAccount.amount) / 10 ** ASSET_DECIMALS);
       console.log("    New shares:", Number(userShares.amount) / 10 ** 9);
     });
   });

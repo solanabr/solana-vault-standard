@@ -4,12 +4,12 @@ use anchor_spl::token_interface::{Mint, TokenAccount};
 
 use crate::{
     math::{convert_to_assets, convert_to_shares, Rounding},
-    state::ConfidentialVault,
+    state::Vault,
 };
 
 #[derive(Accounts)]
 pub struct VaultView<'info> {
-    pub vault: Account<'info, ConfidentialVault>,
+    pub vault: Account<'info, Vault>,
 
     #[account(constraint = shares_mint.key() == vault.shares_mint)]
     pub shares_mint: InterfaceAccount<'info, Mint>,
@@ -17,7 +17,7 @@ pub struct VaultView<'info> {
 
 #[derive(Accounts)]
 pub struct VaultViewWithOwner<'info> {
-    pub vault: Account<'info, ConfidentialVault>,
+    pub vault: Account<'info, Vault>,
 
     #[account(constraint = shares_mint.key() == vault.shares_mint)]
     pub shares_mint: InterfaceAccount<'info, Mint>,

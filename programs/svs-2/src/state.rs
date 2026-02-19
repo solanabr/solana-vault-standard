@@ -3,12 +3,12 @@ use anchor_lang::prelude::*;
 use crate::constants::VAULT_SEED;
 
 #[account]
-pub struct ConfidentialVault {
+pub struct Vault {
     /// Vault admin who can pause/unpause and transfer authority
     pub authority: Pubkey,
     /// Underlying asset mint
     pub asset_mint: Pubkey,
-    /// LP token mint (shares) - Token-2022 with ConfidentialTransferMint extension
+    /// LP token mint (shares)
     pub shares_mint: Pubkey,
     /// Token account holding assets
     pub asset_vault: Pubkey,
@@ -22,16 +22,12 @@ pub struct ConfidentialVault {
     pub paused: bool,
     /// Unique vault identifier (allows multiple vaults per asset)
     pub vault_id: u64,
-    /// Optional auditor ElGamal public key for compliance (32 bytes if Some)
-    pub auditor_elgamal_pubkey: Option<[u8; 32]>,
-    /// Authority for confidential transfer operations
-    pub confidential_authority: Pubkey,
     /// Reserved for future upgrades
-    pub _reserved: [u8; 32],
+    pub _reserved: [u8; 64],
 }
 
-impl ConfidentialVault {
-    pub const LEN: usize = 8 +   // discriminator
+impl Vault {
+    pub const LEN: usize = 8 +  // discriminator
         32 +  // authority
         32 +  // asset_mint
         32 +  // shares_mint
@@ -41,9 +37,7 @@ impl ConfidentialVault {
         1 +   // bump
         1 +   // paused
         8 +   // vault_id
-        1 + 32 + // auditor_elgamal_pubkey (Option<[u8; 32]>)
-        32 +  // confidential_authority
-        32; // _reserved
+        64; // _reserved
 
     pub const SEED_PREFIX: &'static [u8] = VAULT_SEED;
 }

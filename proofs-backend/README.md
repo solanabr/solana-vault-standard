@@ -1,6 +1,6 @@
-# SVS Proof Backend
+# SVS Proofs Backend
 
-ZK proof generation backend for SVS-2 Confidential Vaults. Generates Token-2022 Confidential Transfer proofs using `solana-zk-sdk`.
+ZK proof generation backend for SVS-3/SVS-4 Private Vaults. Generates Token-2022 Confidential Transfer proofs using `solana-zk-sdk`.
 
 ## Why This Exists
 
@@ -189,7 +189,7 @@ if (await isProofBackendAvailable()) {
 
 ```bash
 # Build image
-docker build -t svs-proof-backend .
+docker build -t svs-proofs-backend .
 
 # Run with docker-compose
 docker compose up -d
@@ -202,7 +202,7 @@ docker compose logs -f
 
 ```yaml
 services:
-  proof-backend:
+  proofs-backend:
     build: .
     ports:
       - "3001:3001"
@@ -243,7 +243,7 @@ cargo clippy
 ## Architecture
 
 ```
-backend/
+proofs-backend/
 ├── src/
 │   ├── main.rs              # Server entry, middleware
 │   ├── error.rs             # Error types

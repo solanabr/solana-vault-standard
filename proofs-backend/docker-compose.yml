@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  proof-backend:
+  proofs-backend:
     build:
       context: .
       dockerfile: Dockerfile
@@ -34,4 +34,4 @@ services:
   #     - ./nginx.conf:/etc/nginx/nginx.conf:ro
   #     - ./certs:/etc/nginx/certs:ro
   #   depends_on:
-  #     - proof-backend
+  #     - proofs-backend

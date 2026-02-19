@@ -347,8 +347,9 @@ describe("svs-1 edge cases", () => {
     });
 
     it("rejects withdraw exceeding vault assets", async () => {
-      const vaultAccount = await program.account.vault.fetch(vault);
-      const vaultAssets = vaultAccount.totalAssets.toNumber();
+      // SVS-1: Use live balance from asset_vault
+      const assetVaultAccount = await getAccount(connection, assetVault);
+      const vaultAssets = Number(assetVaultAccount.amount);
 
       try {
         await program.methods
