@@ -50,6 +50,8 @@ pub mod svs_1 {
         pub vault: AccountMeta,
 
         pub shares_mint: AccountMeta,
+
+        pub asset_vault: AccountMeta,
     }
 
     /// Account pubkeys for ConvertToAssets instruction
@@ -58,11 +60,19 @@ pub mod svs_1 {
         pub vault: Pubkey,
 
         pub shares_mint: Pubkey,
+
+        pub asset_vault: Pubkey,
     }
 
     impl ConvertToAssetsInstructionAccounts {
-        pub fn new(vault: Pubkey, shares_mint: Pubkey) -> Self {
-            Self { vault, shares_mint }
+        pub fn new(vault: Pubkey, shares_mint: Pubkey, asset_vault: Pubkey) -> Self {
+            Self {
+                vault,
+
+                shares_mint,
+
+                asset_vault,
+            }
         }
     }
 
@@ -97,6 +107,8 @@ pub mod svs_1 {
 
             self.accounts.shares_mint = AccountMeta::new_readonly(accounts.shares_mint, false);
 
+            self.accounts.asset_vault = AccountMeta::new_readonly(accounts.asset_vault, false);
+
             self
         }
 
@@ -111,6 +123,8 @@ pub mod svs_1 {
             metas.push(self.accounts.vault.clone());
 
             metas.push(self.accounts.shares_mint.clone());
+
+            metas.push(self.accounts.asset_vault.clone());
 
             metas.extend(self.remaining_accounts.clone());
             metas
@@ -144,6 +158,8 @@ pub mod svs_1 {
         pub vault: AccountMeta,
 
         pub shares_mint: AccountMeta,
+
+        pub asset_vault: AccountMeta,
     }
 
     /// Account pubkeys for ConvertToShares instruction
@@ -152,11 +168,19 @@ pub mod svs_1 {
         pub vault: Pubkey,
 
         pub shares_mint: Pubkey,
+
+        pub asset_vault: Pubkey,
     }
 
     impl ConvertToSharesInstructionAccounts {
-        pub fn new(vault: Pubkey, shares_mint: Pubkey) -> Self {
-            Self { vault, shares_mint }
+        pub fn new(vault: Pubkey, shares_mint: Pubkey, asset_vault: Pubkey) -> Self {
+            Self {
+                vault,
+
+                shares_mint,
+
+                asset_vault,
+            }
         }
     }
 
@@ -191,6 +215,8 @@ pub mod svs_1 {
 
             self.accounts.shares_mint = AccountMeta::new_readonly(accounts.shares_mint, false);
 
+            self.accounts.asset_vault = AccountMeta::new_readonly(accounts.asset_vault, false);
+
             self
         }
 
@@ -205,6 +231,8 @@ pub mod svs_1 {
             metas.push(self.accounts.vault.clone());
 
             metas.push(self.accounts.shares_mint.clone());
+
+            metas.push(self.accounts.asset_vault.clone());
 
             metas.extend(self.remaining_accounts.clone());
             metas
@@ -351,7 +379,7 @@ pub mod svs_1 {
         pub fn accounts(mut self, accounts: DepositInstructionAccounts) -> Self {
             self.accounts.user = AccountMeta::new(accounts.user, true);
 
-            self.accounts.vault = AccountMeta::new(accounts.vault, false);
+            self.accounts.vault = AccountMeta::new_readonly(accounts.vault, false);
 
             self.accounts.asset_mint = AccountMeta::new_readonly(accounts.asset_mint, false);
 
@@ -644,6 +672,8 @@ pub mod svs_1 {
         pub vault: AccountMeta,
 
         pub shares_mint: AccountMeta,
+
+        pub asset_vault: AccountMeta,
     }
 
     /// Account pubkeys for MaxDeposit instruction
@@ -652,11 +682,19 @@ pub mod svs_1 {
         pub vault: Pubkey,
 
         pub shares_mint: Pubkey,
+
+        pub asset_vault: Pubkey,
     }
 
     impl MaxDepositInstructionAccounts {
-        pub fn new(vault: Pubkey, shares_mint: Pubkey) -> Self {
-            Self { vault, shares_mint }
+        pub fn new(vault: Pubkey, shares_mint: Pubkey, asset_vault: Pubkey) -> Self {
+            Self {
+                vault,
+
+                shares_mint,
+
+                asset_vault,
+            }
         }
     }
 
@@ -689,6 +727,8 @@ pub mod svs_1 {
 
             self.accounts.shares_mint = AccountMeta::new_readonly(accounts.shares_mint, false);
 
+            self.accounts.asset_vault = AccountMeta::new_readonly(accounts.asset_vault, false);
+
             self
         }
 
@@ -703,6 +743,8 @@ pub mod svs_1 {
             metas.push(self.accounts.vault.clone());
 
             metas.push(self.accounts.shares_mint.clone());
+
+            metas.push(self.accounts.asset_vault.clone());
 
             metas.extend(self.remaining_accounts.clone());
             metas
@@ -736,6 +778,8 @@ pub mod svs_1 {
         pub vault: AccountMeta,
 
         pub shares_mint: AccountMeta,
+
+        pub asset_vault: AccountMeta,
     }
 
     /// Account pubkeys for MaxMint instruction
@@ -744,11 +788,19 @@ pub mod svs_1 {
         pub vault: Pubkey,
 
         pub shares_mint: Pubkey,
+
+        pub asset_vault: Pubkey,
     }
 
     impl MaxMintInstructionAccounts {
-        pub fn new(vault: Pubkey, shares_mint: Pubkey) -> Self {
-            Self { vault, shares_mint }
+        pub fn new(vault: Pubkey, shares_mint: Pubkey, asset_vault: Pubkey) -> Self {
+            Self {
+                vault,
+
+                shares_mint,
+
+                asset_vault,
+            }
         }
     }
 
@@ -781,6 +833,8 @@ pub mod svs_1 {
 
             self.accounts.shares_mint = AccountMeta::new_readonly(accounts.shares_mint, false);
 
+            self.accounts.asset_vault = AccountMeta::new_readonly(accounts.asset_vault, false);
+
             self
         }
 
@@ -795,6 +849,8 @@ pub mod svs_1 {
             metas.push(self.accounts.vault.clone());
 
             metas.push(self.accounts.shares_mint.clone());
+
+            metas.push(self.accounts.asset_vault.clone());
 
             metas.extend(self.remaining_accounts.clone());
             metas
@@ -829,6 +885,8 @@ pub mod svs_1 {
 
         pub shares_mint: AccountMeta,
 
+        pub asset_vault: AccountMeta,
+
         pub owner_shares_account: AccountMeta,
     }
 
@@ -839,15 +897,27 @@ pub mod svs_1 {
 
         pub shares_mint: Pubkey,
 
+        pub asset_vault: Pubkey,
+
         pub owner_shares_account: Pubkey,
     }
 
     impl MaxRedeemInstructionAccounts {
-        pub fn new(vault: Pubkey, shares_mint: Pubkey, owner_shares_account: Pubkey) -> Self {
+        pub fn new(
+            vault: Pubkey,
+
+            shares_mint: Pubkey,
+
+            asset_vault: Pubkey,
+
+            owner_shares_account: Pubkey,
+        ) -> Self {
             Self {
                 vault,
 
                 shares_mint,
+
+                asset_vault,
 
                 owner_shares_account,
             }
@@ -883,6 +953,8 @@ pub mod svs_1 {
 
             self.accounts.shares_mint = AccountMeta::new_readonly(accounts.shares_mint, false);
 
+            self.accounts.asset_vault = AccountMeta::new_readonly(accounts.asset_vault, false);
+
             self.accounts.owner_shares_account =
                 AccountMeta::new_readonly(accounts.owner_shares_account, false);
 
@@ -900,6 +972,8 @@ pub mod svs_1 {
             metas.push(self.accounts.vault.clone());
 
             metas.push(self.accounts.shares_mint.clone());
+
+            metas.push(self.accounts.asset_vault.clone());
 
             metas.push(self.accounts.owner_shares_account.clone());
 
@@ -936,6 +1010,8 @@ pub mod svs_1 {
 
         pub shares_mint: AccountMeta,
 
+        pub asset_vault: AccountMeta,
+
         pub owner_shares_account: AccountMeta,
     }
 
@@ -946,15 +1022,27 @@ pub mod svs_1 {
 
         pub shares_mint: Pubkey,
 
+        pub asset_vault: Pubkey,
+
         pub owner_shares_account: Pubkey,
     }
 
     impl MaxWithdrawInstructionAccounts {
-        pub fn new(vault: Pubkey, shares_mint: Pubkey, owner_shares_account: Pubkey) -> Self {
+        pub fn new(
+            vault: Pubkey,
+
+            shares_mint: Pubkey,
+
+            asset_vault: Pubkey,
+
+            owner_shares_account: Pubkey,
+        ) -> Self {
             Self {
                 vault,
 
                 shares_mint,
+
+                asset_vault,
 
                 owner_shares_account,
             }
@@ -990,6 +1078,8 @@ pub mod svs_1 {
 
             self.accounts.shares_mint = AccountMeta::new_readonly(accounts.shares_mint, false);
 
+            self.accounts.asset_vault = AccountMeta::new_readonly(accounts.asset_vault, false);
+
             self.accounts.owner_shares_account =
                 AccountMeta::new_readonly(accounts.owner_shares_account, false);
 
@@ -1007,6 +1097,8 @@ pub mod svs_1 {
             metas.push(self.accounts.vault.clone());
 
             metas.push(self.accounts.shares_mint.clone());
+
+            metas.push(self.accounts.asset_vault.clone());
 
             metas.push(self.accounts.owner_shares_account.clone());
 
@@ -1155,7 +1247,7 @@ pub mod svs_1 {
         pub fn accounts(mut self, accounts: MintInstructionAccounts) -> Self {
             self.accounts.user = AccountMeta::new(accounts.user, true);
 
-            self.accounts.vault = AccountMeta::new(accounts.vault, false);
+            self.accounts.vault = AccountMeta::new_readonly(accounts.vault, false);
 
             self.accounts.asset_mint = AccountMeta::new_readonly(accounts.asset_mint, false);
 
@@ -1341,6 +1433,8 @@ pub mod svs_1 {
         pub vault: AccountMeta,
 
         pub shares_mint: AccountMeta,
+
+        pub asset_vault: AccountMeta,
     }
 
     /// Account pubkeys for PreviewDeposit instruction
@@ -1349,11 +1443,19 @@ pub mod svs_1 {
         pub vault: Pubkey,
 
         pub shares_mint: Pubkey,
+
+        pub asset_vault: Pubkey,
     }
 
     impl PreviewDepositInstructionAccounts {
-        pub fn new(vault: Pubkey, shares_mint: Pubkey) -> Self {
-            Self { vault, shares_mint }
+        pub fn new(vault: Pubkey, shares_mint: Pubkey, asset_vault: Pubkey) -> Self {
+            Self {
+                vault,
+
+                shares_mint,
+
+                asset_vault,
+            }
         }
     }
 
@@ -1388,6 +1490,8 @@ pub mod svs_1 {
 
             self.accounts.shares_mint = AccountMeta::new_readonly(accounts.shares_mint, false);
 
+            self.accounts.asset_vault = AccountMeta::new_readonly(accounts.asset_vault, false);
+
             self
         }
 
@@ -1402,6 +1506,8 @@ pub mod svs_1 {
             metas.push(self.accounts.vault.clone());
 
             metas.push(self.accounts.shares_mint.clone());
+
+            metas.push(self.accounts.asset_vault.clone());
 
             metas.extend(self.remaining_accounts.clone());
             metas
@@ -1435,6 +1541,8 @@ pub mod svs_1 {
         pub vault: AccountMeta,
 
         pub shares_mint: AccountMeta,
+
+        pub asset_vault: AccountMeta,
     }
 
     /// Account pubkeys for PreviewMint instruction
@@ -1443,11 +1551,19 @@ pub mod svs_1 {
         pub vault: Pubkey,
 
         pub shares_mint: Pubkey,
+
+        pub asset_vault: Pubkey,
     }
 
     impl PreviewMintInstructionAccounts {
-        pub fn new(vault: Pubkey, shares_mint: Pubkey) -> Self {
-            Self { vault, shares_mint }
+        pub fn new(vault: Pubkey, shares_mint: Pubkey, asset_vault: Pubkey) -> Self {
+            Self {
+                vault,
+
+                shares_mint,
+
+                asset_vault,
+            }
         }
     }
 
@@ -1482,6 +1598,8 @@ pub mod svs_1 {
 
             self.accounts.shares_mint = AccountMeta::new_readonly(accounts.shares_mint, false);
 
+            self.accounts.asset_vault = AccountMeta::new_readonly(accounts.asset_vault, false);
+
             self
         }
 
@@ -1496,6 +1614,8 @@ pub mod svs_1 {
             metas.push(self.accounts.vault.clone());
 
             metas.push(self.accounts.shares_mint.clone());
+
+            metas.push(self.accounts.asset_vault.clone());
 
             metas.extend(self.remaining_accounts.clone());
             metas
@@ -1529,6 +1649,8 @@ pub mod svs_1 {
         pub vault: AccountMeta,
 
         pub shares_mint: AccountMeta,
+
+        pub asset_vault: AccountMeta,
     }
 
     /// Account pubkeys for PreviewRedeem instruction
@@ -1537,11 +1659,19 @@ pub mod svs_1 {
         pub vault: Pubkey,
 
         pub shares_mint: Pubkey,
+
+        pub asset_vault: Pubkey,
     }
 
     impl PreviewRedeemInstructionAccounts {
-        pub fn new(vault: Pubkey, shares_mint: Pubkey) -> Self {
-            Self { vault, shares_mint }
+        pub fn new(vault: Pubkey, shares_mint: Pubkey, asset_vault: Pubkey) -> Self {
+            Self {
+                vault,
+
+                shares_mint,
+
+                asset_vault,
+            }
         }
     }
 
@@ -1576,6 +1706,8 @@ pub mod svs_1 {
 
             self.accounts.shares_mint = AccountMeta::new_readonly(accounts.shares_mint, false);
 
+            self.accounts.asset_vault = AccountMeta::new_readonly(accounts.asset_vault, false);
+
             self
         }
 
@@ -1590,6 +1722,8 @@ pub mod svs_1 {
             metas.push(self.accounts.vault.clone());
 
             metas.push(self.accounts.shares_mint.clone());
+
+            metas.push(self.accounts.asset_vault.clone());
 
             metas.extend(self.remaining_accounts.clone());
             metas
@@ -1623,6 +1757,8 @@ pub mod svs_1 {
         pub vault: AccountMeta,
 
         pub shares_mint: AccountMeta,
+
+        pub asset_vault: AccountMeta,
     }
 
     /// Account pubkeys for PreviewWithdraw instruction
@@ -1631,11 +1767,19 @@ pub mod svs_1 {
         pub vault: Pubkey,
 
         pub shares_mint: Pubkey,
+
+        pub asset_vault: Pubkey,
     }
 
     impl PreviewWithdrawInstructionAccounts {
-        pub fn new(vault: Pubkey, shares_mint: Pubkey) -> Self {
-            Self { vault, shares_mint }
+        pub fn new(vault: Pubkey, shares_mint: Pubkey, asset_vault: Pubkey) -> Self {
+            Self {
+                vault,
+
+                shares_mint,
+
+                asset_vault,
+            }
         }
     }
 
@@ -1670,6 +1814,8 @@ pub mod svs_1 {
 
             self.accounts.shares_mint = AccountMeta::new_readonly(accounts.shares_mint, false);
 
+            self.accounts.asset_vault = AccountMeta::new_readonly(accounts.asset_vault, false);
+
             self
         }
 
@@ -1684,6 +1830,8 @@ pub mod svs_1 {
             metas.push(self.accounts.vault.clone());
 
             metas.push(self.accounts.shares_mint.clone());
+
+            metas.push(self.accounts.asset_vault.clone());
 
             metas.extend(self.remaining_accounts.clone());
             metas
@@ -1826,7 +1974,7 @@ pub mod svs_1 {
         pub fn accounts(mut self, accounts: RedeemInstructionAccounts) -> Self {
             self.accounts.user = AccountMeta::new(accounts.user, true);
 
-            self.accounts.vault = AccountMeta::new(accounts.vault, false);
+            self.accounts.vault = AccountMeta::new_readonly(accounts.vault, false);
 
             self.accounts.asset_mint = AccountMeta::new_readonly(accounts.asset_mint, false);
 
@@ -1892,112 +2040,6 @@ pub mod svs_1 {
     }
 
     // ....................................................................
-    // Instruction: Sync
-    // ....................................................................
-
-    /// Main instruction struct for Sync
-    pub struct SyncInstruction {
-        pub accounts: SyncInstructionAccountMetas,
-        pub data: SyncInstructionData,
-        pub remaining_accounts: Vec<AccountMeta>,
-    }
-
-    /// Account metadata for Sync instruction
-    #[derive(Debug, Clone, Default)]
-    pub struct SyncInstructionAccountMetas {
-        pub authority: AccountMeta,
-
-        pub vault: AccountMeta,
-
-        pub asset_vault: AccountMeta,
-    }
-
-    /// Account pubkeys for Sync instruction
-    #[derive(Debug, Clone)]
-    pub struct SyncInstructionAccounts {
-        pub authority: Pubkey,
-
-        pub vault: Pubkey,
-
-        pub asset_vault: Pubkey,
-    }
-
-    impl SyncInstructionAccounts {
-        pub fn new(authority: Pubkey, vault: Pubkey, asset_vault: Pubkey) -> Self {
-            Self {
-                authority,
-
-                vault,
-
-                asset_vault,
-            }
-        }
-    }
-
-    /// Instruction data for Sync
-    #[derive(Debug, BorshDeserialize, BorshSerialize, Clone)]
-    pub struct SyncInstructionData {}
-
-    impl SyncInstructionData {
-        pub fn new() -> Self {
-            Self {}
-        }
-    }
-
-    /// Implementation for SyncInstruction
-    impl SyncInstruction {
-        fn discriminator() -> [u8; 8] {
-            [4u8, 219u8, 40u8, 164u8, 21u8, 157u8, 189u8, 88u8]
-        }
-
-        pub fn data(data: SyncInstructionData) -> Self {
-            Self {
-                accounts: SyncInstructionAccountMetas::default(),
-                data,
-                remaining_accounts: Vec::new(),
-            }
-        }
-
-        pub fn accounts(mut self, accounts: SyncInstructionAccounts) -> Self {
-            self.accounts.authority = AccountMeta::new_readonly(accounts.authority, true);
-
-            self.accounts.vault = AccountMeta::new(accounts.vault, false);
-
-            self.accounts.asset_vault = AccountMeta::new_readonly(accounts.asset_vault, false);
-
-            self
-        }
-
-        pub fn remaining_accounts(mut self, accounts: Vec<AccountMeta>) -> Self {
-            self.remaining_accounts = accounts;
-            self
-        }
-
-        fn to_account_metas(&self) -> Vec<AccountMeta> {
-            let mut metas = Vec::new();
-
-            metas.push(self.accounts.authority.clone());
-
-            metas.push(self.accounts.vault.clone());
-
-            metas.push(self.accounts.asset_vault.clone());
-
-            metas.extend(self.remaining_accounts.clone());
-            metas
-        }
-
-        pub fn instruction(&self) -> Instruction {
-            let mut buffer: Vec<u8> = Vec::new();
-
-            buffer.extend_from_slice(&Self::discriminator());
-
-            self.data.serialize(&mut buffer).unwrap();
-
-            Instruction::new_with_bytes(program_id(), &buffer, self.to_account_metas())
-        }
-    }
-
-    // ....................................................................
     // Instruction: TotalAssets
     // ....................................................................
 
@@ -2014,6 +2056,8 @@ pub mod svs_1 {
         pub vault: AccountMeta,
 
         pub shares_mint: AccountMeta,
+
+        pub asset_vault: AccountMeta,
     }
 
     /// Account pubkeys for TotalAssets instruction
@@ -2022,11 +2066,19 @@ pub mod svs_1 {
         pub vault: Pubkey,
 
         pub shares_mint: Pubkey,
+
+        pub asset_vault: Pubkey,
     }
 
     impl TotalAssetsInstructionAccounts {
-        pub fn new(vault: Pubkey, shares_mint: Pubkey) -> Self {
-            Self { vault, shares_mint }
+        pub fn new(vault: Pubkey, shares_mint: Pubkey, asset_vault: Pubkey) -> Self {
+            Self {
+                vault,
+
+                shares_mint,
+
+                asset_vault,
+            }
         }
     }
 
@@ -2059,6 +2111,8 @@ pub mod svs_1 {
 
             self.accounts.shares_mint = AccountMeta::new_readonly(accounts.shares_mint, false);
 
+            self.accounts.asset_vault = AccountMeta::new_readonly(accounts.asset_vault, false);
+
             self
         }
 
@@ -2073,6 +2127,8 @@ pub mod svs_1 {
             metas.push(self.accounts.vault.clone());
 
             metas.push(self.accounts.shares_mint.clone());
+
+            metas.push(self.accounts.asset_vault.clone());
 
             metas.extend(self.remaining_accounts.clone());
             metas
@@ -2401,7 +2457,7 @@ pub mod svs_1 {
         pub fn accounts(mut self, accounts: WithdrawInstructionAccounts) -> Self {
             self.accounts.user = AccountMeta::new(accounts.user, true);
 
-            self.accounts.vault = AccountMeta::new(accounts.vault, false);
+            self.accounts.vault = AccountMeta::new_readonly(accounts.vault, false);
 
             self.accounts.asset_mint = AccountMeta::new_readonly(accounts.asset_mint, false);
 
@@ -2648,28 +2704,6 @@ pub struct VaultStatusChanged {
 impl VaultStatusChanged {
     pub fn new(vault: Pubkey, paused: bool) -> Self {
         Self { vault, paused }
-    }
-}
-
-/// Custom struct: VaultSynced
-#[derive(Debug, BorshDeserialize, BorshSerialize, Clone)]
-pub struct VaultSynced {
-    pub vault: Pubkey,
-
-    pub previous_total: u64,
-
-    pub new_total: u64,
-}
-
-impl VaultSynced {
-    pub fn new(vault: Pubkey, previous_total: u64, new_total: u64) -> Self {
-        Self {
-            vault,
-
-            previous_total,
-
-            new_total,
-        }
     }
 }
 

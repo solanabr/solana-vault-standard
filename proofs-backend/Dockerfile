@@ -36,7 +36,7 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 # Copy the binary from builder
-COPY --from=builder /app/target/release/svs-proof-backend /usr/local/bin/
+COPY --from=builder /app/target/release/svs-proofs-backend /usr/local/bin/
 
 # Create non-root user
 RUN useradd -m -u 1000 appuser
@@ -50,4 +50,4 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:3001/health || exit 1
 
 # Run the binary
-CMD ["svs-proof-backend"]
+CMD ["svs-proofs-backend"]

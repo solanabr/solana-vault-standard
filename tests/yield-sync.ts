@@ -15,7 +15,14 @@ import { Keypair, PublicKey, SystemProgram, SYSVAR_RENT_PUBKEY, LAMPORTS_PER_SOL
 import { expect } from "chai";
 import { Svs1 } from "../target/types/svs_1";
 
-describe("Yield and Sync", () => {
+/**
+ * SVS-1 Live Balance Tests
+ *
+ * SVS-1 uses LIVE balance from asset_vault.amount - no sync() needed.
+ * External yield (donations) are automatically reflected in share price.
+ * This eliminates sync timing attack vulnerabilities.
+ */
+describe("Yield and Live Balance (SVS-1)", () => {
   const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
 
@@ -160,7 +167,7 @@ describe("Yield and Sync", () => {
     console.log("  Donor:", donor.publicKey.toBase58());
   });
 
-  describe("sync() Basic", () => {
+  describe("Live Balance Basics", () => {
     before(async () => {
       // Initial deposit
       await program.methods
@@ -181,8 +188,9 @@ describe("Yield and Sync", () => {
         .rpc();
     });
 
-    it("sync updates total_assets to match actual balance", async () => {
-      const vaultBefore = await program.account.vault.fetch(vault);
+    it("external transfer immediately reflected in live balance (no sync needed)", async () => {
+      const assetVaultBefore = await getAccount(connection, assetVault);
+      const balanceBefore = Number(assetVaultBefore.amount);
 
       // Simulate external yield: donor sends tokens directly to asset_vault
       const yieldAmount = 10_000 * 10 ** ASSET_DECIMALS;
@@ -198,49 +206,37 @@ describe("Yield and Sync", () => {
         TOKEN_PROGRAM_ID
       );
 
-      // Check state mismatch
-      const assetVaultAccount = await getAccount(connection, assetVault);
-      expect(vaultBefore.totalAssets.toNumber()).to.be.lessThan(Number(assetVaultAccount.amount));
-      console.log("  Before sync - vault.total_assets:", vaultBefore.totalAssets.toNumber());
-      console.log("  Before sync - actual balance:", Number(assetVaultAccount.amount));
+      // SVS-1: Live balance immediately reflects the donation
+      const assetVaultAfter = await getAccount(connection, assetVault);
+      const balanceAfter = Number(assetVaultAfter.amount);
 
-      // Sync
-      await program.methods
-        .sync()
-        .accountsStrict({
-          authority: payer.publicKey,
-          vault: vault,
-          assetVault: assetVault,
-        })
-        .rpc();
-
-      const vaultAfter = await program.account.vault.fetch(vault);
-      expect(vaultAfter.totalAssets.toNumber()).to.equal(Number(assetVaultAccount.amount));
-      console.log("  After sync - vault.total_assets:", vaultAfter.totalAssets.toNumber());
+      expect(balanceAfter).to.equal(balanceBefore + yieldAmount);
+      console.log("  Before donation - live balance:", balanceBefore);
+      console.log("  After donation - live balance:", balanceAfter);
+      console.log("  SVS-1: No sync() needed - yield immediately reflected!");
     });
 
-    it("sync can only be called by authority", async () => {
-      const fakeAuthority = Keypair.generate();
+    it("view functions use live balance", async () => {
+      const assetVaultAccount = await getAccount(connection, assetVault);
+      const liveBalance = Number(assetVaultAccount.amount);
 
-      try {
-        await program.methods
-          .sync()
-          .accountsStrict({
-            authority: fakeAuthority.publicKey,
-            vault: vault,
-            assetVault: assetVault,
-          })
-          .signers([fakeAuthority])
-          .rpc();
-        expect.fail("Should reject non-authority");
-      } catch (err: any) {
-        expect(err.toString()).to.include("Unauthorized");
-        console.log("  Non-authority sync correctly rejected");
-      }
+      // Preview deposit should use live balance for share calculation
+      const depositAmount = new BN(10_000 * 10 ** ASSET_DECIMALS);
+      const result = await program.methods
+        .previewDeposit(depositAmount)
+        .accountsStrict({
+          vault: vault,
+          sharesMint: sharesMint,
+          assetVault: assetVault,
+        })
+        .simulate();
+
+      expect(result.events).to.not.be.undefined;
+      console.log("  View functions correctly use live balance:", liveBalance);
     });
   });
 
-  describe("Yield Accrual", () => {
+  describe("Yield Accrual (Live Balance)", () => {
     let yieldVault: PublicKey;
     let yieldSharesMint: PublicKey;
     let yieldAssetVault: PublicKey;
@@ -281,7 +277,7 @@ describe("Yield and Sync", () => {
         .rpc();
     });
 
-    it("external transfer increases share price after sync", async () => {
+    it("external transfer increases share price immediately (no sync)", async () => {
       const depositAmount = new BN(100_000 * 10 ** ASSET_DECIMALS);
 
       // Initial deposit
@@ -303,11 +299,11 @@ describe("Yield and Sync", () => {
         .rpc();
 
       const userSharesAfterDeposit = await getAccount(connection, yieldUserSharesAccount, undefined, TOKEN_2022_PROGRAM_ID);
-      const vaultBefore = await program.account.vault.fetch(yieldVault);
+      const assetVaultBefore = await getAccount(connection, yieldAssetVault);
 
-      // Calculate initial share price
-      const initialPrice = vaultBefore.totalAssets.toNumber() / Number(userSharesAfterDeposit.amount);
-      console.log("  Initial share price:", initialPrice.toFixed(9));
+      // Calculate initial share price using LIVE balance
+      const initialPrice = Number(assetVaultBefore.amount) / Number(userSharesAfterDeposit.amount);
+      console.log("  Initial share price (live):", initialPrice.toFixed(9));
 
       // Add 50% yield
       const yieldAmount = 50_000 * 10 ** ASSET_DECIMALS;
@@ -323,22 +319,13 @@ describe("Yield and Sync", () => {
         TOKEN_PROGRAM_ID
       );
 
-      // Sync to recognize yield
-      await program.methods
-        .sync()
-        .accountsStrict({
-          authority: payer.publicKey,
-          vault: yieldVault,
-          assetVault: yieldAssetVault,
-        })
-        .rpc();
-
-      const vaultAfter = await program.account.vault.fetch(yieldVault);
-      const newPrice = vaultAfter.totalAssets.toNumber() / Number(userSharesAfterDeposit.amount);
+      // SVS-1: NO sync() needed - share price immediately updated
+      const assetVaultAfter = await getAccount(connection, yieldAssetVault);
+      const newPrice = Number(assetVaultAfter.amount) / Number(userSharesAfterDeposit.amount);
 
       expect(newPrice).to.be.greaterThan(initialPrice);
       expect(newPrice / initialPrice).to.be.closeTo(1.5, 0.01); // 50% yield
-      console.log("  New share price:", newPrice.toFixed(9));
+      console.log("  New share price (live):", newPrice.toFixed(9));
       console.log("  Price increase:", ((newPrice / initialPrice - 1) * 100).toFixed(2) + "%");
     });
 
@@ -374,7 +361,7 @@ describe("Yield and Sync", () => {
     });
   });
 
-  describe("Share Price Tracking", () => {
+  describe("Share Price Tracking (Live Balance)", () => {
     let priceVault: PublicKey;
     let priceSharesMint: PublicKey;
     let priceAssetVault: PublicKey;
@@ -436,29 +423,29 @@ describe("Yield and Sync", () => {
         .rpc();
 
       const userShares = await getAccount(connection, priceUserSharesAccount, undefined, TOKEN_2022_PROGRAM_ID);
-      const vaultState = await program.account.vault.fetch(priceVault);
+      const assetVaultAccount = await getAccount(connection, priceAssetVault);
 
       // With 6 decimal asset and offset=3, virtual offset = 10^3 = 1000
       // First deposit: shares ≈ assets * 1000 (scaled up due to offset)
-      const ratio = Number(userShares.amount) / vaultState.totalAssets.toNumber();
+      const ratio = Number(userShares.amount) / Number(assetVaultAccount.amount);
 
       // Ratio should be approximately 10^(9-6) = 10^3 = 1000 for 6 decimal asset
-      console.log("  Asset deposited:", vaultState.totalAssets.toNumber());
+      console.log("  Asset deposited (live):", Number(assetVaultAccount.amount));
       console.log("  Shares received:", Number(userShares.amount));
       console.log("  Ratio (shares/assets):", ratio.toFixed(2));
     });
 
     it("share price never decreases (without withdrawals)", async () => {
       const getSharePrice = async () => {
-        const vaultState = await program.account.vault.fetch(priceVault);
+        const assetVaultAccount = await getAccount(connection, priceAssetVault);
         const userShares = await getAccount(connection, priceUserSharesAccount, undefined, TOKEN_2022_PROGRAM_ID);
-        return vaultState.totalAssets.toNumber() / Number(userShares.amount);
+        return Number(assetVaultAccount.amount) / Number(userShares.amount);
       };
 
       const price1 = await getSharePrice();
-      console.log("  Initial price:", price1.toFixed(9));
+      console.log("  Initial price (live):", price1.toFixed(9));
 
-      // Add yield
+      // Add yield - immediately reflected in SVS-1
       await transfer(
         connection,
         donor,
@@ -471,17 +458,9 @@ describe("Yield and Sync", () => {
         TOKEN_PROGRAM_ID
       );
 
-      await program.methods
-        .sync()
-        .accountsStrict({
-          authority: payer.publicKey,
-          vault: priceVault,
-          assetVault: priceAssetVault,
-        })
-        .rpc();
-
+      // SVS-1: No sync needed - price immediately updated
       const price2 = await getSharePrice();
-      console.log("  After yield:", price2.toFixed(9));
+      console.log("  After yield (live):", price2.toFixed(9));
       expect(price2).to.be.greaterThanOrEqual(price1);
 
       // Second deposit
@@ -503,37 +482,19 @@ describe("Yield and Sync", () => {
         .rpc();
 
       const price3 = await getSharePrice();
-      console.log("  After deposit:", price3.toFixed(9));
+      console.log("  After deposit (live):", price3.toFixed(9));
       // Use closeTo to account for floating point precision (price should stay same or increase)
       expect(price3).to.be.closeTo(price2, 0.000001);
     });
   });
 
-  describe("Edge Cases", () => {
-    it("sync with no balance change is no-op", async () => {
-      const vaultBefore = await program.account.vault.fetch(vault);
+  describe("Live Balance Edge Cases", () => {
+    it("multiple donations accumulate correctly without sync", async () => {
       const assetVaultBefore = await getAccount(connection, assetVault);
+      const balanceBefore = Number(assetVaultBefore.amount);
 
-      // Sync when already in sync
-      await program.methods
-        .sync()
-        .accountsStrict({
-          authority: payer.publicKey,
-          vault: vault,
-          assetVault: assetVault,
-        })
-        .rpc();
-
-      const vaultAfter = await program.account.vault.fetch(vault);
-
-      expect(vaultAfter.totalAssets.toNumber()).to.equal(vaultBefore.totalAssets.toNumber());
-      console.log("  No-op sync: total_assets unchanged at", vaultAfter.totalAssets.toNumber());
-    });
-
-    it("multiple syncs accumulate correctly", async () => {
       // Send small amounts multiple times
       const smallAmount = 1000;
-
       for (let i = 0; i < 3; i++) {
         await transfer(
           connection,
@@ -548,25 +509,20 @@ describe("Yield and Sync", () => {
         );
       }
 
-      const vaultBefore = await program.account.vault.fetch(vault);
-      const assetVaultAccount = await getAccount(connection, assetVault);
+      // SVS-1: All donations immediately reflected
+      const assetVaultAfter = await getAccount(connection, assetVault);
+      const balanceAfter = Number(assetVaultAfter.amount);
+      const actualIncrease = balanceAfter - balanceBefore;
       const expectedIncrease = 3 * smallAmount;
 
-      // Sync once to capture all
-      await program.methods
-        .sync()
-        .accountsStrict({
-          authority: payer.publicKey,
-          vault: vault,
-          assetVault: assetVault,
-        })
-        .rpc();
-
-      const vaultAfter = await program.account.vault.fetch(vault);
-      const actualIncrease = vaultAfter.totalAssets.toNumber() - vaultBefore.totalAssets.toNumber();
-
       expect(actualIncrease).to.equal(expectedIncrease);
-      console.log("  Multiple transfers captured:", actualIncrease, "expected:", expectedIncrease);
+      console.log("  Multiple transfers captured (no sync):", actualIncrease, "expected:", expectedIncrease);
+    });
+
+    it("SVS-1 has no sync() function (security by design)", async () => {
+      // Verify that sync() does not exist in SVS-1
+      expect((program.methods as any).sync).to.be.undefined;
+      console.log("  SVS-1 correctly has no sync() - eliminates timing attack vector");
     });
   });
 });

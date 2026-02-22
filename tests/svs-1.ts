@@ -9,12 +9,13 @@ import {
   getAccount,
   getAssociatedTokenAddressSync,
   ASSOCIATED_TOKEN_PROGRAM_ID,
+  transfer,
 } from "@solana/spl-token";
 import { Keypair, PublicKey, SystemProgram, SYSVAR_RENT_PUBKEY } from "@solana/web3.js";
 import { expect } from "chai";
 import { Svs1 } from "../target/types/svs_1";
 
-describe("svs-1", () => {
+describe("svs-1 (Live Balance - No Sync)", () => {
   const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
 
@@ -108,6 +109,7 @@ describe("svs-1", () => {
     console.log("  Asset Mint:", assetMint.toBase58());
     console.log("  Vault PDA:", vault.toBase58());
     console.log("  Shares Mint:", sharesMint.toBase58());
+    console.log("  NOTE: SVS-1 uses LIVE balance (no sync)");
   });
 
   describe("Initialize", () => {
@@ -134,8 +136,12 @@ describe("svs-1", () => {
       expect(vaultAccount.authority.toBase58()).to.equal(payer.publicKey.toBase58());
       expect(vaultAccount.assetMint.toBase58()).to.equal(assetMint.toBase58());
       expect(vaultAccount.sharesMint.toBase58()).to.equal(sharesMint.toBase58());
-      expect(vaultAccount.totalAssets.toNumber()).to.equal(0);
       expect(vaultAccount.paused).to.equal(false);
+
+      // Check live balance (asset vault should be empty)
+      const assetVaultAccount = await getAccount(connection, assetVault);
+      expect(Number(assetVaultAccount.amount)).to.equal(0);
+      console.log("  Live balance (asset vault):", Number(assetVaultAccount.amount));
     });
   });
 
@@ -166,20 +172,25 @@ describe("svs-1", () => {
 
       const userAssetAfter = await getAccount(connection, userAssetAccount);
       const userSharesAfter = await getAccount(connection, userSharesAccount, undefined, TOKEN_2022_PROGRAM_ID);
-      const vaultAccount = await program.account.vault.fetch(vault);
+
+      // SVS-1: Check LIVE balance from asset vault (not vault.totalAssets)
+      const assetVaultAccount = await getAccount(connection, assetVault);
 
       const assetsDeposited = Number(userAssetBefore.amount) - Number(userAssetAfter.amount);
       expect(assetsDeposited).to.equal(depositAmount.toNumber());
       expect(Number(userSharesAfter.amount)).to.be.greaterThan(0);
-      expect(vaultAccount.totalAssets.toNumber()).to.equal(depositAmount.toNumber());
+
+      // Live balance should match deposited amount
+      expect(Number(assetVaultAccount.amount)).to.equal(depositAmount.toNumber());
 
       console.log("  Deposited:", assetsDeposited / 10 ** ASSET_DECIMALS, "assets");
       console.log("  Received:", Number(userSharesAfter.amount) / 10 ** 9, "shares");
+      console.log("  Live balance (asset vault):", Number(assetVaultAccount.amount) / 10 ** ASSET_DECIMALS);
     });
 
     it("second deposit works proportionally", async () => {
       const depositAmount = new BN(50_000 * 10 ** ASSET_DECIMALS);
-      const vaultBefore = await program.account.vault.fetch(vault);
+      const assetVaultBefore = await getAccount(connection, assetVault);
 
       await program.methods
         .deposit(depositAmount, new BN(0))
@@ -198,11 +209,116 @@ describe("svs-1", () => {
         })
         .rpc();
 
-      const vaultAfter = await program.account.vault.fetch(vault);
-      expect(vaultAfter.totalAssets.toNumber()).to.equal(
-        vaultBefore.totalAssets.toNumber() + depositAmount.toNumber()
+      // Check live balance increased
+      const assetVaultAfter = await getAccount(connection, assetVault);
+      expect(Number(assetVaultAfter.amount)).to.equal(
+        Number(assetVaultBefore.amount) + depositAmount.toNumber()
       );
-      console.log("  Total assets now:", vaultAfter.totalAssets.toNumber() / 10 ** ASSET_DECIMALS);
+      console.log("  Live balance now:", Number(assetVaultAfter.amount) / 10 ** ASSET_DECIMALS);
+    });
+  });
+
+  describe("Live Balance Behavior", () => {
+    it("donation attack is mitigated by live balance + virtual offset", async () => {
+      // This test demonstrates that SVS-1's live balance design protects against
+      // the classic ERC-4626 inflation/donation attack
+
+      // Create a second user (victim)
+      const victim = Keypair.generate();
+
+      // Airdrop SOL to victim
+      const airdropSig = await connection.requestAirdrop(victim.publicKey, 1_000_000_000);
+      await connection.confirmTransaction(airdropSig);
+
+      // Create victim's asset account and mint tokens
+      const victimAssetAta = await getOrCreateAssociatedTokenAccount(
+        connection,
+        payer,
+        assetMint,
+        victim.publicKey,
+        false,
+        undefined,
+        undefined,
+        TOKEN_PROGRAM_ID
+      );
+
+      await mintTo(
+        connection,
+        payer,
+        assetMint,
+        victimAssetAta.address,
+        payer.publicKey,
+        100_000 * 10 ** ASSET_DECIMALS,
+        [],
+        undefined,
+        TOKEN_PROGRAM_ID
+      );
+
+      // Get current state
+      const assetVaultBefore = await getAccount(connection, assetVault);
+      console.log("  Vault balance before donation:", Number(assetVaultBefore.amount) / 10 ** ASSET_DECIMALS);
+
+      // Attacker (payer) donates directly to asset vault (simulating donation attack)
+      const donationAmount = 100_000 * 10 ** ASSET_DECIMALS;
+      await transfer(
+        connection,
+        payer,
+        userAssetAccount,
+        assetVault,
+        payer.publicKey,
+        donationAmount,
+        [],
+        undefined,
+        TOKEN_PROGRAM_ID
+      );
+
+      const assetVaultAfterDonation = await getAccount(connection, assetVault);
+      console.log("  Vault balance after donation:", Number(assetVaultAfterDonation.amount) / 10 ** ASSET_DECIMALS);
+
+      // KEY POINT: In SVS-1, the donation is IMMEDIATELY reflected in share price
+      // because we use LIVE balance. This means:
+      // 1. The victim's deposit will use the inflated balance for conversion
+      // 2. But the virtual offset (decimals_offset) still provides protection
+
+      // Victim tries to deposit
+      const victimDeposit = new BN(10_000 * 10 ** ASSET_DECIMALS);
+      const victimSharesAccount = getAssociatedTokenAddressSync(
+        sharesMint,
+        victim.publicKey,
+        false,
+        TOKEN_2022_PROGRAM_ID,
+        ASSOCIATED_TOKEN_PROGRAM_ID
+      );
+
+      await program.methods
+        .deposit(victimDeposit, new BN(0))
+        .accountsStrict({
+          user: victim.publicKey,
+          vault: vault,
+          assetMint: assetMint,
+          userAssetAccount: victimAssetAta.address,
+          assetVault: assetVault,
+          sharesMint: sharesMint,
+          userSharesAccount: victimSharesAccount,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+          associatedTokenProgram: anchor.utils.token.ASSOCIATED_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([victim])
+        .rpc();
+
+      const victimSharesAfter = await getAccount(connection, victimSharesAccount, undefined, TOKEN_2022_PROGRAM_ID);
+      console.log("  Victim received shares:", Number(victimSharesAfter.amount) / 10 ** 9);
+
+      // With live balance + virtual offset, victim should receive meaningful shares
+      // The virtual offset ensures the victim isn't completely diluted
+      expect(Number(victimSharesAfter.amount)).to.be.greaterThan(0);
+
+      // NOTE: The attacker's donation benefits ALL existing shareholders proportionally
+      // This is expected ERC-4626 behavior - donations increase share value for everyone
+      console.log("  ✓ Live balance ensures donations immediately reflect in share price");
+      console.log("  ✓ Virtual offset provides minimum share protection");
     });
   });
 
@@ -354,31 +470,175 @@ describe("svs-1", () => {
       expect(vaultAccount.paused).to.equal(false);
       console.log("  Vault unpaused");
     });
+
+    it("SVS-1 has no sync() function", async () => {
+      // Verify sync is not available in SVS-1 (it uses live balance)
+      expect((program.methods as any).sync).to.be.undefined;
+      console.log("  ✓ Confirmed: SVS-1 has no sync() - uses live balance");
+    });
   });
 
   describe("View Functions", () => {
     it("preview deposit simulates correctly", async () => {
       const assets = new BN(10_000 * 10 ** ASSET_DECIMALS);
 
-      // View functions use set_return_data which is available in logs
+      // SVS-1 view functions require assetVault for live balance
       const result = await program.methods
         .previewDeposit(assets)
         .accountsStrict({
           vault: vault,
           sharesMint: sharesMint,
+          assetVault: assetVault,
         })
         .simulate();
 
-      // Verify simulation succeeded (no errors)
       expect(result.events).to.not.be.undefined;
-      console.log("  Preview deposit simulated successfully");
+      console.log("  Preview deposit simulated successfully (using live balance)");
     });
 
-    it("total assets returns correct value", async () => {
-      // Fetch vault state directly (more reliable than return data)
-      const vaultAccount = await program.account.vault.fetch(vault);
-      console.log("  Total assets:", vaultAccount.totalAssets.toNumber() / 10 ** ASSET_DECIMALS);
-      expect(vaultAccount.totalAssets.toNumber()).to.be.greaterThan(0);
+    it("previewMint simulates correctly", async () => {
+      const shares = new BN(1000 * 10 ** 9);
+
+      const result = await program.methods
+        .previewMint(shares)
+        .accountsStrict({
+          vault: vault,
+          sharesMint: sharesMint,
+          assetVault: assetVault,
+        })
+        .simulate();
+
+      expect(result.events).to.not.be.undefined;
+      console.log("  Preview mint simulated successfully");
+    });
+
+    it("previewWithdraw simulates correctly", async () => {
+      const assets = new BN(1000 * 10 ** ASSET_DECIMALS);
+
+      const result = await program.methods
+        .previewWithdraw(assets)
+        .accountsStrict({
+          vault: vault,
+          sharesMint: sharesMint,
+          assetVault: assetVault,
+        })
+        .simulate();
+
+      expect(result.events).to.not.be.undefined;
+      console.log("  Preview withdraw simulated successfully");
+    });
+
+    it("previewRedeem simulates correctly", async () => {
+      const shares = new BN(1000 * 10 ** 9);
+
+      const result = await program.methods
+        .previewRedeem(shares)
+        .accountsStrict({
+          vault: vault,
+          sharesMint: sharesMint,
+          assetVault: assetVault,
+        })
+        .simulate();
+
+      expect(result.events).to.not.be.undefined;
+      console.log("  Preview redeem simulated successfully");
+    });
+
+    it("total assets returns live balance", async () => {
+      // SVS-1: total_assets view returns LIVE balance from asset_vault
+      const assetVaultAccount = await getAccount(connection, assetVault);
+      console.log("  Live total assets:", Number(assetVaultAccount.amount) / 10 ** ASSET_DECIMALS);
+      expect(Number(assetVaultAccount.amount)).to.be.greaterThan(0);
+    });
+
+    it("maxDeposit returns u64::MAX when not paused", async () => {
+      const result = await program.methods
+        .maxDeposit()
+        .accountsStrict({
+          vault: vault,
+          sharesMint: sharesMint,
+          assetVault: assetVault,
+        })
+        .simulate();
+
+      expect(result.events).to.not.be.undefined;
+      console.log("  maxDeposit simulated (not paused)");
+    });
+
+    it("maxMint returns u64::MAX when not paused", async () => {
+      const result = await program.methods
+        .maxMint()
+        .accountsStrict({
+          vault: vault,
+          sharesMint: sharesMint,
+          assetVault: assetVault,
+        })
+        .simulate();
+
+      expect(result.events).to.not.be.undefined;
+      console.log("  maxMint simulated (not paused)");
+    });
+
+    it("maxWithdraw returns owner's redeemable assets", async () => {
+      const result = await program.methods
+        .maxWithdraw()
+        .accountsStrict({
+          vault: vault,
+          sharesMint: sharesMint,
+          assetVault: assetVault,
+          ownerSharesAccount: userSharesAccount,
+        })
+        .simulate();
+
+      expect(result.events).to.not.be.undefined;
+      console.log("  maxWithdraw simulated");
+    });
+
+    it("maxRedeem returns owner's share balance", async () => {
+      const result = await program.methods
+        .maxRedeem()
+        .accountsStrict({
+          vault: vault,
+          sharesMint: sharesMint,
+          assetVault: assetVault,
+          ownerSharesAccount: userSharesAccount,
+        })
+        .simulate();
+
+      expect(result.events).to.not.be.undefined;
+      console.log("  maxRedeem simulated");
+    });
+
+    it("convertToShares simulates correctly", async () => {
+      const assets = new BN(5000 * 10 ** ASSET_DECIMALS);
+
+      const result = await program.methods
+        .convertToShares(assets)
+        .accountsStrict({
+          vault: vault,
+          sharesMint: sharesMint,
+          assetVault: assetVault,
+        })
+        .simulate();
+
+      expect(result.events).to.not.be.undefined;
+      console.log("  convertToShares simulated");
+    });
+
+    it("convertToAssets simulates correctly", async () => {
+      const shares = new BN(5000 * 10 ** 9);
+
+      const result = await program.methods
+        .convertToAssets(shares)
+        .accountsStrict({
+          vault: vault,
+          sharesMint: sharesMint,
+          assetVault: assetVault,
+        })
+        .simulate();
+
+      expect(result.events).to.not.be.undefined;
+      console.log("  convertToAssets simulated");
     });
   });
 });

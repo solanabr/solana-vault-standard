@@ -8,15 +8,12 @@ use anchor_spl::{
     },
     token_interface::{Mint, TokenAccount, TokenInterface},
 };
-use bytemuck::cast_ref;
-use solana_zk_sdk::encryption::pod::elgamal::PodElGamalPubkey;
-use spl_token_2022::extension::confidential_transfer::instruction::initialize_mint as initialize_confidential_mint;
 
 use crate::{
     constants::{MAX_DECIMALS, SHARES_DECIMALS, SHARES_MINT_SEED, VAULT_SEED},
     error::VaultError,
     events::VaultInitialized,
-    state::ConfidentialVault,
+    state::Vault,
 };
 
 #[derive(Accounts)]
@@ -28,11 +25,11 @@ pub struct Initialize<'info> {
     #[account(
         init,
         payer = authority,
-        space = ConfidentialVault::LEN,
+        space = Vault::LEN,
         seeds = [VAULT_SEED, asset_mint.key().as_ref(), &vault_id.to_le_bytes()],
         bump
     )]
-    pub vault: Account<'info, ConfidentialVault>,
+    pub vault: Account<'info, Vault>,
 
     pub asset_mint: InterfaceAccount<'info, Mint>,
 
@@ -66,7 +63,6 @@ pub fn handler(
     name: String,
     symbol: String,
     _uri: String,
-    auditor_elgamal_pubkey: Option<[u8; 32]>,
 ) -> Result<()> {
     let asset_decimals = ctx.accounts.asset_mint.decimals;
     require!(
@@ -78,11 +74,10 @@ pub fn handler(
     let vault_bump = ctx.bumps.vault;
     let shares_mint_bump = ctx.bumps.shares_mint;
 
-    // Calculate space for Token-2022 mint WITH ConfidentialTransferMint extension
-    let extensions = [ExtensionType::ConfidentialTransferMint];
-    let mint_size =
-        ExtensionType::try_calculate_account_len::<spl_token_2022::state::Mint>(&extensions)
-            .map_err(|_| VaultError::MathOverflow)?;
+    // Calculate space for a basic Token-2022 mint (no extensions for now)
+    // We keep it simple - metadata can be added via Metaplex if needed
+    let mint_size = ExtensionType::try_calculate_account_len::<spl_token_2022::state::Mint>(&[])
+        .map_err(|_| VaultError::MathOverflow)?;
 
     let rent = &ctx.accounts.rent;
     let lamports = rent.minimum_balance(mint_size);
@@ -95,18 +90,7 @@ pub fn handler(
         &shares_mint_bump_bytes,
     ];
 
-    // Signer seeds for vault PDA (mint authority)
-    let asset_mint_key = ctx.accounts.asset_mint.key();
-    let vault_id_bytes = vault_id.to_le_bytes();
-    let vault_bump_bytes = [vault_bump];
-    let vault_seeds: &[&[u8]] = &[
-        VAULT_SEED,
-        asset_mint_key.as_ref(),
-        &vault_id_bytes,
-        &vault_bump_bytes,
-    ];
-
-    // Create shares mint account with space for extensions
+    // Create shares mint account
     invoke_signed(
         &anchor_lang::solana_program::system_instruction::create_account(
             &ctx.accounts.authority.key(),
@@ -123,26 +107,6 @@ pub fn handler(
         &[shares_mint_seeds],
     )?;
 
-    // Initialize ConfidentialTransferMint extension BEFORE mint initialization
-    // Convert auditor pubkey to the expected format (32-byte array -> PodElGamalPubkey via bytemuck)
-    let auditor_pubkey: Option<PodElGamalPubkey> = auditor_elgamal_pubkey
-        .as_ref()
-        .map(|bytes| *cast_ref::<[u8; 32], PodElGamalPubkey>(bytes));
-
-    let init_ct_ix = initialize_confidential_mint(
-        &ctx.accounts.token_2022_program.key(),
-        &ctx.accounts.shares_mint.key(),
-        Some(vault_key), // Confidential transfer authority = vault PDA
-        true,            // auto_approve_new_accounts
-        auditor_pubkey,
-    )?;
-
-    invoke_signed(
-        &init_ct_ix,
-        &[ctx.accounts.shares_mint.to_account_info()],
-        &[shares_mint_seeds],
-    )?;
-
     // Initialize mint (vault PDA is mint authority, no freeze authority)
     let init_mint_ix = initialize_mint2(
         &ctx.accounts.token_2022_program.key(),
@@ -155,7 +119,7 @@ pub fn handler(
     invoke_signed(
         &init_mint_ix,
         &[ctx.accounts.shares_mint.to_account_info()],
-        &[vault_seeds],
+        &[shares_mint_seeds],
     )?;
 
     // Set vault state
@@ -169,9 +133,7 @@ pub fn handler(
     vault.bump = vault_bump;
     vault.paused = false;
     vault.vault_id = vault_id;
-    vault.auditor_elgamal_pubkey = auditor_elgamal_pubkey;
-    vault.confidential_authority = vault_key;
-    vault._reserved = [0u8; 32];
+    vault._reserved = [0u8; 64];
 
     emit!(VaultInitialized {
         vault: vault.key(),
@@ -181,11 +143,7 @@ pub fn handler(
         vault_id,
     });
 
-    msg!(
-        "Confidential vault initialized: {} for asset {}",
-        name,
-        symbol
-    );
+    msg!("Vault initialized: {} for asset {}", name, symbol);
 
     Ok(())
 }

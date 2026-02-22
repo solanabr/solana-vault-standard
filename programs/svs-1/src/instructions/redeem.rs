@@ -18,7 +18,6 @@ pub struct Redeem<'info> {
     pub user: Signer<'info>,
 
     #[account(
-        mut,
         constraint = !vault.paused @ VaultError::VaultPaused,
     )]
     pub vault: Account<'info, Vault>,
@@ -71,10 +70,13 @@ pub fn handler(ctx: Context<Redeem>, shares: u64, min_assets_out: u64) -> Result
     let vault = &ctx.accounts.vault;
     let total_shares = ctx.accounts.shares_mint.supply;
 
+    // SVS-1: Use LIVE balance from asset_vault (not stored total_assets)
+    let total_assets = ctx.accounts.asset_vault.amount;
+
     // Calculate assets to receive (floor rounding - user gets less)
     let assets = convert_to_assets(
         shares,
-        vault.total_assets,
+        total_assets,
         total_shares,
         vault.decimals_offset,
         Rounding::Floor,
@@ -84,7 +86,7 @@ pub fn handler(ctx: Context<Redeem>, shares: u64, min_assets_out: u64) -> Result
     require!(assets >= min_assets_out, VaultError::SlippageExceeded);
 
     // Check vault has enough assets
-    require!(assets <= vault.total_assets, VaultError::InsufficientAssets);
+    require!(assets <= total_assets, VaultError::InsufficientAssets);
 
     // Burn shares from user
     token_2022::burn(
@@ -125,12 +127,7 @@ pub fn handler(ctx: Context<Redeem>, shares: u64, min_assets_out: u64) -> Result
         ctx.accounts.asset_mint.decimals,
     )?;
 
-    // Update cached total assets
-    let vault = &mut ctx.accounts.vault;
-    vault.total_assets = vault
-        .total_assets
-        .checked_sub(assets)
-        .ok_or(VaultError::MathOverflow)?;
+    // NOTE: No need to update total_assets - SVS-1 uses live balance
 
     emit!(WithdrawEvent {
         vault: ctx.accounts.vault.key(),

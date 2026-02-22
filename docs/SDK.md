@@ -5,7 +5,7 @@ Complete guide to using the SVS TypeScript SDKs.
 | SDK | Package | Purpose |
 |-----|---------|---------|
 | Core | `@stbr/svs-sdk` | SVS-1 public vaults |
-| Privacy | `@stbr/svs-privacy-sdk` | SVS-2 confidential vaults + Privacy Cash |
+| Privacy | `@stbr/svs-privacy-sdk` | SVS-3/SVS-4 confidential vaults + Privacy Cash |
 
 ---
 
@@ -219,10 +219,10 @@ All view functions work off-chain (no transactions).
 // Get vault state
 const state = await vault.getState();
 console.log("Authority:", state.authority.toBase58());
-console.log("Total Assets:", state.totalAssets.toString());
+console.log("Total Assets (stored):", state.totalAssets.toString());
 console.log("Paused:", state.paused);
 
-// Total assets in vault
+// Total assets in vault (reads live balance from asset_vault)
 const totalAssets = await vault.totalAssets();
 
 // Total shares supply
@@ -259,7 +259,7 @@ await vault.transferAuthority(
   newAuthority
 );
 
-// Sync total_assets with actual balance
+// Sync total_assets with actual balance (SVS-2 only)
 await vault.sync(authorityPublicKey);
 
 // Check if paused
@@ -388,7 +388,7 @@ interface VaultState {
   assetMint: PublicKey;      // Underlying asset mint
   sharesMint: PublicKey;     // LP token mint
   assetVault: PublicKey;     // Token account holding assets
-  totalAssets: BN;           // Cached total assets
+  totalAssets: BN;           // Stored total assets (use totalAssets() for live balance)
   decimalsOffset: number;    // Inflation protection offset
   bump: number;              // PDA bump
   paused: boolean;           // Emergency pause flag
@@ -594,9 +594,9 @@ function DepositButton({ vault, amount }: { vault: SolanaVault; amount: BN }) {
 
 ---
 
-# SVS-2 Privacy SDK (`@stbr/svs-privacy-sdk`)
+# SVS-3/SVS-4 Privacy SDK (`@stbr/svs-privacy-sdk`)
 
-SDK for SVS-2 confidential vaults with Token-2022 Confidential Transfers.
+SDK for SVS-3/SVS-4 confidential vaults with Token-2022 Confidential Transfers.
 
 ## Installation
 

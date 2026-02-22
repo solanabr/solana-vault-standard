@@ -19,7 +19,6 @@ pub struct Deposit<'info> {
     pub user: Signer<'info>,
 
     #[account(
-        mut,
         constraint = !vault.paused @ VaultError::VaultPaused,
     )]
     pub vault: Account<'info, Vault>,
@@ -70,10 +69,14 @@ pub fn handler(ctx: Context<Deposit>, assets: u64, min_shares_out: u64) -> Resul
     let vault = &ctx.accounts.vault;
     let total_shares = ctx.accounts.shares_mint.supply;
 
+    // SVS-1: Use LIVE balance from asset_vault (not stored total_assets)
+    // This prevents donation/inflation attacks without needing sync()
+    let total_assets = ctx.accounts.asset_vault.amount;
+
     // Calculate shares to mint (floor rounding - favors vault)
     let shares = convert_to_shares(
         assets,
-        vault.total_assets,
+        total_assets,
         total_shares,
         vault.decimals_offset,
         Rounding::Floor,
@@ -121,12 +124,8 @@ pub fn handler(ctx: Context<Deposit>, assets: u64, min_shares_out: u64) -> Resul
         shares,
     )?;
 
-    // Update cached total assets
-    let vault = &mut ctx.accounts.vault;
-    vault.total_assets = vault
-        .total_assets
-        .checked_add(assets)
-        .ok_or(VaultError::MathOverflow)?;
+    // NOTE: No need to update total_assets - SVS-1 uses live balance
+    // The asset_vault.amount is automatically updated by the transfer
 
     emit!(DepositEvent {
         vault: ctx.accounts.vault.key(),

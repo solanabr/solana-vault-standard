@@ -240,7 +240,8 @@ describe("Multi-User Scenarios", () => {
     });
 
     it("second depositor receives proportional shares", async () => {
-      const vaultState = await program.account.vault.fetch(vault);
+      // SVS-1: Use live balance from asset_vault
+      const assetVaultAccount = await getAccount(connection, assetVault);
       const userAShares = await getAccount(connection, userASharesAccount, undefined, TOKEN_2022_PROGRAM_ID);
 
       // User A deposits more
@@ -269,7 +270,7 @@ describe("Multi-User Scenarios", () => {
       const newShares = Number(userASharesAfter.amount) - userASharesBefore;
 
       // New shares should be proportional to deposit amount vs existing total
-      const expectedRatio = depositAmount.toNumber() / vaultState.totalAssets.toNumber();
+      const expectedRatio = depositAmount.toNumber() / Number(assetVaultAccount.amount);
       const sharesMintInfo = await getMint(connection, sharesMint, undefined, TOKEN_2022_PROGRAM_ID);
       const actualRatio = newShares / (Number(sharesMintInfo.supply) - newShares);
 
@@ -369,7 +370,6 @@ describe("Multi-User Scenarios", () => {
 
     it("last user can redeem all remaining shares", async () => {
       const userBShares = await getAccount(connection, userBSharesAccount, undefined, TOKEN_2022_PROGRAM_ID);
-      const vaultBefore = await program.account.vault.fetch(vault);
 
       // User B redeems all
       await program.methods
@@ -389,13 +389,14 @@ describe("Multi-User Scenarios", () => {
         .rpc();
 
       const userBSharesAfter = await getAccount(connection, userBSharesAccount, undefined, TOKEN_2022_PROGRAM_ID);
-      const vaultAfter = await program.account.vault.fetch(vault);
+      // SVS-1: Use live balance from asset_vault
+      const assetVaultAfter = await getAccount(connection, assetVault);
 
       expect(Number(userBSharesAfter.amount)).to.equal(0);
-      expect(vaultAfter.totalAssets.toNumber()).to.equal(0);
+      expect(Number(assetVaultAfter.amount)).to.equal(0);
 
       console.log("  Last user exited, vault now empty");
-      console.log("  Vault total_assets:", vaultAfter.totalAssets.toNumber());
+      console.log("  Vault live balance:", Number(assetVaultAfter.amount));
     });
   });
 
@@ -454,18 +455,19 @@ describe("Multi-User Scenarios", () => {
       console.log("  Sum of user shares:", sumOfShares);
     });
 
-    it("total assets equals sum of expected user assets", async () => {
-      const vaultState = await program.account.vault.fetch(vault);
+    it("total assets equals actual vault balance (SVS-1 live balance)", async () => {
+      // SVS-1: Live balance is the source of truth
       const assetVaultAccount = await getAccount(connection, assetVault);
 
-      expect(vaultState.totalAssets.toNumber()).to.equal(Number(assetVaultAccount.amount));
-      console.log("  Vault total_assets:", vaultState.totalAssets.toNumber());
-      console.log("  Actual vault balance:", Number(assetVaultAccount.amount));
+      // In SVS-1, we just verify the vault has assets
+      expect(Number(assetVaultAccount.amount)).to.be.greaterThan(0);
+      console.log("  Live balance (asset_vault.amount):", Number(assetVaultAccount.amount));
     });
 
     it("no shares created from nothing", async () => {
       const sharesMintBefore = await getMint(connection, sharesMint, undefined, TOKEN_2022_PROGRAM_ID);
-      const vaultBefore = await program.account.vault.fetch(vault);
+      // SVS-1: Use live balance from asset_vault
+      const assetVaultBefore = await getAccount(connection, assetVault);
 
       // Small deposit from User A
       const smallDeposit = new BN(1001);
@@ -488,10 +490,10 @@ describe("Multi-User Scenarios", () => {
         .rpc();
 
       const sharesMintAfter = await getMint(connection, sharesMint, undefined, TOKEN_2022_PROGRAM_ID);
-      const vaultAfter = await program.account.vault.fetch(vault);
+      const assetVaultAfter = await getAccount(connection, assetVault);
 
       const sharesCreated = Number(sharesMintAfter.supply) - Number(sharesMintBefore.supply);
-      const assetsAdded = vaultAfter.totalAssets.toNumber() - vaultBefore.totalAssets.toNumber();
+      const assetsAdded = Number(assetVaultAfter.amount) - Number(assetVaultBefore.amount);
 
       // Shares should only be created when assets are added
       expect(assetsAdded).to.equal(smallDeposit.toNumber());
@@ -500,7 +502,8 @@ describe("Multi-User Scenarios", () => {
     });
 
     it("no assets lost in multi-user operations", async () => {
-      const vaultBefore = await program.account.vault.fetch(vault);
+      // SVS-1: Use live balance from asset_vault
+      const assetVaultBefore = await getAccount(connection, assetVault);
       const userAAssetsBefore = await getAccount(connection, userAAssetAccount);
       const userBAssetsBefore = await getAccount(connection, userBAssetAccount);
       const userASharesBefore = await getAccount(connection, userASharesAccount, undefined, TOKEN_2022_PROGRAM_ID);
@@ -524,11 +527,11 @@ describe("Multi-User Scenarios", () => {
         .signers([userA])
         .rpc();
 
-      const vaultAfter = await program.account.vault.fetch(vault);
+      const assetVaultAfter = await getAccount(connection, assetVault);
       const userAAssetsAfter = await getAccount(connection, userAAssetAccount);
       const userBAssetsAfter = await getAccount(connection, userBAssetAccount);
 
-      const vaultDecrease = vaultBefore.totalAssets.toNumber() - vaultAfter.totalAssets.toNumber();
+      const vaultDecrease = Number(assetVaultBefore.amount) - Number(assetVaultAfter.amount);
       const userAIncrease = Number(userAAssetsAfter.amount) - Number(userAAssetsBefore.amount);
       const userBChange = Number(userBAssetsAfter.amount) - Number(userBAssetsBefore.amount);
 

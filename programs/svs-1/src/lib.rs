@@ -65,10 +65,8 @@ pub mod svs_1 {
         instructions::admin::transfer_authority(ctx, new_authority)
     }
 
-    /// Sync total_assets with actual vault balance
-    pub fn sync(ctx: Context<Sync>) -> Result<()> {
-        instructions::admin::sync(ctx)
-    }
+    // NOTE: SVS-1 uses live balance - no sync() needed
+    // For controlled yield distribution, use SVS-2 which has sync()
 
     // ============ View Functions (CPI composable) ============
 

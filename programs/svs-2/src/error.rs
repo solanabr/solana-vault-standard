@@ -31,19 +31,4 @@ pub enum VaultError {
 
     #[msg("Deposit amount below minimum threshold")]
     DepositTooSmall,
-
-    #[msg("Account not configured for confidential transfers")]
-    AccountNotConfigured,
-
-    #[msg("Pending balance not applied - call apply_pending first")]
-    PendingBalanceNotApplied,
-
-    #[msg("Invalid proof data")]
-    InvalidProof,
-
-    #[msg("Confidential transfer extension not initialized")]
-    ConfidentialTransferNotInitialized,
-
-    #[msg("Invalid ciphertext format")]
-    InvalidCiphertext,
 }

@@ -150,20 +150,22 @@ describe("Different Decimals", () => {
         })
         .rpc();
 
-      const vaultAccount = await program.account.vault.fetch(ctx.vault);
-      expect(vaultAccount.totalAssets.toNumber()).to.equal(1001);
+      // SVS-1: Use live balance from asset_vault
+      const assetVaultAccount = await getAccount(connection, ctx.assetVault);
+      expect(Number(assetVaultAccount.amount)).to.equal(1001);
       console.log("  Deposited 1001 whole units successfully");
     });
 
     it("share price calculation correct for 0 decimals", async () => {
       const userShares = await getAccount(connection, ctx.userSharesAccount, undefined, TOKEN_2022_PROGRAM_ID);
-      const vaultAccount = await program.account.vault.fetch(ctx.vault);
+      // SVS-1: Use live balance from asset_vault
+      const assetVaultAccount = await getAccount(connection, ctx.assetVault);
 
       // With offset of 9, shares should be scaled up significantly
       // shares = assets * (total_shares + 10^9) / (total_assets + 1)
       // For first deposit: shares ≈ assets * 10^9
-      expect(Number(userShares.amount)).to.be.greaterThan(vaultAccount.totalAssets.toNumber());
-      console.log("  Shares:", Number(userShares.amount), "Assets:", vaultAccount.totalAssets.toNumber());
+      expect(Number(userShares.amount)).to.be.greaterThan(Number(assetVaultAccount.amount));
+      console.log("  Shares:", Number(userShares.amount), "Assets:", Number(assetVaultAccount.amount));
     });
 
     it("redeem works with 0 decimal token", async () => {
@@ -235,7 +237,8 @@ describe("Different Decimals", () => {
     });
 
     it("proportional second deposit", async () => {
-      const vaultBefore = await program.account.vault.fetch(ctx.vault);
+      // SVS-1: Use live balance from asset_vault
+      const assetVaultBefore = await getAccount(connection, ctx.assetVault);
       const sharesBefore = await getAccount(connection, ctx.userSharesAccount, undefined, TOKEN_2022_PROGRAM_ID);
 
       const depositAmount = new BN(500 * 10 ** 6); // 500 USDC (half of first deposit)
@@ -303,11 +306,12 @@ describe("Different Decimals", () => {
         .rpc();
 
       const userShares = await getAccount(connection, ctx.userSharesAccount, undefined, TOKEN_2022_PROGRAM_ID);
-      const vaultAccount = await program.account.vault.fetch(ctx.vault);
+      // SVS-1: Use live balance from asset_vault
+      const assetVaultAccount = await getAccount(connection, ctx.assetVault);
 
       // With offset=0, virtual_shares = total_shares + 1, virtual_assets = total_assets + 1
       // First deposit: shares ≈ assets (close to 1:1)
-      const ratio = Number(userShares.amount) / vaultAccount.totalAssets.toNumber();
+      const ratio = Number(userShares.amount) / Number(assetVaultAccount.amount);
       expect(ratio).to.be.closeTo(1.0, 0.01);
       console.log("  9-decimal share/asset ratio:", ratio.toFixed(6));
     });

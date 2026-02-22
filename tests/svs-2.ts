@@ -9,39 +9,13 @@ import {
   getAccount,
   getAssociatedTokenAddressSync,
   ASSOCIATED_TOKEN_PROGRAM_ID,
-  getMint,
-  ExtensionType,
-  getExtensionData,
-  createAssociatedTokenAccountInstruction,
+  transfer,
 } from "@solana/spl-token";
-import {
-  Keypair,
-  PublicKey,
-  SystemProgram,
-  Transaction,
-  SYSVAR_RENT_PUBKEY,
-  SYSVAR_INSTRUCTIONS_PUBKEY,
-} from "@solana/web3.js";
+import { Keypair, PublicKey, SystemProgram, SYSVAR_RENT_PUBKEY } from "@solana/web3.js";
 import { expect } from "chai";
 import { Svs2 } from "../target/types/svs_2";
 
-// Privacy SDK imports
-import {
-  deriveElGamalKeypair,
-  deriveAesKey,
-  createDecryptableZeroBalance,
-  createDecryptableBalance,
-  createPubkeyValidityProofData,
-  createVerifyPubkeyValidityInstruction,
-  createConfigureAccountInstruction,
-  createApplyPendingBalanceInstruction,
-  createConfidentialDepositInstruction,
-  ZK_ELGAMAL_PROOF_PROGRAM_ID,
-  ElGamalKeypair,
-  AesKey,
-} from "../sdk/privacy/src";
-
-describe("svs-2 confidential vault", () => {
+describe("svs-2 (Stored Balance - Sync Required)", () => {
   const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
 
@@ -59,13 +33,6 @@ describe("svs-2 confidential vault", () => {
   const vaultId = new BN(1);
   const ASSET_DECIMALS = 6;
 
-  // Optional auditor ElGamal pubkey (32 bytes)
-  const auditorElgamalPubkey: number[] | null = null;
-
-  // Encryption keys (set during configure_account)
-  let userElgamalKeypair: ElGamalKeypair;
-  let userAesKey: AesKey;
-
   const getVaultPDA = (assetMint: PublicKey, vaultId: BN): [PublicKey, number] => {
     return PublicKey.findProgramAddressSync(
       [Buffer.from("vault"), assetMint.toBuffer(), vaultId.toArrayLike(Buffer, "le", 8)],
@@ -81,8 +48,6 @@ describe("svs-2 confidential vault", () => {
   };
 
   before(async () => {
-    console.log("\n=== SVS-2 Confidential Vault Tests ===\n");
-
     // Create asset mint (USDC-like, regular Token Program)
     assetMint = await createMint(
       connection,
@@ -144,18 +109,13 @@ describe("svs-2 confidential vault", () => {
     console.log("  Asset Mint:", assetMint.toBase58());
     console.log("  Vault PDA:", vault.toBase58());
     console.log("  Shares Mint:", sharesMint.toBase58());
+    console.log("  NOTE: SVS-2 uses STORED balance (sync required)");
   });
 
   describe("Initialize", () => {
-    it("creates a new confidential vault with ConfidentialTransferMint extension", async () => {
+    it("creates a new vault", async () => {
       const tx = await program.methods
-        .initialize(
-          vaultId,
-          "SVS-2 Vault",
-          "svVault2",
-          "https://example.com/vault2.json",
-          auditorElgamalPubkey
-        )
+        .initialize(vaultId, "SVS-2 Vault", "svVault2", "https://example.com/vault2.json")
         .accountsStrict({
           authority: payer.publicKey,
           vault: vault,
@@ -172,8 +132,7 @@ describe("svs-2 confidential vault", () => {
 
       console.log("Initialize tx:", tx);
 
-      // Verify vault state
-      const vaultAccount = await program.account.confidentialVault.fetch(vault);
+      const vaultAccount = await program.account.vault.fetch(vault);
       expect(vaultAccount.authority.toBase58()).to.equal(payer.publicKey.toBase58());
       expect(vaultAccount.assetMint.toBase58()).to.equal(assetMint.toBase58());
       expect(vaultAccount.sharesMint.toBase58()).to.equal(sharesMint.toBase58());
@@ -181,369 +140,289 @@ describe("svs-2 confidential vault", () => {
       expect(vaultAccount.paused).to.equal(false);
       expect(vaultAccount.vaultId.toNumber()).to.equal(vaultId.toNumber());
 
-      // Verify shares mint has ConfidentialTransferMint extension
-      const mintInfo = await getMint(connection, sharesMint, undefined, TOKEN_2022_PROGRAM_ID);
-      console.log("  Shares mint created with extensions");
-      console.log("  Decimals:", mintInfo.decimals);
-      console.log("  Supply:", mintInfo.supply.toString());
-
-      // Check confidential authority
-      expect(vaultAccount.confidentialAuthority.toBase58()).to.equal(vault.toBase58());
-      console.log("  Confidential authority:", vaultAccount.confidentialAuthority.toBase58());
+      // Asset vault should be empty
+      const assetVaultAccount = await getAccount(connection, assetVault);
+      expect(Number(assetVaultAccount.amount)).to.equal(0);
+      console.log("  Stored total_assets:", vaultAccount.totalAssets.toNumber());
+      console.log("  Actual vault balance:", Number(assetVaultAccount.amount));
     });
+  });
 
-    it("sets correct auditor if provided", async () => {
-      // Create a new vault with auditor
-      const newVaultId = new BN(2);
-      const [newVault] = getVaultPDA(assetMint, newVaultId);
-      const [newSharesMint] = getSharesMintPDA(newVault);
+  describe("Deposit", () => {
+    it("deposits assets and receives shares", async () => {
+      const depositAmount = new BN(100_000 * 10 ** ASSET_DECIMALS);
 
-      // Create mock auditor ElGamal pubkey (32 bytes)
-      const mockAuditorPubkey = Array.from(Keypair.generate().publicKey.toBytes());
-
-      const newAssetVault = anchor.utils.token.associatedAddress({
-        mint: assetMint,
-        owner: newVault,
-      });
+      const userAssetBefore = await getAccount(connection, userAssetAccount);
 
       await program.methods
-        .initialize(
-          newVaultId,
-          "Audited Vault",
-          "audVault",
-          "https://example.com/audited.json",
-          mockAuditorPubkey
-        )
+        .deposit(depositAmount, new BN(0))
         .accountsStrict({
-          authority: payer.publicKey,
-          vault: newVault,
+          user: payer.publicKey,
+          vault: vault,
           assetMint: assetMint,
-          sharesMint: newSharesMint,
-          assetVault: newAssetVault,
+          userAssetAccount: userAssetAccount,
+          assetVault: assetVault,
+          sharesMint: sharesMint,
+          userSharesAccount: userSharesAccount,
           assetTokenProgram: TOKEN_PROGRAM_ID,
           token2022Program: TOKEN_2022_PROGRAM_ID,
           associatedTokenProgram: anchor.utils.token.ASSOCIATED_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
-          rent: SYSVAR_RENT_PUBKEY,
         })
         .rpc();
 
-      const vaultAccount = await program.account.confidentialVault.fetch(newVault);
-      expect(vaultAccount.auditorElgamalPubkey).to.not.be.null;
-      console.log("  Vault with auditor created successfully");
+      const userAssetAfter = await getAccount(connection, userAssetAccount);
+      const userSharesAfter = await getAccount(connection, userSharesAccount, undefined, TOKEN_2022_PROGRAM_ID);
+
+      const assetsDeposited = Number(userAssetBefore.amount) - Number(userAssetAfter.amount);
+      expect(assetsDeposited).to.equal(depositAmount.toNumber());
+      expect(Number(userSharesAfter.amount)).to.be.greaterThan(0);
+
+      // SVS-2: stored total_assets should update
+      const vaultAccount = await program.account.vault.fetch(vault);
+      expect(vaultAccount.totalAssets.toNumber()).to.equal(depositAmount.toNumber());
+
+      // Actual vault balance should match
+      const assetVaultAccount = await getAccount(connection, assetVault);
+      expect(Number(assetVaultAccount.amount)).to.equal(depositAmount.toNumber());
+
+      console.log("  Deposited:", assetsDeposited / 10 ** ASSET_DECIMALS, "assets");
+      console.log("  Received:", Number(userSharesAfter.amount) / 10 ** 9, "shares");
+      console.log("  Stored total_assets:", vaultAccount.totalAssets.toNumber() / 10 ** ASSET_DECIMALS);
+    });
+
+    it("second deposit updates stored total correctly", async () => {
+      const depositAmount = new BN(50_000 * 10 ** ASSET_DECIMALS);
+      const vaultBefore = await program.account.vault.fetch(vault);
+
+      await program.methods
+        .deposit(depositAmount, new BN(0))
+        .accountsStrict({
+          user: payer.publicKey,
+          vault: vault,
+          assetMint: assetMint,
+          userAssetAccount: userAssetAccount,
+          assetVault: assetVault,
+          sharesMint: sharesMint,
+          userSharesAccount: userSharesAccount,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+          associatedTokenProgram: anchor.utils.token.ASSOCIATED_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
+
+      const vaultAfter = await program.account.vault.fetch(vault);
+      expect(vaultAfter.totalAssets.toNumber()).to.equal(
+        vaultBefore.totalAssets.toNumber() + depositAmount.toNumber()
+      );
+      console.log("  Stored total_assets now:", vaultAfter.totalAssets.toNumber() / 10 ** ASSET_DECIMALS);
     });
   });
 
-  describe("View Functions", () => {
-    it("returns max deposit (u64::MAX when not paused)", async () => {
-      // View functions return data via return_data
-      // We can test by calling via simulate
-      const tx = await program.methods
-        .maxDeposit()
-        .accounts({
-          vault: vault,
-          sharesMint: sharesMint,
-        })
-        .simulate();
+  describe("Stored Balance Behavior", () => {
+    it("external donation does NOT change stored total_assets", async () => {
+      const vaultBefore = await program.account.vault.fetch(vault);
+      const storedBefore = vaultBefore.totalAssets.toNumber();
 
-      // Return data would be u64::MAX (not paused)
-      console.log("  maxDeposit simulated successfully");
+      // Send tokens directly to asset vault (simulating yield/donation)
+      const donationAmount = 10_000 * 10 ** ASSET_DECIMALS;
+      await transfer(
+        connection,
+        payer,
+        userAssetAccount,
+        assetVault,
+        payer.publicKey,
+        donationAmount,
+        [],
+        undefined,
+        TOKEN_PROGRAM_ID
+      );
+
+      // Stored total_assets should be UNCHANGED
+      const vaultAfterDonation = await program.account.vault.fetch(vault);
+      expect(vaultAfterDonation.totalAssets.toNumber()).to.equal(storedBefore);
+
+      // But actual vault balance increased
+      const assetVaultAccount = await getAccount(connection, assetVault);
+      expect(Number(assetVaultAccount.amount)).to.be.greaterThan(storedBefore);
+
+      console.log("  Stored total_assets (unchanged):", vaultAfterDonation.totalAssets.toNumber() / 10 ** ASSET_DECIMALS);
+      console.log("  Actual vault balance:", Number(assetVaultAccount.amount) / 10 ** ASSET_DECIMALS);
+      console.log("  Unrecognized yield:", (Number(assetVaultAccount.amount) - storedBefore) / 10 ** ASSET_DECIMALS);
     });
 
-    it("returns max mint (u64::MAX when not paused)", async () => {
-      const tx = await program.methods
-        .maxMint()
-        .accounts({
-          vault: vault,
-          sharesMint: sharesMint,
-        })
-        .simulate();
+    it("sync() updates stored total_assets to actual balance", async () => {
+      const vaultBefore = await program.account.vault.fetch(vault);
+      const storedBefore = vaultBefore.totalAssets.toNumber();
 
-      console.log("  maxMint simulated successfully");
-    });
-
-    it("returns total assets (0 initially)", async () => {
-      const tx = await program.methods
-        .totalAssets()
-        .accounts({
-          vault: vault,
-          sharesMint: sharesMint,
-        })
-        .simulate();
-
-      console.log("  totalAssets simulated successfully");
-    });
-
-    it("preview deposit calculates shares correctly", async () => {
-      const assets = new BN(1000 * 10 ** ASSET_DECIMALS);
-
-      const tx = await program.methods
-        .previewDeposit(assets)
-        .accounts({
-          vault: vault,
-          sharesMint: sharesMint,
-        })
-        .simulate();
-
-      console.log("  previewDeposit simulated successfully");
-    });
-  });
-
-  describe("Admin Functions", () => {
-    it("pauses the vault", async () => {
-      await program.methods
-        .pause()
-        .accounts({
-          vault: vault,
-          authority: payer.publicKey,
-        })
-        .rpc();
-
-      const vaultAccount = await program.account.confidentialVault.fetch(vault);
-      expect(vaultAccount.paused).to.equal(true);
-      console.log("  Vault paused successfully");
-    });
-
-    it("unpauses the vault", async () => {
-      await program.methods
-        .unpause()
-        .accounts({
-          vault: vault,
-          authority: payer.publicKey,
-        })
-        .rpc();
-
-      const vaultAccount = await program.account.confidentialVault.fetch(vault);
-      expect(vaultAccount.paused).to.equal(false);
-      console.log("  Vault unpaused successfully");
-    });
-
-    it("syncs total assets with vault balance", async () => {
       await program.methods
         .sync()
-        .accounts({
+        .accountsStrict({
+          authority: payer.publicKey,
           vault: vault,
           assetVault: assetVault,
         })
         .rpc();
 
-      console.log("  Sync executed successfully");
+      const vaultAfterSync = await program.account.vault.fetch(vault);
+      const assetVaultAccount = await getAccount(connection, assetVault);
+
+      // Stored total now matches actual balance
+      expect(vaultAfterSync.totalAssets.toNumber()).to.equal(Number(assetVaultAccount.amount));
+      expect(vaultAfterSync.totalAssets.toNumber()).to.be.greaterThan(storedBefore);
+
+      console.log("  Before sync:", storedBefore / 10 ** ASSET_DECIMALS);
+      console.log("  After sync:", vaultAfterSync.totalAssets.toNumber() / 10 ** ASSET_DECIMALS);
+      console.log("  Yield recognized:", (vaultAfterSync.totalAssets.toNumber() - storedBefore) / 10 ** ASSET_DECIMALS);
+    });
+
+    it("sync increases share value for existing holders", async () => {
+      // After sync, shares are worth more because total_assets increased
+      // but total_shares stayed the same
+      const vaultAccount = await program.account.vault.fetch(vault);
+      const assetVaultAccount = await getAccount(connection, assetVault);
+      const userShares = await getAccount(connection, userSharesAccount, undefined, TOKEN_2022_PROGRAM_ID);
+
+      // Share price = total_assets / total_shares (simplified)
+      // After sync, total_assets > sum of deposits, so share price > 1
+      expect(vaultAccount.totalAssets.toNumber()).to.equal(Number(assetVaultAccount.amount));
+
+      console.log("  Total assets:", vaultAccount.totalAssets.toNumber() / 10 ** ASSET_DECIMALS);
+      console.log("  User shares:", Number(userShares.amount) / 10 ** 9);
     });
   });
 
-  // Confidential transfer tests
-  // Note: These require the ZK ElGamal Proof program which is a native program.
-  // On local test validator (Agave 3.0+), the native program should be available.
-  describe("Confidential Operations", () => {
-    it("configures user account for confidential transfers", async () => {
-      // Step 1: Derive encryption keys
-      userElgamalKeypair = deriveElGamalKeypair(payer, userSharesAccount);
-      userAesKey = deriveAesKey(payer, userSharesAccount);
+  describe("Redeem", () => {
+    it("redeems shares for assets", async () => {
+      const sharesBefore = await getAccount(connection, userSharesAccount, undefined, TOKEN_2022_PROGRAM_ID);
+      const assetsBefore = await getAccount(connection, userAssetAccount);
+      const vaultBefore = await program.account.vault.fetch(vault);
 
-      console.log("  ElGamal pubkey:", Buffer.from(userElgamalKeypair.publicKey).toString("hex").slice(0, 16) + "...");
+      // Redeem half of shares
+      const redeemShares = new BN(Number(sharesBefore.amount) / 2);
 
-      // Step 2: Create decryptable zero balance
-      const decryptableZeroBalance = createDecryptableZeroBalance(userAesKey);
+      await program.methods
+        .redeem(redeemShares, new BN(0))
+        .accountsStrict({
+          user: payer.publicKey,
+          vault: vault,
+          assetMint: assetMint,
+          userAssetAccount: userAssetAccount,
+          assetVault: assetVault,
+          sharesMint: sharesMint,
+          userSharesAccount: userSharesAccount,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+        })
+        .rpc();
 
-      // Step 3: Create PubkeyValidityProof
-      const proofData = createPubkeyValidityProofData(userElgamalKeypair);
+      const sharesAfter = await getAccount(connection, userSharesAccount, undefined, TOKEN_2022_PROGRAM_ID);
+      const assetsAfter = await getAccount(connection, userAssetAccount);
+      const vaultAfter = await program.account.vault.fetch(vault);
 
-      // Step 4: Build transaction with proof verification and configure_account
-      const tx = new Transaction();
+      const sharesBurned = Number(sharesBefore.amount) - Number(sharesAfter.amount);
+      const assetsReceived = Number(assetsAfter.amount) - Number(assetsBefore.amount);
 
-      // Add the proof verification instruction (will be at index 0)
-      const verifyProofIx = createVerifyPubkeyValidityInstruction(proofData);
-      tx.add(verifyProofIx);
+      expect(sharesBurned).to.equal(redeemShares.toNumber());
+      expect(assetsReceived).to.be.greaterThan(0);
 
-      // Add the configure_account instruction (references proof at offset -1)
-      const configureIx = createConfigureAccountInstruction(
-        userSharesAccount,
-        sharesMint,
-        payer.publicKey,
-        userElgamalKeypair.publicKey,
-        decryptableZeroBalance.ciphertext,
-        new BN(65536), // max pending balance credits
-        -1, // proof is at previous instruction
+      // SVS-2: stored total_assets should decrease
+      expect(vaultAfter.totalAssets.toNumber()).to.equal(
+        vaultBefore.totalAssets.toNumber() - assetsReceived
       );
-      tx.add(configureIx);
 
-      try {
-        const sig = await connection.sendTransaction(tx, [payer]);
-        await connection.confirmTransaction(sig);
-        console.log("  Configure account tx:", sig);
-        console.log("  User account configured for confidential transfers");
-      } catch (err: any) {
-        // Handle expected errors gracefully
-        if (err.message?.includes("does not exist") || err.message?.includes("invalid program")) {
-          console.log("  ZK ElGamal program not available on this validator - skipping");
-          return;
-        }
-        if (err.message?.includes("invalid proof data") || err.message?.includes("invalid instruction data")) {
-          // This is expected - our JS SDK generates placeholder proofs
-          // Real proof generation requires solana-zk-sdk WASM bindings
-          console.log("  ZK proof validation failed (expected with placeholder proof data)");
-          console.log("  Note: Real proof generation requires Rust solana-zk-sdk or WASM bindings");
-          console.log("  The instruction format and discriminators are correct - crypto impl pending");
-          // Mark keys as derived so other tests can continue
-          return;
-        }
-        throw err;
-      }
-    });
-
-    it("deposits assets and receives confidential shares", async () => {
-      // Skip if configure_account didn't run
-      if (!userElgamalKeypair) {
-        console.log("  Skipping - account not configured");
-        return;
-      }
-
-      const depositAmount = new BN(1000 * 10 ** ASSET_DECIMALS);
-
-      // Deposit via the vault's deposit instruction
-      // This will mint shares to the confidential pending balance
-      try {
-        const tx = await program.methods
-          .deposit(depositAmount, new BN(0)) // min shares out = 0 for test
-          .accountsStrict({
-            user: payer.publicKey,
-            vault: vault,
-            assetMint: assetMint,
-            userAssetAccount: userAssetAccount,
-            assetVault: assetVault,
-            sharesMint: sharesMint,
-            userSharesAccount: userSharesAccount,
-            assetTokenProgram: TOKEN_PROGRAM_ID,
-            token2022Program: TOKEN_2022_PROGRAM_ID,
-            associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-            systemProgram: SystemProgram.programId,
-          })
-          .rpc();
-
-        console.log("  Deposit tx:", tx);
-        console.log("  Deposited", depositAmount.toString(), "assets");
-      } catch (err: any) {
-        if (err.error?.errorCode?.code === "AccountNotInitialized") {
-          console.log("  Skipping - confidential account not properly initialized");
-          return;
-        }
-        throw err;
-      }
-    });
-
-    it("applies pending balance", async () => {
-      // Skip if previous tests didn't run
-      if (!userAesKey) {
-        console.log("  Skipping - no AES key");
-        return;
-      }
-
-      // After deposit, shares are in pending balance
-      // We need to apply them to available balance
-      const expectedPendingCredits = new BN(1); // 1 credit from the deposit
-
-      // Compute new decryptable available balance
-      // For initial apply, this would be the deposited shares
-      const newAvailableBalance = new BN(1000 * 10 ** 9); // shares with 9 decimals
-      const newDecryptableBalance = createDecryptableBalance(userAesKey, newAvailableBalance);
-
-      try {
-        const applyIx = createApplyPendingBalanceInstruction(
-          userSharesAccount,
-          payer.publicKey,
-          newDecryptableBalance.ciphertext,
-          expectedPendingCredits,
-        );
-
-        const tx = new Transaction().add(applyIx);
-        const sig = await connection.sendTransaction(tx, [payer]);
-        await connection.confirmTransaction(sig);
-
-        console.log("  Apply pending tx:", sig);
-        console.log("  Pending balance applied to available");
-      } catch (err: any) {
-        console.log("  Apply pending failed:", err.message || err);
-      }
-    });
-
-    it("redeems confidential shares for assets", async () => {
-      // Skip if previous tests didn't run
-      if (!userElgamalKeypair || !userAesKey) {
-        console.log("  Skipping - encryption keys not initialized");
-        return;
-      }
-
-      // Redeem requires:
-      // 1. CiphertextCommitmentEqualityProof - proves encrypted balance matches commitment
-      // 2. BatchedRangeProofU64 - proves amounts are non-negative
-      // 3. Both proofs submitted to ZK ElGamal program
-
-      const redeemShares = new BN(500 * 10 ** 9);
-      const minAssetsOut = new BN(0);
-
-      // Compute new decryptable balance after redeem
-      const currentBalance = new BN(1000 * 10 ** 9);
-      const newBalance = currentBalance.sub(redeemShares);
-      const newDecryptableBalance = createDecryptableBalance(userAesKey, newBalance);
-
-      try {
-        // Note: Full redeem requires proof context accounts
-        // For now, we test that the instruction builds correctly
-        console.log("  Redeem shares:", redeemShares.toString());
-        console.log("  New balance after redeem:", newBalance.toString());
-        console.log("  (Full redeem requires ZK proof context accounts)");
-      } catch (err: any) {
-        console.log("  Redeem test:", err.message || err);
-      }
-    });
-
-    it("withdraws exact assets", async () => {
-      // Similar to redeem but specifies exact assets to receive
-      if (!userElgamalKeypair || !userAesKey) {
-        console.log("  Skipping - encryption keys not initialized");
-        return;
-      }
-
-      const withdrawAssets = new BN(250 * 10 ** ASSET_DECIMALS);
-
-      console.log("  Withdraw assets:", withdrawAssets.toString());
-      console.log("  (Full withdraw requires ZK proof context accounts)");
+      console.log("  Redeemed:", sharesBurned / 10 ** 9, "shares for", assetsReceived / 10 ** ASSET_DECIMALS, "assets");
+      console.log("  Stored total_assets now:", vaultAfter.totalAssets.toNumber() / 10 ** ASSET_DECIMALS);
     });
   });
 
-  describe("Error Cases", () => {
-    // Note: deposit/redeem error tests require configured confidential account
-    // which needs ZK infrastructure. Testing vault pause via view functions instead.
-    it("max_deposit returns 0 when paused", async () => {
-      // Pause the vault
+  describe("Withdraw", () => {
+    it("withdraws exact assets", async () => {
+      const sharesBefore = await getAccount(connection, userSharesAccount, undefined, TOKEN_2022_PROGRAM_ID);
+      const assetsBefore = await getAccount(connection, userAssetAccount);
+
+      const withdrawAssets = new BN(10_000 * 10 ** ASSET_DECIMALS);
+
+      await program.methods
+        .withdraw(withdrawAssets, new BN(Number(sharesBefore.amount)))
+        .accountsStrict({
+          user: payer.publicKey,
+          vault: vault,
+          assetMint: assetMint,
+          userAssetAccount: userAssetAccount,
+          assetVault: assetVault,
+          sharesMint: sharesMint,
+          userSharesAccount: userSharesAccount,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+        })
+        .rpc();
+
+      const assetsAfter = await getAccount(connection, userAssetAccount);
+      const assetsReceived = Number(assetsAfter.amount) - Number(assetsBefore.amount);
+      expect(assetsReceived).to.equal(withdrawAssets.toNumber());
+
+      // Verify stored total decreased
+      const vaultAfter = await program.account.vault.fetch(vault);
+      console.log("  Withdrew:", assetsReceived / 10 ** ASSET_DECIMALS, "assets");
+      console.log("  Stored total_assets now:", vaultAfter.totalAssets.toNumber() / 10 ** ASSET_DECIMALS);
+    });
+  });
+
+  describe("Mint", () => {
+    it("mints exact shares", async () => {
+      const sharesBefore = await getAccount(connection, userSharesAccount, undefined, TOKEN_2022_PROGRAM_ID);
+      const assetsBefore = await getAccount(connection, userAssetAccount);
+
+      const mintShares = new BN(1000 * 10 ** 9);
+
+      await program.methods
+        .mint(mintShares, new BN(Number(assetsBefore.amount)))
+        .accountsStrict({
+          user: payer.publicKey,
+          vault: vault,
+          assetMint: assetMint,
+          userAssetAccount: userAssetAccount,
+          assetVault: assetVault,
+          sharesMint: sharesMint,
+          userSharesAccount: userSharesAccount,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+          associatedTokenProgram: anchor.utils.token.ASSOCIATED_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
+
+      const sharesAfter = await getAccount(connection, userSharesAccount, undefined, TOKEN_2022_PROGRAM_ID);
+      const sharesMinted = Number(sharesAfter.amount) - Number(sharesBefore.amount);
+      expect(sharesMinted).to.equal(mintShares.toNumber());
+
+      // Verify stored total increased
+      const vaultAfter = await program.account.vault.fetch(vault);
+      console.log("  Minted:", sharesMinted / 10 ** 9, "shares");
+      console.log("  Stored total_assets now:", vaultAfter.totalAssets.toNumber() / 10 ** ASSET_DECIMALS);
+    });
+  });
+
+  describe("Admin", () => {
+    it("pauses and unpauses the vault", async () => {
       await program.methods
         .pause()
-        .accounts({
-          vault: vault,
+        .accountsStrict({
           authority: payer.publicKey,
+          vault: vault,
         })
         .rpc();
 
-      const vaultAccount = await program.account.confidentialVault.fetch(vault);
+      let vaultAccount = await program.account.vault.fetch(vault);
       expect(vaultAccount.paused).to.equal(true);
-      console.log("  Vault paused - deposits would be blocked");
+      console.log("  Vault paused");
 
-      // Unpause for subsequent tests
-      await program.methods
-        .unpause()
-        .accounts({
-          vault: vault,
-          authority: payer.publicKey,
-        })
-        .rpc();
-    });
-
-    it("rejects mint with zero shares", async () => {
-      // Mint with zero shares should fail even without configured account
-      // because the zero check happens before account validation
+      // Deposit should fail when paused
       try {
         await program.methods
-          .mint(new BN(0), new BN(1000))
+          .deposit(new BN(1000), new BN(0))
           .accountsStrict({
             user: payer.publicKey,
             vault: vault,
@@ -558,32 +437,372 @@ describe("svs-2 confidential vault", () => {
             systemProgram: SystemProgram.programId,
           })
           .rpc();
-        expect.fail("Should have thrown ZeroAmount error");
+        expect.fail("Should reject when paused");
       } catch (err: any) {
-        // Either ZeroAmount or AccountNotInitialized is acceptable
-        // (depends on instruction execution order)
-        const code = err.error?.errorCode?.code;
-        expect(code === "ZeroAmount" || code === "AccountNotInitialized").to.be.true;
-        console.log("  Zero/invalid amount correctly rejected:", code);
+        expect(err.toString()).to.include("VaultPaused");
+        console.log("  Deposit correctly rejected when paused");
       }
+
+      await program.methods
+        .unpause()
+        .accountsStrict({
+          authority: payer.publicKey,
+          vault: vault,
+        })
+        .rpc();
+
+      vaultAccount = await program.account.vault.fetch(vault);
+      expect(vaultAccount.paused).to.equal(false);
+      console.log("  Vault unpaused");
     });
 
-    it("fails authority transfer from non-authority", async () => {
+    it("transfers authority", async () => {
+      const newAuthority = Keypair.generate();
+
+      await program.methods
+        .transferAuthority(newAuthority.publicKey)
+        .accountsStrict({
+          authority: payer.publicKey,
+          vault: vault,
+        })
+        .rpc();
+
+      let vaultAccount = await program.account.vault.fetch(vault);
+      expect(vaultAccount.authority.toBase58()).to.equal(newAuthority.publicKey.toBase58());
+      console.log("  Authority transferred to:", newAuthority.publicKey.toBase58().slice(0, 16) + "...");
+
+      // Transfer back
+      await program.methods
+        .transferAuthority(payer.publicKey)
+        .accountsStrict({
+          authority: newAuthority.publicKey,
+          vault: vault,
+        })
+        .signers([newAuthority])
+        .rpc();
+
+      vaultAccount = await program.account.vault.fetch(vault);
+      expect(vaultAccount.authority.toBase58()).to.equal(payer.publicKey.toBase58());
+      console.log("  Authority transferred back");
+    });
+
+    it("rejects authority transfer from non-authority", async () => {
       const fakeAuthority = Keypair.generate();
 
       try {
         await program.methods
           .transferAuthority(fakeAuthority.publicKey)
-          .accounts({
-            vault: vault,
+          .accountsStrict({
             authority: fakeAuthority.publicKey,
+            vault: vault,
           })
           .signers([fakeAuthority])
           .rpc();
-        expect.fail("Should have thrown Unauthorized error");
+        expect.fail("Should reject unauthorized transfer");
       } catch (err: any) {
-        // Constraint violation
+        expect(err.toString()).to.include("Unauthorized");
         console.log("  Unauthorized transfer correctly rejected");
+      }
+    });
+
+    it("SVS-2 has sync() function", async () => {
+      expect((program.methods as any).sync).to.not.be.undefined;
+      console.log("  Confirmed: SVS-2 has sync() for stored balance model");
+    });
+  });
+
+  describe("View Functions", () => {
+    it("preview deposit simulates correctly", async () => {
+      const assets = new BN(10_000 * 10 ** ASSET_DECIMALS);
+
+      // SVS-2 view functions do NOT require assetVault (uses stored total_assets)
+      const result = await program.methods
+        .previewDeposit(assets)
+        .accounts({
+          vault: vault,
+          sharesMint: sharesMint,
+        })
+        .simulate();
+
+      expect(result.events).to.not.be.undefined;
+      console.log("  Preview deposit simulated (using stored total_assets)");
+    });
+
+    it("previewMint simulates correctly", async () => {
+      const shares = new BN(1000 * 10 ** 9);
+
+      const result = await program.methods
+        .previewMint(shares)
+        .accounts({
+          vault: vault,
+          sharesMint: sharesMint,
+        })
+        .simulate();
+
+      expect(result.events).to.not.be.undefined;
+      console.log("  Preview mint simulated (stored balance)");
+    });
+
+    it("previewWithdraw simulates correctly", async () => {
+      const assets = new BN(1000 * 10 ** ASSET_DECIMALS);
+
+      const result = await program.methods
+        .previewWithdraw(assets)
+        .accounts({
+          vault: vault,
+          sharesMint: sharesMint,
+        })
+        .simulate();
+
+      expect(result.events).to.not.be.undefined;
+      console.log("  Preview withdraw simulated (stored balance)");
+    });
+
+    it("previewRedeem simulates correctly", async () => {
+      const shares = new BN(1000 * 10 ** 9);
+
+      const result = await program.methods
+        .previewRedeem(shares)
+        .accounts({
+          vault: vault,
+          sharesMint: sharesMint,
+        })
+        .simulate();
+
+      expect(result.events).to.not.be.undefined;
+      console.log("  Preview redeem simulated (stored balance)");
+    });
+
+    it("total assets returns stored value", async () => {
+      const vaultAccount = await program.account.vault.fetch(vault);
+      const assetVaultAccount = await getAccount(connection, assetVault);
+
+      // SVS-2: total_assets view returns STORED value
+      console.log("  Stored total_assets:", vaultAccount.totalAssets.toNumber() / 10 ** ASSET_DECIMALS);
+      console.log("  Actual vault balance:", Number(assetVaultAccount.amount) / 10 ** ASSET_DECIMALS);
+    });
+
+    it("max deposit returns u64::MAX when not paused", async () => {
+      const result = await program.methods
+        .maxDeposit()
+        .accounts({
+          vault: vault,
+          sharesMint: sharesMint,
+        })
+        .simulate();
+
+      console.log("  maxDeposit simulated successfully");
+    });
+
+    it("max mint returns u64::MAX when not paused", async () => {
+      const result = await program.methods
+        .maxMint()
+        .accounts({
+          vault: vault,
+          sharesMint: sharesMint,
+        })
+        .simulate();
+
+      console.log("  maxMint simulated successfully");
+    });
+
+    it("maxWithdraw returns owner's redeemable assets", async () => {
+      const result = await program.methods
+        .maxWithdraw()
+        .accounts({
+          vault: vault,
+          sharesMint: sharesMint,
+          ownerSharesAccount: userSharesAccount,
+        })
+        .simulate();
+
+      expect(result.events).to.not.be.undefined;
+      console.log("  maxWithdraw simulated (stored balance)");
+    });
+
+    it("maxRedeem returns owner's share balance", async () => {
+      const result = await program.methods
+        .maxRedeem()
+        .accounts({
+          vault: vault,
+          sharesMint: sharesMint,
+          ownerSharesAccount: userSharesAccount,
+        })
+        .simulate();
+
+      expect(result.events).to.not.be.undefined;
+      console.log("  maxRedeem simulated (stored balance)");
+    });
+
+    it("convertToShares simulates correctly", async () => {
+      const assets = new BN(5000 * 10 ** ASSET_DECIMALS);
+
+      const result = await program.methods
+        .convertToShares(assets)
+        .accounts({
+          vault: vault,
+          sharesMint: sharesMint,
+        })
+        .simulate();
+
+      expect(result.events).to.not.be.undefined;
+      console.log("  convertToShares simulated (stored balance)");
+    });
+
+    it("convertToAssets simulates correctly", async () => {
+      const shares = new BN(5000 * 10 ** 9);
+
+      const result = await program.methods
+        .convertToAssets(shares)
+        .accounts({
+          vault: vault,
+          sharesMint: sharesMint,
+        })
+        .simulate();
+
+      expect(result.events).to.not.be.undefined;
+      console.log("  convertToAssets simulated (stored balance)");
+    });
+  });
+
+  describe("Sync Edge Cases", () => {
+    it("sync with zero donation is a no-op", async () => {
+      // First sync to make sure stored matches actual
+      await program.methods
+        .sync()
+        .accountsStrict({
+          authority: payer.publicKey,
+          vault: vault,
+          assetVault: assetVault,
+        })
+        .rpc();
+
+      const vaultBefore = await program.account.vault.fetch(vault);
+
+      // Sync again with no new donations
+      await program.methods
+        .sync()
+        .accountsStrict({
+          authority: payer.publicKey,
+          vault: vault,
+          assetVault: assetVault,
+        })
+        .rpc();
+
+      const vaultAfter = await program.account.vault.fetch(vault);
+      expect(vaultAfter.totalAssets.toNumber()).to.equal(vaultBefore.totalAssets.toNumber());
+      console.log("  Sync with no new donations: total_assets unchanged");
+    });
+
+    it("multiple sequential syncs are idempotent", async () => {
+      // Donate first
+      const donationAmount = 5_000 * 10 ** ASSET_DECIMALS;
+      await transfer(
+        connection,
+        payer,
+        userAssetAccount,
+        assetVault,
+        payer.publicKey,
+        donationAmount,
+        [],
+        undefined,
+        TOKEN_PROGRAM_ID
+      );
+
+      // First sync
+      await program.methods
+        .sync()
+        .accountsStrict({
+          authority: payer.publicKey,
+          vault: vault,
+          assetVault: assetVault,
+        })
+        .rpc();
+
+      const afterFirstSync = await program.account.vault.fetch(vault);
+
+      // Second sync (no new donations)
+      await program.methods
+        .sync()
+        .accountsStrict({
+          authority: payer.publicKey,
+          vault: vault,
+          assetVault: assetVault,
+        })
+        .rpc();
+
+      const afterSecondSync = await program.account.vault.fetch(vault);
+      expect(afterSecondSync.totalAssets.toNumber()).to.equal(afterFirstSync.totalAssets.toNumber());
+      console.log("  Sequential syncs idempotent:", afterSecondSync.totalAssets.toNumber() / 10 ** ASSET_DECIMALS);
+    });
+  });
+
+  describe("Error Cases", () => {
+    it("rejects deposit with zero amount", async () => {
+      try {
+        await program.methods
+          .deposit(new BN(0), new BN(0))
+          .accountsStrict({
+            user: payer.publicKey,
+            vault: vault,
+            assetMint: assetMint,
+            userAssetAccount: userAssetAccount,
+            assetVault: assetVault,
+            sharesMint: sharesMint,
+            userSharesAccount: userSharesAccount,
+            assetTokenProgram: TOKEN_PROGRAM_ID,
+            token2022Program: TOKEN_2022_PROGRAM_ID,
+            associatedTokenProgram: anchor.utils.token.ASSOCIATED_PROGRAM_ID,
+            systemProgram: SystemProgram.programId,
+          })
+          .rpc();
+        expect.fail("Should reject zero deposit");
+      } catch (err: any) {
+        expect(err.toString()).to.include("ZeroAmount");
+        console.log("  Zero deposit correctly rejected");
+      }
+    });
+
+    it("rejects redeem with zero shares", async () => {
+      try {
+        await program.methods
+          .redeem(new BN(0), new BN(0))
+          .accountsStrict({
+            user: payer.publicKey,
+            vault: vault,
+            assetMint: assetMint,
+            userAssetAccount: userAssetAccount,
+            assetVault: assetVault,
+            sharesMint: sharesMint,
+            userSharesAccount: userSharesAccount,
+            assetTokenProgram: TOKEN_PROGRAM_ID,
+            token2022Program: TOKEN_2022_PROGRAM_ID,
+          })
+          .rpc();
+        expect.fail("Should reject zero redeem");
+      } catch (err: any) {
+        expect(err.toString()).to.include("ZeroAmount");
+        console.log("  Zero redeem correctly rejected");
+      }
+    });
+
+    it("rejects sync from non-authority", async () => {
+      const fakeAuthority = Keypair.generate();
+
+      try {
+        await program.methods
+          .sync()
+          .accountsStrict({
+            authority: fakeAuthority.publicKey,
+            vault: vault,
+            assetVault: assetVault,
+          })
+          .signers([fakeAuthority])
+          .rpc();
+        expect.fail("Should reject unauthorized sync");
+      } catch (err: any) {
+        expect(err.toString()).to.include("Unauthorized");
+        console.log("  Unauthorized sync correctly rejected");
       }
     });
   });

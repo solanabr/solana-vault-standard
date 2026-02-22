@@ -54,15 +54,18 @@ Located in `tests/`:
 
 | File | Category | Tests |
 |------|----------|-------|
-| `svs-1.ts` | Core operations | 9 |
-| `edge-cases.ts` | Boundary conditions | 12 |
+| `svs-1.ts` | SVS-1 core + view functions | 19 |
+| `svs-2.ts` | SVS-2 stored balance + sync | 30 |
+| `edge-cases.ts` | Boundary conditions + view edges | 15 |
 | `multi-user.ts` | Multi-user scenarios | 15 |
 | `decimals.ts` | Token decimal handling | 12 |
 | `yield-sync.ts` | Yield accrual & sync | 12 |
 | `invariants.ts` | Mathematical invariants | 15 |
 | `admin-extended.ts` | Admin operations | 10 |
 | `full-lifecycle.ts` | End-to-end flows | 8 |
-| **Total** | | **~93** |
+| **Total** | | **~136** |
+
+**Note:** SVS-3 integration tests require ZK proof generation infrastructure (Rust backend or WASM bindings) and are not yet available.
 
 ### SDK Tests (TypeScript)
 

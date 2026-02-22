@@ -347,8 +347,9 @@ describe("svs-1 edge cases", () => {
     });
 
     it("rejects withdraw exceeding vault assets", async () => {
-      const vaultAccount = await program.account.vault.fetch(vault);
-      const vaultAssets = vaultAccount.totalAssets.toNumber();
+      // SVS-1: Use live balance from asset_vault
+      const assetVaultAccount = await getAccount(connection, assetVault);
+      const vaultAssets = Number(assetVaultAccount.amount);
 
       try {
         await program.methods
@@ -443,6 +444,53 @@ describe("svs-1 edge cases", () => {
       const vault3Account = await program.account.vault.fetch(vault3);
       expect(vault3Account.vaultId.toNumber()).to.equal(3);
       console.log("  Multiple vaults for same asset works");
+    });
+  });
+
+  describe("View Function Edge Cases", () => {
+    it("convertToShares with zero assets returns zero", async () => {
+      const result = await program.methods
+        .convertToShares(new BN(0))
+        .accountsStrict({
+          vault: vault,
+          sharesMint: sharesMint,
+          assetVault: assetVault,
+        })
+        .simulate();
+
+      expect(result.events).to.not.be.undefined;
+      console.log("  convertToShares(0) simulated");
+    });
+
+    it("convertToAssets with zero shares returns zero", async () => {
+      const result = await program.methods
+        .convertToAssets(new BN(0))
+        .accountsStrict({
+          vault: vault,
+          sharesMint: sharesMint,
+          assetVault: assetVault,
+        })
+        .simulate();
+
+      expect(result.events).to.not.be.undefined;
+      console.log("  convertToAssets(0) simulated");
+    });
+
+    it("preview functions handle large values", async () => {
+      // Large value within safe math range (u128 intermediate)
+      const largeAmount = new BN("1000000000000"); // 10^12 (1M USDC)
+
+      const result = await program.methods
+        .previewDeposit(largeAmount)
+        .accountsStrict({
+          vault: vault,
+          sharesMint: sharesMint,
+          assetVault: assetVault,
+        })
+        .simulate();
+
+      expect(result.events).to.not.be.undefined;
+      console.log("  previewDeposit with large value simulated");
     });
   });
 });

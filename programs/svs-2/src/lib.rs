@@ -15,107 +15,39 @@ declare_id!("3UrYrxh1HmVgq7WPygZ5x1gNEaWFwqTMs7geNqMnsrtD");
 pub mod svs_2 {
     use super::*;
 
-    /// Initialize a new confidential vault for the given asset
-    /// Creates shares mint with ConfidentialTransferMint extension
+    /// Initialize a new vault for the given asset
     pub fn initialize(
         ctx: Context<Initialize>,
         vault_id: u64,
         name: String,
         symbol: String,
         uri: String,
-        auditor_elgamal_pubkey: Option<[u8; 32]>,
     ) -> Result<()> {
-        instructions::initialize::handler(ctx, vault_id, name, symbol, uri, auditor_elgamal_pubkey)
+        instructions::initialize::handler(ctx, vault_id, name, symbol, uri)
     }
 
-    /// Configure user's shares account for confidential transfers
-    /// Must be called before first deposit
-    /// Requires PubkeyValidityProof to be submitted in same transaction (or pre-verified context)
-    ///
-    /// # Arguments
-    /// * `decryptable_zero_balance` - AE ciphertext of zero, encrypted with user's AES key
-    /// * `proof_instruction_offset` - Offset to VerifyPubkeyValidity instruction (-1 if preceding)
-    pub fn configure_account(
-        ctx: Context<ConfigureAccount>,
-        decryptable_zero_balance: [u8; 36],
-        proof_instruction_offset: i8,
-    ) -> Result<()> {
-        instructions::configure_account::handler(
-            ctx,
-            decryptable_zero_balance,
-            proof_instruction_offset,
-        )
-    }
-
-    /// Deposit assets and receive confidential shares
-    /// Shares go to pending balance (must call apply_pending to use)
+    /// Deposit assets and receive shares
+    /// Returns shares minted (floor rounding - favors vault)
     pub fn deposit(ctx: Context<Deposit>, assets: u64, min_shares_out: u64) -> Result<()> {
         instructions::deposit::handler(ctx, assets, min_shares_out)
     }
 
-    /// Mint exact confidential shares by depositing required assets
+    /// Mint exact shares by depositing required assets
+    /// Pays assets (ceiling rounding - favors vault)
     pub fn mint(ctx: Context<MintShares>, shares: u64, max_assets_in: u64) -> Result<()> {
         instructions::mint::handler(ctx, shares, max_assets_in)
     }
 
-    /// Apply pending balance to available balance
-    /// Must be called after deposit/mint before shares can be used
-    ///
-    /// # Arguments
-    /// * `new_decryptable_available_balance` - AE ciphertext of new available balance
-    /// * `expected_pending_balance_credit_counter` - Expected pending credits to apply
-    pub fn apply_pending(
-        ctx: Context<ApplyPending>,
-        new_decryptable_available_balance: [u8; 36],
-        expected_pending_balance_credit_counter: u64,
-    ) -> Result<()> {
-        instructions::apply_pending::handler(
-            ctx,
-            new_decryptable_available_balance,
-            expected_pending_balance_credit_counter,
-        )
+    /// Withdraw exact assets by burning required shares
+    /// Burns shares (ceiling rounding - favors vault)
+    pub fn withdraw(ctx: Context<Withdraw>, assets: u64, max_shares_in: u64) -> Result<()> {
+        instructions::withdraw::handler(ctx, assets, max_shares_in)
     }
 
-    /// Withdraw exact assets by burning confidential shares
-    /// Requires pre-verified range proof and ciphertext equality proof context accounts
-    ///
-    /// # Arguments
-    /// * `assets` - Exact amount of assets to withdraw
-    /// * `max_shares_in` - Maximum shares willing to burn (slippage protection)
-    /// * `new_decryptable_available_balance` - AE ciphertext of balance after withdrawal
-    pub fn withdraw(
-        ctx: Context<Withdraw>,
-        assets: u64,
-        max_shares_in: u64,
-        new_decryptable_available_balance: [u8; 36],
-    ) -> Result<()> {
-        instructions::withdraw::handler(
-            ctx,
-            assets,
-            max_shares_in,
-            new_decryptable_available_balance,
-        )
-    }
-
-    /// Redeem confidential shares for assets
-    /// Requires pre-verified range proof and ciphertext equality proof context accounts
-    ///
-    /// # Arguments
-    /// * `shares` - Number of confidential shares to redeem
-    /// * `min_assets_out` - Minimum assets to receive (slippage protection)
-    /// * `new_decryptable_available_balance` - AE ciphertext of balance after withdrawal
-    pub fn redeem(
-        ctx: Context<Redeem>,
-        shares: u64,
-        min_assets_out: u64,
-        new_decryptable_available_balance: [u8; 36],
-    ) -> Result<()> {
-        instructions::redeem::handler(
-            ctx,
-            shares,
-            min_assets_out,
-            new_decryptable_available_balance,
-        )
+    /// Redeem shares for assets
+    /// Receives assets (floor rounding - favors vault)
+    pub fn redeem(ctx: Context<Redeem>, shares: u64, min_assets_out: u64) -> Result<()> {
+        instructions::redeem::handler(ctx, shares, min_assets_out)
     }
 
     /// Pause all vault operations (emergency)

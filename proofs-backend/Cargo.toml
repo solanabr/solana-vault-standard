@@ -1,8 +1,8 @@
 [package]
-name = "svs-proof-backend"
+name = "svs-proofs-backend"
 version = "0.1.0"
 edition = "2021"
-description = "ZK proof generation backend for SVS-2 Confidential Vaults"
+description = "ZK proof generation backend for SVS-3/SVS-4 Private Vaults"
 license = "Apache-2.0"
 
 # Exclude from parent workspace

@@ -258,11 +258,13 @@ describe("Admin Extended", () => {
 
     it("pause does NOT block view functions", async () => {
       // View functions should work even when paused
+      // SVS-1: View functions now require assetVault for live balance
       const result = await program.methods
         .previewDeposit(new BN(10_000 * 10 ** ASSET_DECIMALS))
         .accountsStrict({
           vault: vault,
           sharesMint: sharesMint,
+          assetVault: assetVault,
         })
         .simulate();
 
