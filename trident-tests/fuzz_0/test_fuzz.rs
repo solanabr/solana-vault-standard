@@ -64,7 +64,7 @@ impl FuzzTest {
 
         // Generate random deposit amount (MIN_DEPOSIT to 1T)
         let fuzz_assets: u64 = rand::random::<u64>() % 1_000_000_000_000;
-        let assets = fuzz_assets.max(1001); // MIN_DEPOSIT_AMOUNT = 1001
+        let assets = fuzz_assets.max(1000); // MIN_DEPOSIT_AMOUNT = 1000
 
         let assets_before = self.vault_tracker.total_assets;
         let shares_before = self.vault_tracker.total_shares;
@@ -91,8 +91,10 @@ impl FuzzTest {
         let max_shares = (assets as u128)
             .saturating_mul(offset as u128 + shares_before as u128 + 1)
             .saturating_div(1); // Theoretical max
-        assert!((shares as u128) <= max_shares,
-            "Invariant violation: shares exceed theoretical maximum");
+        assert!(
+            (shares as u128) <= max_shares,
+            "Invariant violation: shares exceed theoretical maximum"
+        );
     }
 
     /// Test mint (exact shares) with fuzzed values
@@ -108,7 +110,7 @@ impl FuzzTest {
         // CRITICAL: Only allow mint after vault has been properly initialized via deposit
         // The real program requires assets to be transferred, so you can't mint on an empty vault
         // without paying. We need at least MIN_DEPOSIT worth of assets.
-        if assets_before < 1001 {
+        if assets_before < 1000 {
             return;
         }
 
@@ -134,7 +136,8 @@ impl FuzzTest {
         // New ratio: (assets_before + assets) / (shares_before + shares)
         // We want: new_ratio >= current_ratio * 0.99 (allow 1% degradation max)
         let current_ratio_x1000 = (assets_before as u128 * 1000) / shares_before.max(1) as u128;
-        let new_ratio_x1000 = ((assets_before + assets) as u128 * 1000) / (shares_before + shares) as u128;
+        let new_ratio_x1000 =
+            ((assets_before + assets) as u128 * 1000) / (shares_before + shares) as u128;
         if new_ratio_x1000 < current_ratio_x1000 * 99 / 100 {
             return;
         }
@@ -147,8 +150,10 @@ impl FuzzTest {
 
         // INVARIANT: Assets paid should be at least what floor rounding would give
         let floor_assets = self.convert_to_assets_floor(shares, assets_before, shares_before);
-        assert!(assets >= floor_assets,
-            "Invariant violation: ceiling rounding yielded less than floor");
+        assert!(
+            assets >= floor_assets,
+            "Invariant violation: ceiling rounding yielded less than floor"
+        );
     }
 
     /// Test withdraw (exact assets) with fuzzed values
@@ -182,8 +187,10 @@ impl FuzzTest {
 
         // INVARIANT: Shares burned should be at least floor amount
         let floor_shares = self.convert_to_shares(assets, assets_before, shares_before);
-        assert!(shares >= floor_shares,
-            "Invariant violation: ceiling shares less than floor shares");
+        assert!(
+            shares >= floor_shares,
+            "Invariant violation: ceiling shares less than floor shares"
+        );
     }
 
     /// Test redeem (exact shares) with fuzzed values
@@ -215,8 +222,10 @@ impl FuzzTest {
         self.vault_tracker.total_redeemed += assets as u128;
 
         // INVARIANT: Cannot extract more assets than available
-        assert!(assets <= assets_before,
-            "Invariant violation: extracted more assets than existed");
+        assert!(
+            assets <= assets_before,
+            "Invariant violation: extracted more assets than existed"
+        );
     }
 
     /// Test round-trip conversion invariant
@@ -231,7 +240,7 @@ impl FuzzTest {
 
         // Skip if vault hasn't been properly initialized via deposit
         // An empty or near-empty vault doesn't represent a realistic state
-        if assets_before < 1001 || shares_before == 0 {
+        if assets_before < 1000 || shares_before == 0 {
             return;
         }
 
@@ -245,7 +254,7 @@ impl FuzzTest {
         }
 
         let test_amount: u64 = rand::random::<u64>() % 1_000_000_000;
-        let test_amount = test_amount.max(1001);
+        let test_amount = test_amount.max(1000);
 
         // Simulate: deposit -> get shares -> redeem -> get assets back
         // Use checked arithmetic to detect any overflow
@@ -262,7 +271,8 @@ impl FuzzTest {
                 None => return, // Overflow - skip this test
             };
 
-            let assets_back = self.convert_to_assets_floor(shares, new_total_assets, new_total_shares);
+            let assets_back =
+                self.convert_to_assets_floor(shares, new_total_assets, new_total_shares);
 
             // Verify with u128 arithmetic that the invariant SHOULD hold
             // shares = floor(test * (S + O) / (A + 1))
@@ -285,15 +295,24 @@ impl FuzzTest {
             }
 
             // CRITICAL INVARIANT: Round-trip should NEVER create free assets
-            assert!(assets_back <= test_amount,
+            assert!(
+                assets_back <= test_amount,
                 "CRITICAL: Round-trip created free assets! deposited={}, got_back={}, shares={}, \
                  vault_state: assets_before={}, shares_before={}, decimals={}, offset={}, \
                  new_assets={}, new_shares={}, \
                  u128_verify: shares={}, back={}",
-                test_amount, assets_back, shares,
-                assets_before, shares_before, self.vault_tracker.decimals_offset, offset,
-                new_total_assets, new_total_shares,
-                verify_shares, verify_back);
+                test_amount,
+                assets_back,
+                shares,
+                assets_before,
+                shares_before,
+                self.vault_tracker.decimals_offset,
+                offset,
+                new_total_assets,
+                new_total_shares,
+                verify_shares,
+                verify_back
+            );
 
             // Track the "loss" due to rounding (should be small)
             let loss = test_amount - assets_back;
@@ -305,9 +324,13 @@ impl FuzzTest {
 
             // INVARIANT: Loss should be bounded (< 1% for reasonable amounts)
             if test_amount > 10000 {
-                assert!(loss_pct < 1.0,
+                assert!(
+                    loss_pct < 1.0,
                     "Excessive round-trip loss: {}% (loss={}, amount={})",
-                    loss_pct, loss, test_amount);
+                    loss_pct,
+                    loss,
+                    test_amount
+                );
             }
         }
     }
@@ -335,7 +358,7 @@ impl FuzzTest {
         }
 
         // Step 1: Attacker deposits minimum
-        let attacker_deposit: u64 = 1001;
+        let attacker_deposit: u64 = 1000;
         let attacker_shares = self.convert_to_shares(attacker_deposit, 0, 0);
 
         let mut vault_assets = attacker_deposit;
@@ -354,11 +377,8 @@ impl FuzzTest {
         vault_shares = vault_shares.saturating_add(victim_shares);
 
         // Step 4: Calculate what attacker can extract
-        let attacker_can_redeem = self.convert_to_assets_floor(
-            attacker_shares,
-            vault_assets,
-            vault_shares
-        );
+        let attacker_can_redeem =
+            self.convert_to_assets_floor(attacker_shares, vault_assets, vault_shares);
 
         // CRITICAL INVARIANT: Attacker should NOT profit from victim's deposit
         // Due to virtual offset, attacker's initial deposit should not give them
@@ -370,26 +390,29 @@ impl FuzzTest {
         // With virtual offset, the attack should be neutralized
 
         // INVARIANT: Attacker cannot extract more than they put in + reasonable share
-        let max_fair_return = attacker_total_in.saturating_add(
-            victim_deposit.saturating_mul(attacker_shares) / vault_shares.max(1)
-        );
+        let max_fair_return = attacker_total_in
+            .saturating_add(victim_deposit.saturating_mul(attacker_shares) / vault_shares.max(1));
 
-        assert!(attacker_can_redeem <= max_fair_return.saturating_add(1000),
+        assert!(
+            attacker_can_redeem <= max_fair_return.saturating_add(1000),
             "Inflation attack succeeded! attacker_in={}, donation={}, can_extract={}",
-            attacker_deposit, donation, attacker_can_redeem);
+            attacker_deposit,
+            donation,
+            attacker_can_redeem
+        );
 
         // INVARIANT: Victim should get reasonable shares for their deposit
         // With the attack, victim's shares should still represent fair value
-        let victim_can_redeem = self.convert_to_assets_floor(
-            victim_shares,
-            vault_assets,
-            vault_shares
-        );
+        let victim_can_redeem =
+            self.convert_to_assets_floor(victim_shares, vault_assets, vault_shares);
 
         // Victim should get back at least 90% of their deposit (10% max loss to rounding)
-        assert!(victim_can_redeem >= victim_deposit * 9 / 10,
+        assert!(
+            victim_can_redeem >= victim_deposit * 9 / 10,
             "Victim lost too much to inflation attack! deposited={}, can_redeem={}",
-            victim_deposit, victim_can_redeem);
+            victim_deposit,
+            victim_can_redeem
+        );
     }
 
     /// Test zero amount edge cases
@@ -441,20 +464,27 @@ impl FuzzTest {
             // Final invariants
 
             // INVARIANT 1: Total redeemed should not exceed total deposited
-            assert!(self.vault_tracker.total_redeemed <= self.vault_tracker.total_deposited,
+            assert!(
+                self.vault_tracker.total_redeemed <= self.vault_tracker.total_deposited,
                 "Final: redeemed more than deposited! deposited={}, redeemed={}",
-                self.vault_tracker.total_deposited, self.vault_tracker.total_redeemed);
+                self.vault_tracker.total_deposited,
+                self.vault_tracker.total_redeemed
+            );
 
             // INVARIANT 2: If there are shares, there should be assets (or it's rounding dust)
             if self.vault_tracker.total_shares > 1000 {
-                assert!(self.vault_tracker.total_assets > 0,
-                    "Final: significant shares exist but no assets");
+                assert!(
+                    self.vault_tracker.total_assets > 0,
+                    "Final: significant shares exist but no assets"
+                );
             }
 
             // INVARIANT 3: If there are assets, there should be shares (or it's initial state)
             if self.vault_tracker.total_assets > 1000 && self.vault_tracker.deposit_count > 0 {
-                assert!(self.vault_tracker.total_shares > 0,
-                    "Final: significant assets exist but no shares");
+                assert!(
+                    self.vault_tracker.total_shares > 0,
+                    "Final: significant assets exist but no shares"
+                );
             }
 
             // Log summary

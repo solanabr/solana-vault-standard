@@ -328,7 +328,7 @@ describe("Admin Extended", () => {
           .rpc();
         expect.fail("Should reject unpause when not paused");
       } catch (err: any) {
-        expect(err.toString()).to.include("VaultPaused");
+        expect(err.toString()).to.include("VaultNotPaused");
         console.log("  Double unpause correctly rejected");
       }
     });

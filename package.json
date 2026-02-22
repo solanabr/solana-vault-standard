@@ -12,7 +12,10 @@
     "test": "anchor test",
     "test:local": "anchor test --skip-local-validator",
     "test:sdk": "yarn workspaces foreach -A run test",
-    "clean": "yarn workspaces foreach -A run clean"
+    "clean": "yarn workspaces foreach -A run clean",
+    "smoke-test": "npx ts-node scripts/smoke-test.ts",
+    "vault-info": "npx ts-node scripts/vault-info.ts",
+    "health-check": "npx ts-node scripts/health-check.ts"
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.31.1",

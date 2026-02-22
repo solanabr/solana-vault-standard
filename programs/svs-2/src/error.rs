@@ -31,4 +31,7 @@ pub enum VaultError {
 
     #[msg("Deposit amount below minimum threshold")]
     DepositTooSmall,
+
+    #[msg("Vault is not paused")]
+    VaultNotPaused,
 }

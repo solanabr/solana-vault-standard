@@ -54,7 +54,7 @@ pub fn pause(ctx: Context<Admin>) -> Result<()> {
 pub fn unpause(ctx: Context<Admin>) -> Result<()> {
     let vault = &mut ctx.accounts.vault;
 
-    require!(vault.paused, VaultError::VaultPaused);
+    require!(vault.paused, VaultError::VaultNotPaused);
 
     vault.paused = false;
 

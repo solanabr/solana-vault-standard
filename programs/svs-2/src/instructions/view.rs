@@ -7,6 +7,8 @@ use crate::{
     state::Vault,
 };
 
+/// SVS-2 view context: uses stored vault.total_assets (no asset_vault needed).
+/// Callers must sync() to see yield from external deposits.
 #[derive(Accounts)]
 pub struct VaultView<'info> {
     pub vault: Account<'info, Vault>,
