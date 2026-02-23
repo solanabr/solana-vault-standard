@@ -28,7 +28,7 @@ ERC-4626 tokenized vault standard for Solana. Deposit assets, receive proportion
 ### Privacy Model
 
 **Public (SVS-1, SVS-2):**
-- Standard SPL Token for shares
+- Token-2022 shares mint (no extensions)
 - All balances visible on-chain
 - Simple, auditable, production-ready
 
@@ -40,18 +40,18 @@ ERC-4626 tokenized vault standard for Solana. Deposit assets, receive proportion
 
 ## Program IDs
 
-| Program | ID |
-|---------|-----|
-| SVS-1 | `SVS1VauLt1111111111111111111111111111111111` |
-| SVS-2 | `SVS2VauLt2222222222222222222222222222222222` |
-| SVS-3 | `SVS3VauLt3333333333333333333333333333333333` |
-| SVS-4 | `SVS4VauLt4444444444444444444444444444444444` |
+| Program | Devnet | Localnet |
+|---------|--------|----------|
+| SVS-1 | `Bv8aVSQ3DJUe3B7TqQZRZgrNvVTh8TjfpwpoeR1ckDMC` | `SVS1VauLt1111111111111111111111111111111111` |
+| SVS-2 | `3UrYrxh1HmVgq7WPygZ5x1gNEaWFwqTMs7geNqMnsrtD` | `SVS2VauLt2222222222222222222222222222222222` |
+| SVS-3 | Not deployed | `SVS3VauLt3333333333333333333333333333333333` |
+| SVS-4 | Not deployed | `SVS4VauLt4444444444444444444444444444444444` |
 
 ## Installation
 
 ```bash
 # Core SDK (SVS-1/SVS-2)
-npm install @stbr/svs-sdk
+npm install @stbr/solana-vault
 
 # Privacy SDK (SVS-3/SVS-4)
 npm install @stbr/svs-privacy-sdk
@@ -63,19 +63,27 @@ cd proofs-backend && cargo run
 ## Quick Start
 
 ```typescript
-import { SolanaVault } from "@stbr/svs-sdk";
+import { SolanaVault } from "@stbr/solana-vault";
+import { BN } from "@coral-xyz/anchor";
 
-// Initialize vault wrapper
-const vault = new SolanaVault(program, vaultPda);
+// Load existing vault
+const vault = await SolanaVault.load(program, assetMint, 1);
 
-// Deposit assets
-const shares = await vault.deposit(assets, minSharesOut);
+// Preview deposit
+const expectedShares = await vault.previewDeposit(new BN(1_000_000));
+
+// Deposit with slippage protection
+await vault.deposit(user, {
+  assets: new BN(1_000_000),
+  minSharesOut: expectedShares.mul(new BN(95)).div(new BN(100)),
+});
 
 // Redeem shares
-const assetsReceived = await vault.redeem(shares, minAssetsOut);
-
-// Preview operations
-const expectedShares = await vault.previewDeposit(assets);
+const expectedAssets = await vault.previewRedeem(shares);
+await vault.redeem(user, {
+  shares,
+  minAssetsOut: expectedAssets.mul(new BN(95)).div(new BN(100)),
+});
 ```
 
 ## Features
@@ -199,6 +207,8 @@ const [sharesMint] = PublicKey.findProgramAddressSync(
 | `max_withdraw` | Get maximum withdraw amount |
 | `max_redeem` | Get maximum redeem amount |
 
+**SVS-3/SVS-4 view difference**: `max_withdraw` returns the vault's total assets (not user-specific) and `max_redeem` returns `u64::MAX`, because encrypted share balances can't be read on-chain. SVS-1/SVS-2 return user-specific values based on `owner_shares_account.amount`.
+
 ### Private Vault Only (SVS-3, SVS-4)
 
 | Instruction | Description |
@@ -279,7 +289,7 @@ tokenized-vault-standard/
 │   ├── svs-3/                    # Private vault, live balance (beta)
 │   └── svs-4/                    # Private vault, stored balance (beta)
 ├── sdk/
-│   ├── core/                     # @stbr/svs-sdk
+│   ├── core/                     # @stbr/solana-vault
 │   └── privacy/                  # @stbr/svs-privacy-sdk
 ├── proofs-backend/               # Rust proof generation backend
 │   ├── src/
@@ -297,7 +307,11 @@ tokenized-vault-standard/
 │   ├── multi-user.ts             # Multi-user tests
 │   └── yield-sync.ts             # Yield/live balance tests
 └── docs/
-    └── README.md
+    ├── ARCHITECTURE.md          # Technical architecture
+    ├── PRIVACY.md               # Privacy model & proof backend
+    ├── SDK.md                   # SDK usage guide
+    ├── SECURITY.md              # Attack vectors & mitigations
+    └── TESTING.md               # Test guide & coverage
 ```
 
 ## Resources

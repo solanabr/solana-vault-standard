@@ -69,7 +69,7 @@ Located in `tests/`:
 
 ### SDK Tests (TypeScript)
 
-Located in `sdk/tests/`:
+Located in `sdk/core/tests/`:
 
 | File | Category | Tests |
 |------|----------|-------|
@@ -525,10 +525,10 @@ grcov . -s . --binary-path ./target/debug/ -t html --branch --ignore-not-existin
 
 | Category | Coverage |
 |----------|----------|
-| Integration Tests | ~93 tests |
+| Integration Tests | ~136 tests |
 | SDK Tests | 113 tests |
 | Fuzz Tests | 5 flows |
-| **Total** | **~200+ test cases** |
+| **Total** | **~254 test cases** |
 
 ## Debugging Tests
 
