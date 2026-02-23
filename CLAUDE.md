@@ -100,10 +100,9 @@ assets = (shares * (total_assets + 1)) / (total_shares + offset)
 
 | Account | Seeds | Purpose |
 |---------|-------|---------|
-| Config | `["config"]` | Vault state (owner, asset_mint, decimals_offset) |
-| Shares Mint | `["shares_mint"]` | Token-2022 mint for LP shares (authority = self) |
-| Asset Vault | ATA | Holds locked assets (owned by shares_mint) |
-| Access | `["access", owner]` | Permission control per user |
+| Vault | `["vault", asset_mint, vault_id.to_le_bytes()]` | Vault state (authority, asset_mint, decimals_offset, bump) |
+| Shares Mint | `["shares", vault_pubkey]` | Token-2022 mint for LP shares (authority = vault PDA) |
+| Asset Vault | `ATA(asset_mint, vault)` | Holds locked assets (owned by vault PDA) |
 
 ## Agents
 

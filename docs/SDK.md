@@ -4,14 +4,16 @@ Complete guide to using the SVS TypeScript SDKs.
 
 | SDK | Package | Purpose |
 |-----|---------|---------|
-| Core | `@stbr/svs-sdk` | SVS-1 public vaults |
+| Core | `@stbr/solana-vault` | SVS-1/SVS-2 public vaults |
 | Privacy | `@stbr/svs-privacy-sdk` | SVS-3/SVS-4 confidential vaults + Privacy Cash |
 
 ---
 
-# SVS-1 SDK (`@stbr/svs-sdk`)
+# Core SDK (`@stbr/solana-vault`)
 
-Complete guide to using the SVS-1 TypeScript SDK for interacting with Solana Vault Standard vaults.
+SDK for interacting with SVS-1 and SVS-2 public vaults.
+
+**Note**: This SDK does not work with SVS-3/SVS-4 private vaults. SVS-3/4 use a different account struct (`ConfidentialVault` vs `Vault`), different instruction signatures (require proof context accounts), and different view function semantics. See the [Privacy SDK](#svs-3svs-4-privacy-sdk-stbrsvs-privacy-sdk) section below.
 
 ## Installation
 
@@ -37,7 +39,7 @@ yarn install
 ```typescript
 import { AnchorProvider, Program, BN } from "@coral-xyz/anchor";
 import { Connection, clusterApiUrl } from "@solana/web3.js";
-import { SolanaVault } from "@svs1/sdk";
+import { SolanaVault } from "@stbr/solana-vault";
 
 // Setup provider
 const connection = new Connection(clusterApiUrl("devnet"));
@@ -98,7 +100,7 @@ The main class for vault interactions.
 ### Creating a Vault
 
 ```typescript
-import { SolanaVault, CreateVaultParams } from "@svs1/sdk";
+import { SolanaVault, CreateVaultParams } from "@stbr/solana-vault";
 
 const params: CreateVaultParams = {
   assetMint: usdcMint,
@@ -132,7 +134,7 @@ console.log("Asset Vault:", vault.assetVault.toBase58());
 Deposit assets and receive shares.
 
 ```typescript
-import { DepositParams } from "@svs1/sdk";
+import { DepositParams } from "@stbr/solana-vault";
 
 // Preview to get expected shares
 const expectedShares = await vault.previewDeposit(assets);
@@ -153,7 +155,7 @@ const txSig = await vault.deposit(userPublicKey, params);
 Request exact shares, pay required assets.
 
 ```typescript
-import { MintParams } from "@svs1/sdk";
+import { MintParams } from "@stbr/solana-vault";
 
 // Preview to get required assets
 const requiredAssets = await vault.previewMint(shares);
@@ -174,7 +176,7 @@ const txSig = await vault.mint(userPublicKey, params);
 Request exact assets, burn required shares.
 
 ```typescript
-import { WithdrawParams } from "@svs1/sdk";
+import { WithdrawParams } from "@stbr/solana-vault";
 
 // Preview to get required shares
 const requiredShares = await vault.previewWithdraw(assets);
@@ -195,7 +197,7 @@ const txSig = await vault.withdraw(userPublicKey, params);
 Burn shares and receive assets.
 
 ```typescript
-import { RedeemParams } from "@svs1/sdk";
+import { RedeemParams } from "@stbr/solana-vault";
 
 // Preview to get expected assets
 const expectedAssets = await vault.previewRedeem(shares);
@@ -293,7 +295,7 @@ import {
   deriveVaultAddresses,
   VAULT_SEED,
   SHARES_MINT_SEED
-} from "@svs1/sdk";
+} from "@stbr/solana-vault";
 
 // Derive vault address
 const [vaultPda, vaultBump] = getVaultAddress(
@@ -334,7 +336,7 @@ import {
   previewRedeem,
   calculateDecimalsOffset,
   Rounding
-} from "@svs1/sdk";
+} from "@stbr/solana-vault";
 
 // Calculate decimals offset
 const offset = calculateDecimalsOffset(6);  // USDC = 3
@@ -535,7 +537,7 @@ Complete example integrating with a Next.js frontend:
 ```typescript
 import { useAnchorWallet, useConnection } from "@solana/wallet-adapter-react";
 import { AnchorProvider, Program } from "@coral-xyz/anchor";
-import { SolanaVault } from "@svs1/sdk";
+import { SolanaVault } from "@stbr/solana-vault";
 import { IDL } from "./idl/svs_1";
 
 function useVault(assetMint: PublicKey, vaultId: number) {
