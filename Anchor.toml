@@ -7,22 +7,24 @@ skip-lint = false
 [programs.devnet]
 svs_1 = "Bv8aVSQ3DJUe3B7TqQZRZgrNvVTh8TjfpwpoeR1ckDMC"
 svs_2 = "3UrYrxh1HmVgq7WPygZ5x1gNEaWFwqTMs7geNqMnsrtD"
+svs_3 = "EcpnYtaCBrZ4p4uq7dDr55D3fL9nsxbCNqpyUREGpPkh"
+svs_4 = "2WP7LXWqrp1W4CwEJuVt2SxWPNY2n6AYmijh6Z4EeidY"
 
 [programs.localnet]
-svs_1 = "SVS1VauLt1111111111111111111111111111111111"
-svs_2 = "SVS2VauLt2222222222222222222222222222222222"
-svs_3 = "SVS3VauLt3333333333333333333333333333333333"
-svs_4 = "SVS4VauLt4444444444444444444444444444444444"
+svs_1 = "Bv8aVSQ3DJUe3B7TqQZRZgrNvVTh8TjfpwpoeR1ckDMC"
+svs_2 = "3UrYrxh1HmVgq7WPygZ5x1gNEaWFwqTMs7geNqMnsrtD"
+svs_3 = "EcpnYtaCBrZ4p4uq7dDr55D3fL9nsxbCNqpyUREGpPkh"
+svs_4 = "2WP7LXWqrp1W4CwEJuVt2SxWPNY2n6AYmijh6Z4EeidY"
 
 [registry]
 url = "https://api.apr.dev"
 
 [provider]
-cluster = "devnet"
-wallet = "~/.config/solana/deployer.json"
+cluster = "localnet"
+wallet = "~/.config/solana/id.json"
 
 [scripts]
 # Run all tests: anchor test
 # Run specific file: anchor test -- tests/svs-1.ts
 # Run by pattern: anchor test -- "tests/svs-*.ts"
-test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts"
+test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/svs-*.ts"

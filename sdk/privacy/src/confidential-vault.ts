@@ -45,7 +45,7 @@ import { ProofType } from "./types";
  * SVS-3 Program ID
  */
 export const SVS_3_PROGRAM_ID = new PublicKey(
-  "SVS3VauLt3333333333333333333333333333333333",
+  "EcpnYtaCBrZ4p4uq7dDr55D3fL9nsxbCNqpyUREGpPkh",
 );
 
 /**

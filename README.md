@@ -6,10 +6,10 @@ ERC-4626 tokenized vault standard for Solana. Deposit assets, receive proportion
 
 | Version | Name | Balance Model | Privacy | Sync | Status |
 |---------|------|---------------|---------|------|--------|
-| **SVS-1** | Public Vault (Live) | Live balance | None | No sync needed | ✅ Production-ready |
-| **SVS-2** | Public Vault (Stored) | Stored balance | None | Requires sync() | ✅ Production-ready |
-| **SVS-3** | Private Vault (Live) | Live balance | Encrypted | No sync needed | 🔬 Beta |
-| **SVS-4** | Private Vault (Stored) | Stored balance | Encrypted | Requires sync() | 🔬 Beta |
+| **SVS-1** | Public Vault (Live) | Live balance | None | No sync needed | ✅ Devnet |
+| **SVS-2** | Public Vault (Stored) | Stored balance | None | Requires sync() | ✅ Devnet |
+| **SVS-3** | Private Vault (Live) | Live balance | Encrypted | No sync needed | ✅ Devnet |
+| **SVS-4** | Private Vault (Stored) | Stored balance | Encrypted | Requires sync() | ✅ Devnet |
 
 ### Balance Model Comparison
 
@@ -42,10 +42,10 @@ ERC-4626 tokenized vault standard for Solana. Deposit assets, receive proportion
 
 | Program | Devnet | Localnet |
 |---------|--------|----------|
-| SVS-1 | `Bv8aVSQ3DJUe3B7TqQZRZgrNvVTh8TjfpwpoeR1ckDMC` | `SVS1VauLt1111111111111111111111111111111111` |
-| SVS-2 | `3UrYrxh1HmVgq7WPygZ5x1gNEaWFwqTMs7geNqMnsrtD` | `SVS2VauLt2222222222222222222222222222222222` |
-| SVS-3 | Not deployed | `SVS3VauLt3333333333333333333333333333333333` |
-| SVS-4 | Not deployed | `SVS4VauLt4444444444444444444444444444444444` |
+| SVS-1 | `Bv8aVSQ3DJUe3B7TqQZRZgrNvVTh8TjfpwpoeR1ckDMC` | Same as devnet |
+| SVS-2 | `3UrYrxh1HmVgq7WPygZ5x1gNEaWFwqTMs7geNqMnsrtD` | Same as devnet |
+| SVS-3 | `EcpnYtaCBrZ4p4uq7dDr55D3fL9nsxbCNqpyUREGpPkh` | Same as devnet |
+| SVS-4 | `2WP7LXWqrp1W4CwEJuVt2SxWPNY2n6AYmijh6Z4EeidY` | Same as devnet |
 
 ## Installation
 
@@ -63,11 +63,14 @@ cd proofs-backend && cargo run
 ## Quick Start
 
 ```typescript
-import { SolanaVault } from "@stbr/solana-vault";
+import { SolanaVault, ManagedVault } from "@stbr/solana-vault";
 import { BN } from "@coral-xyz/anchor";
 
-// Load existing vault
+// SVS-1: Load live-balance vault
 const vault = await SolanaVault.load(program, assetMint, 1);
+
+// SVS-2: Load stored-balance vault (adds sync())
+const managed = await ManagedVault.load(program, assetMint, 1);
 
 // Preview deposit
 const expectedShares = await vault.previewDeposit(new BN(1_000_000));
@@ -84,6 +87,9 @@ await vault.redeem(user, {
   shares,
   minAssetsOut: expectedAssets.mul(new BN(95)).div(new BN(100)),
 });
+
+// SVS-2 only: sync stored balance
+await managed.sync(authority);
 ```
 
 ## Features
@@ -266,7 +272,7 @@ const [sharesMint] = PublicKey.findProgramAddressSync(
 # Build all programs
 anchor build
 
-# Run all tests
+# Run all tests (114 tests, requires proof backend for SVS-3/SVS-4)
 anchor test
 
 # Run SVS-1 tests only
@@ -275,8 +281,11 @@ anchor test -- --grep "svs-1"
 # Run specific test file
 anchor test -- --grep "yield"
 
-# Backend tests
+# Backend tests (19 tests)
 cd proofs-backend && cargo test
+
+# Start proof backend (required for SVS-3/SVS-4 CT tests)
+cd proofs-backend && cargo run
 ```
 
 ## Project Structure
@@ -297,8 +306,12 @@ tokenized-vault-standard/
 │   ├── Dockerfile
 │   └── README.md
 ├── tests/
-│   ├── svs-1.ts                  # SVS-1 public vault tests
-│   ├── svs-2.ts                  # SVS-2 stored balance + sync tests
+│   ├── svs-1.ts                  # SVS-1 public vault tests (19)
+│   ├── svs-2.ts                  # SVS-2 stored balance + sync tests (30)
+│   ├── svs-3.ts                  # SVS-3 confidential live balance tests (32)
+│   ├── svs-4.ts                  # SVS-4 confidential stored balance tests (33)
+│   ├── helpers/
+│   │   └── proof-client.ts       # ZK proof backend client helpers
 │   ├── admin-extended.ts         # Admin function tests
 │   ├── decimals.ts               # Multi-decimal tests
 │   ├── edge-cases.ts             # Edge case tests
@@ -311,7 +324,11 @@ tokenized-vault-standard/
     ├── PRIVACY.md               # Privacy model & proof backend
     ├── SDK.md                   # SDK usage guide
     ├── SECURITY.md              # Attack vectors & mitigations
-    └── TESTING.md               # Test guide & coverage
+    ├── TESTING.md               # Test guide & coverage
+    ├── SVS-1.md                 # SVS-1 spec (live balance)
+    ├── SVS-2.md                 # SVS-2 spec (stored balance + sync)
+    ├── SVS-3.md                 # SVS-3 spec (confidential live)
+    └── SVS-4.md                 # SVS-4 spec (confidential stored)
 ```
 
 ## Resources
