@@ -6,10 +6,10 @@ ERC-4626 tokenized vault standard for Solana. Deposit assets, receive proportion
 
 | Version | Name | Balance Model | Privacy | Sync | Status |
 |---------|------|---------------|---------|------|--------|
-| **SVS-1** | Public Vault (Live) | Live balance | None | No sync needed | ✅ Production-ready |
-| **SVS-2** | Public Vault (Stored) | Stored balance | None | Requires sync() | ✅ Production-ready |
-| **SVS-3** | Private Vault (Live) | Live balance | Encrypted | No sync needed | 🔬 Beta |
-| **SVS-4** | Private Vault (Stored) | Stored balance | Encrypted | Requires sync() | 🔬 Beta |
+| **SVS-1** | Public Vault (Live) | Live balance | None | No sync needed | ✅ Devnet |
+| **SVS-2** | Public Vault (Stored) | Stored balance | None | Requires sync() | ✅ Devnet |
+| **SVS-3** | Private Vault (Live) | Live balance | Encrypted | No sync needed | ✅ Devnet |
+| **SVS-4** | Private Vault (Stored) | Stored balance | Encrypted | Requires sync() | ✅ Devnet |
 
 ### Balance Model Comparison
 
@@ -44,8 +44,8 @@ ERC-4626 tokenized vault standard for Solana. Deposit assets, receive proportion
 |---------|--------|----------|
 | SVS-1 | `Bv8aVSQ3DJUe3B7TqQZRZgrNvVTh8TjfpwpoeR1ckDMC` | Same as devnet |
 | SVS-2 | `3UrYrxh1HmVgq7WPygZ5x1gNEaWFwqTMs7geNqMnsrtD` | Same as devnet |
-| SVS-3 | Not deployed | `EcpnYtaCBrZ4p4uq7dDr55D3fL9nsxbCNqpyUREGpPkh` |
-| SVS-4 | Not deployed | `2WP7LXWqrp1W4CwEJuVt2SxWPNY2n6AYmijh6Z4EeidY` |
+| SVS-3 | `EcpnYtaCBrZ4p4uq7dDr55D3fL9nsxbCNqpyUREGpPkh` | Same as devnet |
+| SVS-4 | `2WP7LXWqrp1W4CwEJuVt2SxWPNY2n6AYmijh6Z4EeidY` | Same as devnet |
 
 ## Installation
 
@@ -272,7 +272,7 @@ const [sharesMint] = PublicKey.findProgramAddressSync(
 # Build all programs
 anchor build
 
-# Run all tests
+# Run all tests (114 tests, requires proof backend for SVS-3/SVS-4)
 anchor test
 
 # Run SVS-1 tests only
@@ -281,8 +281,11 @@ anchor test -- --grep "svs-1"
 # Run specific test file
 anchor test -- --grep "yield"
 
-# Backend tests
+# Backend tests (19 tests)
 cd proofs-backend && cargo test
+
+# Start proof backend (required for SVS-3/SVS-4 CT tests)
+cd proofs-backend && cargo run
 ```
 
 ## Project Structure
@@ -303,8 +306,12 @@ tokenized-vault-standard/
 │   ├── Dockerfile
 │   └── README.md
 ├── tests/
-│   ├── svs-1.ts                  # SVS-1 public vault tests
-│   ├── svs-2.ts                  # SVS-2 stored balance + sync tests
+│   ├── svs-1.ts                  # SVS-1 public vault tests (19)
+│   ├── svs-2.ts                  # SVS-2 stored balance + sync tests (30)
+│   ├── svs-3.ts                  # SVS-3 confidential live balance tests (32)
+│   ├── svs-4.ts                  # SVS-4 confidential stored balance tests (33)
+│   ├── helpers/
+│   │   └── proof-client.ts       # ZK proof backend client helpers
 │   ├── admin-extended.ts         # Admin function tests
 │   ├── decimals.ts               # Multi-decimal tests
 │   ├── edge-cases.ts             # Edge case tests

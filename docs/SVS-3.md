@@ -234,6 +234,7 @@ proofs-backend/
 ├── POST /api/proofs/pubkey-validity   → 64 bytes
 ├── POST /api/proofs/equality          → 192 bytes
 ├── POST /api/proofs/range             → 672+ bytes
+├── POST /api/proofs/withdraw          → 320 + 936 bytes (equality + range, shared Pedersen opening)
 └── GET  /health
 ```
 
@@ -329,10 +330,12 @@ Same virtual offset mechanism as SVS-1. Share price manipulation via donation at
 | Network | Program ID | Status |
 |---------|------------|--------|
 | Localnet | `EcpnYtaCBrZ4p4uq7dDr55D3fL9nsxbCNqpyUREGpPkh` | ✅ Active |
-| Devnet | Not deployed | ⏳ Pending (Phase 4) |
-| Mainnet | Not deployed | ⏳ Pending |
+| Devnet | `EcpnYtaCBrZ4p4uq7dDr55D3fL9nsxbCNqpyUREGpPkh` | ✅ Deployed |
+| Mainnet | Not deployed | ⏳ Pending audit |
 
-**Prerequisites for deployment:** Integration tests with proof backend, security audit of ZK proof validation.
+**Upgrade Authority:** `5fB4rwQTCd5GEyL17Ao7YR4juS6hDtSTkjrXMa7ZtY5x`
+
+**Test Coverage:** 32 integration tests covering init, admin, views, CT deposit flow (configure_account → deposit → apply_pending), and CT withdraw/redeem flow (equality + range proofs via context state accounts).
 
 ---
 

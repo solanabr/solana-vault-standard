@@ -212,8 +212,12 @@ class ConfidentialStoredBalanceVault extends ConfidentialSolanaVault {
 | Network | Program ID | Status |
 |---------|------------|--------|
 | Localnet | `2WP7LXWqrp1W4CwEJuVt2SxWPNY2n6AYmijh6Z4EeidY` | ✅ Active |
-| Devnet | Not deployed | ⏳ Pending |
-| Mainnet | Not deployed | ⏳ Pending |
+| Devnet | `2WP7LXWqrp1W4CwEJuVt2SxWPNY2n6AYmijh6Z4EeidY` | ✅ Deployed |
+| Mainnet | Not deployed | ⏳ Pending audit |
+
+**Upgrade Authority:** `5fB4rwQTCd5GEyL17Ao7YR4juS6hDtSTkjrXMa7ZtY5x`
+
+**Test Coverage:** 33 integration tests covering init, admin, views, sync, CT deposit+sync flow (donation → sync → share price increase → second deposit), and CT withdraw/redeem flow with stored balance updates.
 
 **SDK Package**: Not yet published. Use SVS-3 SDK + manual `sync()` calls.
 

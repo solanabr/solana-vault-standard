@@ -2,7 +2,7 @@
 
 ## Status
 
-Phases 1-2 complete. Programs built, tested, deployed to devnet. Proof backend functional. SDK needs restructure and CLI is built.
+Phases 1-4 complete. All 4 programs built, tested (114 tests), deployed to devnet. Proof backend functional (19 tests). SDK and CLI built.
 
 ---
 
@@ -22,12 +22,12 @@ CORE (Deployed to Devnet)
     Trust assumption on sync caller.
     Use: yield aggregators, strategy vaults, fund managers.
 
-ALPHA (Programs Written, Not Deployed)
+BETA (Deployed to Devnet)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
   SVS-3 — Private Live Balance Vault
     SVS-1 + Token-2022 Confidential Transfers for share balances.
-    Proof backend ready (Rust/Axum, 3 endpoints, 16 tests).
+    Proof backend ready (Rust/Axum, 4 endpoints, 19 tests).
     Use: private DeFi positions.
 
   SVS-4 — Private Stored Balance Vault
@@ -172,9 +172,9 @@ Same as SVS-3 plus:
 - [x] sync() increases share price for existing holders
 - [x] Second deposit gets fewer shares after sync
 
-#### 4.3 Deploy
-- [ ] Deploy SVS-3 to devnet
-- [ ] Deploy SVS-4 to devnet
+#### 4.3 Deploy ✅
+- [x] Deploy SVS-3 to devnet (`EcpnYtaCBrZ4p4uq7dDr55D3fL9nsxbCNqpyUREGpPkh`)
+- [x] Deploy SVS-4 to devnet (`2WP7LXWqrp1W4CwEJuVt2SxWPNY2n6AYmijh6Z4EeidY`)
 
 ### Phase 5: Documentation
 
@@ -239,8 +239,8 @@ assets = shares * (total_assets + 1) / (total_shares + offset)
 |---------|--------|----------|
 | SVS-1 | `Bv8aVSQ3DJUe3B7TqQZRZgrNvVTh8TjfpwpoeR1ckDMC` | Same as devnet |
 | SVS-2 | `3UrYrxh1HmVgq7WPygZ5x1gNEaWFwqTMs7geNqMnsrtD` | Same as devnet |
-| SVS-3 | Not deployed | `EcpnYtaCBrZ4p4uq7dDr55D3fL9nsxbCNqpyUREGpPkh` |
-| SVS-4 | Not deployed | `2WP7LXWqrp1W4CwEJuVt2SxWPNY2n6AYmijh6Z4EeidY` |
+| SVS-3 | `EcpnYtaCBrZ4p4uq7dDr55D3fL9nsxbCNqpyUREGpPkh` | Same as devnet |
+| SVS-4 | `2WP7LXWqrp1W4CwEJuVt2SxWPNY2n6AYmijh6Z4EeidY` | Same as devnet |
 
 ### State Structs
 
