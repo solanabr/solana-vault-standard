@@ -24,6 +24,7 @@ The solana-zk-sdk library has no JavaScript/WASM bindings, so a Rust backend is 
 | POST /api/proofs/pubkey-validity | PubkeyValidityProof | ConfigureAccount |
 | POST /api/proofs/equality | CiphertextCommitmentEqualityProof | Withdraw, Redeem |
 | POST /api/proofs/range | BatchedRangeProofU64 | Batched operations |
+| POST /api/proofs/withdraw | Equality + Range (shared Pedersen opening) | Withdraw, Redeem (combined) |
 
 ## Balance Models in Private Vaults
 

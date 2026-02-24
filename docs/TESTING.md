@@ -1,10 +1,10 @@
 # Testing Guide
 
-Comprehensive guide to testing the SVS-1 Solana Vault Standard.
+Comprehensive guide to testing the Solana Vault Standard (SVS-1 through SVS-4).
 
 ## Overview
 
-SVS-1 uses a multi-layered testing strategy:
+SVS uses a multi-layered testing strategy:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -33,14 +33,20 @@ SVS-1 uses a multi-layered testing strategy:
 ## Quick Start
 
 ```bash
-# Run all integration tests
+# Run all integration tests (114 tests)
 anchor test
+
+# Start proof backend first (required for SVS-3/SVS-4 CT tests)
+cd proofs-backend && cargo run
 
 # Run SDK tests
 cd sdk && yarn test
 
 # Run Rust unit tests
 cargo test --manifest-path programs/svs-1/Cargo.toml
+
+# Run proof backend tests (19 tests)
+cd proofs-backend && cargo test
 
 # Run fuzz tests
 cd trident-tests && cargo test
@@ -56,6 +62,8 @@ Located in `tests/`:
 |------|----------|-------|
 | `svs-1.ts` | SVS-1 core + view functions | 19 |
 | `svs-2.ts` | SVS-2 stored balance + sync | 30 |
+| `svs-3.ts` | SVS-3 confidential live balance (CT deposit + withdraw/redeem) | 32 |
+| `svs-4.ts` | SVS-4 confidential stored balance (CT deposit + sync + withdraw/redeem) | 33 |
 | `edge-cases.ts` | Boundary conditions + view edges | 15 |
 | `multi-user.ts` | Multi-user scenarios | 15 |
 | `decimals.ts` | Token decimal handling | 12 |
@@ -63,9 +71,17 @@ Located in `tests/`:
 | `invariants.ts` | Mathematical invariants | 15 |
 | `admin-extended.ts` | Admin operations | 10 |
 | `full-lifecycle.ts` | End-to-end flows | 8 |
-| **Total** | | **~136** |
+| **Total** | | **~201** |
 
-**Note:** SVS-3 integration tests require ZK proof generation infrastructure (Rust backend or WASM bindings) and are not yet available.
+**Note:** SVS-3/SVS-4 confidential transfer tests require the proof backend running (`cd proofs-backend && cargo run`). Without it, CT-dependent tests are automatically skipped.
+
+### Proof Backend Tests (Rust)
+
+Located in `proofs-backend/src/`:
+
+| Module | Category | Tests |
+|--------|----------|-------|
+| `proof_generator` | ZK proof generation (pubkey validity, equality, range, withdraw) | 19 |
 
 ### SDK Tests (TypeScript)
 
@@ -525,10 +541,11 @@ grcov . -s . --binary-path ./target/debug/ -t html --branch --ignore-not-existin
 
 | Category | Coverage |
 |----------|----------|
-| Integration Tests | ~136 tests |
+| Integration Tests (SVS-1/2/3/4) | 114 tests |
+| Proof Backend Tests | 19 tests |
 | SDK Tests | 113 tests |
 | Fuzz Tests | 5 flows |
-| **Total** | **~254 test cases** |
+| **Total** | **~251 test cases** |
 
 ## Debugging Tests
 
