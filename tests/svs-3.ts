@@ -25,8 +25,11 @@ import { Svs3 } from "../target/types/svs_3";
 import {
   isBackendAvailable,
   requestPubkeyValidityProof,
+  requestWithdrawProof,
+  readAvailableBalanceCiphertext,
   deriveAesKeyFromSignature,
   createDecryptableZeroBalance,
+  createDecryptableBalance,
 } from "./helpers/proof-client";
 
 describe("svs-3 (Confidential Live Balance)", () => {
@@ -1036,6 +1039,358 @@ describe("svs-3 (Confidential Live Balance)", () => {
       // total_assets view
       await program.methods
         .totalAssets()
+        .accountsStrict({
+          vault: vault,
+          sharesMint: sharesMint,
+          assetVault: assetVault,
+        })
+        .rpc();
+    });
+  });
+
+  // ============ Full Withdraw/Redeem Flow (requires proof backend) ============
+  // These tests exercise withdraw and redeem with equality + range proofs.
+  // The program uses ProofLocation::ContextStateAccount, so we must:
+  // 1. Create accounts owned by the ZK ElGamal proof program
+  // 2. Verify proofs into them
+  // 3. Pass them to the vault's withdraw/redeem instruction
+  // Depends on the deposit flow above having run first.
+
+  describe("Confidential Withdraw/Redeem Flow (requires proof backend)", function () {
+    let backendAvailable: boolean;
+    const ZK_ELGAMAL_PROOF_PROGRAM_ID = new PublicKey(
+      "ZkE1Gama1Proof11111111111111111111111111111",
+    );
+
+    // ProofContextState sizes:
+    //   header = authority(32) + proof_type(1) = 33
+    //   CiphertextCommitmentEqualityProofContext = pubkey(32) + ciphertext(64) + commitment(32) = 128
+    //   BatchedRangeProofContext = commitments(8*32) + bit_lengths(8) = 264
+    const EQUALITY_CONTEXT_SIZE = 33 + 128; // 161 bytes
+    const RANGE_CONTEXT_SIZE = 33 + 264; // 297 bytes
+
+    /**
+     * Create a context state account and verify proof into it.
+     * Split into 2 transactions because range proofs (936 bytes) exceed
+     * the single-tx size limit (1232 bytes) when combined with createAccount.
+     */
+    async function createProofContext(
+      proofDiscriminator: number,
+      proofData: Uint8Array,
+      contextSize: number,
+    ): Promise<PublicKey> {
+      const contextKeypair = Keypair.generate();
+      const lamports = await connection.getMinimumBalanceForRentExemption(contextSize);
+
+      // Tx 1: Create the account owned by ZK ElGamal proof program
+      const createAccountIx = SystemProgram.createAccount({
+        fromPubkey: payer.publicKey,
+        newAccountPubkey: contextKeypair.publicKey,
+        lamports,
+        space: contextSize,
+        programId: ZK_ELGAMAL_PROOF_PROGRAM_ID,
+      });
+      const createTx = new Transaction().add(createAccountIx);
+      await provider.sendAndConfirm(createTx, [payer, contextKeypair]);
+
+      // Tx 2: Verify proof and write context data into the account
+      // ZK ElGamal verify instruction needs 2 accounts when writing to context state:
+      //   [0] context_state_account (writable)
+      //   [1] context_state_authority (readonly)
+      const verifyIx = new TransactionInstruction({
+        programId: ZK_ELGAMAL_PROOF_PROGRAM_ID,
+        keys: [
+          { pubkey: contextKeypair.publicKey, isSigner: false, isWritable: true },
+          { pubkey: payer.publicKey, isSigner: false, isWritable: false },
+        ],
+        data: Buffer.concat([Buffer.from([proofDiscriminator]), proofData]),
+      });
+      const verifyTx = new Transaction().add(verifyIx);
+      await provider.sendAndConfirm(verifyTx);
+
+      return contextKeypair.publicKey;
+    }
+
+    before(async function () {
+      backendAvailable = await isBackendAvailable();
+      if (!backendAvailable) {
+        console.log(
+          "  ⚠ Proof backend not running — skipping CT withdraw tests",
+        );
+        console.log(
+          "    Start with: cd proofs-backend && cargo run",
+        );
+        this.skip();
+      }
+    });
+
+    it("redeems shares via confidential withdraw flow", async function () {
+      if (!backendAvailable) this.skip();
+
+      const mintBefore = await getMint(
+        connection,
+        sharesMint,
+        undefined,
+        TOKEN_2022_PROGRAM_ID,
+      );
+      const vaultBalanceBefore = await getAccount(
+        connection,
+        assetVault,
+        undefined,
+        TOKEN_PROGRAM_ID,
+      );
+      const userAssetBefore = await getAccount(
+        connection,
+        userAssetAccount,
+        undefined,
+        TOKEN_PROGRAM_ID,
+      );
+
+      const totalShares = Number(mintBefore.supply);
+      const totalAssets = Number(vaultBalanceBefore.amount);
+      console.log("  State before redeem:");
+      console.log("    Total shares:", totalShares);
+      console.log("    Total assets:", totalAssets);
+
+      // Redeem a portion. After 2 deposits (1M + 500K = 1.5M USDC),
+      // shares at ~1000:1 ratio → ~1.5B shares. Redeem 500M.
+      const sharesToRedeem = 500_000_000;
+
+      // Read available balance ciphertext from CT extension
+      const availableCiphertext = await readAvailableBalanceCiphertext(
+        connection,
+        userSharesAccount,
+      );
+      console.log(
+        "  Available balance ciphertext:",
+        availableCiphertext.length,
+        "bytes",
+      );
+
+      const currentSharesBalance = totalShares;
+
+      // Get withdraw proofs from backend
+      const { equalityProof, rangeProof } = await requestWithdrawProof(
+        payer,
+        userSharesAccount,
+        availableCiphertext,
+        currentSharesBalance,
+        sharesToRedeem,
+      );
+
+      console.log("  Equality proof:", equalityProof.length, "bytes");
+      console.log("  Range proof:", rangeProof.length, "bytes");
+
+      // Create context state accounts with verified proofs
+      // discriminator 3 = VerifyCiphertextCommitmentEquality
+      // discriminator 6 = VerifyBatchedRangeProofU64
+      const equalityContext = await createProofContext(3, equalityProof, EQUALITY_CONTEXT_SIZE);
+      const rangeContext = await createProofContext(6, rangeProof, RANGE_CONTEXT_SIZE);
+
+      console.log("  Equality context:", equalityContext.toBase58());
+      console.log("  Range context:", rangeContext.toBase58());
+
+      // Compute new decryptable balance after redeem
+      const remainingShares = currentSharesBalance - sharesToRedeem;
+      const aesKey = deriveAesKeyFromSignature(payer, userSharesAccount);
+      const newDecryptableBalance = createDecryptableBalance(
+        aesKey,
+        remainingShares,
+      );
+
+      // Call redeem with context state accounts
+      const tx = await program.methods
+        .redeem(
+          new BN(sharesToRedeem),
+          new BN(0), // min_assets_out
+          Array.from(newDecryptableBalance),
+        )
+        .accountsStrict({
+          user: payer.publicKey,
+          vault: vault,
+          assetMint: assetMint,
+          userAssetAccount: userAssetAccount,
+          assetVault: assetVault,
+          sharesMint: sharesMint,
+          userSharesAccount: userSharesAccount,
+          equalityProofContext: equalityContext,
+          rangeProofContext: rangeContext,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+        })
+        .rpc();
+
+      console.log("  Redeem tx:", tx);
+
+      // Verify state after redeem
+      const mintAfter = await getMint(
+        connection,
+        sharesMint,
+        undefined,
+        TOKEN_2022_PROGRAM_ID,
+      );
+      const vaultBalanceAfter = await getAccount(
+        connection,
+        assetVault,
+        undefined,
+        TOKEN_PROGRAM_ID,
+      );
+      const userAssetAfter = await getAccount(
+        connection,
+        userAssetAccount,
+        undefined,
+        TOKEN_PROGRAM_ID,
+      );
+
+      const sharesBurned = totalShares - Number(mintAfter.supply);
+      const assetsReceived =
+        Number(userAssetAfter.amount) - Number(userAssetBefore.amount);
+      const vaultDecrease =
+        Number(vaultBalanceBefore.amount) - Number(vaultBalanceAfter.amount);
+
+      console.log("  Shares burned:", sharesBurned);
+      console.log("  Assets received:", assetsReceived);
+      console.log("  Vault decrease:", vaultDecrease);
+
+      expect(sharesBurned).to.equal(sharesToRedeem);
+      expect(assetsReceived).to.equal(vaultDecrease);
+      expect(assetsReceived).to.be.greaterThan(0);
+    });
+
+    it("withdraws exact assets via confidential withdraw flow", async function () {
+      if (!backendAvailable) this.skip();
+
+      const mintBefore = await getMint(
+        connection,
+        sharesMint,
+        undefined,
+        TOKEN_2022_PROGRAM_ID,
+      );
+      const vaultBalanceBefore = await getAccount(
+        connection,
+        assetVault,
+        undefined,
+        TOKEN_PROGRAM_ID,
+      );
+      const userAssetBefore = await getAccount(
+        connection,
+        userAssetAccount,
+        undefined,
+        TOKEN_PROGRAM_ID,
+      );
+
+      const totalShares = Number(mintBefore.supply);
+      const totalAssets = Number(vaultBalanceBefore.amount);
+      const withdrawAssets = 100_000; // 0.1 USDC
+
+      console.log("  State before withdraw:");
+      console.log("    Total shares:", totalShares);
+      console.log("    Total assets:", totalAssets);
+
+      // Read current ciphertext
+      const availableCiphertext = await readAvailableBalanceCiphertext(
+        connection,
+        userSharesAccount,
+      );
+
+      const currentSharesBalance = totalShares;
+
+      // Calculate shares to burn (ceiling rounding)
+      const offset = 1000;
+      const sharesToBurn = Math.ceil(
+        (withdrawAssets * (totalShares + offset)) / (totalAssets + 1),
+      );
+
+      // Get withdraw proofs
+      const { equalityProof, rangeProof } = await requestWithdrawProof(
+        payer,
+        userSharesAccount,
+        availableCiphertext,
+        currentSharesBalance,
+        sharesToBurn,
+      );
+
+      // Create context state accounts
+      const equalityContext = await createProofContext(3, equalityProof, EQUALITY_CONTEXT_SIZE);
+      const rangeContext = await createProofContext(6, rangeProof, RANGE_CONTEXT_SIZE);
+
+      const remainingShares = currentSharesBalance - sharesToBurn;
+      const aesKey = deriveAesKeyFromSignature(payer, userSharesAccount);
+      const newDecryptableBalance = createDecryptableBalance(
+        aesKey,
+        remainingShares,
+      );
+
+      const tx = await program.methods
+        .withdraw(
+          new BN(withdrawAssets),
+          new BN(sharesToBurn + 1000), // max_shares_in with buffer
+          Array.from(newDecryptableBalance),
+        )
+        .accountsStrict({
+          user: payer.publicKey,
+          vault: vault,
+          assetMint: assetMint,
+          userAssetAccount: userAssetAccount,
+          assetVault: assetVault,
+          sharesMint: sharesMint,
+          userSharesAccount: userSharesAccount,
+          equalityProofContext: equalityContext,
+          rangeProofContext: rangeContext,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+        })
+        .rpc();
+
+      console.log("  Withdraw tx:", tx);
+
+      const userAssetAfter = await getAccount(
+        connection,
+        userAssetAccount,
+        undefined,
+        TOKEN_PROGRAM_ID,
+      );
+      const assetsReceived =
+        Number(userAssetAfter.amount) - Number(userAssetBefore.amount);
+
+      expect(assetsReceived).to.equal(withdrawAssets);
+      console.log("  Assets received:", assetsReceived, "(exact)");
+    });
+
+    it("view functions reflect state after withdraw/redeem", async function () {
+      if (!backendAvailable) this.skip();
+
+      const vaultBalance = await getAccount(
+        connection,
+        assetVault,
+        undefined,
+        TOKEN_PROGRAM_ID,
+      );
+      const mint = await getMint(
+        connection,
+        sharesMint,
+        undefined,
+        TOKEN_2022_PROGRAM_ID,
+      );
+
+      console.log("  Final state:");
+      console.log("    Vault assets:", Number(vaultBalance.amount));
+      console.log("    Shares supply:", Number(mint.supply));
+
+      expect(Number(vaultBalance.amount)).to.be.greaterThan(0);
+      expect(Number(mint.supply)).to.be.greaterThan(0);
+
+      await program.methods
+        .totalAssets()
+        .accountsStrict({
+          vault: vault,
+          sharesMint: sharesMint,
+          assetVault: assetVault,
+        })
+        .rpc();
+
+      await program.methods
+        .previewDeposit(new BN(1_000_000))
         .accountsStrict({
           vault: vault,
           sharesMint: sharesMint,

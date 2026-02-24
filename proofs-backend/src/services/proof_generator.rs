@@ -5,7 +5,7 @@
 use crate::error::{BackendError, Result};
 use base64::{engine::general_purpose::STANDARD, Engine};
 use solana_sdk::pubkey::Pubkey;
-use solana_sdk::signature::{Signature, SeedDerivable};
+use solana_sdk::signature::{SeedDerivable, Signature};
 use solana_zk_sdk::encryption::{
     elgamal::{ElGamalCiphertext, ElGamalKeypair},
     pedersen::{Pedersen, PedersenOpening},
@@ -15,6 +15,15 @@ use solana_zk_sdk::zk_elgamal_proof_program::proof_data::{
     BatchedRangeProofU64Data, CiphertextCommitmentEqualityProofData, PubkeyValidityProofData,
 };
 use std::str::FromStr;
+
+/// Combined proof data for CT withdraw/redeem
+#[derive(Debug)]
+pub struct WithdrawProofData {
+    /// CiphertextCommitmentEqualityProof bytes
+    pub equality_proof: Vec<u8>,
+    /// BatchedRangeProofU64 bytes
+    pub range_proof: Vec<u8>,
+}
 
 /// Proof generator service
 pub struct ProofGenerator;
@@ -100,10 +109,7 @@ impl ProofGenerator {
     ///
     /// This proves that multiple values are within the valid u64 range.
     /// Required for Withdraw/Redeem with multiple amounts.
-    pub fn generate_range_proof(
-        amounts: &[u64],
-        openings: &[PedersenOpening],
-    ) -> Result<Vec<u8>> {
+    pub fn generate_range_proof(amounts: &[u64], openings: &[PedersenOpening]) -> Result<Vec<u8>> {
         if amounts.len() != openings.len() {
             return Err(BackendError::BadRequest(
                 "Amounts and openings must have same length".to_string(),
@@ -144,6 +150,61 @@ impl ProofGenerator {
         })?;
 
         Ok(bytemuck::bytes_of(&proof_data).to_vec())
+    }
+
+    /// Generate both proofs required for CT withdraw/redeem.
+    ///
+    /// Computes remaining_balance = current_balance - withdraw_amount, then generates:
+    /// 1. CiphertextCommitmentEqualityProof (proves remaining ciphertext encrypts remaining amount)
+    /// 2. BatchedRangeProofU64 (proves remaining balance is in [0, 2^64))
+    ///
+    /// Both proofs share the same Pedersen opening, which is required by Token-2022.
+    pub fn generate_withdraw_proof(
+        elgamal_keypair: &ElGamalKeypair,
+        current_available_ciphertext: &ElGamalCiphertext,
+        current_balance: u64,
+        withdraw_amount: u64,
+    ) -> Result<WithdrawProofData> {
+        let remaining_balance = current_balance
+            .checked_sub(withdraw_amount)
+            .ok_or_else(|| {
+                BackendError::BadRequest("Withdraw amount exceeds current balance".to_string())
+            })?;
+
+        // Compute remaining balance ciphertext via homomorphic subtraction
+        let remaining_ciphertext = current_available_ciphertext.subtract_amount(withdraw_amount);
+
+        // Generate Pedersen commitment for remaining balance (shared opening)
+        let opening = PedersenOpening::new_rand();
+        let commitment = Pedersen::with(remaining_balance, &opening);
+
+        // Equality proof: proves remaining_ciphertext encrypts remaining_balance
+        let equality_proof_data = CiphertextCommitmentEqualityProofData::new(
+            elgamal_keypair,
+            &remaining_ciphertext,
+            &commitment,
+            &opening,
+            remaining_balance,
+        )
+        .map_err(|e| {
+            BackendError::ProofGeneration(format!("Failed to generate equality proof: {e}"))
+        })?;
+
+        // Range proof: proves remaining_balance ∈ [0, 2^64)
+        let range_proof_data = BatchedRangeProofU64Data::new(
+            vec![&commitment],
+            vec![remaining_balance],
+            vec![64],
+            vec![&opening],
+        )
+        .map_err(|e| {
+            BackendError::ProofGeneration(format!("Failed to generate range proof: {e}"))
+        })?;
+
+        Ok(WithdrawProofData {
+            equality_proof: bytemuck::bytes_of(&equality_proof_data).to_vec(),
+            range_proof: bytemuck::bytes_of(&range_proof_data).to_vec(),
+        })
     }
 
     /// Verify wallet request signature
@@ -263,9 +324,8 @@ impl ProofGenerator {
         let mut opening_bytes = [0u8; 32];
         opening_bytes.copy_from_slice(&bytes);
 
-        PedersenOpening::from_bytes(&opening_bytes).ok_or_else(|| {
-            BackendError::BadRequest("Invalid Pedersen opening bytes".to_string())
-        })
+        PedersenOpening::from_bytes(&opening_bytes)
+            .ok_or_else(|| BackendError::BadRequest("Invalid Pedersen opening bytes".to_string()))
     }
 }
 
@@ -354,7 +414,10 @@ mod tests {
         let result = ProofGenerator::parse_pubkey("invalid");
 
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), BackendError::InvalidPubkey(_)));
+        assert!(matches!(
+            result.unwrap_err(),
+            BackendError::InvalidPubkey(_)
+        ));
     }
 
     #[test]
@@ -375,7 +438,10 @@ mod tests {
         let result = ProofGenerator::parse_signature(&sig_b64);
 
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), BackendError::InvalidSignature(_)));
+        assert!(matches!(
+            result.unwrap_err(),
+            BackendError::InvalidSignature(_)
+        ));
     }
 
     #[test]
@@ -383,7 +449,10 @@ mod tests {
         let result = ProofGenerator::parse_signature("not-valid-base64!!!");
 
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), BackendError::InvalidSignature(_)));
+        assert!(matches!(
+            result.unwrap_err(),
+            BackendError::InvalidSignature(_)
+        ));
     }
 
     #[test]
@@ -439,6 +508,69 @@ mod tests {
         let openings: Vec<PedersenOpening> = (0..4).map(|_| PedersenOpening::new_rand()).collect();
 
         let result = ProofGenerator::generate_range_proof(&amounts, &openings);
+
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), BackendError::BadRequest(_)));
+    }
+
+    #[test]
+    fn test_withdraw_proof_generation() {
+        let signature = [42u8; 64];
+        let token_account = Pubkey::new_unique();
+        let keypair = ProofGenerator::derive_elgamal_keypair(&signature, &token_account).unwrap();
+
+        // Encrypt a known balance
+        let current_balance = 1_000_000u64;
+        let ciphertext = keypair.pubkey().encrypt(current_balance);
+
+        let result = ProofGenerator::generate_withdraw_proof(
+            &keypair,
+            &ciphertext,
+            current_balance,
+            500_000, // withdraw half
+        );
+
+        assert!(result.is_ok());
+        let proof_data = result.unwrap();
+        assert!(!proof_data.equality_proof.is_empty());
+        assert!(!proof_data.range_proof.is_empty());
+    }
+
+    #[test]
+    fn test_withdraw_proof_full_balance() {
+        let signature = [42u8; 64];
+        let token_account = Pubkey::new_unique();
+        let keypair = ProofGenerator::derive_elgamal_keypair(&signature, &token_account).unwrap();
+
+        let current_balance = 1_000_000u64;
+        let ciphertext = keypair.pubkey().encrypt(current_balance);
+
+        // Withdraw entire balance (remaining = 0)
+        let result = ProofGenerator::generate_withdraw_proof(
+            &keypair,
+            &ciphertext,
+            current_balance,
+            current_balance,
+        );
+
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_withdraw_proof_exceeds_balance() {
+        let signature = [42u8; 64];
+        let token_account = Pubkey::new_unique();
+        let keypair = ProofGenerator::derive_elgamal_keypair(&signature, &token_account).unwrap();
+
+        let current_balance = 1_000_000u64;
+        let ciphertext = keypair.pubkey().encrypt(current_balance);
+
+        let result = ProofGenerator::generate_withdraw_proof(
+            &keypair,
+            &ciphertext,
+            current_balance,
+            current_balance + 1, // exceeds balance
+        );
 
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), BackendError::BadRequest(_)));

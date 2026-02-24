@@ -17,11 +17,7 @@ use axum::{
     Router,
 };
 use std::sync::Arc;
-use tower_http::{
-    cors::CorsLayer,
-    limit::RequestBodyLimitLayer,
-    trace::TraceLayer,
-};
+use tower_http::{cors::CorsLayer, limit::RequestBodyLimitLayer, trace::TraceLayer};
 use tracing::{info, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -84,7 +80,11 @@ fn build_cors_layer(config: &Config) -> CorsLayer {
     CorsLayer::new()
         .allow_origin(origins)
         .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
-        .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION, header::HeaderName::from_static("x-api-key")])
+        .allow_headers([
+            header::CONTENT_TYPE,
+            header::AUTHORIZATION,
+            header::HeaderName::from_static("x-api-key"),
+        ])
 }
 
 /// API key authentication middleware

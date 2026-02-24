@@ -97,6 +97,48 @@ pub struct RangeProofResponse {
     pub proof_data: String,
 }
 
+/// Request for combined withdraw proof generation
+///
+/// Generates both equality and range proofs needed for CT withdraw/redeem.
+/// The backend computes remaining_balance = current_balance - withdraw_amount,
+/// then generates proofs with a shared Pedersen opening.
+#[derive(Debug, Deserialize)]
+pub struct WithdrawProofRequest {
+    /// Wallet public key (base58)
+    pub wallet_pubkey: String,
+
+    /// Token account public key (base58)
+    pub token_account: String,
+
+    /// Unix timestamp (must be within 5 minutes)
+    pub timestamp: i64,
+
+    /// Signature of: "SVS_PROOF_REQUEST" || timestamp || token_account
+    pub request_signature: String,
+
+    /// Signature used for ElGamal key derivation
+    pub elgamal_signature: String,
+
+    /// Current available balance ciphertext (64 bytes, base64 encoded)
+    pub current_ciphertext: String,
+
+    /// Current plaintext balance (as string to handle u64)
+    pub current_balance: String,
+
+    /// Amount to withdraw (as string to handle u64)
+    pub withdraw_amount: String,
+}
+
+/// Response for combined withdraw proof
+#[derive(Debug, Serialize)]
+pub struct WithdrawProofResponse {
+    /// CiphertextCommitmentEqualityProof data (base64 encoded)
+    pub equality_proof: String,
+
+    /// BatchedRangeProofU64 data (base64 encoded)
+    pub range_proof: String,
+}
+
 /// Health check response
 #[derive(Debug, Serialize)]
 pub struct HealthResponse {

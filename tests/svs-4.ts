@@ -26,8 +26,11 @@ import { Svs4 } from "../target/types/svs_4";
 import {
   isBackendAvailable,
   requestPubkeyValidityProof,
+  requestWithdrawProof,
+  readAvailableBalanceCiphertext,
   deriveAesKeyFromSignature,
   createDecryptableZeroBalance,
+  createDecryptableBalance,
 } from "./helpers/proof-client";
 
 describe("svs-4 (Confidential Stored Balance)", () => {
@@ -985,6 +988,320 @@ describe("svs-4 (Confidential Stored Balance)", () => {
       const vaultState =
         await program.account.confidentialVault.fetch(vault);
       expect(vaultState.totalAssets.toNumber()).to.equal(2_500_000);
+    });
+  });
+
+  // ============ Full Withdraw/Redeem Flow (requires proof backend) ============
+  // Depends on the deposit+sync flow above having run first.
+  // SVS-4 key difference: redeem/withdraw use stored total_assets and update it.
+
+  describe("Confidential Withdraw/Redeem Flow (requires proof backend)", function () {
+    let backendAvailable: boolean;
+    const ZK_ELGAMAL_PROOF_PROGRAM_ID = new PublicKey(
+      "ZkE1Gama1Proof11111111111111111111111111111",
+    );
+
+    // ProofContextState sizes:
+    //   header = authority(32) + proof_type(1) = 33
+    //   CiphertextCommitmentEqualityProofContext = 128
+    //   BatchedRangeProofContext = 264
+    const EQUALITY_CONTEXT_SIZE = 33 + 128; // 161 bytes
+    const RANGE_CONTEXT_SIZE = 33 + 264; // 297 bytes
+
+    /**
+     * Create a context state account and verify proof into it.
+     * Split into 2 transactions because range proofs exceed single-tx size limit.
+     */
+    async function createProofContext(
+      proofDiscriminator: number,
+      proofData: Uint8Array,
+      contextSize: number,
+    ): Promise<PublicKey> {
+      const contextKeypair = Keypair.generate();
+      const lamports = await connection.getMinimumBalanceForRentExemption(contextSize);
+
+      // Tx 1: Create account owned by ZK ElGamal proof program
+      const createAccountIx = SystemProgram.createAccount({
+        fromPubkey: payer.publicKey,
+        newAccountPubkey: contextKeypair.publicKey,
+        lamports,
+        space: contextSize,
+        programId: ZK_ELGAMAL_PROOF_PROGRAM_ID,
+      });
+      const createTx = new Transaction().add(createAccountIx);
+      await provider.sendAndConfirm(createTx, [payer, contextKeypair]);
+
+      // Tx 2: Verify proof into the account
+      const verifyIx = new TransactionInstruction({
+        programId: ZK_ELGAMAL_PROOF_PROGRAM_ID,
+        keys: [
+          { pubkey: contextKeypair.publicKey, isSigner: false, isWritable: true },
+          { pubkey: payer.publicKey, isSigner: false, isWritable: false },
+        ],
+        data: Buffer.concat([Buffer.from([proofDiscriminator]), proofData]),
+      });
+      const verifyTx = new Transaction().add(verifyIx);
+      await provider.sendAndConfirm(verifyTx);
+
+      return contextKeypair.publicKey;
+    }
+
+    before(async function () {
+      backendAvailable = await isBackendAvailable();
+      if (!backendAvailable) {
+        console.log(
+          "  ⚠ Proof backend not running — skipping CT withdraw tests",
+        );
+        this.skip();
+      }
+    });
+
+    it("redeems shares and updates stored total_assets", async function () {
+      if (!backendAvailable) this.skip();
+
+      const mintBefore = await getMint(
+        connection,
+        sharesMint,
+        undefined,
+        TOKEN_2022_PROGRAM_ID,
+      );
+      const vaultBefore =
+        await program.account.confidentialVault.fetch(vault);
+      const userAssetBefore = await getAccount(
+        connection,
+        userAssetAccount,
+        undefined,
+        TOKEN_PROGRAM_ID,
+      );
+
+      const totalShares = Number(mintBefore.supply);
+      const storedTotalAssets = vaultBefore.totalAssets.toNumber();
+      console.log("  State before redeem:");
+      console.log("    Total shares:", totalShares);
+      console.log("    Stored total_assets:", storedTotalAssets);
+
+      // Redeem a portion of shares
+      const sharesToRedeem = Math.floor(totalShares / 4);
+
+      // Read available balance ciphertext
+      const availableCiphertext = await readAvailableBalanceCiphertext(
+        connection,
+        userSharesAccount,
+      );
+
+      // Get withdraw proofs from backend
+      const { equalityProof, rangeProof } = await requestWithdrawProof(
+        payer,
+        userSharesAccount,
+        availableCiphertext,
+        totalShares, // user holds all shares
+        sharesToRedeem,
+      );
+
+      // Create proof context state accounts
+      const equalityContext = await createProofContext(3, equalityProof, EQUALITY_CONTEXT_SIZE);
+      const rangeContext = await createProofContext(6, rangeProof, RANGE_CONTEXT_SIZE);
+
+      // New decryptable balance after redeem
+      const remainingShares = totalShares - sharesToRedeem;
+      const aesKey = deriveAesKeyFromSignature(payer, userSharesAccount);
+      const newDecryptableBalance = createDecryptableBalance(
+        aesKey,
+        remainingShares,
+      );
+
+      const tx = await program.methods
+        .redeem(
+          new BN(sharesToRedeem),
+          new BN(0), // min_assets_out
+          Array.from(newDecryptableBalance),
+        )
+        .accountsStrict({
+          user: payer.publicKey,
+          vault: vault,
+          assetMint: assetMint,
+          userAssetAccount: userAssetAccount,
+          assetVault: assetVault,
+          sharesMint: sharesMint,
+          userSharesAccount: userSharesAccount,
+          equalityProofContext: equalityContext,
+          rangeProofContext: rangeContext,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+        })
+        .rpc();
+
+      console.log("  Redeem tx:", tx);
+
+      // Verify state changes
+      const mintAfter = await getMint(
+        connection,
+        sharesMint,
+        undefined,
+        TOKEN_2022_PROGRAM_ID,
+      );
+      const vaultAfter =
+        await program.account.confidentialVault.fetch(vault);
+      const userAssetAfter = await getAccount(
+        connection,
+        userAssetAccount,
+        undefined,
+        TOKEN_PROGRAM_ID,
+      );
+
+      const sharesBurned = totalShares - Number(mintAfter.supply);
+      const assetsReceived =
+        Number(userAssetAfter.amount) - Number(userAssetBefore.amount);
+
+      console.log("  Shares burned:", sharesBurned);
+      console.log("  Assets received:", assetsReceived);
+      console.log("  Stored total_assets after:", vaultAfter.totalAssets.toNumber());
+
+      expect(sharesBurned).to.equal(sharesToRedeem);
+      expect(assetsReceived).to.be.greaterThan(0);
+
+      // SVS-4: stored total_assets should have decreased by assets received
+      expect(vaultAfter.totalAssets.toNumber()).to.equal(
+        storedTotalAssets - assetsReceived,
+      );
+    });
+
+    it("withdraws exact assets and updates stored total_assets", async function () {
+      if (!backendAvailable) this.skip();
+
+      const mintBefore = await getMint(
+        connection,
+        sharesMint,
+        undefined,
+        TOKEN_2022_PROGRAM_ID,
+      );
+      const vaultBefore =
+        await program.account.confidentialVault.fetch(vault);
+      const userAssetBefore = await getAccount(
+        connection,
+        userAssetAccount,
+        undefined,
+        TOKEN_PROGRAM_ID,
+      );
+
+      const totalShares = Number(mintBefore.supply);
+      const storedTotalAssets = vaultBefore.totalAssets.toNumber();
+      const withdrawAssets = 100_000; // 0.1 USDC
+
+      console.log("  State before withdraw:");
+      console.log("    Total shares:", totalShares);
+      console.log("    Stored total_assets:", storedTotalAssets);
+
+      // Read current ciphertext
+      const availableCiphertext = await readAvailableBalanceCiphertext(
+        connection,
+        userSharesAccount,
+      );
+
+      // Calculate shares to burn (ceiling rounding)
+      const offset = 1000;
+      const sharesToBurn = Math.ceil(
+        (withdrawAssets * (totalShares + offset)) / (storedTotalAssets + 1),
+      );
+
+      // Get proofs
+      const { equalityProof, rangeProof } = await requestWithdrawProof(
+        payer,
+        userSharesAccount,
+        availableCiphertext,
+        totalShares,
+        sharesToBurn,
+      );
+
+      // Create context state accounts
+      const equalityContext = await createProofContext(3, equalityProof, EQUALITY_CONTEXT_SIZE);
+      const rangeContext = await createProofContext(6, rangeProof, RANGE_CONTEXT_SIZE);
+
+      const remainingShares = totalShares - sharesToBurn;
+      const aesKey = deriveAesKeyFromSignature(payer, userSharesAccount);
+      const newDecryptableBalance = createDecryptableBalance(
+        aesKey,
+        remainingShares,
+      );
+
+      const tx = await program.methods
+        .withdraw(
+          new BN(withdrawAssets),
+          new BN(sharesToBurn + 1000), // max_shares_in with buffer
+          Array.from(newDecryptableBalance),
+        )
+        .accountsStrict({
+          user: payer.publicKey,
+          vault: vault,
+          assetMint: assetMint,
+          userAssetAccount: userAssetAccount,
+          assetVault: assetVault,
+          sharesMint: sharesMint,
+          userSharesAccount: userSharesAccount,
+          equalityProofContext: equalityContext,
+          rangeProofContext: rangeContext,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+        })
+        .rpc();
+
+      console.log("  Withdraw tx:", tx);
+
+      const vaultAfter =
+        await program.account.confidentialVault.fetch(vault);
+      const userAssetAfter = await getAccount(
+        connection,
+        userAssetAccount,
+        undefined,
+        TOKEN_PROGRAM_ID,
+      );
+      const assetsReceived =
+        Number(userAssetAfter.amount) - Number(userAssetBefore.amount);
+
+      expect(assetsReceived).to.equal(withdrawAssets);
+      // SVS-4: stored total_assets decreased by exact withdraw amount
+      expect(vaultAfter.totalAssets.toNumber()).to.equal(
+        storedTotalAssets - withdrawAssets,
+      );
+
+      console.log("  Assets received:", assetsReceived, "(exact)");
+      console.log("  Stored total_assets after:", vaultAfter.totalAssets.toNumber());
+    });
+
+    it("view functions reflect state after withdraw/redeem", async function () {
+      if (!backendAvailable) this.skip();
+
+      const vaultState =
+        await program.account.confidentialVault.fetch(vault);
+      const mint = await getMint(
+        connection,
+        sharesMint,
+        undefined,
+        TOKEN_2022_PROGRAM_ID,
+      );
+
+      console.log("  Final state:");
+      console.log("    Stored total_assets:", vaultState.totalAssets.toNumber());
+      console.log("    Shares supply:", Number(mint.supply));
+
+      expect(vaultState.totalAssets.toNumber()).to.be.greaterThan(0);
+      expect(Number(mint.supply)).to.be.greaterThan(0);
+
+      await program.methods
+        .totalAssets()
+        .accountsStrict({
+          vault: vault,
+          sharesMint: sharesMint,
+        })
+        .rpc();
+
+      await program.methods
+        .previewDeposit(new BN(1_000_000))
+        .accountsStrict({
+          vault: vault,
+          sharesMint: sharesMint,
+        })
+        .rpc();
     });
   });
 });
