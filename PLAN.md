@@ -79,8 +79,10 @@ ALPHA (Programs Written, Not Deployed)
 - [x] configure_account, apply_pending instructions
 - [x] ZK proof context account validation (owner == zk_elgamal_proof_program)
 - [x] SVS-3 integration tests (29 tests: init, admin, views, CT deposit flow)
+- [x] SVS-4 integration tests (30 tests: init, admin, views, sync, CT deposit+sync flow)
 - [x] Test proof client helper (`tests/helpers/proof-client.ts`)
 - [x] Program IDs updated from vanity to real keypairs
+- [x] Full test suite: 95 passing across all 4 programs (+ 13 backend-dependent skippable)
 
 ### Proof Backend (`proofs-backend/`)
 - [x] Axum REST API with 3 proof endpoints + health check
@@ -161,10 +163,13 @@ Start backend (`cargo run` or `docker compose up`), write tests exercising:
 - [x] Pause/unpause with confidential state
 - [x] View functions return correct vault-level bounds
 
-#### 4.2 SVS-4 Integration Tests
+#### 4.2 SVS-4 Integration Tests ✅
 Same as SVS-3 plus:
-- [ ] sync() updates total_assets
-- [ ] Operations use stored balance correctly
+- [x] sync() updates total_assets
+- [x] Operations use stored balance correctly
+- [x] External donation doesn't change stored balance
+- [x] sync() increases share price for existing holders
+- [x] Second deposit gets fewer shares after sync
 
 #### 4.3 Deploy
 - [ ] Deploy SVS-3 to devnet
