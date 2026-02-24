@@ -109,7 +109,7 @@ export class SolanaVault {
 
   private _state: VaultState | null = null;
 
-  private constructor(
+  protected constructor(
     program: Program,
     provider: AnchorProvider,
     vault: PublicKey,
@@ -526,20 +526,6 @@ export class SolanaVault {
       .accountsStrict({
         authority,
         vault: this.vault,
-      })
-      .rpc();
-  }
-
-  /**
-   * Sync total_assets with actual vault balance
-   */
-  async sync(authority: PublicKey): Promise<string> {
-    return this.program.methods
-      .sync()
-      .accountsStrict({
-        authority,
-        vault: this.vault,
-        assetVault: this.assetVault,
       })
       .rpc();
   }

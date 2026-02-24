@@ -1,7 +1,8 @@
-// SVS-1 Solana Vault Standard SDK
+// Solana Vault Standard SDK
 // ERC-4626 equivalent for Solana
 
 export * from "./vault";
+export * from "./managed-vault";
 export * from "./pda";
 export * from "./math";
 

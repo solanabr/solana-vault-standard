@@ -18,8 +18,8 @@ import {
 } from "@solana/spl-token";
 
 const SVS_PROGRAMS: Record<string, string> = {
-  "svs-1": "SVS1VauLt1111111111111111111111111111111111",
-  "svs-2": "SVS2VauLt2222222222222222222222222222222222",
+  "svs-1": "Bv8aVSQ3DJUe3B7TqQZRZgrNvVTh8TjfpwpoeR1ckDMC",
+  "svs-2": "3UrYrxh1HmVgq7WPygZ5x1gNEaWFwqTMs7geNqMnsrtD",
 };
 
 // Vault account layout offsets (after 8-byte discriminator)

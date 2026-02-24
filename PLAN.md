@@ -2,9 +2,7 @@
 
 ## Status
 
-Phases 1-2 are complete. Programs are built, tested, and deployed to devnet.
-
-The SDK exists as `@stbr/solana-vault` (core) and `@stbr/svs-privacy-sdk` (privacy) but only covers basic vault operations — the module/plugin architecture from the original plan has not been implemented yet.
+Phases 1-2 complete. Programs built, tested, deployed to devnet. Proof backend functional. SDK needs restructure and CLI is built.
 
 ---
 
@@ -29,6 +27,7 @@ ALPHA (Programs Written, Not Deployed)
 
   SVS-3 — Private Live Balance Vault
     SVS-1 + Token-2022 Confidential Transfers for share balances.
+    Proof backend ready (Rust/Axum, 3 endpoints, 16 tests).
     Use: private DeFi positions.
 
   SVS-4 — Private Stored Balance Vault
@@ -67,78 +66,67 @@ ALPHA (Programs Written, Not Deployed)
 - [x] Full lifecycle (~8 tests)
 - [x] SDK unit tests (113 tests: math, PDA, vault, errors, events)
 
-### SDK Core
-- [x] `SolanaVault` class with deposit/mint/withdraw/redeem
+### SDK Core (`@stbr/solana-vault`)
+- [x] `SolanaVault` class with deposit/mint/withdraw/redeem (SVS-1)
+- [x] `ManagedVault` subclass with `sync()` and `storedTotalAssets()` (SVS-2)
 - [x] Off-chain math (previewDeposit/Mint/Withdraw/Redeem, convertToShares/Assets)
 - [x] PDA derivation helpers
 - [x] Auto-detection of SPL Token vs Token-2022 for asset mints
-- [x] `sync()` method for SVS-2
+- [x] CLI tool (`solana-vault` binary with info/preview/convert/derive)
 
 ### SVS-3/SVS-4 Programs
 - [x] Programs written with ConfidentialTransfer extension
 - [x] configure_account, apply_pending instructions
 - [x] ZK proof context account validation (owner == zk_elgamal_proof_program)
-- [x] Proof backend service scaffolded (proofs-backend/)
+- [x] SVS-3 integration tests (29 tests: init, admin, views, CT deposit flow)
+- [x] Test proof client helper (`tests/helpers/proof-client.ts`)
+- [x] Program IDs updated from vanity to real keypairs
 
-### Privacy SDK
+### Proof Backend (`proofs-backend/`)
+- [x] Axum REST API with 3 proof endpoints + health check
+- [x] PubkeyValidityProof generation (64 bytes, for ConfigureAccount)
+- [x] CiphertextCommitmentEqualityProof generation (192 bytes, for Withdraw/Redeem)
+- [x] BatchedRangeProofU64 generation (672+ bytes, for range validation)
+- [x] Dual-layer auth (API key + Ed25519 wallet signature verification)
+- [x] Replay attack prevention (5-min timestamp window)
+- [x] 16 unit tests passing
+- [x] Docker deployment ready (Dockerfile + docker-compose.yml)
+- [x] Uses solana-zk-sdk 2.1 (latest stable)
+
+### Privacy SDK (`@stbr/svs-privacy-sdk`)
 - [x] Key derivation (ElGamal, AES)
 - [x] Instruction builders for CT operations
 - [x] ZK proof discriminators and instruction wrappers
-- [x] Placeholder proof generation (real proofs require Rust backend or WASM)
+- [x] Backend client integration (`configureProofBackend()`, `createPubkeyValidityProofViaBackend()`, etc.)
+- [x] Placeholder proof functions (for environments without backend)
 
 ---
 
 ## Remaining Work
 
-### Phase 3: SDK — `@stbr/solana-vault`
+### Phase 3: SDK Restructure — `@stbr/solana-vault`
 
-The current SDK covers basic operations. The planned module/plugin architecture has not been built.
+#### 3.1 ManagedVault Separation ✅
 
-#### 3.1 SDK Restructure
-
-Rename and reorganize:
+Done. `SolanaVault` is SVS-1 only (no `sync()`). `ManagedVault` extends it with `sync()` and `storedTotalAssets()` for SVS-2.
 
 ```
-sdk/core/
-├── src/
-│   ├── index.ts              # Public exports
-│   ├── vault.ts              # SolanaVault (SVS-1)
-│   ├── managed-vault.ts      # ManagedVault (SVS-2, extends SolanaVault)
-│   ├── math.ts
-│   ├── pda.ts
-│   ├── types.ts
-│   └── cli.ts                # CLI entry point (solana-vault)
-├── package.json              # @stbr/solana-vault + bin: solana-vault
-└── tests/
+sdk/core/src/
+├── vault.ts              # SolanaVault (SVS-1) — no sync()
+├── managed-vault.ts      # ManagedVault (SVS-2) — extends SolanaVault, adds sync()
+├── math.ts
+├── pda.ts
+├── cli.ts                # solana-vault CLI
+└── index.ts              # Exports both classes
 ```
 
-**Known Issue**: `SolanaVault` exposes `sync()` unconditionally. Calling it on SVS-1 will fail at instruction level. Should either: (a) create a `ManagedVault` subclass that adds `sync()`, or (b) guard with a runtime check.
+#### 3.2 SVS-3 SDK — ConfidentialSolanaVault ✅
 
-#### 3.2 CLI Tool (`solana-vault`)
+Done. Lives in privacy SDK (`@stbr/svs-privacy-sdk`). The core SDK **does not work** with SVS-3/SVS-4 because of different account struct (`ConfidentialVault` vs `Vault`), different instruction signatures (proof context accounts), and different view function contexts.
 
-Build a CLI binary for the SDK:
-- `solana-vault create` — Initialize a new vault
-- `solana-vault deposit` — Deposit assets
-- `solana-vault redeem` — Redeem shares
-- `solana-vault info` — Show vault state
-- `solana-vault preview` — Preview operations
+`ConfidentialSolanaVault` in `sdk/privacy/src/confidential-vault.ts` wraps SVS-3 directly with configureAccount, deposit, applyPending, withdraw, redeem, and view functions.
 
-#### 3.3 SVS-3 SDK Incompatibility
-
-The core SDK (`SolanaVault`) **will not work with SVS-3/SVS-4** because:
-
-1. **Different account struct**: SVS-1/2 use `Vault`, SVS-3/4 use `ConfidentialVault`. The Anchor IDL generates different account names (`vault` vs `confidentialVault`), so `program.account["vault"].fetch()` fails on SVS-3.
-2. **Different instruction signatures**: SVS-3 withdraw/redeem require `new_decryptable_available_balance` and proof context accounts. The core SDK's `withdraw()`/`redeem()` methods don't pass these.
-3. **Different view function contexts**: SVS-3 `max_withdraw`/`max_redeem` use `VaultView` (returns vault-level bounds) instead of `VaultViewWithOwner` (returns user-specific bounds), because encrypted balances can't be read on-chain.
-
-**Resolution options**:
-- (a) Build a separate `ConfidentialVault` class in the privacy SDK that extends/wraps `SolanaVault`
-- (b) Make `SolanaVault` generic over the account struct with a type parameter
-- (c) Keep them fully separate — privacy SDK has its own vault class
-
-#### 3.4 Module Architecture (Not Started)
-
-Modules are SDK-level plugins that compose on top of base vault instructions:
+#### 3.3 Module Architecture (Not Started)
 
 | Module | Priority | Description |
 |--------|----------|-------------|
@@ -150,29 +138,55 @@ Modules are SDK-level plugins that compose on top of base vault instructions:
 | `timelock` | P2 | Propose -> wait -> execute for admin ops |
 | `strategy` | P3 | CPI templates for deploying to other protocols |
 
-#### 3.5 Publish
-- [ ] Build CLI (`solana-vault` binary)
-- [ ] Separate `ManagedVault` from `SolanaVault`
+#### 3.4 Publish
+- [x] CLI (`solana-vault` binary)
+- [x] Separate `ManagedVault` from `SolanaVault`
+- [x] `ConfidentialSolanaVault` class in privacy SDK
 - [ ] npm publish `@stbr/solana-vault`
 - [ ] TypeDoc API documentation
 - [ ] Examples folder
 
-### Phase 4: SVS-3/SVS-4 (Alpha)
+### Phase 4: SVS-3/SVS-4 Testing & Deployment
 
-**Blocked by**: ZK proof generation requires Rust backend or WASM bindings (expected mid-2026).
+**Not blocked.** Proof backend is production-ready. SDK client integration exists. What's missing is integration tests and devnet deployment.
 
-- [ ] SVS-3 integration tests (requires proof infrastructure)
-- [ ] SVS-4 integration tests
-- [ ] `ConfidentialVault` SDK class (separate from `SolanaVault`)
-- [ ] Proof backend -> SDK integration (REST API or direct WASM)
-- [ ] Deploy SVS-3/4 to devnet once tests pass
+#### 4.1 SVS-3 Integration Tests
+Start backend (`cargo run` or `docker compose up`), write tests exercising:
+- [x] Initialize vault with ConfidentialTransferMint extension
+- [x] ConfigureAccount with PubkeyValidityProof via backend
+- [x] Deposit -> shares arrive as pending balance
+- [x] ApplyPending -> move to available balance
+- [ ] Withdraw with EqualityProof + RangeProof via backend
+- [ ] Redeem with EqualityProof + RangeProof via backend
+- [x] Pause/unpause with confidential state
+- [x] View functions return correct vault-level bounds
 
-### Phase 5: Documentation + Polish
+#### 4.2 SVS-4 Integration Tests
+Same as SVS-3 plus:
+- [ ] sync() updates total_assets
+- [ ] Operations use stored balance correctly
 
-- [ ] Per-variant spec docs (`docs/SVS-1.md`, `docs/SVS-2.md`)
-- [ ] `docs/MODULES.md` — Module documentation with examples
+#### 4.3 Deploy
+- [ ] Deploy SVS-3 to devnet
+- [ ] Deploy SVS-4 to devnet
+
+### Phase 5: Documentation
+
+Should happen alongside Phases 3-4, not after.
+
+#### Per-Variant Spec Docs
+- [x] `docs/SVS-1.md` — Live balance vault spec: accounts, instructions, math, use cases, deployment info
+- [x] `docs/SVS-2.md` — Stored balance + sync spec: sync mechanics, trust model, yield strategies
+- [x] `docs/SVS-3.md` — Confidential live balance spec: CT extension, proof flow, configure_account/apply_pending, backend integration, view function differences
+- [x] `docs/SVS-4.md` — Confidential stored balance spec: SVS-3 + sync
+
+#### Other Docs
+- [ ] `docs/MODULES.md` — Module documentation with examples (when modules built)
 - [ ] `docs/INTEGRATION.md` — How to build on SVS
-- [ ] CI/CD: GitHub Actions (build -> fmt -> clippy -> test)
+- [ ] `docs/PROOF-BACKEND.md` — Deployment guide, API reference, security model (backend has its own README but needs cross-linking)
+
+#### Infrastructure
+- [ ] CI/CD: GitHub Actions (build -> fmt -> clippy -> test -> backend test)
 - [ ] AI slop cleanup pass on branch diff
 
 ### Phase 6: Production
@@ -217,10 +231,10 @@ assets = shares * (total_assets + 1) / (total_shares + offset)
 ### Program IDs
 | Program | Devnet | Localnet |
 |---------|--------|----------|
-| SVS-1 | `Bv8aVSQ3DJUe3B7TqQZRZgrNvVTh8TjfpwpoeR1ckDMC` | `SVS1VauLt1111111111111111111111111111111111` |
-| SVS-2 | `3UrYrxh1HmVgq7WPygZ5x1gNEaWFwqTMs7geNqMnsrtD` | `SVS2VauLt2222222222222222222222222222222222` |
-| SVS-3 | Not deployed | `SVS3VauLt3333333333333333333333333333333333` |
-| SVS-4 | Not deployed | `SVS4VauLt4444444444444444444444444444444444` |
+| SVS-1 | `Bv8aVSQ3DJUe3B7TqQZRZgrNvVTh8TjfpwpoeR1ckDMC` | Same as devnet |
+| SVS-2 | `3UrYrxh1HmVgq7WPygZ5x1gNEaWFwqTMs7geNqMnsrtD` | Same as devnet |
+| SVS-3 | Not deployed | `EcpnYtaCBrZ4p4uq7dDr55D3fL9nsxbCNqpyUREGpPkh` |
+| SVS-4 | Not deployed | `2WP7LXWqrp1W4CwEJuVt2SxWPNY2n6AYmijh6Z4EeidY` |
 
 ### State Structs
 
@@ -257,6 +271,15 @@ pub struct ConfidentialVault {
     pub _reserved: [u8; 32],                  // 32
 }
 ```
+
+### Proof Backend
+| Endpoint | Proof | Size | Use Case |
+|----------|-------|------|----------|
+| `POST /api/proofs/pubkey-validity` | PubkeyValidityProof | 64 B | ConfigureAccount |
+| `POST /api/proofs/equality` | CiphertextCommitmentEqualityProof | 192 B | Withdraw/Redeem |
+| `POST /api/proofs/range` | BatchedRangeProofU64 | 672+ B | Range validation |
+
+Security: dual-layer auth (API key + Ed25519 signature), 5-min replay window, 64KB body limit.
 
 ---
 

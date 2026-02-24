@@ -42,10 +42,10 @@ ERC-4626 tokenized vault standard for Solana. Deposit assets, receive proportion
 
 | Program | Devnet | Localnet |
 |---------|--------|----------|
-| SVS-1 | `Bv8aVSQ3DJUe3B7TqQZRZgrNvVTh8TjfpwpoeR1ckDMC` | `SVS1VauLt1111111111111111111111111111111111` |
-| SVS-2 | `3UrYrxh1HmVgq7WPygZ5x1gNEaWFwqTMs7geNqMnsrtD` | `SVS2VauLt2222222222222222222222222222222222` |
-| SVS-3 | Not deployed | `SVS3VauLt3333333333333333333333333333333333` |
-| SVS-4 | Not deployed | `SVS4VauLt4444444444444444444444444444444444` |
+| SVS-1 | `Bv8aVSQ3DJUe3B7TqQZRZgrNvVTh8TjfpwpoeR1ckDMC` | Same as devnet |
+| SVS-2 | `3UrYrxh1HmVgq7WPygZ5x1gNEaWFwqTMs7geNqMnsrtD` | Same as devnet |
+| SVS-3 | Not deployed | `EcpnYtaCBrZ4p4uq7dDr55D3fL9nsxbCNqpyUREGpPkh` |
+| SVS-4 | Not deployed | `2WP7LXWqrp1W4CwEJuVt2SxWPNY2n6AYmijh6Z4EeidY` |
 
 ## Installation
 
@@ -63,11 +63,14 @@ cd proofs-backend && cargo run
 ## Quick Start
 
 ```typescript
-import { SolanaVault } from "@stbr/solana-vault";
+import { SolanaVault, ManagedVault } from "@stbr/solana-vault";
 import { BN } from "@coral-xyz/anchor";
 
-// Load existing vault
+// SVS-1: Load live-balance vault
 const vault = await SolanaVault.load(program, assetMint, 1);
+
+// SVS-2: Load stored-balance vault (adds sync())
+const managed = await ManagedVault.load(program, assetMint, 1);
 
 // Preview deposit
 const expectedShares = await vault.previewDeposit(new BN(1_000_000));
@@ -84,6 +87,9 @@ await vault.redeem(user, {
   shares,
   minAssetsOut: expectedAssets.mul(new BN(95)).div(new BN(100)),
 });
+
+// SVS-2 only: sync stored balance
+await managed.sync(authority);
 ```
 
 ## Features
@@ -311,7 +317,11 @@ tokenized-vault-standard/
     ├── PRIVACY.md               # Privacy model & proof backend
     ├── SDK.md                   # SDK usage guide
     ├── SECURITY.md              # Attack vectors & mitigations
-    └── TESTING.md               # Test guide & coverage
+    ├── TESTING.md               # Test guide & coverage
+    ├── SVS-1.md                 # SVS-1 spec (live balance)
+    ├── SVS-2.md                 # SVS-2 spec (stored balance + sync)
+    ├── SVS-3.md                 # SVS-3 spec (confidential live)
+    └── SVS-4.md                 # SVS-4 spec (confidential stored)
 ```
 
 ## Resources

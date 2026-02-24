@@ -9,7 +9,7 @@ pub mod state;
 
 use instructions::*;
 
-declare_id!("SVS4VauLt4444444444444444444444444444444444");
+declare_id!("2WP7LXWqrp1W4CwEJuVt2SxWPNY2n6AYmijh6Z4EeidY");
 
 #[program]
 pub mod svs_4 {

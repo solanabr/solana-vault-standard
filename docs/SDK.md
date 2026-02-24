@@ -66,8 +66,11 @@ await vault.deposit(wallet.publicKey, {
 ## Exports
 
 ```typescript
-// Main SDK
+// SVS-1 Vault
 export { SolanaVault } from "./vault";
+
+// SVS-2 Managed Vault (extends SolanaVault with sync())
+export { ManagedVault } from "./managed-vault";
 
 // PDA helpers
 export {
@@ -93,9 +96,9 @@ export { BN } from "@coral-xyz/anchor";
 export { PublicKey } from "@solana/web3.js";
 ```
 
-## SolanaVault Class
+## SolanaVault Class (SVS-1)
 
-The main class for vault interactions.
+The base class for SVS-1 live-balance vault interactions. For SVS-2 stored-balance vaults, use [`ManagedVault`](#managedvault-class-svs-2) instead.
 
 ### Creating a Vault
 
@@ -261,15 +264,45 @@ await vault.transferAuthority(
   newAuthority
 );
 
-// Sync total_assets with actual balance (SVS-2 only)
-await vault.sync(authorityPublicKey);
-
 // Check if paused
 const isPaused = await vault.isPaused();
 
 // Get current authority
 const authority = await vault.getAuthority();
 ```
+
+## ManagedVault Class (SVS-2)
+
+`ManagedVault` extends `SolanaVault` with `sync()` for stored-balance vaults. Use this for SVS-2 programs where assets leave the vault ATA (deployed to other protocols, bridged, managed off-chain).
+
+```typescript
+import { ManagedVault } from "@stbr/solana-vault";
+
+// Load an SVS-2 vault
+const vault = await ManagedVault.load(program, assetMint, 1);
+
+// All SolanaVault methods available (deposit, mint, withdraw, redeem, etc.)
+await vault.deposit(user, { assets, minSharesOut });
+
+// SVS-2 specific: sync total_assets with actual balance
+await vault.sync(authorityPublicKey);
+
+// Get the stored (cached) total_assets value
+const storedAssets = await vault.storedTotalAssets();
+
+// Get the live on-chain balance (inherited from SolanaVault)
+const liveAssets = await vault.totalAssets();
+```
+
+### When to Use ManagedVault vs SolanaVault
+
+| Scenario | Class | Why |
+|----------|-------|-----|
+| All assets in vault ATA | `SolanaVault` | Live balance, no sync needed |
+| Assets deployed elsewhere | `ManagedVault` | Stored balance, authority syncs yield |
+| Lending pool | `SolanaVault` | Assets stay in vault |
+| Yield aggregator | `ManagedVault` | Assets deployed to strategies |
+| Fund manager | `ManagedVault` | Authority reports returns via sync |
 
 ### Helper Methods
 
