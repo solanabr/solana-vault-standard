@@ -78,20 +78,21 @@ ALPHA (Programs Written, Not Deployed)
 - [x] Programs written with ConfidentialTransfer extension
 - [x] configure_account, apply_pending instructions
 - [x] ZK proof context account validation (owner == zk_elgamal_proof_program)
-- [x] SVS-3 integration tests (29 tests: init, admin, views, CT deposit flow)
-- [x] SVS-4 integration tests (30 tests: init, admin, views, sync, CT deposit+sync flow)
+- [x] SVS-3 integration tests (32 tests: init, admin, views, CT deposit, CT withdraw/redeem)
+- [x] SVS-4 integration tests (33 tests: init, admin, views, sync, CT deposit+sync, CT withdraw/redeem)
 - [x] Test proof client helper (`tests/helpers/proof-client.ts`)
 - [x] Program IDs updated from vanity to real keypairs
-- [x] Full test suite: 95 passing across all 4 programs (+ 13 backend-dependent skippable)
+- [x] Full test suite: 114 passing across all 4 programs (with proof backend running)
 
 ### Proof Backend (`proofs-backend/`)
-- [x] Axum REST API with 3 proof endpoints + health check
+- [x] Axum REST API with 4 proof endpoints + health check
 - [x] PubkeyValidityProof generation (64 bytes, for ConfigureAccount)
 - [x] CiphertextCommitmentEqualityProof generation (192 bytes, for Withdraw/Redeem)
 - [x] BatchedRangeProofU64 generation (672+ bytes, for range validation)
+- [x] Combined withdraw proof endpoint (equality + range with shared Pedersen opening)
 - [x] Dual-layer auth (API key + Ed25519 wallet signature verification)
 - [x] Replay attack prevention (5-min timestamp window)
-- [x] 16 unit tests passing
+- [x] 19 unit tests passing
 - [x] Docker deployment ready (Dockerfile + docker-compose.yml)
 - [x] Uses solana-zk-sdk 2.1 (latest stable)
 
@@ -152,14 +153,14 @@ Done. Lives in privacy SDK (`@stbr/svs-privacy-sdk`). The core SDK **does not wo
 
 **Not blocked.** Proof backend is production-ready. SDK client integration exists. What's missing is integration tests and devnet deployment.
 
-#### 4.1 SVS-3 Integration Tests
+#### 4.1 SVS-3 Integration Tests ✅
 Start backend (`cargo run` or `docker compose up`), write tests exercising:
 - [x] Initialize vault with ConfidentialTransferMint extension
 - [x] ConfigureAccount with PubkeyValidityProof via backend
 - [x] Deposit -> shares arrive as pending balance
 - [x] ApplyPending -> move to available balance
-- [ ] Withdraw with EqualityProof + RangeProof via backend
-- [ ] Redeem with EqualityProof + RangeProof via backend
+- [x] Withdraw with EqualityProof + RangeProof via backend (context state accounts)
+- [x] Redeem with EqualityProof + RangeProof via backend (context state accounts)
 - [x] Pause/unpause with confidential state
 - [x] View functions return correct vault-level bounds
 
@@ -283,6 +284,7 @@ pub struct ConfidentialVault {
 | `POST /api/proofs/pubkey-validity` | PubkeyValidityProof | 64 B | ConfigureAccount |
 | `POST /api/proofs/equality` | CiphertextCommitmentEqualityProof | 192 B | Withdraw/Redeem |
 | `POST /api/proofs/range` | BatchedRangeProofU64 | 672+ B | Range validation |
+| `POST /api/proofs/withdraw` | Equality + Range (shared opening) | 320 + 936 B | Withdraw/Redeem (combined) |
 
 Security: dual-layer auth (API key + Ed25519 signature), 5-min replay window, 64KB body limit.
 

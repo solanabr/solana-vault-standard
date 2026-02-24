@@ -1,10 +1,6 @@
 //! Proof generation endpoints
 
-use axum::{
-    extract::State,
-    routing::post,
-    Json, Router,
-};
+use axum::{extract::State, routing::post, Json, Router};
 use base64::{engine::general_purpose::STANDARD, Engine};
 use chrono::Utc;
 use std::sync::Arc;
@@ -15,7 +11,8 @@ use crate::{
     services::ProofGenerator,
     types::{
         Config, EqualityProofRequest, EqualityProofResponse, PubkeyValidityRequest,
-        PubkeyValidityResponse, RangeProofRequest, RangeProofResponse,
+        PubkeyValidityResponse, RangeProofRequest, RangeProofResponse, WithdrawProofRequest,
+        WithdrawProofResponse,
     },
 };
 
@@ -33,6 +30,7 @@ pub fn proofs_router(config: Arc<Config>) -> Router {
         .route("/api/proofs/pubkey-validity", post(pubkey_validity))
         .route("/api/proofs/equality", post(equality_proof))
         .route("/api/proofs/range", post(range_proof))
+        .route("/api/proofs/withdraw", post(withdraw_proof))
         .with_state(state)
 }
 
@@ -187,6 +185,65 @@ async fn range_proof(
 
     Ok(Json(RangeProofResponse {
         proof_data: STANDARD.encode(&proof_data),
+    }))
+}
+
+/// Generate combined withdraw proofs (equality + range)
+///
+/// POST /api/proofs/withdraw
+async fn withdraw_proof(
+    State(state): State<AppState>,
+    Json(req): Json<WithdrawProofRequest>,
+) -> Result<Json<WithdrawProofResponse>> {
+    info!(
+        wallet = %req.wallet_pubkey,
+        token_account = %req.token_account,
+        withdraw_amount = %req.withdraw_amount,
+        "Generating withdraw proofs"
+    );
+
+    validate_timestamp(req.timestamp, state.config.timestamp_tolerance_secs)?;
+
+    let wallet_pubkey = ProofGenerator::parse_pubkey(&req.wallet_pubkey)?;
+    let token_account = ProofGenerator::parse_pubkey(&req.token_account)?;
+    let request_signature = ProofGenerator::parse_signature(&req.request_signature)?;
+    let elgamal_signature = ProofGenerator::parse_signature(&req.elgamal_signature)?;
+    let ciphertext = ProofGenerator::parse_ciphertext(&req.current_ciphertext)?;
+    let current_balance: u64 = req
+        .current_balance
+        .parse()
+        .map_err(|e| BackendError::BadRequest(format!("Invalid current_balance: {e}")))?;
+    let withdraw_amount: u64 = req
+        .withdraw_amount
+        .parse()
+        .map_err(|e| BackendError::BadRequest(format!("Invalid withdraw_amount: {e}")))?;
+
+    ProofGenerator::verify_request_signature(
+        &wallet_pubkey,
+        req.timestamp,
+        &token_account,
+        &request_signature,
+    )?;
+
+    let sig_bytes: [u8; 64] = elgamal_signature.into();
+    let elgamal_keypair = ProofGenerator::derive_elgamal_keypair(&sig_bytes, &token_account)?;
+
+    let proof_data = ProofGenerator::generate_withdraw_proof(
+        &elgamal_keypair,
+        &ciphertext,
+        current_balance,
+        withdraw_amount,
+    )?;
+
+    info!(
+        equality_size = proof_data.equality_proof.len(),
+        range_size = proof_data.range_proof.len(),
+        "Generated withdraw proofs"
+    );
+
+    Ok(Json(WithdrawProofResponse {
+        equality_proof: STANDARD.encode(&proof_data.equality_proof),
+        range_proof: STANDARD.encode(&proof_data.range_proof),
     }))
 }
 
