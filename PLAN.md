@@ -4,6 +4,8 @@
 
 Phases 1-4 complete. All 4 programs built, tested (114 tests), deployed to devnet. Proof backend functional (19 tests). SDK and CLI built.
 
+**SDK v1 Beta (March 2026):** All SDK modules implemented (P0-P3). Core SDK: 369 tests. Privacy SDK: 52 tests. Total: 421 tests.
+
 ---
 
 ## The Four Standards
@@ -47,19 +49,20 @@ BETA (Deployed to Devnet)
 
 ### Module Architecture
 
-| Module | Priority | Description |
-|--------|----------|-------------|
-| `fees` | P0 | Management + performance fee calculation |
-| `cap` | P1 | Per-user and global deposit caps |
-| `emergency` | P1 | Emergency withdrawal when paused (with penalty) |
-| `access-control` | P1 | Whitelist/blacklist depositors |
-| `multi-asset` | P2 | Meta-vault wrapping N single-asset vaults |
-| `timelock` | P2 | Propose -> wait -> execute for admin ops |
-| `strategy` | P3 | CPI templates for deploying to other protocols |
+| Module | Priority | Status | Description |
+|--------|----------|--------|-------------|
+| `fees` | P0 | ✅ | Management + performance fee calculation (31 tests) |
+| `cap` | P1 | ✅ | Per-user and global deposit caps (22 tests) |
+| `emergency` | P1 | ✅ | Emergency withdrawal when paused with penalty (26 tests) |
+| `access-control` | P1 | ✅ | Whitelist/blacklist depositors + merkle proofs (33 tests) |
+| `multi-asset` | P2 | ✅ | Meta-vault wrapping N single-asset vaults (33 tests) |
+| `timelock` | P2 | ✅ | Propose -> wait -> execute for admin ops (34 tests) |
+| `strategy` | P3 | ✅ | CPI templates for deploying to other protocols (52 tests) |
+| Privacy SDK | P4 | ✅ | ElGamal/AES encryption, ZK proof helpers (52 tests) |
 
 ### Documentation
 
-- [ ] `docs/MODULES.md` — Module documentation with examples (when modules built)
+- [ ] `docs/MODULES.md` — Module documentation with examples
 - [ ] `docs/INTEGRATION.md` — How to build on SVS
 - [ ] `docs/PROOF-BACKEND.md` — Deployment guide, API reference, security model
 
