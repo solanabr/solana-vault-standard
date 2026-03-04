@@ -12,7 +12,7 @@ import {
   previewRecall,
   getTotalDeployed,
   getCurrentWeights,
-  needsRebalance,
+  strategyNeedsRebalance,
   validateStrategyConfig,
   validateTargetWeights,
   checkStrategyHealth,
@@ -319,7 +319,7 @@ describe("SDK Strategy Module", () => {
     });
   });
 
-  describe("needsRebalance", () => {
+  describe("strategyNeedsRebalance", () => {
     it("returns false when within threshold", () => {
       const positions = [
         createTestPosition("strat1", new BN(500_000), new BN(500_000)),
@@ -330,7 +330,7 @@ describe("SDK Strategy Module", () => {
         ["strat2", 5000],
       ]);
 
-      expect(needsRebalance(positions, targetWeights, 100)).to.be.false;
+      expect(strategyNeedsRebalance(positions, targetWeights, 100)).to.be.false;
     });
 
     it("returns true when exceeding threshold", () => {
@@ -344,7 +344,7 @@ describe("SDK Strategy Module", () => {
       ]);
 
       // 60/40 vs 50/50 = 10% drift
-      expect(needsRebalance(positions, targetWeights, 500)).to.be.true;
+      expect(strategyNeedsRebalance(positions, targetWeights, 500)).to.be.true;
     });
   });
 

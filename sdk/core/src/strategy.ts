@@ -323,9 +323,9 @@ export function getCurrentWeights(
 }
 
 /**
- * Check if rebalancing is needed.
+ * Check if strategy rebalancing is needed.
  */
-export function needsRebalance(
+export function strategyNeedsRebalance(
   positions: StrategyPosition[],
   targetWeights: Map<string, number>,
   thresholdBps: number,
@@ -688,7 +688,7 @@ export class StrategyManager {
    * Check if rebalancing is needed.
    */
   needsRebalance(thresholdBps: number): boolean {
-    return needsRebalance(
+    return strategyNeedsRebalance(
       this.getAllPositions(),
       this.targetWeights,
       thresholdBps,
