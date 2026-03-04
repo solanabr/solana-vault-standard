@@ -1,6 +1,6 @@
 # Solana Vault Standard (SVS)
 
-ERC-4626 tokenized vault standard for Solana. Deposit assets, receive proportional share tokens, redeem shares for assets.
+Tokenized vault programs and TypeScript SDK for building yield-bearing vaults on Solana. The SDK provides deposit/withdraw operations, share accounting, preview functions, and modular extensions for fees, caps, access control, timelocks, and multi-asset portfolios. The interface follows the ERC-4626 specification adapted for Solana's account model.
 
 ## SVS Variants
 
@@ -96,13 +96,26 @@ await managed.sync(authority);
 
 | Feature | Description |
 |---------|-------------|
-| **ERC-4626 Compatible** | Standard interface matching Ethereum's vault standard |
 | **Inflation Attack Protection** | Virtual offset mechanism prevents donation attacks |
 | **Vault-Favoring Rounding** | All operations round to protect vault solvency |
 | **Slippage Protection** | Min/max parameters prevent sandwich attacks |
 | **Multi-Vault Support** | Multiple vaults per asset via `vault_id` |
 | **Emergency Controls** | Pause/unpause and authority transfer |
 | **CPI-Composable Views** | Preview functions callable from other programs |
+
+## SDK Extensions
+
+The TypeScript SDK includes modular extensions for common vault patterns:
+
+| Module | Description |
+|--------|-------------|
+| `fees` | Management, performance, and entry/exit fee calculation |
+| `cap` | Global and per-user deposit caps |
+| `emergency` | Emergency withdrawal with configurable penalty |
+| `access-control` | Whitelist/blacklist with merkle proof verification |
+| `multi-asset` | Portfolio allocation across multiple vaults |
+| `timelock` | Governance proposal lifecycle management |
+| `strategy` | CPI templates for deploying assets to external protocols |
 
 ## Core Operations
 

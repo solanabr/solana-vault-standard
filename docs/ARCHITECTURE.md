@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Solana Vault Standard (SVS) implements ERC-4626 compatible tokenized vaults on Solana. Four program variants cover the matrix of public/private and live/stored balance models.
+The Solana Vault Standard (SVS) provides tokenized vault programs for Solana. Four program variants cover the matrix of public/private and live/stored balance models.
 
 ## SVS Variants Matrix
 
