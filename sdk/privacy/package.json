@@ -1,7 +1,8 @@
 {
   "name": "@stbr/svs-privacy-sdk",
-  "version": "0.1.0",
+  "version": "0.1.0-beta.1",
   "description": "Privacy SDK for SVS-3/SVS-4 Confidential Vaults with Token-2022 Confidential Transfers. Provides ElGamal/AES encryption, ZK proof structures, and Privacy Cash integration for full transactional privacy.",
+  "license": "Apache-2.0",
   "keywords": [
     "solana",
     "token-2022",
@@ -25,7 +26,7 @@
     "@coral-xyz/anchor": "^0.31.1",
     "@solana/spl-token": "^0.4.10",
     "@solana/web3.js": "^1.98.0",
-    "@stbr/solana-vault": "*",
+    "@stbr/solana-vault": "0.1.0-beta.1",
     "tweetnacl": "^1.0.3"
   },
   "devDependencies": {

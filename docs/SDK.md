@@ -91,6 +91,15 @@ export {
   Rounding
 } from "./math";
 
+// SDK Modules
+export * from "./fees";          // Fee calculation (management, performance, entry/exit)
+export * from "./cap";           // Deposit caps (global, per-user)
+export * from "./emergency";     // Emergency withdrawal with penalty
+export * from "./access-control"; // Whitelist/blacklist + merkle proofs
+export * from "./multi-asset";   // Multi-vault portfolio allocation
+export * from "./timelock";      // Governance proposal lifecycle
+export * from "./strategy";      // CPI templates for protocol deployment
+
 // Re-exports
 export { BN } from "@coral-xyz/anchor";
 export { PublicKey } from "@solana/web3.js";
