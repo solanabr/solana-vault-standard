@@ -2,7 +2,7 @@
 
 ## Overview
 
-SVS-1 is the simplest ERC-4626 compatible tokenized vault variant on Solana. It reads `asset_vault.amount` directly on every instruction without requiring synchronization, making external donations immediately visible in share price calculations. This zero-trust, minimal-complexity variant is ideal for lending pools, liquid staking, and yield aggregators where all assets remain in the vault's associated token account.
+SVS-1 is the simplest tokenized vault variant in the Solana Vault Standard. It reads `asset_vault.amount` directly on every instruction without requiring synchronization, making external donations immediately visible in share price calculations. This zero-trust, minimal-complexity variant is ideal for lending pools, liquid staking, and yield aggregators where all assets remain in the vault's associated token account.
 
 ## Balance Model
 

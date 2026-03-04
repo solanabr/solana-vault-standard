@@ -1,6 +1,6 @@
 # @stbr/solana-vault
 
-Core TypeScript SDK for the Solana Vault Standard (SVS). ERC-4626 compatible tokenized vault interface for Solana.
+Core TypeScript SDK for the Solana Vault Standard (SVS). Provides vault operations, share accounting math, PDA derivation, and modular extensions for fees, caps, access control, and strategy deployment.
 
 ## Installation
 
@@ -34,17 +34,17 @@ await vault.redeem(user, {
 
 ## Features
 
-- **ERC-4626 Compatible** - Standard vault interface
+- **Vault Operations** - Deposit, mint, withdraw, redeem with slippage protection
+- **Preview Functions** - Off-chain calculation of expected shares/assets
 - **Inflation Attack Protection** - Virtual offset mechanism
 - **Vault-Favoring Rounding** - Protects solvency
-- **Slippage Protection** - Min/max parameters
 - **Multi-Vault Support** - Multiple vaults per asset
 
 ## SDK Modules
 
 ```typescript
 export * from "./vault";          // Core vault operations
-export * from "./math";           // ERC-4626 math utilities
+export * from "./math";           // Share/asset conversion math
 export * from "./fees";           // Fee calculation (management, performance)
 export * from "./cap";            // Deposit caps (global, per-user)
 export * from "./emergency";      // Emergency withdrawal with penalty
