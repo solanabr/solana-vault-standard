@@ -1,3 +1,5 @@
+/** Tests for multi-asset portfolios: weight validation, rebalancing, allocation */
+
 import { expect } from "chai";
 import { BN } from "@coral-xyz/anchor";
 import { Keypair, PublicKey } from "@solana/web3.js";

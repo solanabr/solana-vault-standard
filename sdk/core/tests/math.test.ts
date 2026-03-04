@@ -1,3 +1,5 @@
+/** Tests for vault math functions: share/asset conversion, rounding, decimals offset */
+
 import { expect } from "chai";
 import { BN } from "@coral-xyz/anchor";
 import {

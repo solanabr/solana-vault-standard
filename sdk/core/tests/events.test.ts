@@ -1,3 +1,5 @@
+/** Tests for vault event parsing: deposit, withdraw, mint, redeem events */
+
 import { expect } from "chai";
 import { PublicKey } from "@solana/web3.js";
 import { BN } from "@coral-xyz/anchor";

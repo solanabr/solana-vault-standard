@@ -1,3 +1,5 @@
+//! View instructions: read-only queries for vault state and conversions.
+
 use anchor_lang::prelude::*;
 use anchor_lang::solana_program::program::set_return_data;
 use anchor_spl::token_interface::{Mint, TokenAccount};

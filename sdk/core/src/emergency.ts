@@ -1,3 +1,31 @@
+/**
+ * Emergency Withdrawal Module
+ *
+ * Emergency exit functionality for paused vaults. Allows users to
+ * withdraw with a penalty when normal operations are suspended.
+ *
+ * Features:
+ * - Configurable penalty rate in basis points
+ * - Min/max penalty bounds
+ * - Per-user cooldown between withdrawals
+ * - Penalty funds routed to configurable recipient
+ *
+ * @example
+ * ```ts
+ * import { calculateEmergencyWithdraw, checkEmergencyAllowed } from "./emergency";
+ *
+ * // Check if user can emergency withdraw
+ * const check = checkEmergencyAllowed(status, userLastWithdraw, now);
+ * if (!check.allowed) {
+ *   console.log(`Wait ${check.waitTime}s before withdrawing`);
+ * }
+ *
+ * // Calculate withdrawal with penalty
+ * const result = calculateEmergencyWithdraw(shares, config, vaultState);
+ * console.log(`Receive ${result.netAssets} after ${result.penalty} penalty`);
+ * ```
+ */
+
 import { BN } from "@coral-xyz/anchor";
 import { PublicKey } from "@solana/web3.js";
 import { convertToAssets, Rounding } from "./math";

@@ -1,3 +1,5 @@
+//! Mint instruction: mint exact shares, deposit to confidential balance.
+
 use anchor_lang::prelude::*;
 use anchor_lang::solana_program::program::invoke;
 use anchor_spl::{

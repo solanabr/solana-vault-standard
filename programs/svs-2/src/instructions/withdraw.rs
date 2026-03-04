@@ -1,3 +1,5 @@
+//! Withdraw instruction: burn shares to receive exact assets (stored balance model).
+
 use anchor_lang::prelude::*;
 use anchor_spl::{
     token_2022::{self, Burn, Token2022},

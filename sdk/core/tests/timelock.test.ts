@@ -1,3 +1,5 @@
+/** Tests for timelocked admin operations: proposals, execution, cancellation */
+
 import { expect } from "chai";
 import { Keypair, PublicKey } from "@solana/web3.js";
 import {

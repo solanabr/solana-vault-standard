@@ -1,3 +1,5 @@
+//! Mint instruction: mint exact shares by depositing required assets (stored balance model).
+
 use anchor_lang::prelude::*;
 use anchor_spl::{
     associated_token::AssociatedToken,

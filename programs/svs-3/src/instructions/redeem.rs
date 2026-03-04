@@ -1,3 +1,5 @@
+//! Redeem instruction: withdraw from confidential balance, burn exact shares, transfer assets.
+
 use anchor_lang::prelude::*;
 use anchor_lang::solana_program::program::invoke;
 use anchor_spl::{

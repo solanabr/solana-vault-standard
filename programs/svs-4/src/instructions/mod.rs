@@ -1,3 +1,5 @@
+//! Vault instruction handlers: deposit, mint, withdraw, redeem, admin, sync, confidential transfer.
+
 pub mod admin;
 pub mod apply_pending;
 pub mod configure_account;

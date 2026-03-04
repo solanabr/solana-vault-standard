@@ -1,3 +1,5 @@
+//! Deposit instruction: transfer assets to vault, mint shares to user (stored balance model).
+
 use anchor_lang::prelude::*;
 use anchor_spl::{
     associated_token::AssociatedToken,

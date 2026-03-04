@@ -1,3 +1,5 @@
+//! Mint instruction: mint exact shares by depositing required assets.
+
 use anchor_lang::prelude::*;
 use anchor_spl::{
     associated_token::AssociatedToken,

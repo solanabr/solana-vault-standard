@@ -1,3 +1,13 @@
+//! SVS-1: Public Vault with Live Balance
+//!
+//! ERC-4626 compliant tokenized vault for Solana. Deposits assets, mints shares,
+//! and reads balance directly from the asset vault account (live balance model).
+//!
+//! Key features:
+//! - Slippage protection via min/max parameters
+//! - Inflation attack protection via virtual offset
+//! - Token-2022 shares, SPL Token or Token-2022 assets
+
 use anchor_lang::prelude::*;
 
 pub mod constants;

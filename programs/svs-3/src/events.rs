@@ -1,3 +1,5 @@
+//! Vault events emitted on state changes.
+
 use anchor_lang::prelude::*;
 
 #[event]

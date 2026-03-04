@@ -1,3 +1,9 @@
+//! SVS-4: Privacy-Preserving Managed Vault
+//!
+//! Combines SVS-2 stored balance with SVS-3 confidential transfers.
+//! Share balances are encrypted, and balance uses stored total_assets.
+//! Maximum privacy with external yield strategy support.
+
 use anchor_lang::prelude::*;
 
 pub mod constants;

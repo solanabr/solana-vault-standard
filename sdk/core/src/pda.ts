@@ -1,7 +1,30 @@
+/**
+ * PDA Derivation Module
+ *
+ * Program Derived Address helpers for vault accounts.
+ *
+ * Seeds:
+ * - Vault: ["vault", asset_mint, vault_id (u64 LE)]
+ * - Shares Mint: ["shares", vault_pubkey]
+ *
+ * @example
+ * ```ts
+ * import { deriveVaultAddresses, getVaultAddress } from "./pda";
+ *
+ * // Get all vault addresses at once
+ * const { vault, sharesMint } = deriveVaultAddresses(programId, assetMint, 1);
+ *
+ * // Or derive individually
+ * const [vault, bump] = getVaultAddress(programId, assetMint, 1);
+ * ```
+ */
+
 import { PublicKey } from "@solana/web3.js";
 import { BN } from "@coral-xyz/anchor";
 
+/** Seed for vault PDA derivation */
 export const VAULT_SEED = Buffer.from("vault");
+/** Seed for shares mint PDA derivation */
 export const SHARES_MINT_SEED = Buffer.from("shares");
 
 /**

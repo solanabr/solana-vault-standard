@@ -1,3 +1,5 @@
+/** Tests for access control: whitelist/blacklist modes, merkle proofs */
+
 import { expect } from "chai";
 import { Keypair, PublicKey } from "@solana/web3.js";
 import {

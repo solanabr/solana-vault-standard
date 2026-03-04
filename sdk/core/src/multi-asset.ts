@@ -1,3 +1,35 @@
+/**
+ * Multi-Asset Vault Module
+ *
+ * Portfolio management across multiple SVS vaults. Enables:
+ * - Target allocation weights per vault
+ * - Automatic rebalancing detection
+ * - Rebalance operation calculation
+ *
+ * Weights are specified in basis points (bps), totaling 10000 (100%).
+ *
+ * @example
+ * ```ts
+ * import { calculateRebalance, getMultiVaultState } from "./multi-asset";
+ *
+ * // Define portfolio allocation
+ * const config: MultiVaultConfig = {
+ *   allocations: [
+ *     { vault: vaultA, targetWeight: 6000 }, // 60%
+ *     { vault: vaultB, targetWeight: 4000 }, // 40%
+ *   ],
+ *   rebalanceThresholdBps: 500, // 5% deviation triggers rebalance
+ *   maxSlippageBps: 100,
+ * };
+ *
+ * // Check if rebalancing is needed
+ * const state = await getMultiVaultState(config, connection);
+ * if (state.needsRebalance) {
+ *   console.log(`${state.rebalanceOperations.length} ops needed`);
+ * }
+ * ```
+ */
+
 import { BN } from "@coral-xyz/anchor";
 import { PublicKey } from "@solana/web3.js";
 

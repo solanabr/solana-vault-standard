@@ -1,3 +1,5 @@
+//! Apply pending instruction: move confidential pending balance to available balance.
+
 use anchor_lang::prelude::*;
 use anchor_lang::solana_program::program::invoke;
 use anchor_spl::token_2022::Token2022;

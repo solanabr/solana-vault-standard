@@ -1,3 +1,5 @@
+//! Program constants: PDA seeds, limits, and decimals configuration.
+
 pub const VAULT_SEED: &[u8] = b"vault";
 pub const SHARES_MINT_SEED: &[u8] = b"shares";
 

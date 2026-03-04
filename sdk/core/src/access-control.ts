@@ -1,3 +1,31 @@
+/**
+ * Access Control Module
+ *
+ * Address-based access management for SVS vaults. Supports:
+ * - Open mode: Anyone can deposit
+ * - Whitelist mode: Only approved addresses can deposit
+ * - Blacklist mode: All except blocked addresses can deposit
+ *
+ * Whitelist verification supports both:
+ * - Direct address set (simple, for small lists)
+ * - Merkle proof verification (gas-efficient for large lists)
+ *
+ * @example
+ * ```ts
+ * import { checkAccess, verifyMerkleProof, buildMerkleTree } from "./access-control";
+ *
+ * // Simple whitelist check
+ * const result = checkAccess(config, userAddress);
+ * if (!result.allowed) {
+ *   console.log(`Access denied: ${result.reason}`);
+ * }
+ *
+ * // Build merkle tree for large whitelist
+ * const { root, proofs } = buildMerkleTree(addresses);
+ * const isValid = verifyMerkleProof(root, proofs[userAddress], userAddress);
+ * ```
+ */
+
 import { PublicKey } from "@solana/web3.js";
 import { createHash } from "crypto";
 

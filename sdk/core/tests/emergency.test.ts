@@ -1,3 +1,5 @@
+/** Tests for emergency withdrawals: penalty calculation, cooldowns, validation */
+
 import { expect } from "chai";
 import { BN } from "@coral-xyz/anchor";
 import { PublicKey, Keypair } from "@solana/web3.js";

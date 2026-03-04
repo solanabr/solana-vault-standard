@@ -1,3 +1,28 @@
+/**
+ * Solana Vault SDK - Core Module
+ *
+ * SVS-1 (Public Vault, Live Balance) implementation.
+ * Provides deposit, mint, withdraw, redeem operations with:
+ * - Slippage protection via min/max parameters
+ * - Inflation attack protection via virtual offset
+ * - Support for both SPL Token and Token-2022 assets
+ *
+ * @example
+ * ```ts
+ * import { SolanaVault } from "@stbr/solana-vault";
+ *
+ * // Load existing vault
+ * const vault = await SolanaVault.load(program, assetMint, 1);
+ *
+ * // Preview and deposit
+ * const shares = await vault.previewDeposit(new BN(1_000_000));
+ * await vault.deposit(user, {
+ *   assets: new BN(1_000_000),
+ *   minSharesOut: shares.mul(new BN(95)).div(new BN(100)), // 5% slippage
+ * });
+ * ```
+ */
+
 import { BN, Program, AnchorProvider } from "@coral-xyz/anchor";
 import {
   PublicKey,

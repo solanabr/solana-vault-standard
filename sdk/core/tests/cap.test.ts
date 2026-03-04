@@ -1,3 +1,5 @@
+/** Tests for deposit cap management: global/per-user limits, validation */
+
 import { expect } from "chai";
 import { BN } from "@coral-xyz/anchor";
 import { PublicKey, Keypair } from "@solana/web3.js";

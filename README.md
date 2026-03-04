@@ -117,6 +117,34 @@ The TypeScript SDK includes modular extensions for common vault patterns:
 | `timelock` | Governance proposal lifecycle management |
 | `strategy` | CPI templates for deploying assets to external protocols |
 
+## CLI
+
+The SDK includes a CLI for vault management:
+
+```bash
+# Install globally
+npm install -g @stbr/solana-vault
+
+# Initialize config
+solana-vault config init
+
+# Add vault alias
+solana-vault config add-vault my-vault <ADDRESS> --variant svs-1 --asset-mint <MINT>
+
+# Common operations
+solana-vault info my-vault                    # View vault state
+solana-vault balance my-vault                 # Check your balance
+solana-vault deposit my-vault -a 1000000      # Deposit assets
+solana-vault withdraw my-vault -a 500000      # Withdraw assets
+solana-vault dashboard my-vault               # Live monitoring
+
+# Admin (authority only)
+solana-vault pause my-vault                   # Emergency pause
+solana-vault sync my-vault                    # Sync balance (SVS-2/4)
+```
+
+**Global flags:** `--dry-run`, `--yes`, `--output json`, `--keypair <path>`, `--url <rpc>`
+
 ## Core Operations
 
 | Operation | User Action | Rounding | Favors |

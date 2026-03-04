@@ -1,3 +1,35 @@
+/**
+ * Strategy Module
+ *
+ * DeFi strategy integration for SVS vaults. Defines interfaces for:
+ * - Lending protocols (Solend, Kamino)
+ * - Liquid staking (Marinade, Lido)
+ * - AMM liquidity provision (Orca, Raydium)
+ * - Perpetual vaults (Drift)
+ *
+ * Strategies are managed by vault operators and can be:
+ * - Active: Accepting allocations
+ * - Paused: No new allocations, existing positions held
+ * - Deprecated: Should not be used
+ * - WindingDown: Withdrawing positions
+ *
+ * @example
+ * ```ts
+ * import { StrategyType, StrategyStatus, StrategyConfig } from "./strategy";
+ *
+ * const lendingStrategy: StrategyConfig = {
+ *   id: "solend-usdc",
+ *   type: StrategyType.Lending,
+ *   programId: SOLEND_PROGRAM_ID,
+ *   name: "Solend USDC Pool",
+ *   status: StrategyStatus.Active,
+ *   maxAllocationBps: 5000, // Max 50% of vault
+ *   expectedApyBps: 800,    // ~8% APY
+ *   riskScore: 3,
+ * };
+ * ```
+ */
+
 import { PublicKey, TransactionInstruction } from "@solana/web3.js";
 import { BN } from "@coral-xyz/anchor";
 

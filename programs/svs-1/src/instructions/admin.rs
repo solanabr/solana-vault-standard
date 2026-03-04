@@ -1,3 +1,5 @@
+//! Admin instructions: pause, unpause, transfer authority.
+
 use anchor_lang::prelude::*;
 
 use crate::{

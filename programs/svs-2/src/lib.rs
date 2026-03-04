@@ -1,3 +1,9 @@
+//! SVS-2: Managed Vault with Stored Balance
+//!
+//! ERC-4626 compliant vault that stores balance in vault.total_assets rather
+//! than reading live balance. Requires explicit sync() calls to update balance.
+//! Suitable for vaults with external yield strategies.
+
 use anchor_lang::prelude::*;
 
 pub mod constants;

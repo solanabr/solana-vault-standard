@@ -1,3 +1,5 @@
+/** Tests for vault error codes and error handling */
+
 import { expect } from "chai";
 import { BN } from "@coral-xyz/anchor";
 

@@ -1,3 +1,5 @@
+/** Tests for DeFi strategy integration: allocations, deploy/recall, rebalancing */
+
 import { expect } from "chai";
 import { BN } from "@coral-xyz/anchor";
 import { PublicKey, Keypair } from "@solana/web3.js";

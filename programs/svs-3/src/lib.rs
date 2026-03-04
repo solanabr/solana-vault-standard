@@ -1,3 +1,9 @@
+//! SVS-3: Confidential Vault
+//!
+//! ERC-4626 vault with Token-2022 confidential transfer extension.
+//! Share balances are encrypted on-chain, providing privacy for depositors.
+//! Uses live balance model (reads asset_vault.amount directly).
+
 use anchor_lang::prelude::*;
 
 pub mod constants;

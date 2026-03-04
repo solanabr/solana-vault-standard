@@ -1,3 +1,5 @@
+//! Vault math: share/asset conversion with inflation attack protection.
+
 use anchor_lang::prelude::*;
 
 use crate::error::VaultError;

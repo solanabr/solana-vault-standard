@@ -1,3 +1,5 @@
+//! Withdraw instruction: withdraw from confidential balance, burn shares, transfer assets (managed vault).
+
 use anchor_lang::prelude::*;
 use anchor_lang::solana_program::program::invoke;
 use anchor_spl::{

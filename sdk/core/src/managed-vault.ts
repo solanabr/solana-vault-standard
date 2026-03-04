@@ -1,3 +1,30 @@
+/**
+ * Managed Vault Module (SVS-2)
+ *
+ * Extension of SolanaVault for stored-balance vaults. Unlike SVS-1 which
+ * reads the asset vault balance directly, SVS-2 maintains a stored
+ * `total_assets` field that is updated via explicit sync operations.
+ *
+ * This enables:
+ * - External yield strategies (assets deployed outside the vault)
+ * - Delayed balance updates (gas optimization)
+ * - Custom accounting logic
+ *
+ * @example
+ * ```ts
+ * import { ManagedVault } from "@stbr/solana-vault";
+ *
+ * // Load SVS-2 vault
+ * const vault = await ManagedVault.load(program, assetMint, 1);
+ *
+ * // Sync stored balance with actual vault balance
+ * await vault.sync(authority);
+ *
+ * // Operations work the same as SolanaVault
+ * await vault.deposit(user, { assets, minSharesOut });
+ * ```
+ */
+
 import { BN, Program, AnchorProvider } from "@coral-xyz/anchor";
 import { PublicKey, SystemProgram, SYSVAR_RENT_PUBKEY } from "@solana/web3.js";
 import {

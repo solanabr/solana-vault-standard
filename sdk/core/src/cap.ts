@@ -1,3 +1,28 @@
+/**
+ * Deposit Cap Module
+ *
+ * Deposit limit management for SVS vaults. Supports:
+ * - Global cap: Maximum total assets allowed in the vault
+ * - Per-user cap: Maximum assets per individual depositor
+ *
+ * Caps can be enabled/disabled and configured independently.
+ *
+ * @example
+ * ```ts
+ * import { checkDepositCap, getCapStatus } from "./cap";
+ *
+ * // Check if deposit is allowed
+ * const check = checkDepositCap(config, totalAssets, depositAmount, userPosition);
+ * if (!check.allowed) {
+ *   console.log(`Deposit rejected: ${check.reason}`);
+ * }
+ *
+ * // Get current utilization
+ * const status = getCapStatus(config, totalAssets, userPosition);
+ * console.log(`Global: ${status.globalUtilization}% used`);
+ * ```
+ */
+
 import { BN } from "@coral-xyz/anchor";
 import { PublicKey } from "@solana/web3.js";
 

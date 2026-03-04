@@ -1,3 +1,5 @@
+//! Initialize instruction: create confidential vault with CT-enabled shares mint.
+
 use anchor_lang::prelude::*;
 use anchor_lang::solana_program::program::invoke_signed;
 use anchor_spl::{

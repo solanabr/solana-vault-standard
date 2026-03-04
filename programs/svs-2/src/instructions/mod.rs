@@ -1,3 +1,5 @@
+//! Vault instruction handlers: deposit, mint, withdraw, redeem, admin, sync.
+
 pub mod admin;
 pub mod deposit;
 pub mod initialize;

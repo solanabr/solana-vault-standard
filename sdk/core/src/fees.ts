@@ -1,3 +1,25 @@
+/**
+ * Vault Fee Module
+ *
+ * Fee calculation utilities for SVS vaults. Supports:
+ * - Management fees: Time-based annual fee on AUM
+ * - Performance fees: Fee on profits above high-water mark
+ * - Entry/exit fees: Optional deposit/withdrawal fees
+ *
+ * All fees are specified in basis points (bps), where 10000 bps = 100%.
+ *
+ * @example
+ * ```ts
+ * import { calculateManagementFee, calculatePerformanceFee } from "./fees";
+ *
+ * // Calculate management fee for 30 days
+ * const mgmtFee = calculateManagementFee(totalAssets, 200, 30 * 86400);
+ *
+ * // Calculate performance fee with HWM
+ * const perfFee = calculatePerformanceFee(profit, highWaterMark, 2000);
+ * ```
+ */
+
 import { BN } from "@coral-xyz/anchor";
 import { PublicKey } from "@solana/web3.js";
 import { convertToShares, Rounding } from "./math";

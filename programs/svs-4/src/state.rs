@@ -1,3 +1,5 @@
+//! Vault state account definition.
+
 use anchor_lang::prelude::*;
 
 use crate::constants::VAULT_SEED;

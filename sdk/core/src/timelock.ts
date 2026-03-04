@@ -1,3 +1,37 @@
+/**
+ * Timelock Module
+ *
+ * Time-delayed admin operations for SVS vaults. Provides governance
+ * safety by requiring a waiting period before sensitive changes take effect.
+ *
+ * Features:
+ * - Configurable delay (min/max bounds)
+ * - Grace period after unlock (auto-expire if not executed)
+ * - Separate proposer and executor roles
+ * - Proposal cancellation support
+ *
+ * Timelocked actions: authority transfer, fee updates, cap changes,
+ * access control updates, pause/unpause, emergency withdrawals.
+ *
+ * @example
+ * ```ts
+ * import { createProposal, getProposalStatus, executeProposal } from "./timelock";
+ *
+ * // Propose fee update with 24h delay
+ * const proposal = createProposal(
+ *   TimelockAction.UpdateFees,
+ *   { managementFeeBps: 200 },
+ *   86400, // 1 day delay
+ * );
+ *
+ * // Check status and execute when ready
+ * const status = getProposalStatus(proposal, now);
+ * if (status === ProposalStatus.Ready) {
+ *   await executeProposal(proposal);
+ * }
+ * ```
+ */
+
 import { PublicKey } from "@solana/web3.js";
 import { createHash } from "crypto";
 

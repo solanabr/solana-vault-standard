@@ -1,3 +1,5 @@
+/** Tests for vault interfaces, params validation, and address derivation */
+
 import { expect } from "chai";
 import { PublicKey } from "@solana/web3.js";
 import { BN } from "@coral-xyz/anchor";

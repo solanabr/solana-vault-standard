@@ -1,5 +1,33 @@
+/**
+ * Vault Math Module
+ *
+ * ERC-4626 compliant share/asset conversion functions with:
+ * - Virtual offset for inflation attack protection
+ * - Configurable rounding direction
+ * - Vault-favoring rounding strategy (deposit/redeem floor, mint/withdraw ceiling)
+ *
+ * @example
+ * ```ts
+ * import { previewDeposit, convertToShares, Rounding } from "./math";
+ *
+ * // Preview shares for 1M token deposit
+ * const shares = previewDeposit(
+ *   new BN(1_000_000),
+ *   totalAssets,
+ *   totalShares,
+ *   decimalsOffset
+ * );
+ * ```
+ */
+
 import { BN } from "@coral-xyz/anchor";
 
+/**
+ * Rounding direction for share/asset conversions.
+ * Vault-favoring strategy:
+ * - Floor: Used for deposit (fewer shares) and redeem (fewer assets)
+ * - Ceiling: Used for mint (more assets) and withdraw (more shares)
+ */
 export enum Rounding {
   Floor,
   Ceiling,

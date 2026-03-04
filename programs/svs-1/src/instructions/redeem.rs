@@ -1,3 +1,5 @@
+//! Redeem instruction: burn exact shares to receive proportional assets.
+
 use anchor_lang::prelude::*;
 use anchor_spl::{
     token_2022::{self, Burn, Token2022},
