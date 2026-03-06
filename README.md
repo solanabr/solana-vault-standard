@@ -313,8 +313,11 @@ const [sharesMint] = PublicKey.findProgramAddressSync(
 # Build all programs
 anchor build
 
-# Run all tests (114 tests, requires proof backend for SVS-3/SVS-4)
+# Run all tests (256 tests, requires proof backend for SVS-3/SVS-4)
 anchor test
+
+# Run SDK tests (460 tests)
+cd sdk/core && npm test
 
 # Run SVS-1 tests only
 anchor test -- --grep "svs-1"
@@ -332,7 +335,7 @@ cd proofs-backend && cargo run
 ## Project Structure
 
 ```
-tokenized-vault-standard/
+solana-vault-standard/
 ├── programs/
 │   ├── svs-1/                    # Public vault, live balance
 │   ├── svs-2/                    # Public vault, stored balance
@@ -347,10 +350,10 @@ tokenized-vault-standard/
 │   ├── Dockerfile
 │   └── README.md
 ├── tests/
-│   ├── svs-1.ts                  # SVS-1 public vault tests (19)
-│   ├── svs-2.ts                  # SVS-2 stored balance + sync tests (30)
-│   ├── svs-3.ts                  # SVS-3 confidential live balance tests (32)
-│   ├── svs-4.ts                  # SVS-4 confidential stored balance tests (33)
+│   ├── svs-1.ts                  # SVS-1 public vault tests (26)
+│   ├── svs-2.ts                  # SVS-2 stored balance + sync tests (35)
+│   ├── svs-3.ts                  # SVS-3 confidential live balance tests (42)
+│   ├── svs-4.ts                  # SVS-4 confidential stored balance tests (43)
 │   ├── helpers/
 │   │   └── proof-client.ts       # ZK proof backend client helpers
 │   ├── admin-extended.ts         # Admin function tests
@@ -362,6 +365,8 @@ tokenized-vault-standard/
 │   └── yield-sync.ts             # Yield/live balance tests
 └── docs/
     ├── ARCHITECTURE.md          # Technical architecture
+    ├── CLI.md                   # CLI reference
+    ├── DEPLOYMENT.md            # Deployment guide
     ├── PRIVACY.md               # Privacy model & proof backend
     ├── SDK.md                   # SDK usage guide
     ├── SECURITY.md              # Attack vectors & mitigations
