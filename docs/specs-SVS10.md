@@ -313,3 +313,399 @@ To submit a new request, the user must first cancel or claim the existing one. T
 - **Operator liveness:** If the operator goes offline, requests are stuck. Mitigation: add a `cancel_after` timestamp to requests, allowing users to cancel and reclaim assets after a timeout.
 - **Escrow isolation:** Assets in `claimable_tokens` are per-user PDA-owned accounts. One user's claimable assets cannot be accessed by another user or the operator.
 - **CPI validation:** Ensure `vault.operator` is checked on every fulfill instruction. The operator address change (`set_vault_operator`) should emit an event for off-chain monitoring.
+
+---
+
+## 12. Request State Machine
+
+```
+                         ┌──────────────────────────────────────────────────────┐
+                         │                                                      │
+                         ▼                                                      │
+┌───────────┐      ┌───────────┐      ┌─────────────┐      ┌───────────────────┴─┐
+│  (none)   │─────▶│  Pending  │─────▶│ Claimable   │─────▶│      Claimed        │
+└───────────┘      └─────┬─────┘      │ (Fulfilled) │      └─────────────────────┘
+  request_               │            └─────────────┘          claim_deposit /
+  deposit /              │                  ▲                  claim_redeem
+  request_               │                  │
+  redeem                 │            fulfill_deposit /
+                         │            fulfill_redeem
+                         │
+                         ▼
+                   ┌───────────┐
+                   │ Cancelled │
+                   └───────────┘
+                     cancel_deposit /
+                     cancel_redeem
+```
+
+### State Descriptions
+
+| State | Description | Valid Transitions |
+|-------|-------------|-------------------|
+| **Pending** | Request created, assets/shares locked in escrow, awaiting operator | → Fulfilled (by operator), → Cancelled (by user) |
+| **Fulfilled** | Operator processed request, shares/assets calculated, ready to claim | → Claimed (by user/receiver) |
+| **Claimed** | User claimed their shares/assets, request account closed | (terminal state) |
+| **Cancelled** | User cancelled, escrowed tokens returned, request account closed | (terminal state) |
+
+---
+
+## 13. Cancel Flows
+
+### cancel_deposit
+
+```rust
+pub fn cancel_deposit(ctx: Context<CancelDeposit>) -> Result<()> {
+    let request = &ctx.accounts.deposit_request;
+    let vault = &ctx.accounts.vault;
+
+    // 1. Verify request is still pending
+    require!(
+        request.status == RequestStatus::Pending,
+        VaultError::RequestNotPending
+    );
+
+    // 2. Verify caller is request owner
+    require!(
+        ctx.accounts.owner.key() == request.owner,
+        VaultError::Unauthorized
+    );
+
+    // 3. Return escrowed assets to user
+    let escrow_balance = request.assets_locked;
+
+    let vault_seeds = &[
+        b"async_vault",
+        vault.asset_mint.as_ref(),
+        &vault.vault_id.to_le_bytes(),
+        &[vault.bump],
+    ];
+
+    transfer_checked(
+        CpiContext::new_with_signer(
+            ctx.accounts.token_program.to_account_info(),
+            TransferChecked {
+                from: ctx.accounts.asset_vault.to_account_info(),
+                to: ctx.accounts.user_asset_account.to_account_info(),
+                mint: ctx.accounts.asset_mint.to_account_info(),
+                authority: ctx.accounts.vault.to_account_info(),
+            },
+            &[vault_seeds],
+        ),
+        escrow_balance,
+        ctx.accounts.asset_mint.decimals,
+    )?;
+
+    // 4. Close request account (rent returned to owner)
+    // Done via close = owner constraint in account context
+
+    emit!(DepositRequestCancelled {
+        vault: vault.key(),
+        request_id: request.key(),
+        owner: request.owner,
+        assets_returned: escrow_balance,
+    });
+
+    Ok(())
+}
+
+#[derive(Accounts)]
+pub struct CancelDeposit<'info> {
+    #[account(mut)]
+    pub vault: Account<'info, AsyncVault>,
+
+    #[account(
+        mut,
+        seeds = [b"deposit_request", vault.key().as_ref(), owner.key().as_ref()],
+        bump = deposit_request.bump,
+        has_one = owner,
+        has_one = vault,
+        close = owner,  // Return rent to owner
+    )]
+    pub deposit_request: Account<'info, DepositRequest>,
+
+    pub owner: Signer<'info>,
+
+    #[account(mut)]
+    pub asset_vault: InterfaceAccount<'info, TokenAccount>,
+
+    #[account(mut)]
+    pub user_asset_account: InterfaceAccount<'info, TokenAccount>,
+
+    pub asset_mint: InterfaceAccount<'info, Mint>,
+    pub token_program: Interface<'info, TokenInterface>,
+}
+```
+
+### cancel_redeem
+
+```rust
+pub fn cancel_redeem(ctx: Context<CancelRedeem>) -> Result<()> {
+    let request = &ctx.accounts.redeem_request;
+    let vault = &ctx.accounts.vault;
+
+    // 1. Verify request is still pending
+    require!(
+        request.status == RequestStatus::Pending,
+        VaultError::RequestNotPending
+    );
+
+    // 2. Verify caller is request owner
+    require!(
+        ctx.accounts.owner.key() == request.owner,
+        VaultError::Unauthorized
+    );
+
+    // 3. Return escrowed shares to user
+    let shares_balance = request.shares_locked;
+
+    let vault_seeds = &[
+        b"async_vault",
+        vault.asset_mint.as_ref(),
+        &vault.vault_id.to_le_bytes(),
+        &[vault.bump],
+    ];
+
+    transfer_checked(
+        CpiContext::new_with_signer(
+            ctx.accounts.token_program.to_account_info(),
+            TransferChecked {
+                from: ctx.accounts.share_escrow.to_account_info(),
+                to: ctx.accounts.user_shares_account.to_account_info(),
+                mint: ctx.accounts.shares_mint.to_account_info(),
+                authority: ctx.accounts.vault.to_account_info(),
+            },
+            &[vault_seeds],
+        ),
+        shares_balance,
+        9,  // shares always 9 decimals
+    )?;
+
+    // 4. Close request account
+    emit!(RedeemRequestCancelled {
+        vault: vault.key(),
+        request_id: request.key(),
+        owner: request.owner,
+        shares_returned: shares_balance,
+    });
+
+    Ok(())
+}
+```
+
+---
+
+## 14. Operator Approval Lifecycle
+
+### 1. Grant Operator Approval
+
+User grants a third party the ability to claim on their behalf:
+
+```typescript
+// TypeScript SDK
+await vault.approveOperator(operatorPubkey, {
+  canFulfillDeposit: true,
+  canFulfillRedeem: true,
+  canClaim: true,
+});
+
+// Creates OperatorApproval PDA: ["operator_approval", vault, owner, operator]
+```
+
+```rust
+pub fn set_operator(
+    ctx: Context<SetOperator>,
+    approved: bool,
+) -> Result<()> {
+    let approval = &mut ctx.accounts.operator_approval;
+
+    if approval.owner == Pubkey::default() {
+        // Initializing new approval
+        approval.vault = ctx.accounts.vault.key();
+        approval.owner = ctx.accounts.owner.key();
+        approval.operator = ctx.accounts.operator.key();
+        approval.bump = ctx.bumps.operator_approval;
+    }
+
+    approval.approved = approved;
+
+    emit!(OperatorSet {
+        vault: ctx.accounts.vault.key(),
+        owner: ctx.accounts.owner.key(),
+        operator: ctx.accounts.operator.key(),
+        approved,
+    });
+
+    Ok(())
+}
+```
+
+### 2. Operator Actions
+
+With approval, operators can:
+
+```typescript
+// Claim deposit on behalf of user
+await vault.claimDeposit({
+  owner: userPubkey,
+  operator: operatorKeypair,  // Signer is operator, not owner
+});
+
+// Claim redeem on behalf of user
+await vault.claimRedeem({
+  owner: userPubkey,
+  operator: operatorKeypair,
+});
+```
+
+### 3. Revoke Operator Approval
+
+```typescript
+// Revoke approval
+await vault.revokeOperator(operatorPubkey);
+
+// Closes OperatorApproval PDA, recovers rent
+```
+
+### OperatorApproval PDA Structure
+
+```rust
+#[account]
+pub struct OperatorApproval {
+    pub vault: Pubkey,             // 32 - Which vault this applies to
+    pub owner: Pubkey,             // 32 - Who granted approval
+    pub operator: Pubkey,          // 32 - Who received approval
+    pub can_fulfill_deposit: bool, // 1  - Can operator fulfill deposits?
+    pub can_fulfill_redeem: bool,  // 1  - Can operator fulfill redeems?
+    pub can_claim: bool,           // 1  - Can operator claim on owner's behalf?
+    pub bump: u8,                  // 1
+}
+// Total: 100 bytes
+// Seeds: ["operator_approval", vault, owner, operator]
+```
+
+### Operator Validation in Instructions
+
+```rust
+/// Check if signer is authorized (owner or approved operator)
+pub fn validate_claim_authority(
+    signer: &Signer,
+    request_owner: Pubkey,
+    operator_approval: Option<&Account<OperatorApproval>>,
+) -> Result<()> {
+    // Owner can always claim
+    if signer.key() == request_owner {
+        return Ok(());
+    }
+
+    // Check operator approval
+    match operator_approval {
+        Some(approval) => {
+            require!(
+                approval.operator == signer.key(),
+                VaultError::Unauthorized
+            );
+            require!(
+                approval.owner == request_owner,
+                VaultError::Unauthorized
+            );
+            require!(
+                approval.can_claim,
+                VaultError::OperatorNotApproved
+            );
+            Ok(())
+        }
+        None => Err(error!(VaultError::Unauthorized)),
+    }
+}
+```
+
+---
+
+## 15. Escrow Account Lifecycle
+
+### Deposit Flow Escrow
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│ request_deposit                                                     │
+│ ─────────────────                                                   │
+│ User's assets → asset_vault (shared pool)                           │
+│ DepositRequest PDA created (assets_locked recorded)                 │
+└─────────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│ fulfill_deposit                                                     │
+│ ─────────────────                                                   │
+│ Operator sets shares_claimable on DepositRequest                    │
+│ vault.total_assets += assets_locked                                 │
+│ vault.total_shares += shares_claimable (reserved)                   │
+│ No token movement                                                   │
+└─────────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│ claim_deposit                                                       │
+│ ─────────────────                                                   │
+│ Mint shares_claimable to receiver                                   │
+│ Close DepositRequest PDA (rent → owner)                             │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### Redeem Flow Escrow
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│ request_redeem                                                      │
+│ ─────────────────                                                   │
+│ User's shares → share_escrow (PDA-owned)                            │
+│ RedeemRequest PDA created (shares_locked recorded)                  │
+└─────────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│ fulfill_redeem                                                      │
+│ ─────────────────                                                   │
+│ Calculate assets = convert_to_assets(shares_locked, ...)           │
+│ Burn shares from share_escrow                                       │
+│ Transfer assets: asset_vault → claimable_tokens (per-user PDA)      │
+│ Create ClaimableEscrow PDA                                          │
+│ vault.total_assets -= assets                                        │
+│ vault.total_shares -= shares_locked                                 │
+└─────────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│ claim_redeem                                                        │
+│ ─────────────────                                                   │
+│ Transfer assets: claimable_tokens → receiver wallet                 │
+│ Close claimable_tokens account (rent → owner)                       │
+│ Close ClaimableEscrow PDA (rent → owner)                            │
+│ Close RedeemRequest PDA (rent → owner)                              │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 16. Compute Unit Estimates
+
+| Instruction | Approximate CU | Notes |
+|-------------|---------------|-------|
+| `initialize` | ~35,000 | Create vault + mint + asset_vault + share_escrow |
+| `request_deposit` | ~20,000 | Transfer + create DepositRequest PDA |
+| `cancel_deposit` | ~15,000 | Transfer + close PDA |
+| `fulfill_deposit` | ~25,000 | State updates, optional oracle read |
+| `claim_deposit` | ~30,000 | Mint shares + close PDA |
+| `request_redeem` | ~25,000 | Transfer shares + create RedeemRequest |
+| `cancel_redeem` | ~15,000 | Transfer + close PDA |
+| `fulfill_redeem` | ~40,000 | Burn + transfer + create escrow accounts |
+| `claim_redeem` | ~25,000 | Transfer + close 3 accounts |
+
+---
+
+## See Also
+
+- [SVS-11](./specs-SVS11.md) — Credit Markets (extends async with KYC)
+- [ERC-7540](https://eips.ethereum.org/EIPS/eip-7540) — Original EVM specification
+- [ARCHITECTURE.md](./ARCHITECTURE.md) — Cross-variant design

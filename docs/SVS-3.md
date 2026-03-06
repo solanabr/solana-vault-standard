@@ -339,8 +339,78 @@ Same virtual offset mechanism as SVS-1. Share price manipulation via donation at
 
 ---
 
+---
+
+## Proof Size Reference
+
+| Proof Type | Size (bytes) | When Required |
+|------------|--------------|---------------|
+| PubkeyValidityProof | 64 | `configure_account` (one-time) |
+| CiphertextCommitmentEqualityProof | 192 | `withdraw`, `redeem` |
+| BatchedRangeProofU64 | 672+ | `withdraw`, `redeem` |
+| **Total for withdraw/redeem** | **~864+** | Per operation |
+
+### Context State Accounts
+
+Range proof data exceeds single transaction size. Use context state accounts:
+
+```typescript
+// Transaction 1: Create context state account
+const contextStatePda = await createContextStateAccount(proofData);
+
+// Transaction 2: Use context in withdraw
+await vault.withdraw({
+  assets,
+  equalityProofContext: contextStatePda,
+  rangeProofContext: contextStatePda,
+  // ...
+});
+```
+
+**Lesson Learned (2026-03)**: Always split proof submission into separate transactions.
+
+---
+
+## Compute Units
+
+| Instruction | Approximate CU |
+|-------------|---------------|
+| `configure_account` | ~80,000 |
+| `apply_pending` | ~40,000 |
+| `deposit` | ~150,000 |
+| `withdraw` | ~180,000 |
+| `redeem` | ~180,000 |
+
+CT proof verification accounts for ~100k CU of withdraw/redeem cost.
+
+---
+
+## Error Codes
+
+In addition to [core errors](ERRORS.md):
+
+| Code | Name | Message |
+|------|------|---------|
+| 6020 | `InvalidProof` | Invalid zero-knowledge proof |
+| 6021 | `ProofContextMismatch` | Proof context account mismatch |
+| 6022 | `PendingBalanceNotEmpty` | Pending balance must be empty |
+| 6023 | `ConfidentialTransferDisabled` | CT not enabled on account |
+
+---
+
+## Implementation Files
+
+| File | Purpose |
+|------|---------|
+| `programs/svs-3/src/instructions/configure_account.rs` | CT setup |
+| `programs/svs-3/src/instructions/apply_pending.rs` | Pending→available |
+| `proofs-backend/src/` | ZK proof generation server |
+
+---
+
 **See Also:**
 - [SVS-1.md](./SVS-1.md) — Base live balance model
 - [SVS-4.md](./SVS-4.md) — SVS-3 + stored balance (sync)
 - [PRIVACY.md](./PRIVACY.md) — Privacy model details
 - [ARCHITECTURE.md](./ARCHITECTURE.md) — Cross-variant architecture
+- [PATTERNS.md](./PATTERNS.md) — Implementation patterns

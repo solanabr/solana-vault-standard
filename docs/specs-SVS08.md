@@ -238,3 +238,298 @@ For vaults that want to enforce balanced deposits, `deposit_proportional` is the
 - **Oracle dependency.** Every financial operation requires fresh prices for ALL basket assets. A single stale oracle blocks the entire vault.
 - **No atomic rebalancing.** Rebalance swaps are separate transactions. MEV is possible between legs of a multi-step rebalance. Mitigation: use Jupiter's route API for optimal execution in a single tx.
 - **Share price tracking.** Divergence between actual portfolio weights and target weights means share price reflects actual holdings, not target allocation.
+
+---
+
+## 12. Jupiter CPI Integration
+
+Rebalancing uses Jupiter aggregator for optimal swap execution:
+
+```rust
+/// Rebalance via Jupiter aggregator
+pub fn rebalance_jupiter(
+    ctx: Context<RebalanceJupiter>,
+    route_data: Vec<u8>,  // Jupiter route payload (serialized)
+    minimum_out: u64,     // Slippage protection
+) -> Result<()> {
+    let vault = &ctx.accounts.vault;
+
+    // 1. Validate authority
+    require!(ctx.accounts.authority.key() == vault.authority, VaultError::Unauthorized);
+
+    // 2. Validate Jupiter program ID
+    let jupiter_program = Pubkey::from_str("JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4")
+        .map_err(|_| VaultError::InvalidProgram)?;
+    require!(
+        ctx.accounts.jupiter_program.key() == jupiter_program,
+        VaultError::InvalidProgram
+    );
+
+    // 3. Deserialize route to get expected amounts
+    let route = JupiterRoute::deserialize(&route_data)?;
+
+    // 4. Record balances before swap
+    let from_balance_before = ctx.accounts.from_asset_vault.amount;
+    let to_balance_before = ctx.accounts.to_asset_vault.amount;
+
+    // 5. Execute swap via Jupiter CPI
+    // Note: remaining_accounts contains all Jupiter route accounts
+    let vault_seeds = &[
+        b"multi_vault",
+        &vault.vault_id.to_le_bytes(),
+        &[vault.bump],
+    ];
+    let signer_seeds = &[&vault_seeds[..]];
+
+    invoke_signed(
+        &jupiter_instruction(&route_data, &ctx.remaining_accounts),
+        &ctx.remaining_accounts.to_vec(),
+        signer_seeds,
+    )?;
+
+    // 6. Reload and verify output
+    ctx.accounts.to_asset_vault.reload()?;
+    let received = ctx.accounts.to_asset_vault.amount
+        .checked_sub(to_balance_before)
+        .ok_or(VaultError::MathOverflow)?;
+
+    require!(received >= minimum_out, VaultError::SlippageExceeded);
+
+    // 7. Validate weight invariant still holds
+    // (Portfolio value should be approximately the same, just rebalanced)
+
+    emit!(Rebalance {
+        vault: vault.key(),
+        from_asset: ctx.accounts.from_asset_mint.key(),
+        to_asset: ctx.accounts.to_asset_mint.key(),
+        amount_in: from_balance_before - ctx.accounts.from_asset_vault.amount,
+        amount_out: received,
+    });
+
+    Ok(())
+}
+
+#[derive(Accounts)]
+pub struct RebalanceJupiter<'info> {
+    #[account(mut, has_one = authority)]
+    pub vault: Account<'info, MultiAssetVault>,
+
+    pub authority: Signer<'info>,
+
+    #[account(mut)]
+    pub from_asset_vault: InterfaceAccount<'info, TokenAccount>,
+
+    #[account(mut)]
+    pub to_asset_vault: InterfaceAccount<'info, TokenAccount>,
+
+    pub from_asset_mint: InterfaceAccount<'info, Mint>,
+    pub to_asset_mint: InterfaceAccount<'info, Mint>,
+
+    /// CHECK: Validated against known Jupiter program ID
+    pub jupiter_program: UncheckedAccount<'info>,
+
+    pub token_program: Interface<'info, TokenInterface>,
+
+    // remaining_accounts: Jupiter route accounts (varies per route)
+}
+```
+
+---
+
+## 13. Oracle Staleness Validation
+
+```rust
+/// Validate oracle price is fresh and confident
+pub fn validate_oracle_price(
+    oracle: &AccountInfo,
+    max_staleness_secs: u64,
+    max_confidence_pct: u64,  // e.g., 100 = 1%
+) -> Result<OraclePrice> {
+    let clock = Clock::get()?;
+    let current_time = clock.unix_timestamp as u64;
+
+    // Pyth price feed validation
+    let price_feed = load_price_feed_from_account_info(oracle)
+        .map_err(|_| VaultError::InvalidOracle)?;
+
+    let price_data = price_feed.get_price_no_older_than(
+        current_time as i64,
+        max_staleness_secs,
+    ).ok_or(VaultError::OracleStale)?;
+
+    // Check confidence interval
+    // confidence should be < price * max_confidence_pct / 10000
+    let price_abs = price_data.price.abs() as u64;
+    let max_confidence = price_abs
+        .checked_mul(max_confidence_pct)?
+        .checked_div(10000)?;
+
+    require!(
+        (price_data.conf as u64) <= max_confidence,
+        VaultError::OracleUncertain
+    );
+
+    Ok(OraclePrice {
+        price: price_data.price,
+        expo: price_data.expo,
+        confidence: price_data.conf,
+        updated_at: price_data.publish_time,
+    })
+}
+
+/// Read all basket prices, blocking if any are stale
+pub fn read_all_prices(
+    assets: &[AssetEntry],
+    oracles: &[AccountInfo],
+    max_staleness: u64,
+) -> Result<Vec<u64>> {
+    let mut prices = Vec::with_capacity(assets.len());
+
+    for (asset, oracle) in assets.iter().zip(oracles.iter()) {
+        let price = validate_oracle_price(oracle, max_staleness, 100)?;  // 1% confidence
+
+        // Normalize to base decimals
+        let normalized = normalize_price(price.price, price.expo, asset.asset_decimals)?;
+        prices.push(normalized);
+    }
+
+    Ok(prices)
+}
+```
+
+### Oracle Staleness Behavior
+
+| Scenario | Behavior |
+|----------|----------|
+| All oracles fresh | Operations proceed normally |
+| One oracle stale | ALL operations blocked (deposit, redeem, rebalance) |
+| Oracle confidence too wide | Treated as stale, operations blocked |
+| Oracle account invalid | Transaction fails with `InvalidOracle` |
+
+**Rationale**: A multi-asset vault cannot compute accurate share prices with partial price data. Better to fail fast than allow incorrect valuations.
+
+---
+
+## 14. add_asset Pseudocode
+
+```rust
+pub fn add_asset(
+    ctx: Context<AddAsset>,
+    target_weight_bps: u16,
+) -> Result<()> {
+    let vault = &mut ctx.accounts.vault;
+
+    // 1. Validate authority
+    require!(
+        ctx.accounts.authority.key() == vault.authority,
+        VaultError::Unauthorized
+    );
+
+    // 2. Validate max assets not exceeded
+    require!(vault.num_assets < 8, VaultError::MaxAssetsExceeded);
+
+    // 3. Calculate current total weight
+    let mut current_total_weight: u16 = 0;
+    // Note: would need to iterate existing AssetEntry accounts
+    // Passed as remaining_accounts for efficiency
+    for asset_info in ctx.remaining_accounts.iter() {
+        let asset: Account<AssetEntry> = Account::try_from(asset_info)?;
+        current_total_weight = current_total_weight
+            .checked_add(asset.target_weight_bps)
+            .ok_or(VaultError::MathOverflow)?;
+    }
+
+    // 4. Validate new weight won't exceed 10000 bps
+    require!(
+        current_total_weight.checked_add(target_weight_bps).ok_or(VaultError::MathOverflow)? <= 10000,
+        VaultError::InvalidWeight
+    );
+
+    // 5. Validate oracle is readable
+    validate_oracle_price(
+        &ctx.accounts.oracle,
+        300,  // 5 minute staleness for setup
+        500,  // 5% confidence for setup
+    )?;
+
+    // 6. Initialize AssetEntry PDA
+    let asset_entry = &mut ctx.accounts.asset_entry;
+    asset_entry.vault = vault.key();
+    asset_entry.asset_mint = ctx.accounts.asset_mint.key();
+    asset_entry.asset_vault = ctx.accounts.asset_vault.key();
+    asset_entry.oracle = ctx.accounts.oracle.key();
+    asset_entry.target_weight_bps = target_weight_bps;
+    asset_entry.asset_decimals = ctx.accounts.asset_mint.decimals;
+    asset_entry.index = vault.num_assets;
+    asset_entry.bump = ctx.bumps.asset_entry;
+
+    // 7. Increment asset count
+    vault.num_assets = vault.num_assets.checked_add(1).ok_or(VaultError::MathOverflow)?;
+
+    emit!(AssetAdded {
+        vault: vault.key(),
+        asset_mint: ctx.accounts.asset_mint.key(),
+        oracle: ctx.accounts.oracle.key(),
+        target_weight_bps,
+        index: asset_entry.index,
+    });
+
+    Ok(())
+}
+
+#[derive(Accounts)]
+pub struct AddAsset<'info> {
+    #[account(mut, has_one = authority)]
+    pub vault: Account<'info, MultiAssetVault>,
+
+    pub authority: Signer<'info>,
+
+    pub asset_mint: InterfaceAccount<'info, Mint>,
+
+    /// CHECK: Validated via oracle reading
+    pub oracle: UncheckedAccount<'info>,
+
+    #[account(
+        init,
+        payer = authority,
+        space = 8 + AssetEntry::INIT_SPACE,
+        seeds = [b"asset_entry", vault.key().as_ref(), asset_mint.key().as_ref()],
+        bump,
+    )]
+    pub asset_entry: Account<'info, AssetEntry>,
+
+    #[account(
+        init,
+        payer = authority,
+        token::mint = asset_mint,
+        token::authority = vault,
+    )]
+    pub asset_vault: InterfaceAccount<'info, TokenAccount>,
+
+    pub token_program: Interface<'info, TokenInterface>,
+    pub system_program: Program<'info, System>,
+
+    // remaining_accounts: existing AssetEntry accounts for weight calculation
+}
+```
+
+---
+
+## 15. Compute Unit Estimates
+
+| Instruction | Approximate CU | Notes |
+|-------------|---------------|-------|
+| `initialize` | ~25,000 | Create vault + shares mint |
+| `add_asset` | ~35,000 | Create AssetEntry + asset_vault |
+| `deposit_single` | ~50,000 | Read all oracles + transfer + mint |
+| `deposit_proportional` | ~80,000 | N transfers + N oracle reads |
+| `redeem_proportional` | ~90,000 | N transfers + burn |
+| `rebalance` | ~100,000+ | Jupiter CPI (varies by route) |
+
+---
+
+## See Also
+
+- [SVS-1](./SVS-1.md) — Base single-asset vault
+- [specs-modules.md](./specs-modules.md#36-svs-oracle) — Oracle module interface
+- [ARCHITECTURE.md](./ARCHITECTURE.md) — Cross-variant design

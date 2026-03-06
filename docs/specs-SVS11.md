@@ -229,17 +229,120 @@ The vault reads an external attestation PDA at request and approval time:
 
 ```rust
 /// External attestation account (owned by attestation program)
+#[account]
 pub struct Attestation {
-    pub subject: Pubkey,         // the investor wallet
-    pub attester: Pubkey,        // who issued this (must match vault.attester)
-    pub valid_until: i64,        // expiry timestamp
-    // schema fields TBD for future phases
+    pub subject: Pubkey,          // 32 - User being attested (investor wallet)
+    pub issuer: Pubkey,           // 32 - KYC provider who issued this attestation
+    pub attestation_type: u8,     // 1  - 0=KYC, 1=Accredited, 2=Qualified Purchaser
+    pub country_code: [u8; 2],    // 2  - ISO 3166-1 alpha-2 (e.g., "BR", "US")
+    pub issued_at: i64,           // 8  - Unix timestamp when issued
+    pub expires_at: i64,          // 8  - Unix timestamp (0 = never expires)
+    pub revoked: bool,            // 1  - Can be revoked by issuer
+    pub bump: u8,                 // 1  - PDA bump
+    pub _reserved: [u8; 32],      // 32 - Future use
+}
+// Total: 117 bytes (+ 8-byte Anchor discriminator = 125 bytes)
+// Seeds: ["attestation", subject, issuer, attestation_type]
+```
+
+### 8.1 Attestation Type Enum
+
+```rust
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, PartialEq)]
+#[repr(u8)]
+pub enum AttestationType {
+    Kyc = 0,               // Basic identity verification
+    AccreditedInvestor = 1, // SEC accredited investor (US)
+    QualifiedPurchaser = 2, // SEC qualified purchaser (US)
+    ProfessionalInvestor = 3, // MiFID professional client (EU)
+    InvestidorQualificado = 4, // CVM qualified investor (BR)
+}
+```
+
+### 8.2 Attestation Validation
+
+```rust
+pub fn validate_attestation(
+    attestation: &Attestation,
+    vault: &CreditVault,
+    clock: &Clock,
+) -> Result<()> {
+    // 1. Check issuer matches vault's trusted attester
+    require!(
+        attestation.issuer == vault.attester,
+        VaultError::InvalidAttester
+    );
+
+    // 2. Check attestation is not revoked
+    require!(!attestation.revoked, VaultError::AttestationRevoked);
+
+    // 3. Check expiration (0 = never expires)
+    if attestation.expires_at > 0 {
+        require!(
+            attestation.expires_at > clock.unix_timestamp,
+            VaultError::AttestationExpired
+        );
+    }
+
+    // 4. Optionally check country restrictions (vault-specific config)
+    // This would be checked against a vault.allowed_countries list if configured
+
+    Ok(())
 }
 ```
 
 The vault does NOT know how KYC was conducted. It only verifies that a valid attestation exists from the trusted attester and hasn't expired. The attestation protocol (Solana Attestation Service, Civic Pass, or custom) is pluggable — the vault reads any account that matches this layout.
 
 Re-validation at approval time is critical: KYC could expire between request and manager processing.
+
+### 8.3 KYC Validation Timing
+
+| Operation | When Checked | Failure Behavior |
+|-----------|--------------|------------------|
+| `request_deposit` | At request creation | Reject immediately, return assets |
+| `approve_deposit` | At approval | Reject if expired/revoked, leave request pending |
+| `claim_shares` | **Not checked** | Allow (was valid at approval time) |
+| `request_redeem` | At request creation | Reject if expired/revoked |
+| `approve_redeem` | At approval | Reject if expired/revoked, leave request pending |
+| `claim_redemption` | **Not checked** | Allow (was valid at approval time) |
+
+**Rationale:**
+- Check at commitment points (request creation, manager approval)
+- Don't re-check at claim time — user already committed, blocking claim would be unfair
+- Allows grace period for KYC renewal without blocking existing approved claims
+
+### 8.4 KYC Timing Example
+
+```
+Day 0:  Alice's KYC attestation valid (expires Day 15)
+        Alice calls request_deposit(100_000) ✓ passes
+        InvestmentRequest PDA created
+
+Day 5:  Manager calls approve_deposit(alice_request) ✓ passes
+        Shares minted to Alice's account
+
+Day 10: Alice's KYC expires (attestation.expires_at passed)
+
+Day 12: Alice calls claim_shares() ✓ ALLOWED
+        (Was valid at approval time - no re-check)
+
+Day 13: Alice calls request_redeem(50_shares) ✗ REJECTED
+        Error: AttestationExpired
+        Alice must renew KYC before new requests
+
+Day 20: Alice renews KYC (new attestation, expires Day 50)
+        Alice calls request_redeem(50_shares) ✓ passes
+
+Day 25: Manager calls approve_redeem(alice_request) ✓ passes
+        Shares burned, assets moved to ClaimableEscrow
+
+Day 35: Alice's new KYC expires again
+
+Day 40: Alice calls claim_redemption() ✓ ALLOWED
+        (Was valid at approval time - no re-check)
+```
+
+This pattern ensures investors are never trapped with funds they cannot access due to administrative timing issues, while still enforcing compliance at decision points.
 
 ---
 
@@ -380,3 +483,34 @@ Group 5 — Compliance:
   freeze_account, unfreeze_account
   Test: frozen investor blocked from requests, existing claims unaffected
 ```
+
+---
+
+## 16. Compute Unit Estimates
+
+| Instruction | Approximate CU | Notes |
+|-------------|---------------|-------|
+| `initialize_pool` | ~45,000 | Create vault PDA + shares mint + deposit vault + redemption escrow |
+| `open/close_investment_window` | ~8,000 | State update only |
+| `request_deposit` | ~55,000 | Attestation check + transfer + PDA creation |
+| `approve_deposit` | ~65,000 | Oracle read + attestation re-check + mint shares |
+| `reject_deposit` | ~35,000 | Transfer back + close PDA |
+| `cancel_deposit` | ~35,000 | Transfer back + close PDA |
+| `request_redeem` | ~50,000 | Attestation check + share transfer + PDA creation |
+| `approve_redeem` | ~70,000 | Oracle read + attestation re-check + burn + escrow creation |
+| `claim_redemption` | ~30,000 | Transfer + close escrow |
+| `repay` | ~25,000 | Transfer + state update |
+| `freeze_account` | ~20,000 | Create FrozenAccount PDA |
+| `unfreeze_account` | ~15,000 | Close FrozenAccount PDA |
+
+**Note**: Attestation validation adds ~15-20k CU due to cross-program account read and validation. Oracle read adds ~10k CU. Budget 100k CU for approve operations.
+
+---
+
+## See Also
+
+- [SVS-10](./specs-SVS10.md) — Base async vault pattern
+- [SVS-12](./specs-SVS12.md) — Tranched vault (often combined with SVS-11)
+- [specs-modules.md](./specs-modules.md) — Module system for fees, caps, locks
+- [ARCHITECTURE.md](./ARCHITECTURE.md) — Cross-variant design patterns
+- [SECURITY.md](./SECURITY.md) — Security considerations

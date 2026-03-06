@@ -625,9 +625,74 @@ function DepositButton({ vault, amount }: { vault: SolanaVault; amount: BN }) {
 4. **Use preview functions** - Calculate expected amounts before transactions
 5. **Cache vault instance** - Reuse `SolanaVault` object, don't recreate
 
+## Multi-Variant Detection
+
+When working with vaults of unknown type, use the account discriminator to detect the variant:
+
+```typescript
+import { SolanaVault, ManagedVault } from "@stbr/solana-vault";
+import { Connection, PublicKey } from "@solana/web3.js";
+
+// Account discriminators (first 8 bytes)
+const VAULT_DISCRIMINATOR = Buffer.from([211, 8, 232, 43, 2, 152, 117, 119]);
+const CONFIDENTIAL_VAULT_DISCRIMINATOR = Buffer.from([/* SVS-3/4 discriminator */]);
+
+async function detectVaultVariant(
+  connection: Connection,
+  vaultAddress: PublicKey
+): Promise<"svs-1" | "svs-2" | "svs-3" | "svs-4" | null> {
+  const accountInfo = await connection.getAccountInfo(vaultAddress);
+  if (!accountInfo) return null;
+
+  const discriminator = accountInfo.data.slice(0, 8);
+
+  // Check program owner for variant detection
+  const programId = accountInfo.owner.toBase58();
+
+  switch (programId) {
+    case "Bv8aVSQ3DJUe3B7TqQZRZgrNvVTh8TjfpwpoeR1ckDMC":
+      return "svs-1";
+    case "3UrYrxh1HmVgq7WPygZ5x1gNEaWFwqTMs7geNqMnsrtD":
+      return "svs-2";
+    case "EcpnYtaCBrZ4p4uq7dDr55D3fL9nsxbCNqpyUREGpPkh":
+      return "svs-3";
+    case "2WP7LXWqrp1W4CwEJuVt2SxWPNY2n6AYmijh6Z4EeidY":
+      return "svs-4";
+    default:
+      return null;
+  }
+}
+
+// Usage
+const variant = await detectVaultVariant(connection, vaultPda);
+if (variant === "svs-1" || variant === "svs-2") {
+  // Use SolanaVault or ManagedVault
+} else if (variant === "svs-3" || variant === "svs-4") {
+  // Use ConfidentialSolanaVault from privacy SDK
+}
+```
+
+## Method-to-Instruction Mapping
+
+| SDK Method | On-Chain Instruction | Accounts Required |
+|------------|---------------------|-------------------|
+| `SolanaVault.create()` | `initialize` | vault, authority, asset_mint, shares_mint, asset_vault |
+| `vault.deposit()` | `deposit` | vault, shares_mint, asset_vault, user_asset, user_shares |
+| `vault.mint()` | `mint` | vault, shares_mint, asset_vault, user_asset, user_shares |
+| `vault.withdraw()` | `withdraw` | vault, shares_mint, asset_vault, user_asset, user_shares |
+| `vault.redeem()` | `redeem` | vault, shares_mint, asset_vault, user_asset, user_shares |
+| `vault.pause()` | `pause` | vault, authority |
+| `vault.unpause()` | `unpause` | vault, authority |
+| `vault.transferAuthority()` | `transfer_authority` | vault, authority, new_authority |
+| `managedVault.sync()` | `sync` | vault, asset_vault, authority |
+
 ## See Also
 
 - [Architecture](./ARCHITECTURE.md) - Technical deep-dive
+- [Patterns](./PATTERNS.md) - Implementation patterns for contributors
+- [Errors](./ERRORS.md) - Complete error code reference
+- [Constants](./CONSTANTS.md) - PDA seeds and numeric limits
+- [Events](./EVENTS.md) - Event definitions for indexers
 - [Security](./SECURITY.md) - Security considerations
 - [Testing](./TESTING.md) - Test coverage
 
@@ -963,6 +1028,10 @@ Output in `dist/`:
 
 ## See Also
 
+- [SVS-3 Specification](./SVS-3.md) - Confidential live balance vault
+- [SVS-4 Specification](./SVS-4.md) - Confidential stored balance vault
 - [Privacy Architecture](./PRIVACY.md) - Detailed privacy documentation
+- [Patterns](./PATTERNS.md) - Implementation patterns
+- [Errors](./ERRORS.md) - Error code reference (including CT errors 6020-6023)
 - [Security](./SECURITY.md) - Security considerations
 - [Architecture](./ARCHITECTURE.md) - Technical deep-dive

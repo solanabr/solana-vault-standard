@@ -317,8 +317,91 @@ if (actual > stored) {
 
 ---
 
-**Next Steps**:
-- Review SVS-1.md for comparison
-- Test sync timing attack scenarios
-- Implement automated sync monitoring
-- Evaluate SVS-3 (Rate-Limited Balance) for additional security
+## Sync Deep Dive
+
+### Sync vs Arithmetic Updates
+
+| Event | total_assets Update | Source |
+|-------|---------------------|--------|
+| `deposit(1000)` | `+= 1000` | Arithmetic |
+| `withdraw(500)` | `-= 500` | Arithmetic |
+| External yield | Unchanged until `sync()` | Manual |
+| `sync()` | `= asset_vault.amount` | Token account read |
+
+### Automated Sync Patterns
+
+```typescript
+// Crank bot pattern
+async function syncCrank(vault: ManagedVault, interval: number) {
+  while (true) {
+    const stored = await vault.storedTotalAssets();
+    const actual = await vault.actualTotalAssets();
+
+    if (actual > stored) {
+      console.log(`Syncing ${actual - stored} unrecognized assets`);
+      await vault.sync(authority.publicKey);
+    }
+
+    await sleep(interval);
+  }
+}
+
+// Event-driven pattern
+connection.onAccountChange(assetVault, async (accountInfo) => {
+  const balance = unpackAccount(accountInfo).amount;
+  const stored = await vault.storedTotalAssets();
+
+  if (balance > stored * 1.001n) {  // 0.1% threshold
+    await vault.sync(authority.publicKey);
+  }
+});
+```
+
+### Timing Mitigation Strategies
+
+| Strategy | Implementation | Trade-off |
+|----------|----------------|-----------|
+| **Automated sync** | Crank bot monitors balance | Requires off-chain infrastructure |
+| **Timelock** | Delay between sync and authority deposits | Slower operations |
+| **Multisig** | Require N-of-M signatures for sync | Coordination overhead |
+| **Public announcement** | Announce sync X blocks ahead | Information leakage |
+| **Sync insurance** | Deposit bond forfeited on manipulation | Capital requirement |
+
+---
+
+## Error Codes
+
+In addition to [core errors](ERRORS.md):
+
+| Code | Name | Message |
+|------|------|---------|
+| 6011 | `SyncRequired` | Vault balance out of sync |
+
+---
+
+## Compute Units
+
+| Instruction | Approximate CU |
+|-------------|---------------|
+| `sync` | ~8,000 |
+| `deposit` | ~27,000 |
+| `withdraw` | ~32,000 |
+| Others | Same as SVS-1 |
+
+---
+
+## Implementation Files
+
+| File | Purpose |
+|------|---------|
+| `programs/svs-2/src/lib.rs` | Program entry |
+| `programs/svs-2/src/instructions/sync.rs` | sync() handler |
+| `programs/svs-2/src/state.rs` | Vault with active total_assets |
+
+---
+
+**See Also**:
+- [SVS-1.md](./SVS-1.md) — Live balance comparison
+- [SVS-4.md](./SVS-4.md) — Stored balance + confidential
+- [ARCHITECTURE.md](./ARCHITECTURE.md) — Cross-variant design
+- [PATTERNS.md](./PATTERNS.md) — Implementation patterns

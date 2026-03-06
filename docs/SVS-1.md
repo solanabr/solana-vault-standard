@@ -242,17 +242,333 @@ Published to npm as `@stbr/solana-vault-idl`. SDK auto-imports.
 
 ## Differences from Other SVS Variants
 
-| Feature | SVS-1 (Live) | SVS-2 (Cached) | SVS-3 (Rebasing) |
-|---------|--------------|----------------|------------------|
+| Feature | SVS-1 (Live) | SVS-2 (Stored) | SVS-3 (Confidential Live) |
+|---------|--------------|----------------|---------------------------|
 | **Balance Source** | `asset_vault.amount` | `vault.total_assets` | `asset_vault.amount` |
-| **Sync Needed** | ❌ No | ✅ Yes (`sync()`) | ❌ No (auto-rebase) |
+| **Sync Needed** | ❌ No | ✅ Yes (`sync()`) | ❌ No |
 | **External Donations** | Immediate | After `sync()` | Immediate |
 | **State Staleness** | Never | Possible | Never |
-| **Compute Cost** | +1 account read | Baseline | +1 account read |
-| **Complexity** | Lowest | Medium | Highest |
+| **Privacy** | Public | Public | Encrypted balances |
+| **Compute Cost** | ~25k CU | ~27k CU | ~150k CU |
+
+---
+
+## Account Contexts
+
+### Initialize Context
+
+From `programs/svs-1/src/instructions/initialize.rs:21-60`:
+
+```rust
+#[derive(Accounts)]
+#[instruction(vault_id: u64)]
+pub struct Initialize<'info> {
+    #[account(mut)]
+    pub authority: Signer<'info>,
+
+    #[account(
+        init,
+        payer = authority,
+        space = Vault::LEN,
+        seeds = [VAULT_SEED, asset_mint.key().as_ref(), &vault_id.to_le_bytes()],
+        bump
+    )]
+    pub vault: Account<'info, Vault>,
+
+    pub asset_mint: InterfaceAccount<'info, Mint>,
+
+    /// CHECK: Initialized via CPI
+    #[account(
+        mut,
+        seeds = [SHARES_MINT_SEED, vault.key().as_ref()],
+        bump
+    )]
+    pub shares_mint: UncheckedAccount<'info>,
+
+    #[account(
+        init,
+        payer = authority,
+        associated_token::mint = asset_mint,
+        associated_token::authority = vault,
+        associated_token::token_program = asset_token_program,
+    )]
+    pub asset_vault: InterfaceAccount<'info, TokenAccount>,
+
+    pub asset_token_program: Interface<'info, TokenInterface>,
+    pub token_2022_program: Program<'info, Token2022>,
+    pub associated_token_program: Program<'info, AssociatedToken>,
+    pub system_program: Program<'info, System>,
+    pub rent: Sysvar<'info, Rent>,
+}
+```
+
+### Deposit Context
+
+From `programs/svs-1/src/instructions/deposit.rs:18-65`:
+
+```rust
+#[derive(Accounts)]
+pub struct Deposit<'info> {
+    #[account(mut)]
+    pub user: Signer<'info>,
+
+    #[account(constraint = !vault.paused @ VaultError::VaultPaused)]
+    pub vault: Account<'info, Vault>,
+
+    #[account(constraint = asset_mint.key() == vault.asset_mint)]
+    pub asset_mint: InterfaceAccount<'info, Mint>,
+
+    #[account(
+        mut,
+        constraint = user_asset_account.mint == vault.asset_mint,
+        constraint = user_asset_account.owner == user.key(),
+    )]
+    pub user_asset_account: InterfaceAccount<'info, TokenAccount>,
+
+    #[account(mut, constraint = asset_vault.key() == vault.asset_vault)]
+    pub asset_vault: InterfaceAccount<'info, TokenAccount>,
+
+    #[account(mut, constraint = shares_mint.key() == vault.shares_mint)]
+    pub shares_mint: InterfaceAccount<'info, Mint>,
+
+    #[account(
+        init_if_needed,
+        payer = user,
+        associated_token::mint = shares_mint,
+        associated_token::authority = user,
+        associated_token::token_program = token_2022_program,
+    )]
+    pub user_shares_account: InterfaceAccount<'info, TokenAccount>,
+
+    pub asset_token_program: Interface<'info, TokenInterface>,
+    pub token_2022_program: Program<'info, Token2022>,
+    pub associated_token_program: Program<'info, AssociatedToken>,
+    pub system_program: Program<'info, System>,
+}
+```
+
+### Withdraw Context
+
+From `programs/svs-1/src/instructions/withdraw.rs:17-60`:
+
+```rust
+#[derive(Accounts)]
+pub struct Withdraw<'info> {
+    #[account(mut)]
+    pub user: Signer<'info>,
+
+    #[account(constraint = !vault.paused @ VaultError::VaultPaused)]
+    pub vault: Account<'info, Vault>,
+
+    #[account(constraint = asset_mint.key() == vault.asset_mint)]
+    pub asset_mint: InterfaceAccount<'info, Mint>,
+
+    #[account(
+        mut,
+        constraint = user_asset_account.mint == vault.asset_mint,
+        constraint = user_asset_account.owner == user.key(),
+    )]
+    pub user_asset_account: InterfaceAccount<'info, TokenAccount>,
+
+    #[account(mut, constraint = asset_vault.key() == vault.asset_vault)]
+    pub asset_vault: InterfaceAccount<'info, TokenAccount>,
+
+    #[account(mut, constraint = shares_mint.key() == vault.shares_mint)]
+    pub shares_mint: InterfaceAccount<'info, Mint>,
+
+    #[account(
+        mut,
+        constraint = user_shares_account.mint == vault.shares_mint,
+        constraint = user_shares_account.owner == user.key(),
+    )]
+    pub user_shares_account: InterfaceAccount<'info, TokenAccount>,
+
+    pub asset_token_program: Interface<'info, TokenInterface>,
+    pub token_2022_program: Program<'info, Token2022>,
+}
+```
+
+---
+
+## Error Codes
+
+| Code | Name | Message |
+|------|------|---------|
+| 6000 | `ZeroAmount` | Amount must be greater than zero |
+| 6001 | `SlippageExceeded` | Slippage tolerance exceeded |
+| 6002 | `VaultPaused` | Vault is paused |
+| 6003 | `InvalidAssetDecimals` | Asset decimals must be <= 9 |
+| 6004 | `MathOverflow` | Arithmetic overflow |
+| 6005 | `DivisionByZero` | Division by zero |
+| 6006 | `InsufficientShares` | Insufficient shares balance |
+| 6007 | `InsufficientAssets` | Insufficient assets in vault |
+| 6008 | `Unauthorized` | Unauthorized - caller is not vault authority |
+| 6009 | `DepositTooSmall` | Deposit amount below minimum threshold |
+| 6010 | `VaultNotPaused` | Vault is not paused |
+
+See [ERRORS.md](ERRORS.md) for complete error documentation.
+
+---
+
+## Events
+
+### VaultInitialized
+```rust
+#[event]
+pub struct VaultInitialized {
+    pub vault: Pubkey,
+    pub authority: Pubkey,
+    pub asset_mint: Pubkey,
+    pub shares_mint: Pubkey,
+    pub vault_id: u64,
+}
+```
+
+### Deposit
+```rust
+#[event]
+pub struct Deposit {
+    pub vault: Pubkey,
+    pub caller: Pubkey,
+    pub owner: Pubkey,
+    pub assets: u64,
+    pub shares: u64,
+}
+```
+
+### Withdraw
+```rust
+#[event]
+pub struct Withdraw {
+    pub vault: Pubkey,
+    pub caller: Pubkey,
+    pub receiver: Pubkey,
+    pub owner: Pubkey,
+    pub assets: u64,
+    pub shares: u64,
+}
+```
+
+### VaultStatusChanged
+```rust
+#[event]
+pub struct VaultStatusChanged {
+    pub vault: Pubkey,
+    pub paused: bool,
+}
+```
+
+### AuthorityTransferred
+```rust
+#[event]
+pub struct AuthorityTransferred {
+    pub vault: Pubkey,
+    pub previous_authority: Pubkey,
+    pub new_authority: Pubkey,
+}
+```
+
+See [EVENTS.md](EVENTS.md) for parsing examples.
+
+---
+
+## Constants
+
+```rust
+pub const VAULT_SEED: &[u8] = b"vault";
+pub const SHARES_MINT_SEED: &[u8] = b"shares";
+pub const MAX_DECIMALS: u8 = 9;
+pub const SHARES_DECIMALS: u8 = 9;
+pub const MIN_DEPOSIT_AMOUNT: u64 = 1000;
+```
+
+See [CONSTANTS.md](CONSTANTS.md) for complete reference.
+
+---
+
+## CPI Examples
+
+### Mint Shares (Vault as Authority)
+
+```rust
+let asset_mint_key = ctx.accounts.vault.asset_mint;
+let vault_id_bytes = ctx.accounts.vault.vault_id.to_le_bytes();
+let bump = ctx.accounts.vault.bump;  // STORED bump
+
+let signer_seeds: &[&[&[u8]]] = &[&[
+    VAULT_SEED,
+    asset_mint_key.as_ref(),
+    vault_id_bytes.as_ref(),
+    &[bump],
+]];
+
+token_2022::mint_to(
+    CpiContext::new_with_signer(
+        ctx.accounts.token_2022_program.to_account_info(),
+        MintTo {
+            mint: ctx.accounts.shares_mint.to_account_info(),
+            to: ctx.accounts.user_shares_account.to_account_info(),
+            authority: ctx.accounts.vault.to_account_info(),
+        },
+        signer_seeds,
+    ),
+    shares,
+)?;
+```
+
+### Transfer Assets (From Vault)
+
+```rust
+transfer_checked(
+    CpiContext::new_with_signer(
+        ctx.accounts.asset_token_program.to_account_info(),
+        TransferChecked {
+            from: ctx.accounts.asset_vault.to_account_info(),
+            to: ctx.accounts.user_asset_account.to_account_info(),
+            mint: ctx.accounts.asset_mint.to_account_info(),
+            authority: ctx.accounts.vault.to_account_info(),
+        },
+        signer_seeds,
+    ),
+    assets,
+    ctx.accounts.asset_mint.decimals,
+)?;
+```
+
+See [PATTERNS.md](PATTERNS.md) for complete implementation patterns.
+
+---
+
+## Compute Units
+
+| Instruction | Approximate CU |
+|-------------|---------------|
+| `initialize` | ~50,000 |
+| `deposit` | ~25,000 |
+| `mint` | ~25,000 |
+| `withdraw` | ~30,000 |
+| `redeem` | ~30,000 |
+| `pause` | ~5,000 |
+| `unpause` | ~5,000 |
+| `transfer_authority` | ~5,000 |
+| View functions | ~3,000-5,000 |
+
+---
+
+## Implementation Files
+
+| File | Purpose |
+|------|---------|
+| `programs/svs-1/src/lib.rs` | Program entry point |
+| `programs/svs-1/src/state.rs` | Vault account struct |
+| `programs/svs-1/src/constants.rs` | PDA seeds, limits |
+| `programs/svs-1/src/error.rs` | Error codes |
+| `programs/svs-1/src/events.rs` | Event definitions |
+| `programs/svs-1/src/math.rs` | Share/asset conversion |
+| `programs/svs-1/src/instructions/` | Instruction handlers |
 
 ---
 
 **Specification Version**: 1.0.0
-**Last Updated**: 2026-02-23
+**Last Updated**: 2026-03-06
 **Program Version**: 0.1.0

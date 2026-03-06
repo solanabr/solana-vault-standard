@@ -176,3 +176,186 @@ SVS-3/SVS-4 validate proof context accounts by checking `account.owner == zk_elg
 ### Account Reloading
 
 After CPIs that modify token accounts (transfer, mint, burn), account data must be current. Anchor's account deserialization happens at instruction entry, so operations that need post-CPI state read `asset_vault.amount` before any CPIs and calculate the expected result arithmetically rather than re-reading.
+
+---
+
+## CPI Signer Seeds Pattern
+
+When the vault PDA needs to sign CPIs (mint shares, transfer assets), construct signer seeds from stored values.
+
+### Critical: Always Use Stored Bump
+
+```rust
+// WRONG - Wastes ~1500 CU per access, potential security issue
+let (_, bump) = Pubkey::find_program_address(&seeds, &program_id);
+
+// CORRECT - Use stored bump from vault state
+let bump = ctx.accounts.vault.bump;
+```
+
+### Complete Signer Seeds Construction
+
+```rust
+let asset_mint_key = ctx.accounts.vault.asset_mint;
+let vault_id_bytes = ctx.accounts.vault.vault_id.to_le_bytes();
+let bump = ctx.accounts.vault.bump;  // STORED bump
+
+let signer_seeds: &[&[&[u8]]] = &[&[
+    VAULT_SEED,              // b"vault"
+    asset_mint_key.as_ref(),
+    vault_id_bytes.as_ref(),
+    &[bump],
+]];
+
+// Use in CPI
+transfer_checked(
+    CpiContext::new_with_signer(
+        ctx.accounts.asset_token_program.to_account_info(),
+        TransferChecked { from, to, mint, authority: vault },
+        signer_seeds,
+    ),
+    amount,
+    decimals,
+)?;
+```
+
+See [PATTERNS.md](PATTERNS.md#3-pda-signer-seeds-pattern) for complete examples.
+
+---
+
+## Compute Unit Estimates
+
+Approximate CU costs per instruction type:
+
+| Instruction | SVS-1 | SVS-2 | SVS-3 | SVS-4 | Notes |
+|-------------|-------|-------|-------|-------|-------|
+| `initialize` | ~50k | ~50k | ~65k | ~65k | Mint creation overhead |
+| `deposit` | ~25k | ~27k | ~150k | ~155k | CT adds ~120k for proofs |
+| `mint` | ~25k | ~27k | ~150k | ~155k | Same as deposit |
+| `withdraw` | ~30k | ~32k | ~180k | ~185k | CT withdraw more expensive |
+| `redeem` | ~30k | ~32k | ~180k | ~185k | Same as withdraw |
+| `sync` | N/A | ~8k | N/A | ~8k | Simple state update |
+| `pause/unpause` | ~5k | ~5k | ~5k | ~5k | State flag only |
+| `configure_account` | N/A | N/A | ~80k | ~80k | Account reallocation |
+| `apply_pending` | N/A | N/A | ~40k | ~40k | CT state update |
+
+**Notes**:
+- SVS-1/2 are significantly cheaper than SVS-3/4
+- Proof verification is the main cost in confidential variants
+- `init_if_needed` on shares account adds ~5k on first deposit
+
+---
+
+## Account Sizes
+
+| Account Type | Size (bytes) | Variants |
+|--------------|-------------|----------|
+| Vault | 219 | SVS-1, SVS-2 |
+| ConfidentialVault | 252 | SVS-3, SVS-4 |
+| TokenAccount (SPL) | 165 | Asset accounts |
+| TokenAccount (Token-2022) | 165+ | Shares, +CT extension |
+| Mint (SPL) | 82 | Asset mints |
+| Mint (Token-2022) | 82+ | Shares mint, +extensions |
+
+### Module Config PDAs
+
+| Account Type | Size (bytes) | Module |
+|--------------|-------------|--------|
+| FeeConfig | ~100 | svs-fees |
+| CapConfig | ~50 | svs-caps |
+| UserDeposit | ~80 | svs-caps |
+| LockConfig | ~50 | svs-locks |
+| ShareLock | ~60 | svs-locks |
+| AccessConfig | ~70 | svs-access |
+| FrozenAccount | ~80 | svs-access |
+| RewardConfig | ~120 | svs-rewards |
+| UserReward | ~100 | svs-rewards |
+
+---
+
+## Module Integration Points
+
+Modules hook into core vault instructions at specific points:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     DEPOSIT INSTRUCTION                      │
+├─────────────────────────────────────────────────────────────┤
+│  1. Validation                                               │
+│     └── svs-access: verify_access(), check_not_frozen()     │
+│     └── svs-caps: check_global_cap(), check_user_cap()      │
+│                                                              │
+│  2. Compute shares                                           │
+│                                                              │
+│  3. Apply fees                                               │
+│     └── svs-fees: apply_entry_fee()                         │
+│                                                              │
+│  4. Execute transfer + mint                                  │
+│                                                              │
+│  5. Update locks                                             │
+│     └── svs-locks: set_lock()                               │
+│                                                              │
+│  6. Update rewards                                           │
+│     └── svs-rewards: update_reward_debt()                   │
+│                                                              │
+│  7. Emit event                                               │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Module Config PDAs
+
+Each module stores configuration in a PDA derived from the vault:
+
+```rust
+// Module config derivation pattern
+seeds = [MODULE_SEED, vault.key().as_ref()]
+
+// Per-user tracking PDAs add user pubkey
+seeds = [USER_SEED, vault.key().as_ref(), user.key().as_ref()]
+```
+
+See [specs-modules.md](specs-modules.md) for complete module specifications.
+
+---
+
+## Extended Variants (SVS-5 through SVS-12)
+
+Beyond the core 4 variants, SVS defines additional specialized vaults:
+
+| Variant | Purpose | Key Difference |
+|---------|---------|----------------|
+| SVS-5 | Streaming Yield | Time-interpolated yield distribution |
+| SVS-6 | Streaming + Confidential | SVS-5 with encrypted balances |
+| SVS-7 | Native SOL | Direct SOL deposits (wraps internally) |
+| SVS-8 | Multi-Asset | Portfolio of multiple tokens |
+| SVS-9 | Allocator | Vault-of-vaults (MetaMorpho pattern) |
+| SVS-10 | Async | Request → Fulfill → Claim flow |
+| SVS-11 | Credit Markets | Async + KYC + Oracle NAV |
+| SVS-12 | Tranched | Multiple share classes with waterfall |
+
+See individual spec files (`specs-SVS{N}.md`) for details.
+
+---
+
+## EVM Reference
+
+SVS is a native Solana port of ERC-4626. Key mappings:
+
+| SVS | EVM Standard |
+|-----|--------------|
+| SVS-1/2/3/4 | [ERC-4626](https://eips.ethereum.org/EIPS/eip-4626) |
+| SVS-10 | [ERC-7540](https://eips.ethereum.org/EIPS/eip-7540) (Async) |
+| SVS-9 | [MetaMorpho](https://github.com/morpho-org/metamorpho) |
+| SVS-12 | [Centrifuge Tinlake](https://github.com/centrifuge/tinlake) |
+
+See [ERC-4626-REFERENCE.md](ERC-4626-REFERENCE.md) for complete EVM mapping.
+
+---
+
+## Related Documentation
+
+- [PATTERNS.md](PATTERNS.md) - Implementation patterns for contributors
+- [SECURITY.md](SECURITY.md) - Security model and attack vectors
+- [ERRORS.md](ERRORS.md) - Error code reference
+- [CONSTANTS.md](CONSTANTS.md) - PDA seeds and numeric constants
+- [EVENTS.md](EVENTS.md) - Event definitions and parsing

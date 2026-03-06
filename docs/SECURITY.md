@@ -227,3 +227,228 @@ pub account: Account<'info, Data>,
 ## Reporting Vulnerabilities
 
 Please report security vulnerabilities to: security@superteam.com.br
+
+---
+
+## Per-Instruction Security Checklist
+
+Use this checklist when implementing or reviewing instructions:
+
+### Initialize
+- [ ] Asset decimals validated (≤ 9)
+- [ ] Vault PDA derived correctly
+- [ ] Bump stored for future use
+- [ ] Shares mint authority is vault PDA
+- [ ] Asset vault authority is vault PDA
+- [ ] All accounts owned by correct programs
+
+### Deposit / Mint
+- [ ] Amount > 0 validated
+- [ ] Amount >= MIN_DEPOSIT_AMOUNT validated
+- [ ] Vault not paused
+- [ ] Slippage check (min_shares_out / max_assets_in)
+- [ ] User owns source token account
+- [ ] Correct mint for token accounts
+- [ ] Shares minted to correct recipient
+- [ ] Event emitted with correct values
+
+### Withdraw / Redeem
+- [ ] Amount > 0 validated
+- [ ] Vault not paused
+- [ ] Slippage check (max_shares_in / min_assets_out)
+- [ ] User has sufficient shares
+- [ ] Vault has sufficient assets
+- [ ] Stored bump used for signer seeds
+- [ ] Assets transferred to correct recipient
+- [ ] Shares burned from correct account
+- [ ] Event emitted with correct values
+
+### Admin Operations
+- [ ] Caller is authority
+- [ ] State transition is valid (pause when unpaused, etc.)
+- [ ] New authority is not zero address
+- [ ] Event emitted for audit trail
+
+### View Functions
+- [ ] No state mutations
+- [ ] Return data set correctly
+- [ ] Safe to call when paused
+
+---
+
+## Fuzz Testing Requirements
+
+Before mainnet deployment, fuzz testing must:
+
+1. **Run for minimum 10 minutes** with no crashes
+2. **Test all state transitions** (init → deposit → yield → sync → withdraw)
+3. **Verify invariants** after every operation
+4. **Include edge cases**: zero amounts, max values, concurrent operations
+
+### Trident Configuration
+
+```toml
+# trident-tests/Trident.toml
+[fuzz]
+iterations = 100000
+exit_on_error = true
+corpus_dir = "corpus"
+
+[invariants]
+shares_conservation = true
+rounding_direction = true
+no_value_creation = true
+```
+
+### Required Invariants
+
+```rust
+// Must pass after every fuzzed operation
+fn invariants_hold(state: &VaultState) -> bool {
+    // 1. Shares supply matches sum of balances
+    let supply_matches = state.shares_supply ==
+        state.user_shares.values().sum();
+
+    // 2. Assets cover all claims
+    let assets_sufficient = state.asset_vault_balance >=
+        calculate_total_claimable(state);
+
+    // 3. No overflow in any field
+    let no_overflow = state.shares_supply <= u64::MAX &&
+                      state.total_assets <= u64::MAX;
+
+    supply_matches && assets_sufficient && no_overflow
+}
+```
+
+---
+
+## Audit Preparation Checklist
+
+Before requesting an audit:
+
+### Code Quality
+- [ ] All `unwrap()` removed from program code
+- [ ] All arithmetic uses checked operations
+- [ ] No `init_if_needed` without careful analysis
+- [ ] PDA bumps stored and reused
+- [ ] All CPIs use typed Program accounts
+
+### Documentation
+- [ ] README current and accurate
+- [ ] All instructions documented
+- [ ] Error codes documented
+- [ ] PDA derivations documented
+- [ ] Known limitations documented
+
+### Testing
+- [ ] Unit tests for all math functions
+- [ ] Integration tests for all instructions
+- [ ] Edge case tests (zero, max, boundary)
+- [ ] Multi-user scenario tests
+- [ ] Fuzz tests run for 10+ minutes
+
+### Security
+- [ ] OWASP top 10 considered
+- [ ] Reentrancy analyzed
+- [ ] Integer overflow/underflow checked
+- [ ] Access control reviewed
+- [ ] Account validation complete
+
+---
+
+## Attack Scenario Examples
+
+### Inflation Attack (Prevented)
+
+```rust
+// Attack attempt:
+// 1. Attacker is first depositor
+// 2. Deposits 1 wei
+// 3. Directly transfers 1M tokens to vault
+// 4. New user deposits 1M tokens, gets ~1 share
+// 5. Attacker redeems 1 share, gets ~1M tokens
+
+// SVS Prevention (virtual offset):
+// With offset = 1000 (USDC):
+// Step 2: Attacker gets 1 * (0 + 1000) / (0 + 1) = 1000 shares
+// Step 3: Direct transfer makes vault have 1M assets
+// Step 4: New user gets 1M * (1000 + 1000) / (1M + 1) ≈ 2000 shares
+// Step 5: Attacker redeems 1000 shares, gets 1000 * (1M + 1) / (3000) ≈ 333K
+// Attack fails: Attacker paid 1M, got 333K
+```
+
+### Sync Timing Attack (SVS-2/4)
+
+```rust
+// Attack scenario:
+// 1. External yield of 100 tokens accrued
+// 2. Authority sees large deposit incoming
+// 3. Authority syncs just before deposit
+// 4. Depositor gets shares at old price
+// 5. Authority benefits from diluted price
+
+// Mitigations:
+// - Use SVS-1 for trustless scenarios
+// - Timelock between sync and authority actions
+// - Multisig authority
+// - Automated sync bots
+```
+
+### Rounding Extraction (Prevented)
+
+```rust
+// Attack attempt:
+// Loop: deposit 1 → redeem 1 → extract rounding error
+
+// SVS Prevention:
+// All operations round in favor of vault
+// deposit(1) → floor(shares) → maybe 0 shares
+// redeem(shares) → floor(assets) → maybe 0 assets
+// No value extracted, attacker loses fees
+```
+
+---
+
+## Confidential Transfer Security (SVS-3/4)
+
+### Proof Validation
+
+```rust
+// CRITICAL: Validate proof context ownership
+require!(
+    ctx.accounts.proof_context.owner == zk_elgamal_proof_program::id(),
+    VaultError::InvalidProof
+);
+
+// Prevents: Attacker creating fake "verified" proof accounts
+```
+
+### Ciphertext Handling
+
+```rust
+// Range proofs required for all withdrawals
+// Prevents: Negative amounts, overflow attacks
+
+// Ciphertext equality proofs required
+// Prevents: Substituting different amounts
+```
+
+### Pending Balance Flow
+
+```
+1. deposit() → shares go to pending balance
+2. apply_pending() → user moves to available
+3. Only user can call apply_pending (signed)
+
+// Prevents: Front-running pending balance claims
+```
+
+---
+
+## See Also
+
+- [Architecture](./ARCHITECTURE.md) - Technical implementation
+- [Patterns](./PATTERNS.md) - Implementation patterns
+- [Testing](./TESTING.md) - Testing guide
+- [Errors](./ERRORS.md) - Error codes

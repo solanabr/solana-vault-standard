@@ -154,3 +154,162 @@ All modules from `specs-modules.md` are compatible with the same caveats as SVS-
 - **Total shares leakage:** `total_shares` is stored in plaintext. Individual balances are encrypted, but the aggregate is public. An observer can see vault-level metrics but not per-user positions.
 - **Deposit/redeem amounts:** The asset amounts in deposit/redeem are public (SPL token transfers are visible). Only share balances are confidential. Full privacy requires wrapping the asset side with a privacy protocol (see Privacy Cash integration in SDK).
 - **Proof verification cost:** Each ZK proof verification costs ~50-100k CU. Combined with streaming math (~200 CU), total compute for a confidential redeem is ~150-200k CU. Fits within default budget but leaves less headroom for modules.
+
+---
+
+## 10. Proof Size Reference
+
+| Proof Type | Size (bytes) | When Required | Verification CU |
+|------------|--------------|---------------|-----------------|
+| PubkeyValidityProof | 64 | `configure_account` (one-time) | ~25,000 |
+| CiphertextCommitmentEqualityProof | 192 | `withdraw`, `redeem` | ~50,000 |
+| BatchedRangeProofU64 | 672+ | `withdraw`, `redeem` | ~80,000 |
+| **Total per withdraw/redeem** | **~928+** | Per operation | ~155,000 |
+
+**Note**: Range proof size increases with batch size. Single-value proof = 672 bytes. Multi-value (up to 8 amounts) increases proportionally.
+
+---
+
+## 11. Combined State Struct Detail
+
+```rust
+#[account]
+pub struct ConfidentialStreamVault {
+    // ── Core vault fields ──
+    pub authority: Pubkey,                    // 32 bytes
+    pub asset_mint: Pubkey,                   // 32 bytes
+    pub shares_mint: Pubkey,                  // 32 bytes
+    pub asset_vault: Pubkey,                  // 32 bytes
+    pub decimals_offset: u8,                  // 1 byte
+    pub bump: u8,                             // 1 byte
+    pub paused: bool,                         // 1 byte
+    pub vault_id: u64,                        // 8 bytes
+
+    // ── Streaming fields (from SVS-5) ──
+    pub base_assets: u64,                     // 8 bytes
+    pub total_shares: u64,                    // 8 bytes
+    pub stream_amount: u64,                   // 8 bytes
+    pub stream_start: i64,                    // 8 bytes
+    pub stream_end: i64,                      // 8 bytes
+    pub last_checkpoint: i64,                 // 8 bytes
+
+    // ── Confidential fields (from SVS-3) ──
+    pub auditor_elgamal_pubkey: Option<[u8; 32]>,  // 33 bytes (1 discriminator + 32)
+    pub confidential_authority: Pubkey,       // 32 bytes
+
+    pub _reserved: [u8; 32],                  // 32 bytes
+}
+// Total: 286 bytes (+ 8-byte Anchor discriminator = 294 bytes)
+// Seeds: ["confidential_stream_vault", asset_mint, vault_id.to_le_bytes()]
+```
+
+**Size Comparison**:
+| Variant | Account Size | Key Difference |
+|---------|--------------|----------------|
+| SVS-1 Vault | 219 bytes | Base vault |
+| SVS-3 ConfidentialVault | 252 bytes | +CT fields |
+| SVS-5 StreamVault | 243 bytes | +streaming fields |
+| **SVS-6 ConfidentialStreamVault** | **286 bytes** | +CT + streaming |
+
+---
+
+## 12. Two-Transaction Pattern for Withdraw/Redeem
+
+Due to proof data size exceeding single transaction limits (~1232 bytes), confidential withdrawals require a 2-transaction flow:
+
+### Transaction 1: Create Proof Context State Accounts
+
+```typescript
+import { createContextStateAccount } from '@stbr/svs-privacy-sdk';
+
+// 1. Generate proofs client-side (via Rust backend)
+const { equalityProof, rangeProof } = await generateWithdrawProofs(
+  elgamalKeypair,
+  currentEncryptedBalance,
+  withdrawAmount
+);
+
+// 2. Create context state accounts
+const contextTx = new Transaction();
+
+// Equality proof context
+const [equalityContextPda] = await createContextStateAccount(
+  contextTx,
+  equalityProof,
+  'ciphertext_commitment_equality',
+  payer
+);
+
+// Range proof context
+const [rangeContextPda] = await createContextStateAccount(
+  contextTx,
+  rangeProof,
+  'batched_range_proof_u64',
+  payer
+);
+
+await sendTransaction(contextTx, [payer]);
+```
+
+### Transaction 2: Execute Withdraw with Proof Contexts
+
+```typescript
+// Critical: checkpoint() must precede withdraw to accrue pending yield
+const withdrawTx = new Transaction()
+  .add(await vault.checkpoint())  // Accrue streaming yield first
+  .add(await vault.confidentialWithdraw({
+    assets: withdrawAmount,
+    maxSharesIn: expectedShares.mul(new BN(105)).div(new BN(100)),
+    newDecryptableAvailableBalance: computeNewBalance(aesKey, currentBalance - withdrawAmount),
+    equalityProofContext: equalityContextPda,
+    rangeProofContext: rangeContextPda,
+  }));
+
+await sendTransaction(withdrawTx, [owner]);
+```
+
+### Transaction 3 (Optional): Close Proof Context Accounts
+
+```typescript
+// Recover rent from context state accounts
+const closeTx = new Transaction()
+  .add(closeContextStateAccount(equalityContextPda, payer))
+  .add(closeContextStateAccount(rangeContextPda, payer));
+
+await sendTransaction(closeTx, [payer]);
+```
+
+### Why checkpoint() Before Withdraw?
+
+The streaming vault's `effective_total_assets` changes continuously. If you compute share amounts based on timestamp T1, but the withdraw executes at timestamp T2, the share price has changed. By calling `checkpoint()` immediately before `withdraw` in the same transaction:
+
+1. Yield accrued up to T2 is finalized into `base_assets`
+2. `stream_start` resets to T2
+3. `withdraw` computes shares at exactly the post-checkpoint state
+4. No race condition between share price preview and execution
+
+---
+
+## 13. Compute Unit Budget
+
+| Instruction | Approximate CU | Breakdown |
+|-------------|---------------|-----------|
+| `initialize` | ~30,000 | Create vault + CT-enabled shares mint |
+| `configure_account` | ~80,000 | PubkeyValidityProof verification |
+| `deposit` | ~50,000 | Streaming math + CT mint |
+| `checkpoint` | ~8,000 | State update only |
+| `distribute_yield` | ~25,000 | May auto-checkpoint |
+| `withdraw` | ~185,000 | Streaming + equality + range proofs |
+| `redeem` | ~185,000 | Streaming + equality + range proofs |
+| `apply_pending` | ~40,000 | CT balance finalization |
+
+**Note**: Withdraw/redeem approach the 200k CU limit. Using modules may require requesting additional CU via `SetComputeUnitLimit`.
+
+---
+
+## See Also
+
+- [SVS-5](./specs-SVS05.md) — Base streaming yield vault
+- [SVS-3](./SVS-3.md) — Confidential transfer implementation
+- [PRIVACY.md](./PRIVACY.md) — Privacy model details
+- [ARCHITECTURE.md](./ARCHITECTURE.md) — Cross-variant design

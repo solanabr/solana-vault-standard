@@ -861,3 +861,119 @@ Specify a different RPC endpoint:
 ```bash
 solana-vault info my-vault --url https://api.mainnet-beta.solana.com
 ```
+
+---
+
+## Environment Variables
+
+The CLI respects the following environment variables:
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `SVS_RPC_URL` | Solana RPC endpoint | `https://api.devnet.solana.com` |
+| `SVS_KEYPAIR` | Path to wallet keypair | `~/.config/solana/id.json` |
+| `SVS_CLUSTER` | Cluster name (`devnet`, `mainnet-beta`, `localnet`) | `devnet` |
+| `SVS_OUTPUT` | Default output format (`table`, `json`, `csv`) | `table` |
+| `SVS_CONFIG_PATH` | Path to config file | `~/.solana-vault/config.yaml` |
+| `SVS_CONFIRMATION` | Transaction confirmation level | `confirmed` |
+| `SVS_VERBOSE` | Enable verbose output (`true`/`false`) | `false` |
+
+**Priority order** (highest to lowest):
+1. Command-line flags (`--url`, `--keypair`, etc.)
+2. Environment variables (`SVS_RPC_URL`, etc.)
+3. Profile settings (from config file)
+4. Default values
+
+```bash
+# Example: Use mainnet with custom RPC
+SVS_RPC_URL=https://my-rpc.example.com SVS_CLUSTER=mainnet-beta solana-vault info my-vault
+```
+
+---
+
+## Common Workflows
+
+### Full Vault Lifecycle (SVS-1)
+
+```bash
+# 1. Initialize config
+solana-vault config init
+
+# 2. Create vault (if not exists)
+# Note: Usually done via SDK/program, not CLI
+
+# 3. Add vault to config
+solana-vault config add-vault usdc-vault <VAULT_ADDRESS> --variant svs-1
+
+# 4. Check vault state
+solana-vault info usdc-vault
+
+# 5. Preview and deposit
+solana-vault preview usdc-vault deposit 1000000000
+solana-vault deposit usdc-vault --amount 1000000000 --slippage 50
+
+# 6. Monitor balance over time (yield accrues)
+solana-vault balance usdc-vault
+
+# 7. Preview and redeem when ready
+solana-vault preview usdc-vault redeem --all
+solana-vault redeem usdc-vault --all --slippage 50
+```
+
+### Managed Vault with Strategy (SVS-2)
+
+```bash
+# 1. Setup
+solana-vault config add-vault yield-vault <ADDRESS> --variant svs-2
+
+# 2. Deposit assets
+solana-vault deposit yield-vault --amount 10000000000
+
+# 3. Authority deploys to strategy (off-chain)
+# ...strategy generates yield...
+
+# 4. Authority syncs yield
+solana-vault sync yield-vault
+
+# 5. Check updated share price
+solana-vault info yield-vault
+
+# 6. User redeems with yield gains
+solana-vault redeem yield-vault --all
+```
+
+### Fee Configuration Workflow
+
+```bash
+# 1. View current fees
+solana-vault fees show my-vault
+
+# 2. Configure fees with timelock
+solana-vault timelock configure my-vault --min-delay 86400
+solana-vault timelock propose my-vault --action update-fees \
+  --params '{"managementFeeBps":200,"performanceFeeBps":2000}'
+
+# 3. Wait for timelock...
+
+# 4. Execute
+solana-vault timelock execute my-vault --proposal-id <ID>
+
+# 5. Verify
+solana-vault fees show my-vault
+```
+
+---
+
+## See Also
+
+- [SDK Documentation](./SDK.md) - TypeScript SDK reference
+- [Architecture](./ARCHITECTURE.md) - Technical deep-dive
+- [Patterns](./PATTERNS.md) - Implementation patterns
+- [Errors](./ERRORS.md) - Error code reference
+- [Constants](./CONSTANTS.md) - PDA seeds and limits
+- [Events](./EVENTS.md) - Event definitions
+- [Security](./SECURITY.md) - Security considerations
+- [SVS-1](./SVS-1.md) - Live balance vault specification
+- [SVS-2](./SVS-2.md) - Stored balance vault specification
+- [SVS-3](./SVS-3.md) - Confidential live balance vault
+- [SVS-4](./SVS-4.md) - Confidential stored balance vault

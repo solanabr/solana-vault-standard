@@ -584,8 +584,107 @@ PROPTEST_CASES=10000 cargo test 2>&1 | tee fuzz_output.log
 5. **Test invariants** - Mathematical properties that must always hold
 6. **Clean up** - Reset state between tests when needed
 
+## Key Invariants Reference
+
+These mathematical invariants must ALWAYS hold:
+
+### 1. Share Conservation
+```
+shares_mint.supply == sum(all user share balances)
+```
+
+### 2. Asset Conservation (SVS-1)
+```
+asset_vault.amount >= sum(all claimable assets)
+```
+
+### 3. Rounding Never Profits User
+```
+redeem(deposit(X)) <= X
+withdraw(mint(Y)) <= Y
+```
+
+### 4. Share Price Monotonic (absent losses)
+```
+share_price(t2) >= share_price(t1)  when t2 > t1 and no losses
+```
+
+### 5. Virtual Offset Protection
+```
+For attacker donating D tokens to empty vault:
+  shares_from_1_token <= 1 when D < offset
+```
+
+### 6. Stored Balance Consistency (SVS-2/4)
+```
+After sync(): vault.total_assets == asset_vault.amount
+```
+
+---
+
+## Test File Naming Convention
+
+| Pattern | Purpose | Example |
+|---------|---------|---------|
+| `svs-{N}.ts` | Core variant tests | `svs-1.ts`, `svs-3.ts` |
+| `{feature}.ts` | Feature-specific | `decimals.ts`, `yield-sync.ts` |
+| `{scenario}.ts` | Scenario-based | `multi-user.ts`, `full-lifecycle.ts` |
+| `invariants.ts` | Mathematical properties | Always run |
+| `edge-cases.ts` | Boundary conditions | Include in CI |
+
+---
+
+## Property-Based Testing with Trident
+
+### Setup
+
+```bash
+# Install Trident
+cargo install trident-cli
+
+# Initialize in project
+cd trident-tests
+trident init
+```
+
+### Key Flows to Fuzz
+
+| Flow | Property |
+|------|----------|
+| `initialize` → `deposit` → `redeem` | No value creation |
+| `deposit` → `yield` → `sync` → `redeem` | Yield distributed proportionally |
+| Concurrent deposits | Order-independent results |
+| Max values | No overflow |
+
+### Invariant Assertions
+
+```rust
+// In trident-tests/src/lib.rs
+
+#[invariant]
+fn shares_conservation(state: &VaultState) -> bool {
+    state.total_shares == state.user_shares.values().sum()
+}
+
+#[invariant]
+fn rounding_favors_vault(pre: &Snapshot, post: &Snapshot, op: &Operation) -> bool {
+    match op {
+        Operation::Deposit { assets, shares } => {
+            shares <= calculate_max_shares(assets, pre)
+        }
+        Operation::Redeem { shares, assets } => {
+            assets <= calculate_max_assets(shares, pre)
+        }
+        _ => true
+    }
+}
+```
+
+---
+
 ## See Also
 
 - [Architecture](./ARCHITECTURE.md) - Technical implementation
 - [Security](./SECURITY.md) - Security considerations
+- [Patterns](./PATTERNS.md) - Implementation patterns
 - [SDK](./SDK.md) - SDK documentation

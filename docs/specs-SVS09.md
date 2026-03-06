@@ -262,3 +262,241 @@ sum(target_weight_bps) + idle_buffer_bps == 10_000
 `total_assets()` reads state from all child vaults. With 10 children, that's 10 account reads + 10 mul_div operations. Estimated ~5,000 CU for the computation alone, plus account deserialization overhead (~1,000 CU per account).
 
 Total compute for a deposit with 10 children: ~30-40k CU. Well within budget. The CPI calls in `allocate`/`deallocate` are more expensive (~50-100k CU each) but those are curator-only operations, not user-facing.
+
+---
+
+## 12. Child Vault Compatibility Matrix
+
+| Child Variant | Compatible | Reason |
+|---------------|------------|--------|
+| **SVS-1** | ✅ Yes | Live balance, synchronous deposit/redeem |
+| **SVS-2** | ✅ Yes | Stored balance, synchronous deposit/redeem |
+| **SVS-3** | ❌ No | Encrypted balances — cannot read child total_assets |
+| **SVS-4** | ❌ No | Encrypted balances — cannot read child total_assets |
+| **SVS-5** | ✅ Yes | Streaming yield, synchronous ops (after checkpoint) |
+| **SVS-6** | ❌ No | Encrypted + streaming — cannot read child total_assets |
+| **SVS-7** | ✅ Yes | Native SOL, synchronous ops |
+| **SVS-8** | ⚠️ Partial | Requires oracle calls for child value — high CU cost |
+| **SVS-9** | ⚠️ Partial | Nested allocators work but add complexity |
+| **SVS-10** | ❌ No | Async — deposit/redeem not atomic (request→fulfill→claim) |
+| **SVS-11** | ❌ No | Async + KYC — not suitable for programmatic CPI |
+| **SVS-12** | ⚠️ Partial | Per-tranche allocation complex; requires selecting specific tranche |
+
+**Core Rule**: Allocator children must have:
+1. **Synchronous deposit/redeem** — atomic CPI must complete in one transaction
+2. **Readable total_assets** — no encryption that prevents balance reading
+3. **Standard interface** — `deposit(assets, min_shares_out)` and `redeem(shares, min_assets_out)`
+
+---
+
+## 13. Child CPI Validation
+
+Before executing CPI to a child vault, the allocator validates the child program to prevent program substitution attacks:
+
+```rust
+/// Validate child vault before CPI
+pub fn validate_child_for_cpi(
+    child_allocation: &ChildAllocation,
+    child_vault_info: &AccountInfo,
+    child_program_info: &AccountInfo,
+) -> Result<()> {
+    // 1. Verify child program matches registered program
+    require!(
+        child_program_info.key() == child_allocation.child_program,
+        VaultError::InvalidChildProgram
+    );
+
+    // 2. Verify child vault account is owned by the registered program
+    require!(
+        child_vault_info.owner == &child_allocation.child_program,
+        VaultError::InvalidChildProgram
+    );
+
+    // 3. Verify child vault PDA matches registered address
+    require!(
+        child_vault_info.key() == child_allocation.child_vault,
+        VaultError::InvalidChildVault
+    );
+
+    // 4. Validate discriminator matches expected vault type
+    let data = child_vault_info.try_borrow_data()?;
+    let discriminator = &data[..8];
+
+    // SVS-1 Vault discriminator
+    const SVS1_DISCRIMINATOR: [u8; 8] = [211, 8, 232, 43, 2, 152, 117, 119];
+
+    // Accept SVS-1 or SVS-2 vaults (same struct, different program)
+    require!(
+        discriminator == &SVS1_DISCRIMINATOR,
+        VaultError::UnsupportedChildVariant
+    );
+
+    // 5. Verify child allocation is enabled
+    require!(
+        child_allocation.enabled,
+        VaultError::ChildAllocationDisabled
+    );
+
+    Ok(())
+}
+
+/// Read total_assets from a child vault (no CPI needed, direct deserialization)
+pub fn read_child_total_assets(
+    child_vault_info: &AccountInfo,
+) -> Result<u64> {
+    let data = child_vault_info.try_borrow_data()?;
+
+    // Vault struct layout (after 8-byte discriminator):
+    // authority: 32, asset_mint: 32, shares_mint: 32, asset_vault: 32
+    // → total_assets at offset 136
+    const TOTAL_ASSETS_OFFSET: usize = 8 + 32 + 32 + 32 + 32;
+
+    let total_assets_bytes: [u8; 8] = data[TOTAL_ASSETS_OFFSET..TOTAL_ASSETS_OFFSET + 8]
+        .try_into()
+        .map_err(|_| VaultError::InvalidAccountData)?;
+
+    Ok(u64::from_le_bytes(total_assets_bytes))
+}
+```
+
+---
+
+## 14. harvest() Implementation
+
+The `harvest` instruction collects yield from all child vaults by redeeming the profit portion of shares:
+
+```rust
+/// Collect yield from all child vaults
+pub fn harvest(ctx: Context<Harvest>) -> Result<()> {
+    let allocator = &mut ctx.accounts.allocator;
+    let mut total_harvested = 0u64;
+
+    // Children passed as remaining_accounts in groups of 4:
+    // [ChildAllocation, child_vault_state, child_shares_account, child_vault_program]
+    let chunks = ctx.remaining_accounts.chunks_exact(4);
+
+    for (i, child_accounts) in chunks.enumerate() {
+        let child_allocation_info = &child_accounts[0];
+        let child_vault_info = &child_accounts[1];
+        let child_shares_info = &child_accounts[2];
+        let child_program_info = &child_accounts[3];
+
+        // 1. Deserialize child allocation
+        let child_allocation: Account<ChildAllocation> =
+            Account::try_from(child_allocation_info)?;
+
+        if !child_allocation.enabled {
+            continue;
+        }
+
+        // 2. Validate child program
+        validate_child_for_cpi(&child_allocation, child_vault_info, child_program_info)?;
+
+        // 3. Read current position value
+        let child_total_assets = read_child_total_assets(child_vault_info)?;
+        let our_shares = get_token_account_balance(child_shares_info)?;
+
+        // Get child total_shares from mint
+        let child_vault: Account<Vault> = Account::try_from(child_vault_info)?;
+        let child_total_shares = child_vault.total_shares;
+        let child_offset = 10u64.pow(child_vault.decimals_offset as u32);
+
+        let our_value = convert_to_assets(
+            our_shares,
+            child_total_shares,
+            child_total_assets,
+            child_offset,
+        )?;
+
+        // 4. Calculate yield (current value - cost basis)
+        let cost_basis = child_allocation.deposited_assets;
+        let yield_amount = our_value.saturating_sub(cost_basis);
+
+        if yield_amount == 0 {
+            continue;  // No yield to harvest
+        }
+
+        // 5. Calculate shares to redeem for yield portion
+        let shares_to_redeem = convert_to_shares(
+            yield_amount,
+            child_total_shares,
+            child_total_assets,
+            child_offset,
+        )?;
+
+        if shares_to_redeem == 0 {
+            continue;  // Rounding resulted in zero shares
+        }
+
+        // 6. CPI: Redeem yield portion from child vault
+        let allocator_seeds = &[
+            b"allocator_vault",
+            allocator.asset_mint.as_ref(),
+            &allocator.vault_id.to_le_bytes(),
+            &[allocator.bump],
+        ];
+
+        let cpi_accounts = child_vault::cpi::accounts::Redeem {
+            vault: child_vault_info.clone(),
+            // ... other required accounts
+        };
+
+        child_vault::cpi::redeem(
+            CpiContext::new_with_signer(
+                child_program_info.clone(),
+                cpi_accounts,
+                &[allocator_seeds],
+            ),
+            shares_to_redeem,
+            0,  // min_assets_out (curator accepts any, slippage managed externally)
+        )?;
+
+        // 7. Update state
+        // Note: cost_basis stays the same (we harvested yield, not principal)
+        total_harvested = total_harvested.checked_add(yield_amount)?;
+
+        emit!(ChildHarvested {
+            allocator: allocator.key(),
+            child_vault: child_allocation.child_vault,
+            shares_redeemed: shares_to_redeem,
+            assets_received: yield_amount,
+        });
+    }
+
+    // 8. Harvested assets now in idle_vault
+    // total_assets doesn't change (value was already counted in position)
+
+    emit!(Harvest {
+        allocator: allocator.key(),
+        total_harvested,
+    });
+
+    Ok(())
+}
+```
+
+---
+
+## 15. Compute Unit Estimates
+
+| Instruction | Approximate CU | Notes |
+|-------------|---------------|-------|
+| `initialize` | ~30,000 | Create allocator + shares mint + idle vault |
+| `add_child` | ~25,000 | Create ChildAllocation PDA |
+| `deposit` | ~40,000 | Read N child vaults + transfer + mint |
+| `redeem` | ~35,000 | Read N child vaults + burn + transfer |
+| `allocate` | ~60,000 | CPI deposit to child vault |
+| `deallocate` | ~70,000 | CPI redeem from child vault |
+| `harvest` | ~80,000 × N | CPI redeem from each child with yield |
+| `rebalance` | ~150,000 | deallocate + allocate in one tx |
+
+**With 10 children**: Deposit/redeem operations cost ~40-50k CU. Well within the 200k default limit.
+
+---
+
+## See Also
+
+- [SVS-1](./SVS-1.md) — Base synchronous vault (compatible child)
+- [SVS-2](./SVS-2.md) — Stored balance vault (compatible child)
+- [specs-modules.md](./specs-modules.md) — Module integration
+- [ARCHITECTURE.md](./ARCHITECTURE.md) — Cross-variant design

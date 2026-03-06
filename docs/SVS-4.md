@@ -223,7 +223,97 @@ class ConfidentialStoredBalanceVault extends ConfidentialSolanaVault {
 
 ---
 
+---
+
+## Trust Model Analysis
+
+### What Authority Can Do
+
+| Action | Impact | Visibility |
+|--------|--------|------------|
+| Delay `sync()` | Suppress yield recognition | Observable (balance mismatch) |
+| Front-run `sync()` | Capture yield before others | Detectable via tx ordering |
+| Sync to wrong value | Not possible (reads actual balance) | N/A |
+| Read user balances | Only with auditor key | Depends on configuration |
+
+### What Authority Cannot Do
+
+| Action | Why |
+|--------|-----|
+| Set arbitrary `total_assets` | `sync()` reads `asset_vault.amount` directly |
+| Decrypt user balances | Requires user's ElGamal secret key |
+| Transfer user shares | Requires user signature |
+| Bypass proof verification | Proofs validated on-chain |
+
+### Recommended Use Cases
+
+| Use Case | Appropriate | Notes |
+|----------|-------------|-------|
+| Institutional fund | ✅ Yes | Trusted operator, compliance auditor |
+| Public DeFi vault | ❌ No | Use SVS-1 or SVS-3 |
+| Permissioned strategy | ✅ Yes | KYC'd participants, managed deployment |
+| Anonymous deposits | ❌ No | Privacy + sync = trust conflict |
+
+---
+
+## SDK Implementation Status
+
+**Current Status**: Not implemented
+
+**Workaround**:
+```typescript
+import { ConfidentialSolanaVault } from '@stbr/svs-privacy-sdk';
+import { Program } from '@coral-xyz/anchor';
+
+// Use SVS-3 SDK
+const vault = new ConfidentialSolanaVault(connection, wallet, idl);
+
+// Manual sync instruction
+async function syncVault(program: Program, vaultPda: PublicKey, authority: Keypair) {
+  await program.methods
+    .sync()
+    .accounts({
+      vault: vaultPda,
+      assetVault: await getAssetVault(vaultPda),
+      authority: authority.publicKey,
+    })
+    .signers([authority])
+    .rpc();
+}
+```
+
+**Planned SDK**: Q2 2026 - Will extend `ConfidentialSolanaVault` with `sync()` method.
+
+---
+
+## Error Codes
+
+Combines [SVS-2 errors](SVS-2.md#error-codes) and [SVS-3 errors](SVS-3.md#error-codes).
+
+---
+
+## Compute Units
+
+| Instruction | Approximate CU |
+|-------------|---------------|
+| `sync` | ~8,000 |
+| `deposit` | ~155,000 |
+| `withdraw` | ~185,000 |
+| Others | See SVS-3 |
+
+---
+
+## Limitation: Cannot Use in SVS-9 Allocator
+
+SVS-4 vaults **cannot** be used as child vaults in SVS-9 (Allocator) because:
+1. Encrypted balances prevent `total_assets` calculation across children
+2. Allocator needs to read child vault balances
+
+---
+
 **See Also**:
 - [SVS-2.md](./SVS-2.md) — Stored balance model and sync() details
 - [SVS-3.md](./SVS-3.md) — Confidential transfer implementation and ZK proof handling
 - [ARCHITECTURE.md](./ARCHITECTURE.md) — Feature matrix across all variants
+- [PATTERNS.md](./PATTERNS.md) — Implementation patterns
+- [ERRORS.md](./ERRORS.md) — Error code reference

@@ -420,3 +420,150 @@ All SVS programs and all modules import `svs-math` instead of maintaining their 
 - **Merkle root updates:** Changing the merkle root on `AccessConfig` takes effect immediately. A malicious authority could whitelist themselves and drain. Mitigation: combine with `svs-locks` timelock on config changes, or use a multisig authority.
 - **Reward accumulator precision:** The `accumulated_per_share` uses u128 scaled by 1e18. With u64 shares, this supports up to ~3.4e19 reward tokens per share before overflow — sufficient for any realistic scenario.
 - **Cap bypass via mint:** Both `deposit` (assets→shares) and `mint` (shares→assets) must enforce caps. Checking only one creates a bypass.
+
+---
+
+## 9. Integration Examples
+
+### Adding svs-fees to SVS-1
+
+```rust
+// Cargo.toml
+[dependencies]
+svs-fees = { path = "../modules/svs-fees" }
+
+// In deposit handler
+pub fn handler(ctx: Context<Deposit>, assets: u64, min_shares_out: u64) -> Result<()> {
+    // ... existing validation ...
+
+    // Calculate shares
+    let gross_shares = convert_to_shares(...)?;
+
+    // Apply entry fee if FeeConfig exists
+    let (net_shares, fee_shares) = if let Some(fee_config) = &ctx.accounts.fee_config {
+        svs_fees::apply_entry_fee(gross_shares, fee_config.entry_fee_bps)?
+    } else {
+        (gross_shares, 0)
+    };
+
+    require!(net_shares >= min_shares_out, VaultError::SlippageExceeded);
+
+    // Mint net shares to user
+    mint_to(user_shares_account, net_shares)?;
+
+    // Mint fee shares to fee recipient
+    if fee_shares > 0 {
+        mint_to(fee_config.fee_recipient, fee_shares)?;
+    }
+
+    // ... rest of handler ...
+}
+```
+
+### Adding svs-caps to SVS-1
+
+```rust
+// In deposit handler
+pub fn handler(ctx: Context<Deposit>, assets: u64, min_shares_out: u64) -> Result<()> {
+    // Check caps BEFORE executing
+    if let Some(cap_config) = &ctx.accounts.cap_config {
+        svs_caps::check_global_cap(
+            ctx.accounts.asset_vault.amount,
+            assets,
+            cap_config.global_cap,
+        )?;
+
+        if let Some(user_deposit) = &ctx.accounts.user_deposit {
+            svs_caps::check_user_cap(
+                user_deposit.cumulative_assets,
+                assets,
+                cap_config.per_user_cap,
+            )?;
+        }
+    }
+
+    // ... execute deposit ...
+
+    // Update user cumulative after deposit
+    if let Some(user_deposit) = &mut ctx.accounts.user_deposit {
+        user_deposit.cumulative_assets = user_deposit.cumulative_assets
+            .checked_add(assets)
+            .ok_or(VaultError::MathOverflow)?;
+    }
+}
+```
+
+---
+
+## 10. Module Interaction Matrix
+
+| Modules | Compatible | Notes |
+|---------|------------|-------|
+| fees + caps | ✅ | Fees applied after cap check |
+| fees + locks | ✅ | Independent operation |
+| caps + locks | ✅ | Independent operation |
+| fees + access | ✅ | Access checked before fees |
+| rewards + any | ✅ | Rewards are independent |
+| access + freeze | ✅ | Freeze is part of access |
+
+---
+
+## 11. SDK v1 → v2 Migration Guide
+
+### v1 (Client-Side Extensions)
+
+```typescript
+// Current: Extensions are TypeScript wrappers
+import { SolanaVault, FeeExtension, CapExtension } from '@stbr/solana-vault';
+
+const vault = await SolanaVault.load(connection, vaultPda);
+const feeExtension = new FeeExtension(vault, feeConfig);
+const capExtension = new CapExtension(vault, capConfig);
+
+// Client calculates fees/caps locally
+const netShares = feeExtension.calculateNetShares(assets);
+const canDeposit = capExtension.checkCap(assets);
+```
+
+### v2 (On-Chain Modules)
+
+```typescript
+// Future: Modules enforced on-chain
+import { SolanaVault } from '@stbr/solana-vault';
+
+const vault = await SolanaVault.load(connection, vaultPda);
+
+// Fees and caps enforced by program
+// SDK just builds transaction with correct accounts
+const tx = await vault.deposit(assets, minSharesOut, {
+  feeConfig: feeConfigPda,        // Optional module PDAs
+  userDeposit: userDepositPda,
+});
+```
+
+### Migration Steps
+
+1. **Deploy module-enabled vault program**
+2. **Create module config PDAs** (`initialize_fee_config`, etc.)
+3. **Update SDK to v2** (pass module PDAs to transactions)
+4. **Remove client-side extension logic** (deprecated)
+5. **Update tests** to use on-chain enforcement
+
+---
+
+## 12. Per-Module Test Requirements
+
+| Module | Required Tests |
+|--------|----------------|
+| svs-fees | Entry fee calculation, exit fee calculation, management fee accrual, performance fee (high-water mark) |
+| svs-caps | Global cap enforcement, per-user cap enforcement, cap bypass via mint check |
+| svs-locks | Lock creation, lock update on deposit, lockup check on redeem, retroactive exemption |
+| svs-access | Open mode, whitelist mode, blacklist mode, merkle proof verification, freeze/unfreeze |
+| svs-rewards | Reward funding, reward claim, reward debt update, precision overflow check |
+
+---
+
+**See Also**:
+- [ARCHITECTURE.md](./ARCHITECTURE.md) — Module integration points
+- [PATTERNS.md](./PATTERNS.md) — Implementation patterns
+- [ERRORS.md](./ERRORS.md) — Module error codes
