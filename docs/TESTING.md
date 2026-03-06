@@ -33,7 +33,7 @@ SVS uses a multi-layered testing strategy:
 ## Quick Start
 
 ```bash
-# Run all integration tests (114 tests)
+# Run all integration tests (256 tests)
 anchor test
 
 # Start proof backend first (required for SVS-3/SVS-4 CT tests)
@@ -60,10 +60,10 @@ Located in `tests/`:
 
 | File | Category | Tests |
 |------|----------|-------|
-| `svs-1.ts` | SVS-1 core + view functions | 19 |
-| `svs-2.ts` | SVS-2 stored balance + sync | 30 |
-| `svs-3.ts` | SVS-3 confidential live balance (CT deposit + withdraw/redeem) | 32 |
-| `svs-4.ts` | SVS-4 confidential stored balance (CT deposit + sync + withdraw/redeem) | 33 |
+| `svs-1.ts` | SVS-1 core + view functions | 26 |
+| `svs-2.ts` | SVS-2 stored balance + sync | 35 |
+| `svs-3.ts` | SVS-3 confidential live balance (CT deposit + withdraw/redeem) | 42 |
+| `svs-4.ts` | SVS-4 confidential stored balance (CT deposit + sync + withdraw/redeem) | 43 |
 | `edge-cases.ts` | Boundary conditions + view edges | 15 |
 | `multi-user.ts` | Multi-user scenarios | 15 |
 | `decimals.ts` | Token decimal handling | 12 |
@@ -71,7 +71,7 @@ Located in `tests/`:
 | `invariants.ts` | Mathematical invariants | 15 |
 | `admin-extended.ts` | Admin operations | 10 |
 | `full-lifecycle.ts` | End-to-end flows | 8 |
-| **Total** | | **~201** |
+| **Total** | | **256** |
 
 **Note:** SVS-3/SVS-4 confidential transfer tests require the proof backend running (`cd proofs-backend && cargo run`). Without it, CT-dependent tests are automatically skipped.
 
@@ -89,12 +89,8 @@ Located in `sdk/core/tests/`:
 
 | File | Category | Tests |
 |------|----------|-------|
-| `math.test.ts` | Conversion math | 18 |
-| `pda.test.ts` | PDA derivation | 11 |
-| `vault.test.ts` | Vault interfaces | 30 |
-| `errors.test.ts` | Error handling | 25 |
-| `events.test.ts` | Event parsing | 29 |
-| **Total** | | **113** |
+| All test files | Full SDK coverage | 460 |
+| **Total** | | **460** |
 
 ### Fuzz Tests (Trident)
 
@@ -541,11 +537,11 @@ grcov . -s . --binary-path ./target/debug/ -t html --branch --ignore-not-existin
 
 | Category | Coverage |
 |----------|----------|
-| Integration Tests (SVS-1/2/3/4) | 114 tests |
+| Integration Tests (SVS-1/2/3/4) | 256 tests |
 | Proof Backend Tests | 19 tests |
-| SDK Tests | 113 tests |
+| SDK Tests | 460 tests |
 | Fuzz Tests | 5 flows |
-| **Total** | **~251 test cases** |
+| **Total** | **735+ test cases** |
 
 ## Debugging Tests
 

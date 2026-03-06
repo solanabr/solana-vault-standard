@@ -18,8 +18,7 @@ SDK for interacting with SVS-1 and SVS-2 public vaults.
 ## Installation
 
 ```bash
-cd sdk
-yarn install
+npm install @stbr/solana-vault
 ```
 
 ### Dependencies
@@ -546,26 +545,22 @@ const maxAssets = applySlippage(requiredAssets, 50, false);
 ## Testing
 
 ```bash
-cd sdk
-yarn test
+cd sdk/core
+npm test
 ```
 
 ### Test Coverage
 
 | Category | Tests |
 |----------|-------|
-| Math | 18 |
-| PDA | 11 |
-| Vault Interfaces | 30 |
-| Error Handling | 25 |
-| Event Parsing | 29 |
-| **Total** | **113** |
+| Full SDK coverage | 460 |
+| **Total** | **460** |
 
 ## Building
 
 ```bash
-cd sdk
-yarn build
+cd sdk/core
+npm run build
 ```
 
 Output in `dist/`:

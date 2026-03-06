@@ -217,7 +217,7 @@ class ConfidentialStoredBalanceVault extends ConfidentialSolanaVault {
 
 **Upgrade Authority:** `5fB4rwQTCd5GEyL17Ao7YR4juS6hDtSTkjrXMa7ZtY5x`
 
-**Test Coverage:** 33 integration tests covering init, admin, views, sync, CT deposit+sync flow (donation → sync → share price increase → second deposit), and CT withdraw/redeem flow with stored balance updates.
+**Test Coverage:** 43 integration tests covering init, admin, views, sync, CT deposit+sync flow (donation → sync → share price increase → second deposit), and CT withdraw/redeem flow with stored balance updates.
 
 **SDK Package**: Not yet published. Use SVS-3 SDK + manual `sync()` calls.
 
@@ -226,4 +226,4 @@ class ConfidentialStoredBalanceVault extends ConfidentialSolanaVault {
 **See Also**:
 - [SVS-2.md](./SVS-2.md) — Stored balance model and sync() details
 - [SVS-3.md](./SVS-3.md) — Confidential transfer implementation and ZK proof handling
-- [comparison.md](./comparison.md) — Feature matrix across all variants
+- [ARCHITECTURE.md](./ARCHITECTURE.md) — Feature matrix across all variants

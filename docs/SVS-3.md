@@ -335,7 +335,7 @@ Same virtual offset mechanism as SVS-1. Share price manipulation via donation at
 
 **Upgrade Authority:** `5fB4rwQTCd5GEyL17Ao7YR4juS6hDtSTkjrXMa7ZtY5x`
 
-**Test Coverage:** 32 integration tests covering init, admin, views, CT deposit flow (configure_account → deposit → apply_pending), and CT withdraw/redeem flow (equality + range proofs via context state accounts).
+**Test Coverage:** 42 integration tests covering init, admin, views, CT deposit flow (configure_account → deposit → apply_pending), and CT withdraw/redeem flow (equality + range proofs via context state accounts).
 
 ---
 

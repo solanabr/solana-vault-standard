@@ -6,10 +6,10 @@ Command-line interface for managing SVS (Solana Vault Standard) vaults.
 
 ```bash
 # From npm
-npm install -g @stbr/solana-vault-cli
+npm install -g @stbr/solana-vault
 
 # Or run via npx
-npx solana-vault <command>
+npx @stbr/solana-vault <command>
 ```
 
 ## Quick Start

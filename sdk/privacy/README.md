@@ -11,7 +11,7 @@ npm install @stbr/svs-privacy-sdk
 ## Requirements
 
 - SVS-3 or SVS-4 program deployed
-- [Proofs Backend](https://github.com/solanabr/tokenized-vault-standard/tree/main/proofs-backend) running for ZK proof generation
+- [Proofs Backend](https://github.com/solanabr/solana-vault-standard/tree/main/proofs-backend) running for ZK proof generation
 
 ## Quick Start
 
@@ -47,7 +47,7 @@ const proofData = await generateProofData(ProofType.Range, {
 
 ## Documentation
 
-See [Privacy Documentation](https://github.com/solanabr/tokenized-vault-standard/blob/main/docs/PRIVACY.md).
+See [Privacy Documentation](https://github.com/solanabr/solana-vault-standard/blob/main/docs/PRIVACY.md).
 
 ## License
 
