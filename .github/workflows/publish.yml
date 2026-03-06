@@ -31,7 +31,13 @@ jobs:
 
       - name: Run tests
         working-directory: sdk/core
-        run: yarn test:ci
+        run: |
+          NODE_MAJOR=$(node -v | cut -d. -f1 | tr -d 'v')
+          if [ "$NODE_MAJOR" -ge 22 ]; then
+            node --no-experimental-strip-types ./node_modules/.bin/mocha -r ts-node/register --timeout 10000 --exit 'tests/**/*.ts'
+          else
+            yarn test
+          fi
 
       - name: Publish to npm
         working-directory: sdk/core
