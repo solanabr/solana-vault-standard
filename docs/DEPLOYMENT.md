@@ -189,31 +189,6 @@ solana program set-upgrade-authority <PROGRAM_ID> \
     --url mainnet
 ```
 
-### Creating Upgrade Proposals
-
-```typescript
-async function proposeUpgrade(
-  squads: Squads,
-  multisigPda: PublicKey,
-  programId: PublicKey,
-  bufferAddress: PublicKey
-) {
-  const transaction = await squads.createTransaction({
-    multisig: multisigPda,
-    instructions: [
-      SystemProgram.createUpgradeInstruction({
-        programId,
-        bufferAddress,
-        upgradeAuthority: multisigPda,
-        spillAccount: treasury,
-      }),
-    ],
-  });
-
-  console.log("Upgrade proposal created:", transaction.toString());
-}
-```
-
 ---
 
 ## CI/CD Pipeline
@@ -287,48 +262,10 @@ jobs:
           solana config set --keypair deployer.json --url devnet
 
       - name: Deploy to devnet
-        run: |
-          anchor deploy --provider.cluster devnet
+        run: anchor deploy --provider.cluster devnet
 
       - name: Verify deployment
-        run: |
-          anchor verify ${{ vars.PROGRAM_ID }} --provider.cluster devnet
-
-  deploy-mainnet:
-    needs: test
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    runs-on: ubuntu-latest
-    environment: mainnet
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Download artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: program-artifacts
-
-      - name: Write buffer
-        run: |
-          # Only write buffer - manual multisig approval required
-          echo "${{ secrets.MAINNET_BUFFER_KEYPAIR }}" > buffer.json
-          solana program write-buffer target/deploy/my_program.so \
-              --url mainnet \
-              --keypair buffer.json
-
-      - name: Output buffer address
-        id: buffer
-        run: echo "::set-output name=address::$(cat buffer-address.txt)"
-
-      - name: Create PR comment
-        uses: actions/github-script@v7
-        with:
-          script: |
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: `🚀 Buffer written to mainnet: \`${{ steps.buffer.outputs.address }}\`\n\nApprove upgrade via Squads multisig.`
-            })
+        run: anchor verify ${{ vars.PROGRAM_ID }} --provider.cluster devnet
 ```
 
 ---
@@ -443,7 +380,7 @@ solana logs <PROGRAM_ID> --url devnet
 
 ---
 
-## Best Practices Summary
+## Best Practices
 
 1. **Always use verifiable builds** for production deployments
 2. **Use multisig** for mainnet upgrade authority
@@ -453,3 +390,11 @@ solana logs <PROGRAM_ID> --url devnet
 6. **Have a rollback plan** before deploying
 7. **Monitor post-deployment** for anomalies
 8. **Close old buffers** to reclaim SOL
+
+---
+
+**See Also:**
+- [ARCHITECTURE.md](./ARCHITECTURE.md) — Program architecture
+- [SDK.md](./SDK.md) — TypeScript SDK
+- [CLI.md](./CLI.md) — Command-line interface
+- [SECURITY.md](./SECURITY.md) — Security checklist

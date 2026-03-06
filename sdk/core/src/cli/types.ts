@@ -242,6 +242,22 @@ export interface CliConfig {
   guards?: Record<string, GuardConfig>;
   /** Alert webhook configuration */
   alerts?: AlertsConfig;
+
+  // Extended command configurations (stored as arbitrary objects)
+  /** Fee configuration per vault */
+  fees?: Record<string, unknown>;
+  /** Cap configuration per vault */
+  caps?: Record<string, unknown>;
+  /** Access control configuration per vault */
+  access?: Record<string, unknown>;
+  /** Emergency withdrawal configuration per vault */
+  emergency?: Record<string, unknown>;
+  /** Timelock configuration per vault */
+  timelock?: Record<string, unknown>;
+  /** Strategy configuration per vault */
+  strategies?: Record<string, unknown>;
+  /** Multi-vault portfolio configuration */
+  portfolio?: unknown;
 }
 
 /**

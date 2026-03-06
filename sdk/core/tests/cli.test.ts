@@ -76,6 +76,16 @@ describe("CLI Module", () => {
 
       // Config commands
       expect(commands).to.include("config");
+
+      // New extended commands
+      expect(commands).to.include("ct");
+      expect(commands).to.include("fees");
+      expect(commands).to.include("cap");
+      expect(commands).to.include("access");
+      expect(commands).to.include("emergency");
+      expect(commands).to.include("timelock");
+      expect(commands).to.include("strategy");
+      expect(commands).to.include("portfolio");
     });
 
     it("has correct version", () => {
@@ -718,6 +728,129 @@ describe("CLI Module", () => {
       expect(subcommands).to.include("run");
       expect(subcommands).to.include("validate");
       expect(subcommands).to.include("template");
+    });
+
+    it("ct command has subcommands", () => {
+      const program = createCli();
+      const ctCmd = program.commands.find((c) => c.name() === "ct");
+
+      expect(ctCmd).to.exist;
+
+      const subcommands = ctCmd!.commands.map((c) => c.name());
+      expect(subcommands).to.include("configure");
+      expect(subcommands).to.include("apply-pending");
+      expect(subcommands).to.include("status");
+    });
+
+    it("fees command has subcommands", () => {
+      const program = createCli();
+      const feesCmd = program.commands.find((c) => c.name() === "fees");
+
+      expect(feesCmd).to.exist;
+
+      const subcommands = feesCmd!.commands.map((c) => c.name());
+      expect(subcommands).to.include("show");
+      expect(subcommands).to.include("configure");
+      expect(subcommands).to.include("preview");
+      expect(subcommands).to.include("clear");
+    });
+
+    it("cap command has subcommands", () => {
+      const program = createCli();
+      const capCmd = program.commands.find((c) => c.name() === "cap");
+
+      expect(capCmd).to.exist;
+
+      const subcommands = capCmd!.commands.map((c) => c.name());
+      expect(subcommands).to.include("show");
+      expect(subcommands).to.include("configure");
+      expect(subcommands).to.include("check");
+      expect(subcommands).to.include("max");
+      expect(subcommands).to.include("clear");
+    });
+
+    it("access command has subcommands", () => {
+      const program = createCli();
+      const accessCmd = program.commands.find((c) => c.name() === "access");
+
+      expect(accessCmd).to.exist;
+
+      const subcommands = accessCmd!.commands.map((c) => c.name());
+      expect(subcommands).to.include("show");
+      expect(subcommands).to.include("set-mode");
+      expect(subcommands).to.include("add");
+      expect(subcommands).to.include("remove");
+      expect(subcommands).to.include("check");
+      expect(subcommands).to.include("generate-proof");
+      expect(subcommands).to.include("clear");
+    });
+
+    it("emergency command has subcommands", () => {
+      const program = createCli();
+      const emergencyCmd = program.commands.find(
+        (c) => c.name() === "emergency",
+      );
+
+      expect(emergencyCmd).to.exist;
+
+      const subcommands = emergencyCmd!.commands.map((c) => c.name());
+      expect(subcommands).to.include("show");
+      expect(subcommands).to.include("configure");
+      expect(subcommands).to.include("preview");
+      expect(subcommands).to.include("withdraw");
+      expect(subcommands).to.include("clear");
+    });
+
+    it("timelock command has subcommands", () => {
+      const program = createCli();
+      const timelockCmd = program.commands.find((c) => c.name() === "timelock");
+
+      expect(timelockCmd).to.exist;
+
+      const subcommands = timelockCmd!.commands.map((c) => c.name());
+      expect(subcommands).to.include("show");
+      expect(subcommands).to.include("configure");
+      expect(subcommands).to.include("propose");
+      expect(subcommands).to.include("execute");
+      expect(subcommands).to.include("cancel");
+      expect(subcommands).to.include("list");
+      expect(subcommands).to.include("clear");
+    });
+
+    it("strategy command has subcommands", () => {
+      const program = createCli();
+      const strategyCmd = program.commands.find((c) => c.name() === "strategy");
+
+      expect(strategyCmd).to.exist;
+
+      const subcommands = strategyCmd!.commands.map((c) => c.name());
+      expect(subcommands).to.include("show");
+      expect(subcommands).to.include("add");
+      expect(subcommands).to.include("remove");
+      expect(subcommands).to.include("set-weight");
+      expect(subcommands).to.include("deploy");
+      expect(subcommands).to.include("recall");
+      expect(subcommands).to.include("rebalance");
+      expect(subcommands).to.include("health");
+      expect(subcommands).to.include("clear");
+    });
+
+    it("portfolio command has subcommands", () => {
+      const program = createCli();
+      const portfolioCmd = program.commands.find(
+        (c) => c.name() === "portfolio",
+      );
+
+      expect(portfolioCmd).to.exist;
+
+      const subcommands = portfolioCmd!.commands.map((c) => c.name());
+      expect(subcommands).to.include("show");
+      expect(subcommands).to.include("configure");
+      expect(subcommands).to.include("status");
+      expect(subcommands).to.include("deposit");
+      expect(subcommands).to.include("redeem");
+      expect(subcommands).to.include("rebalance");
+      expect(subcommands).to.include("clear");
     });
   });
 });

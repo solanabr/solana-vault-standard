@@ -93,11 +93,11 @@ Always verify:
 - [programs-anchor.md](programs-anchor.md) - Anchor patterns, constraints, testing pyramid, IDL generation
 
 ### Testing & Security
-- [testing.md](testing.md) - LiteSVM, Mollusk, Trident, CI guidance
-- [security.md](security.md) - Vulnerability categories, program checklists
+- [docs/TESTING.md](../../docs/TESTING.md) - LiteSVM, Mollusk, Trident, CI guidance
+- [docs/SECURITY.md](../../docs/SECURITY.md) - Vulnerability categories, program checklists
 
 ### Deployment
-- [deployment.md](deployment.md) - Devnet/mainnet workflows, verifiable builds, multisig
+- [docs/DEPLOYMENT.md](../../docs/DEPLOYMENT.md) - Devnet/mainnet workflows, verifiable builds, multisig
 
 ### Ecosystem & Reference
 - [ecosystem.md](ecosystem.md) - Token standards, DeFi protocols
@@ -109,10 +109,10 @@ Always verify:
 | User asks about... | Primary file(s) |
 |--------------------|-----------------|
 | Anchor program code | programs-anchor.md |
-| Unit/integration testing | testing.md |
-| Fuzz testing (Trident) | testing.md |
-| Security review, audit | security.md |
-| Deploy to devnet/mainnet | deployment.md |
+| Unit/integration testing | docs/TESTING.md |
+| Fuzz testing (Trident) | docs/TESTING.md |
+| Security review, audit | docs/SECURITY.md |
+| Deploy to devnet/mainnet | docs/DEPLOYMENT.md |
 | Token standards, SPL | ecosystem.md |
 | Generated clients, IDL | idl-codegen.md |
 

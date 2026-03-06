@@ -59,6 +59,16 @@ import { registerDeriveCommand } from "./commands/offline/derive";
 import { registerConfigCommands } from "./commands/config-cmd";
 import { registerAutomationCommands } from "./commands/automation";
 
+// New extended commands
+import { registerConfidentialCommands } from "./commands/confidential";
+import { registerFeesCommands } from "./commands/fees";
+import { registerCapsCommands } from "./commands/caps";
+import { registerAccessCommands } from "./commands/access";
+import { registerEmergencyCommands } from "./commands/emergency";
+import { registerTimelockCommands } from "./commands/timelock";
+import { registerStrategyCommands } from "./commands/strategy";
+import { registerPortfolioCommands } from "./commands/portfolio";
+
 /**
  * Create and configure the CLI program.
  *
@@ -82,6 +92,16 @@ export function createCli(): Command {
   registerAutomationCommands(program);
   registerOfflineCommands(program);
   registerConfigCommands(program);
+
+  // Extended commands
+  registerConfidentialCommands(program);
+  registerFeesCommands(program);
+  registerCapsCommands(program);
+  registerAccessCommands(program);
+  registerEmergencyCommands(program);
+  registerTimelockCommands(program);
+  registerStrategyCommands(program);
+  registerPortfolioCommands(program);
 
   return program;
 }

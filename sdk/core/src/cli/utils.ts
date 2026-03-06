@@ -16,6 +16,22 @@ import {
   isValidPublicKey,
 } from "./config/vault-aliases";
 
+// Re-export for use by command files
+export { isValidPublicKey } from "./config/vault-aliases";
+
+/**
+ * Derive cluster from RPC URL.
+ */
+export function getCluster(
+  url?: string,
+): "devnet" | "mainnet-beta" | "testnet" | "localnet" {
+  if (!url) return "devnet";
+  if (url.includes("mainnet")) return "mainnet-beta";
+  if (url.includes("testnet")) return "testnet";
+  if (url.includes("localhost") || url.includes("127.0.0.1")) return "localnet";
+  return "devnet";
+}
+
 /** Base path for IDL files (relative to compiled output) */
 const IDL_BASE_PATH = path.resolve(__dirname, "..", "..", "target", "idl");
 
