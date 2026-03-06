@@ -32,8 +32,6 @@ jobs:
 
       - name: Run tests
         working-directory: sdk/core
-        env:
-          NODE_OPTIONS: '--no-experimental-strip-types'
         run: yarn test:ci
 
       - name: Type check
