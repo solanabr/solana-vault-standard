@@ -66,8 +66,18 @@ export function registerConfidentialCommands(program: Command): void {
 
       try {
         // Dynamic import of privacy SDK to avoid bundling issues
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const privacySdk = await import(
+          "@stbr/svs-privacy-sdk" as string
+        ).catch(() => null);
+        if (!privacySdk) {
+          spinner.fail(
+            "Privacy SDK not installed. Run: npm install @stbr/svs-privacy-sdk",
+          );
+          process.exit(1);
+        }
         const { ConfidentialSolanaVault, deriveElGamalKeypair, deriveAesKey } =
-          await import("@stbr/svs-privacy-sdk");
+          privacySdk;
         const { getAssociatedTokenAddressSync } =
           await import("@solana/spl-token");
 
@@ -194,11 +204,20 @@ export function registerConfidentialCommands(program: Command): void {
 
       try {
         // Dynamic import of privacy SDK
+        const privacySdk = await import(
+          "@stbr/svs-privacy-sdk" as string
+        ).catch(() => null);
+        if (!privacySdk) {
+          spinner.fail(
+            "Privacy SDK not installed. Run: npm install @stbr/svs-privacy-sdk",
+          );
+          process.exit(1);
+        }
         const {
           ConfidentialSolanaVault,
           deriveAesKey,
           computeNewDecryptableBalance,
-        } = await import("@stbr/svs-privacy-sdk");
+        } = privacySdk;
 
         // Load IDL
         const idlPath =
@@ -310,8 +329,16 @@ export function registerConfidentialCommands(program: Command): void {
       }
 
       try {
-        const { ConfidentialSolanaVault } =
-          await import("@stbr/svs-privacy-sdk");
+        const privacySdk = await import(
+          "@stbr/svs-privacy-sdk" as string
+        ).catch(() => null);
+        if (!privacySdk) {
+          output.error(
+            "Privacy SDK not installed. Run: npm install @stbr/svs-privacy-sdk",
+          );
+          process.exit(1);
+        }
+        const { ConfidentialSolanaVault } = privacySdk;
         const { getAssociatedTokenAddressSync } =
           await import("@solana/spl-token");
 
