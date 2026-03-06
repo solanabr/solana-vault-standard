@@ -13,7 +13,8 @@
   ],
   "scripts": {
     "build": "tsc",
-    "test": "NODE_OPTIONS='--no-experimental-strip-types' mocha -r ts-node/register --timeout 10000 --exit tests/**/*.ts",
+    "test": "mocha -r ts-node/register --timeout 10000 --exit 'tests/**/*.ts'",
+    "test:ci": "mocha -r ts-node/register --timeout 10000 --exit 'tests/**/*.ts'",
     "clean": "rm -rf dist"
   },
   "dependencies": {

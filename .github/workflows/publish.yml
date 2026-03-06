@@ -31,7 +31,9 @@ jobs:
 
       - name: Run tests
         working-directory: sdk/core
-        run: yarn test
+        env:
+          NODE_OPTIONS: '--no-experimental-strip-types'
+        run: yarn test:ci
 
       - name: Publish to npm
         working-directory: sdk/core
