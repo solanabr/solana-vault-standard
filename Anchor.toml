@@ -27,4 +27,5 @@ wallet = "~/.config/solana/id.json"
 # Run all tests: anchor test
 # Run specific file: anchor test -- tests/svs-1.ts
 # Run by pattern: anchor test -- "tests/svs-*.ts"
-test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/svs-*.ts"
+# Note: modules.ts tests require: anchor build -- --features modules
+test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/svs-*.ts tests/modules.ts"

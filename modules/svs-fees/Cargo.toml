@@ -1,0 +1,12 @@
+[package]
+name = "svs-fees"
+version = "0.1.0"
+edition = "2021"
+description = "Fee module for SVS vault programs - entry/exit/management/performance fees"
+license = "Apache-2.0"
+
+[dependencies]
+svs-math = { path = "../svs-math" }
+
+[dev-dependencies]
+proptest = "1.4"

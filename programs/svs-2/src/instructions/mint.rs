@@ -15,6 +15,9 @@ use crate::{
     state::Vault,
 };
 
+#[cfg(feature = "modules")]
+use crate::module_hooks;
+
 #[derive(Accounts)]
 pub struct MintShares<'info> {
     #[account(mut)]
@@ -66,20 +69,45 @@ pub struct MintShares<'info> {
 }
 
 /// Mint exact shares, paying required assets (ceiling rounding - protects vault)
+///
+/// IMPORTANT: Both deposit() and mint() enforce caps to prevent bypass.
 pub fn handler(ctx: Context<MintShares>, shares: u64, max_assets_in: u64) -> Result<()> {
     require!(shares > 0, VaultError::ZeroAmount);
 
     let vault = &ctx.accounts.vault;
     let total_shares = ctx.accounts.shares_mint.supply;
+    // SVS-2: Use STORED balance (vault.total_assets)
+    let total_assets = vault.total_assets;
 
     // Calculate required assets (ceiling rounding - user pays more)
     let assets = convert_to_assets(
         shares,
-        vault.total_assets,
+        total_assets,
         total_shares,
         vault.decimals_offset,
         Rounding::Ceiling,
     )?;
+
+    // ===== Module Hooks (if enabled) =====
+    #[cfg(feature = "modules")]
+    let net_shares = {
+        let remaining = ctx.remaining_accounts;
+        let vault_key = vault.key();
+        let user_key = ctx.accounts.user.key();
+
+        // 1. Access control check (whitelist/blacklist + frozen)
+        module_hooks::check_deposit_access(remaining, &vault_key, &user_key, &[])?;
+
+        // 2. Cap enforcement (critical: prevents cap bypass via mint)
+        module_hooks::check_deposit_caps(remaining, &vault_key, &user_key, total_assets, assets)?;
+
+        // 3. Apply entry fee - user requested `shares`, but gets fewer due to fee
+        let result = module_hooks::apply_entry_fee(remaining, &vault_key, shares)?;
+        result.net_shares
+    };
+
+    #[cfg(not(feature = "modules"))]
+    let net_shares = shares;
 
     // Slippage check
     require!(assets <= max_assets_in, VaultError::SlippageExceeded);
@@ -120,7 +148,7 @@ pub fn handler(ctx: Context<MintShares>, shares: u64, max_assets_in: u64) -> Res
             },
             signer_seeds,
         ),
-        shares,
+        net_shares,
     )?;
 
     // Update cached total assets
@@ -135,7 +163,7 @@ pub fn handler(ctx: Context<MintShares>, shares: u64, max_assets_in: u64) -> Res
         caller: ctx.accounts.user.key(),
         owner: ctx.accounts.user.key(),
         assets,
-        shares,
+        shares: net_shares,
     });
 
     Ok(())

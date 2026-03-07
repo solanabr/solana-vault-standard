@@ -555,6 +555,36 @@ See [PATTERNS.md](PATTERNS.md) for complete implementation patterns.
 
 ---
 
+## Module Integration
+
+SVS-1 supports optional on-chain modules via the `modules` feature flag.
+
+**Build:** `anchor build -- --features modules`
+
+### Available Modules
+
+| Module | Purpose | Admin Instruction |
+|--------|---------|-------------------|
+| svs-fees | Entry/exit fees | `initialize_fee_config` |
+| svs-caps | Global/per-user caps | `initialize_cap_config` |
+| svs-locks | Time-locked shares | `initialize_lock_config` |
+| svs-access | Whitelist/blacklist | `initialize_access_config` |
+
+### Integration Points
+
+Module hooks are called in deposit/mint/withdraw/redeem handlers:
+
+1. **Access check** — `verify_access()`, `check_not_frozen()`
+2. **Cap check** — `check_global_cap()`, `check_user_cap()`
+3. **Fee application** — `apply_entry_fee()` / `apply_exit_fee()`
+4. **Lock enforcement** — `check_lockup()`, `set_lock()`
+
+Module config PDAs are passed via `remaining_accounts`. If not provided, checks are skipped (pure ERC-4626 behavior).
+
+See [specs-modules.md](specs-modules.md) for full specification.
+
+---
+
 ## Implementation Files
 
 | File | Purpose |
@@ -566,6 +596,8 @@ See [PATTERNS.md](PATTERNS.md) for complete implementation patterns.
 | `programs/svs-1/src/events.rs` | Event definitions |
 | `programs/svs-1/src/math.rs` | Share/asset conversion |
 | `programs/svs-1/src/instructions/` | Instruction handlers |
+| `programs/svs-1/src/module_hooks.rs` | Module integration (with `modules` feature) |
+| `programs/svs-1/src/instructions/module_admin.rs` | Module admin instructions (with `modules` feature) |
 
 ---
 

@@ -398,12 +398,29 @@ In addition to [core errors](ERRORS.md):
 
 ---
 
+## Module Integration
+
+SVS-3 supports module configuration via admin instructions. Build with `anchor build -- --features modules`.
+
+**Note:** Module admin instructions (fee/cap/lock/access configuration) are available. Handler hook integration (automatic enforcement in deposit/withdraw) is pending due to confidential transfer proof complexity.
+
+Available admin instructions:
+- `initialize_fee_config`, `update_fee_config`
+- `initialize_cap_config`, `update_cap_config`
+- `initialize_lock_config`, `update_lock_config`
+- `initialize_access_config`, `update_access_config`
+
+See [specs-modules.md](specs-modules.md) for full specification.
+
+---
+
 ## Implementation Files
 
 | File | Purpose |
 |------|---------|
 | `programs/svs-3/src/instructions/configure_account.rs` | CT setup |
 | `programs/svs-3/src/instructions/apply_pending.rs` | Pending→available |
+| `programs/svs-3/src/instructions/module_admin.rs` | Module admin (with `modules` feature) |
 | `proofs-backend/src/` | ZK proof generation server |
 
 ---

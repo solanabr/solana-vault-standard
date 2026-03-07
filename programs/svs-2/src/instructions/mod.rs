@@ -8,6 +8,9 @@ pub mod redeem;
 pub mod view;
 pub mod withdraw;
 
+#[cfg(feature = "modules")]
+pub mod module_admin;
+
 #[allow(ambiguous_glob_reexports)]
 pub use admin::*;
 #[allow(ambiguous_glob_reexports)]
@@ -22,3 +25,7 @@ pub use redeem::*;
 pub use view::*;
 #[allow(ambiguous_glob_reexports)]
 pub use withdraw::*;
+
+#[cfg(feature = "modules")]
+#[allow(ambiguous_glob_reexports)]
+pub use module_admin::*;

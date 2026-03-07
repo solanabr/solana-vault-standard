@@ -224,6 +224,8 @@ For vaults that want to enforce balanced deposits, `deposit_proportional` is the
 
 ## 10. Module Compatibility
 
+**Implementation:** Build with `--features modules`. Module config PDAs passed via `remaining_accounts`.
+
 - **svs-fees:** Fees computed on the base-unit value of the deposit/redemption.
 - **svs-caps:** Global cap on total_portfolio_value. Per-user cap on cumulative deposited value.
 - **svs-locks:** Works identically (share-based).

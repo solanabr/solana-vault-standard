@@ -451,6 +451,8 @@ pub struct SubordinationStatus {
 
 ## 10. Module Compatibility
 
+**Implementation:** Build with `--features modules`. Module config PDAs passed via `remaining_accounts`.
+
 - **svs-fees:** Per-tranche fee configuration. Senior tranche may have lower fees (lower risk). Junior/equity tranche may have performance fees only.
 - **svs-caps:** Per-tranche caps (max size per tranche) AND global vault cap. Also enforced via `cap_bps` on the Tranche struct.
 - **svs-locks:** Per-tranche lock duration. Junior investors typically have longer lockups than senior.

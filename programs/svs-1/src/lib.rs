@@ -17,6 +17,9 @@ pub mod instructions;
 pub mod math;
 pub mod state;
 
+#[cfg(feature = "modules")]
+pub mod module_hooks;
+
 use instructions::*;
 
 declare_id!("Bv8aVSQ3DJUe3B7TqQZRZgrNvVTh8TjfpwpoeR1ckDMC");
@@ -133,5 +136,98 @@ pub mod svs_1 {
     /// Max shares owner can redeem
     pub fn max_redeem(ctx: Context<VaultViewWithOwner>) -> Result<()> {
         instructions::view::max_redeem(ctx)
+    }
+
+    // ============ Module Admin Instructions (requires "modules" feature) ============
+
+    /// Initialize fee configuration for vault
+    #[cfg(feature = "modules")]
+    pub fn initialize_fee_config(
+        ctx: Context<InitializeFeeConfig>,
+        entry_fee_bps: u16,
+        exit_fee_bps: u16,
+        management_fee_bps: u16,
+        performance_fee_bps: u16,
+    ) -> Result<()> {
+        instructions::module_admin::initialize_fee_config(
+            ctx,
+            entry_fee_bps,
+            exit_fee_bps,
+            management_fee_bps,
+            performance_fee_bps,
+        )
+    }
+
+    /// Update fee configuration
+    #[cfg(feature = "modules")]
+    pub fn update_fee_config(
+        ctx: Context<UpdateFeeConfig>,
+        entry_fee_bps: Option<u16>,
+        exit_fee_bps: Option<u16>,
+        management_fee_bps: Option<u16>,
+        performance_fee_bps: Option<u16>,
+    ) -> Result<()> {
+        instructions::module_admin::update_fee_config(
+            ctx,
+            entry_fee_bps,
+            exit_fee_bps,
+            management_fee_bps,
+            performance_fee_bps,
+        )
+    }
+
+    /// Initialize cap configuration for vault
+    #[cfg(feature = "modules")]
+    pub fn initialize_cap_config(
+        ctx: Context<InitializeCapConfig>,
+        global_cap: u64,
+        per_user_cap: u64,
+    ) -> Result<()> {
+        instructions::module_admin::initialize_cap_config(ctx, global_cap, per_user_cap)
+    }
+
+    /// Update cap configuration
+    #[cfg(feature = "modules")]
+    pub fn update_cap_config(
+        ctx: Context<UpdateCapConfig>,
+        global_cap: Option<u64>,
+        per_user_cap: Option<u64>,
+    ) -> Result<()> {
+        instructions::module_admin::update_cap_config(ctx, global_cap, per_user_cap)
+    }
+
+    /// Initialize lock configuration for vault
+    #[cfg(feature = "modules")]
+    pub fn initialize_lock_config(
+        ctx: Context<InitializeLockConfig>,
+        lock_duration: i64,
+    ) -> Result<()> {
+        instructions::module_admin::initialize_lock_config(ctx, lock_duration)
+    }
+
+    /// Update lock configuration
+    #[cfg(feature = "modules")]
+    pub fn update_lock_config(ctx: Context<UpdateLockConfig>, lock_duration: i64) -> Result<()> {
+        instructions::module_admin::update_lock_config(ctx, lock_duration)
+    }
+
+    /// Initialize access configuration for vault
+    #[cfg(feature = "modules")]
+    pub fn initialize_access_config(
+        ctx: Context<InitializeAccessConfig>,
+        mode: state::AccessMode,
+        merkle_root: [u8; 32],
+    ) -> Result<()> {
+        instructions::module_admin::initialize_access_config(ctx, mode, merkle_root)
+    }
+
+    /// Update access configuration
+    #[cfg(feature = "modules")]
+    pub fn update_access_config(
+        ctx: Context<UpdateAccessConfig>,
+        mode: Option<state::AccessMode>,
+        merkle_root: Option<[u8; 32]>,
+    ) -> Result<()> {
+        instructions::module_admin::update_access_config(ctx, mode, merkle_root)
     }
 }

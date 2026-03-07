@@ -1,0 +1,12 @@
+[package]
+name = "svs-caps"
+version = "0.1.0"
+edition = "2021"
+description = "Deposit cap module for SVS vault programs - global and per-user limits"
+license = "Apache-2.0"
+
+[dependencies]
+svs-math = { path = "../svs-math" }
+
+[dev-dependencies]
+proptest = "1.4"

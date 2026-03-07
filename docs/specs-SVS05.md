@@ -196,6 +196,8 @@ pub struct Checkpoint {
 
 ## 9. Module Compatibility
 
+**Implementation:** Build with `--features modules` to enable. Module config PDAs passed via `remaining_accounts`.
+
 SVS-5 supports all modules defined in `specs-modules.md`:
 
 - **svs-fees:** Applied on deposit/redeem after share computation. Management fees accrue on `effective_total_assets(now)`.

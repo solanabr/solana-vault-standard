@@ -283,6 +283,8 @@ To submit a new request, the user must first cancel or claim the existing one. T
 
 ## 9. Module Compatibility
 
+**Implementation:** Build with `--features modules`. Module config PDAs passed via `remaining_accounts`.
+
 - **svs-fees:** Entry fee applied at fulfillment (not request). Exit fee applied at fulfillment. Management fee accrued on `total_assets`.
 - **svs-caps:** Checked at `request_deposit` time. The cap check uses `total_assets + assets_being_requested` to include pending deposits.
 - **svs-locks:** ShareLock set when `claim_deposit` mints shares. Checked on `request_redeem`.

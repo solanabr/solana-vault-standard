@@ -14,6 +14,9 @@ use crate::{
     state::Vault,
 };
 
+#[cfg(feature = "modules")]
+use crate::module_hooks;
+
 #[derive(Accounts)]
 pub struct Redeem<'info> {
     #[account(mut)]
@@ -60,6 +63,11 @@ pub struct Redeem<'info> {
 }
 
 /// Redeem shares for assets (floor rounding - protects vault)
+///
+/// With modules feature enabled, pass module config PDAs via remaining_accounts:
+/// - LockConfig + ShareLock: checks if shares are still locked
+/// - FeeConfig: applies exit fee (fee retained in vault for later collection)
+/// - AccessConfig + FrozenAccount: access control checks
 pub fn handler(ctx: Context<Redeem>, shares: u64, min_assets_out: u64) -> Result<()> {
     require!(shares > 0, VaultError::ZeroAmount);
 
@@ -84,8 +92,30 @@ pub fn handler(ctx: Context<Redeem>, shares: u64, min_assets_out: u64) -> Result
         Rounding::Floor,
     )?;
 
-    // Slippage check
-    require!(assets >= min_assets_out, VaultError::SlippageExceeded);
+    // ===== Module Hooks (if enabled) =====
+    #[cfg(feature = "modules")]
+    let net_assets = {
+        let remaining = ctx.remaining_accounts;
+        let clock = Clock::get()?;
+        let vault_key = vault.key();
+        let user_key = ctx.accounts.user.key();
+
+        // 1. Access control check (frozen account)
+        module_hooks::check_deposit_access(remaining, &vault_key, &user_key, &[])?;
+
+        // 2. Lock check - ensure shares are not locked
+        module_hooks::check_share_lock(remaining, &vault_key, &user_key, clock.unix_timestamp)?;
+
+        // 3. Apply exit fee
+        let result = module_hooks::apply_exit_fee(remaining, &vault_key, assets)?;
+        result.net_assets
+    };
+
+    #[cfg(not(feature = "modules"))]
+    let net_assets = assets;
+
+    // Slippage check (on net assets after fee)
+    require!(net_assets >= min_assets_out, VaultError::SlippageExceeded);
 
     // Check vault has enough assets
     require!(assets <= total_assets, VaultError::InsufficientAssets);
@@ -103,7 +133,7 @@ pub fn handler(ctx: Context<Redeem>, shares: u64, min_assets_out: u64) -> Result
         shares,
     )?;
 
-    // Transfer assets from vault to user
+    // Prepare vault signer seeds
     let asset_mint_key = ctx.accounts.vault.asset_mint;
     let vault_id_bytes = ctx.accounts.vault.vault_id.to_le_bytes();
     let bump = ctx.accounts.vault.bump;
@@ -114,6 +144,7 @@ pub fn handler(ctx: Context<Redeem>, shares: u64, min_assets_out: u64) -> Result
         &[bump],
     ]];
 
+    // Transfer net assets to user (fee stays in vault for later collection)
     transfer_checked(
         CpiContext::new_with_signer(
             ctx.accounts.asset_token_program.to_account_info(),
@@ -125,18 +156,18 @@ pub fn handler(ctx: Context<Redeem>, shares: u64, min_assets_out: u64) -> Result
             },
             signer_seeds,
         ),
-        assets,
+        net_assets,
         ctx.accounts.asset_mint.decimals,
     )?;
 
-    // NOTE: No need to update total_assets - SVS-1 uses live balance
+    // NOTE: Exit fee stays in vault - use collect_fees instruction to withdraw
 
     emit!(WithdrawEvent {
         vault: ctx.accounts.vault.key(),
         caller: ctx.accounts.user.key(),
         receiver: ctx.accounts.user.key(),
         owner: ctx.accounts.user.key(),
-        assets,
+        assets: net_assets,
         shares,
     });
 

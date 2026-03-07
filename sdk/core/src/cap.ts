@@ -1,5 +1,15 @@
 /**
- * Deposit Cap Module
+ * Deposit Cap Module (Client-Side Preview)
+ *
+ * @deprecated For enforcement, use on-chain CapConfig module.
+ * This module is retained for client-side cap PREVIEW only.
+ * On-chain enforcement is handled by the svs-caps module when
+ * the vault program is built with the "modules" feature.
+ *
+ * For on-chain module PDAs, see:
+ * - `getCapConfigAddress()` from "./modules"
+ * - `getUserDepositAddress()` from "./modules"
+ * - `CapConfigAccount`, `UserDepositAccount` types from "./modules"
  *
  * Deposit limit management for SVS vaults. Supports:
  * - Global cap: Maximum total assets allowed in the vault
@@ -11,13 +21,13 @@
  * ```ts
  * import { checkDepositCap, getCapStatus } from "./cap";
  *
- * // Check if deposit is allowed
+ * // Check if deposit is allowed (PREVIEW ONLY)
  * const check = checkDepositCap(config, totalAssets, depositAmount, userPosition);
  * if (!check.allowed) {
  *   console.log(`Deposit rejected: ${check.reason}`);
  * }
  *
- * // Get current utilization
+ * // Get current utilization (PREVIEW ONLY)
  * const status = getCapStatus(config, totalAssets, userPosition);
  * console.log(`Global: ${status.globalUtilization}% used`);
  * ```

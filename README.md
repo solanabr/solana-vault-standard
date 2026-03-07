@@ -103,6 +103,24 @@ await managed.sync(authority);
 | **Emergency Controls** | Pause/unpause and authority transfer |
 | **CPI-Composable Views** | Preview functions callable from other programs |
 
+## On-Chain Modules (SVS-1)
+
+SVS-1 includes optional on-chain modules for enforcing vault policies at the program level. Build with `--features modules` to enable.
+
+| Module | Description |
+|--------|-------------|
+| `svs-fees` | Entry/exit fees (max 10%), collected later via admin instruction |
+| `svs-caps` | Global and per-user deposit caps with bypass prevention |
+| `svs-locks` | Time-locked shares before redemption (max 1 year) |
+| `svs-access` | Whitelist/blacklist with merkle proof verification |
+
+**Module PDAs** are passed via `remaining_accounts`. If not passed, checks are skipped (backward compatible).
+
+```bash
+# Build SVS-1 with modules
+anchor build -p svs-1 -- --features modules
+```
+
 ## SDK Extensions
 
 The TypeScript SDK includes modular extensions for common vault patterns:
@@ -313,8 +331,11 @@ const [sharesMint] = PublicKey.findProgramAddressSync(
 # Build all programs
 anchor build
 
-# Run all tests (256 tests, requires proof backend for SVS-3/SVS-4)
+# Run all tests (130 tests, requires proof backend for SVS-3/SVS-4)
 anchor test
+
+# Run with modules feature (includes 16 module tests)
+anchor build -p svs-1 -- --features modules && anchor test --skip-build
 
 # Run SDK tests (460 tests)
 cd sdk/core && npm test
@@ -341,6 +362,14 @@ solana-vault-standard/
 │   ├── svs-2/                    # Public vault, stored balance
 │   ├── svs-3/                    # Private vault, live balance (beta)
 │   └── svs-4/                    # Private vault, stored balance (beta)
+├── modules/
+│   ├── svs-math/                 # Shared math (mul_div, rounding, conversion)
+│   ├── svs-fees/                 # Entry/exit fee calculation
+│   ├── svs-caps/                 # Global/per-user deposit caps
+│   ├── svs-locks/                # Time-locked shares
+│   ├── svs-access/               # Whitelist/blacklist + merkle proofs
+│   ├── svs-rewards/              # Secondary reward distribution
+│   └── svs-oracle/               # Oracle price validation
 ├── sdk/
 │   ├── core/                     # @stbr/solana-vault
 │   └── privacy/                  # @stbr/svs-privacy-sdk

@@ -13,6 +13,9 @@ pub mod instructions;
 pub mod math;
 pub mod state;
 
+#[cfg(feature = "modules")]
+pub mod module_hooks;
+
 use instructions::*;
 
 declare_id!("2WP7LXWqrp1W4CwEJuVt2SxWPNY2n6AYmijh6Z4EeidY");
@@ -142,6 +145,91 @@ pub mod svs_4 {
     /// Sync total_assets with actual vault balance
     pub fn sync(ctx: Context<Sync>) -> Result<()> {
         instructions::admin::sync(ctx)
+    }
+
+    // ============ Module Admin (feature: modules) ============
+
+    #[cfg(feature = "modules")]
+    pub fn initialize_fee_config(
+        ctx: Context<InitializeFeeConfig>,
+        entry_fee_bps: u16,
+        exit_fee_bps: u16,
+        management_fee_bps: u16,
+        performance_fee_bps: u16,
+    ) -> Result<()> {
+        instructions::module_admin::initialize_fee_config(
+            ctx,
+            entry_fee_bps,
+            exit_fee_bps,
+            management_fee_bps,
+            performance_fee_bps,
+        )
+    }
+
+    #[cfg(feature = "modules")]
+    pub fn update_fee_config(
+        ctx: Context<UpdateFeeConfig>,
+        entry_fee_bps: Option<u16>,
+        exit_fee_bps: Option<u16>,
+        management_fee_bps: Option<u16>,
+        performance_fee_bps: Option<u16>,
+    ) -> Result<()> {
+        instructions::module_admin::update_fee_config(
+            ctx,
+            entry_fee_bps,
+            exit_fee_bps,
+            management_fee_bps,
+            performance_fee_bps,
+        )
+    }
+
+    #[cfg(feature = "modules")]
+    pub fn initialize_cap_config(
+        ctx: Context<InitializeCapConfig>,
+        global_cap: u64,
+        per_user_cap: u64,
+    ) -> Result<()> {
+        instructions::module_admin::initialize_cap_config(ctx, global_cap, per_user_cap)
+    }
+
+    #[cfg(feature = "modules")]
+    pub fn update_cap_config(
+        ctx: Context<UpdateCapConfig>,
+        global_cap: Option<u64>,
+        per_user_cap: Option<u64>,
+    ) -> Result<()> {
+        instructions::module_admin::update_cap_config(ctx, global_cap, per_user_cap)
+    }
+
+    #[cfg(feature = "modules")]
+    pub fn initialize_lock_config(
+        ctx: Context<InitializeLockConfig>,
+        lock_duration: i64,
+    ) -> Result<()> {
+        instructions::module_admin::initialize_lock_config(ctx, lock_duration)
+    }
+
+    #[cfg(feature = "modules")]
+    pub fn update_lock_config(ctx: Context<UpdateLockConfig>, lock_duration: i64) -> Result<()> {
+        instructions::module_admin::update_lock_config(ctx, lock_duration)
+    }
+
+    #[cfg(feature = "modules")]
+    pub fn initialize_access_config(
+        ctx: Context<InitializeAccessConfig>,
+        mode: state::AccessMode,
+        merkle_root: [u8; 32],
+    ) -> Result<()> {
+        instructions::module_admin::initialize_access_config(ctx, mode, merkle_root)
+    }
+
+    #[cfg(feature = "modules")]
+    pub fn update_access_config(
+        ctx: Context<UpdateAccessConfig>,
+        mode: Option<state::AccessMode>,
+        merkle_root: Option<[u8; 32]>,
+    ) -> Result<()> {
+        instructions::module_admin::update_access_config(ctx, mode, merkle_root)
     }
 
     // ============ View Functions (CPI composable) ============

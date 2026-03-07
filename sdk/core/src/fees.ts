@@ -1,5 +1,14 @@
 /**
- * Vault Fee Module
+ * Vault Fee Module (Client-Side Preview)
+ *
+ * @deprecated For enforcement, use on-chain FeeConfig module.
+ * This module is retained for client-side fee PREVIEW only.
+ * On-chain enforcement is handled by the svs-fees module when
+ * the vault program is built with the "modules" feature.
+ *
+ * For on-chain module PDAs, see:
+ * - `getFeeConfigAddress()` from "./modules"
+ * - `FeeConfigAccount` type from "./modules"
  *
  * Fee calculation utilities for SVS vaults. Supports:
  * - Management fees: Time-based annual fee on AUM
@@ -12,10 +21,10 @@
  * ```ts
  * import { calculateManagementFee, calculatePerformanceFee } from "./fees";
  *
- * // Calculate management fee for 30 days
+ * // Calculate management fee for 30 days (PREVIEW ONLY)
  * const mgmtFee = calculateManagementFee(totalAssets, 200, 30 * 86400);
  *
- * // Calculate performance fee with HWM
+ * // Calculate performance fee with HWM (PREVIEW ONLY)
  * const perfFee = calculatePerformanceFee(profit, highWaterMark, 2000);
  * ```
  */

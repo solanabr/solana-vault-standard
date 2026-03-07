@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-03-06
+
+### Added
+
+#### On-Chain Module System
+- **modules/svs-math**: Extracted shared math crate (mul_div, rounding, share/asset conversion)
+- **modules/svs-fees**: Entry/exit fee calculation with basis points
+- **modules/svs-caps**: Global and per-user deposit cap enforcement
+- **modules/svs-locks**: Time-locked shares with duration checking
+- **modules/svs-access**: Whitelist/blacklist with merkle proof verification
+- **modules/svs-rewards**: Secondary reward token distribution (scaffolding)
+- **modules/svs-oracle**: Oracle price validation with staleness checks (scaffolding)
+
+#### SVS-1 Module Instructions (feature: modules)
+- `initialize_fee_config` / `update_fee_config` - Configure entry/exit fees (max 10%)
+- `initialize_cap_config` / `update_cap_config` - Configure global/per-user caps
+- `initialize_lock_config` / `update_lock_config` - Configure share lock duration (max 1 year)
+- `initialize_access_config` / `update_access_config` - Configure whitelist/blacklist with merkle root
+
+#### Module Hook Integration
+- Deposit/mint handlers now enforce access control, caps, and entry fees when module configs are passed
+- Withdraw/redeem handlers now enforce access control, lock checks, and exit fees when module configs are passed
+- Modules are optional - if config PDAs not passed, checks are skipped (backward compatible)
+- Both deposit() and mint() enforce caps to prevent bypass attacks
+
+### Changed
+- Test count: 130 passing (anchor tests) + module crate unit tests
+
 ## [0.2.2] - 2025-03-06
 
 ### Fixed

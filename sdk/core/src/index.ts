@@ -36,7 +36,10 @@ export * from "./managed-vault";
 export * from "./pda";
 export * from "./math";
 
-// SDK Modules
+// On-chain Module Support (v2)
+export * from "./modules";
+
+// SDK Modules (client-side, deprecated for enforcement - use on-chain modules)
 export * from "./fees";
 export * from "./cap";
 export * from "./emergency";

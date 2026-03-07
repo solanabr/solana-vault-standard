@@ -249,6 +249,8 @@ sum(target_weight_bps) + idle_buffer_bps == 10_000
 
 ## 10. Module Compatibility
 
+**Implementation:** Build with `--features modules`. Module config PDAs passed via `remaining_accounts`.
+
 - **svs-fees:** Management fee on total_assets (including child positions). Performance fee on allocator share price appreciation. Entry/exit fees on user deposits/redeems.
 - **svs-caps:** Global cap on total_assets. Per-user cap on allocator shares value.
 - **svs-locks:** Applied to allocator shares. Users locked from redeeming for a period.

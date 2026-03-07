@@ -1,0 +1,12 @@
+[package]
+name = "svs-access"
+version = "0.1.0"
+edition = "2021"
+description = "Access control module for SVS vault programs - whitelist/blacklist with merkle proofs"
+license = "Apache-2.0"
+
+[dependencies]
+blake3 = "1.5"
+
+[dev-dependencies]
+proptest = "1.4"

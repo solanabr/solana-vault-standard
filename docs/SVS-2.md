@@ -390,6 +390,14 @@ In addition to [core errors](ERRORS.md):
 
 ---
 
+## Module Integration
+
+SVS-2 supports the same module system as SVS-1. Build with `anchor build -- --features modules`.
+
+Module hooks are fully integrated into deposit/mint/withdraw/redeem handlers. See [SVS-1.md#module-integration](SVS-1.md#module-integration) for details and [specs-modules.md](specs-modules.md) for full specification.
+
+---
+
 ## Implementation Files
 
 | File | Purpose |
@@ -397,6 +405,8 @@ In addition to [core errors](ERRORS.md):
 | `programs/svs-2/src/lib.rs` | Program entry |
 | `programs/svs-2/src/instructions/sync.rs` | sync() handler |
 | `programs/svs-2/src/state.rs` | Vault with active total_assets |
+| `programs/svs-2/src/module_hooks.rs` | Module integration (with `modules` feature) |
+| `programs/svs-2/src/instructions/module_admin.rs` | Module admin instructions |
 
 ---
 

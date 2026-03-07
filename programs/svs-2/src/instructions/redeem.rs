@@ -14,6 +14,9 @@ use crate::{
     state::Vault,
 };
 
+#[cfg(feature = "modules")]
+use crate::module_hooks;
+
 #[derive(Accounts)]
 pub struct Redeem<'info> {
     #[account(mut)]
@@ -72,21 +75,45 @@ pub fn handler(ctx: Context<Redeem>, shares: u64, min_assets_out: u64) -> Result
 
     let vault = &ctx.accounts.vault;
     let total_shares = ctx.accounts.shares_mint.supply;
+    // SVS-2: Use STORED balance (vault.total_assets)
+    let total_assets = vault.total_assets;
 
     // Calculate assets to receive (floor rounding - user gets less)
     let assets = convert_to_assets(
         shares,
-        vault.total_assets,
+        total_assets,
         total_shares,
         vault.decimals_offset,
         Rounding::Floor,
     )?;
 
-    // Slippage check
-    require!(assets >= min_assets_out, VaultError::SlippageExceeded);
+    // ===== Module Hooks (if enabled) =====
+    #[cfg(feature = "modules")]
+    let net_assets = {
+        let remaining = ctx.remaining_accounts;
+        let clock = Clock::get()?;
+        let vault_key = vault.key();
+        let user_key = ctx.accounts.user.key();
+
+        // 1. Access control check (frozen account)
+        module_hooks::check_deposit_access(remaining, &vault_key, &user_key, &[])?;
+
+        // 2. Lock check - ensure shares are not locked
+        module_hooks::check_share_lock(remaining, &vault_key, &user_key, clock.unix_timestamp)?;
+
+        // 3. Apply exit fee
+        let result = module_hooks::apply_exit_fee(remaining, &vault_key, assets)?;
+        result.net_assets
+    };
+
+    #[cfg(not(feature = "modules"))]
+    let net_assets = assets;
+
+    // Slippage check (on net assets after fee)
+    require!(net_assets >= min_assets_out, VaultError::SlippageExceeded);
 
     // Check vault has enough assets
-    require!(assets <= vault.total_assets, VaultError::InsufficientAssets);
+    require!(assets <= total_assets, VaultError::InsufficientAssets);
 
     // Burn shares from user
     token_2022::burn(
@@ -123,15 +150,15 @@ pub fn handler(ctx: Context<Redeem>, shares: u64, min_assets_out: u64) -> Result
             },
             signer_seeds,
         ),
-        assets,
+        net_assets,
         ctx.accounts.asset_mint.decimals,
     )?;
 
-    // Update cached total assets
+    // Update cached total assets (subtract full assets, fee stays in vault)
     let vault = &mut ctx.accounts.vault;
     vault.total_assets = vault
         .total_assets
-        .checked_sub(assets)
+        .checked_sub(net_assets)
         .ok_or(VaultError::MathOverflow)?;
 
     emit!(WithdrawEvent {
@@ -139,7 +166,7 @@ pub fn handler(ctx: Context<Redeem>, shares: u64, min_assets_out: u64) -> Result
         caller: ctx.accounts.user.key(),
         receiver: ctx.accounts.user.key(),
         owner: ctx.accounts.user.key(),
-        assets,
+        assets: net_assets,
         shares,
     });
 

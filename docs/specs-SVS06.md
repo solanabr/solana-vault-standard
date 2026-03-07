@@ -139,6 +139,8 @@ The proof backend must be available for withdraw/redeem operations. Deposit/mint
 
 ## 8. Module Compatibility
 
+**Implementation:** Build with `--features modules`. Same caveats as SVS-3 (admin instructions available, handler hooks require CT proof integration).
+
 All modules from `specs-modules.md` are compatible with the same caveats as SVS-3:
 
 - **svs-fees:** Entry/exit fees computed on plaintext amounts before CT application. Fee shares minted to fee_recipient's non-confidential balance (or confidential if configured).

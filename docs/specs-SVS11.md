@@ -415,6 +415,8 @@ SVS-11 uses SVS-10's core async flow but replaces the generic operator with a re
 
 ## 13. Module Compatibility
 
+**Implementation:** Build with `--features modules`. Module config PDAs passed via `remaining_accounts`.
+
 - **svs-fees:** Management fee on total_assets. Performance fee on NAV appreciation above high-water mark. Entry/exit fees at approval time.
 - **svs-caps:** Global cap on total_assets (fund size limit). Per-user cap for concentration limits.
 - **svs-locks:** Share lockup after approval (e.g., 90-day lock-in period for credit fund investors).

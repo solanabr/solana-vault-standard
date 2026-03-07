@@ -311,6 +311,16 @@ SVS-4 vaults **cannot** be used as child vaults in SVS-9 (Allocator) because:
 
 ---
 
+## Module Integration
+
+SVS-4 supports module configuration via admin instructions. Build with `anchor build -- --features modules`.
+
+**Note:** Same as SVS-3 — module admin instructions are available, handler hook integration pending due to confidential transfer complexity.
+
+See [SVS-3.md#module-integration](SVS-3.md#module-integration) for details and [specs-modules.md](specs-modules.md) for full specification.
+
+---
+
 **See Also**:
 - [SVS-2.md](./SVS-2.md) — Stored balance model and sync() details
 - [SVS-3.md](./SVS-3.md) — Confidential transfer implementation and ZK proof handling

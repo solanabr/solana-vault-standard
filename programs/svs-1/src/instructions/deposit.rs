@@ -15,6 +15,9 @@ use crate::{
     state::Vault,
 };
 
+#[cfg(feature = "modules")]
+use crate::module_hooks;
+
 #[derive(Accounts)]
 pub struct Deposit<'info> {
     #[account(mut)]
@@ -64,6 +67,13 @@ pub struct Deposit<'info> {
     pub system_program: Program<'info, System>,
 }
 
+/// Deposit assets and receive shares.
+///
+/// With modules feature enabled, pass module config PDAs via remaining_accounts:
+/// - FeeConfig: applies entry fee (fee shares minted to fee_recipient later via collect_fees)
+/// - CapConfig + UserDeposit: enforces global/per-user caps
+/// - LockConfig + ShareLock: sets lock period on minted shares
+/// - AccessConfig + FrozenAccount: access control checks
 pub fn handler(ctx: Context<Deposit>, assets: u64, min_shares_out: u64) -> Result<()> {
     require!(assets > 0, VaultError::ZeroAmount);
     require!(assets >= MIN_DEPOSIT_AMOUNT, VaultError::DepositTooSmall);
@@ -75,17 +85,48 @@ pub fn handler(ctx: Context<Deposit>, assets: u64, min_shares_out: u64) -> Resul
     // This prevents donation/inflation attacks without needing sync()
     let total_assets = ctx.accounts.asset_vault.amount;
 
-    // Calculate shares to mint (floor rounding - favors vault)
-    let shares = convert_to_shares(
-        assets,
-        total_assets,
-        total_shares,
-        vault.decimals_offset,
-        Rounding::Floor,
-    )?;
+    // ===== Module Hooks (if enabled) =====
+    #[cfg(feature = "modules")]
+    let net_shares = {
+        let remaining = ctx.remaining_accounts;
+        let vault_key = vault.key();
+        let user_key = ctx.accounts.user.key();
 
-    // Slippage check
-    require!(shares >= min_shares_out, VaultError::SlippageExceeded);
+        // 1. Access control check (whitelist/blacklist + frozen)
+        module_hooks::check_deposit_access(remaining, &vault_key, &user_key, &[])?;
+
+        // 2. Cap enforcement
+        module_hooks::check_deposit_caps(remaining, &vault_key, &user_key, total_assets, assets)?;
+
+        // Calculate shares to mint (floor rounding - favors vault)
+        let shares = convert_to_shares(
+            assets,
+            total_assets,
+            total_shares,
+            vault.decimals_offset,
+            Rounding::Floor,
+        )?;
+
+        // 3. Apply entry fee
+        let result = module_hooks::apply_entry_fee(remaining, &vault_key, shares)?;
+        result.net_shares
+        // NOTE: fee_shares are not minted here - use collect_fees instruction
+    };
+
+    #[cfg(not(feature = "modules"))]
+    let net_shares = {
+        // Calculate shares to mint (floor rounding - favors vault)
+        convert_to_shares(
+            assets,
+            total_assets,
+            total_shares,
+            vault.decimals_offset,
+            Rounding::Floor,
+        )?
+    };
+
+    // Slippage check (on net shares after fee)
+    require!(net_shares >= min_shares_out, VaultError::SlippageExceeded);
 
     // Transfer assets from user to vault
     transfer_checked(
@@ -102,7 +143,7 @@ pub fn handler(ctx: Context<Deposit>, assets: u64, min_shares_out: u64) -> Resul
         ctx.accounts.asset_mint.decimals,
     )?;
 
-    // Mint shares to user (vault PDA is mint authority)
+    // Prepare vault signer seeds
     let asset_mint_key = ctx.accounts.vault.asset_mint;
     let vault_id_bytes = ctx.accounts.vault.vault_id.to_le_bytes();
     let bump = ctx.accounts.vault.bump;
@@ -113,6 +154,7 @@ pub fn handler(ctx: Context<Deposit>, assets: u64, min_shares_out: u64) -> Resul
         &[bump],
     ]];
 
+    // Mint net shares to user
     token_2022::mint_to(
         CpiContext::new_with_signer(
             ctx.accounts.token_2022_program.to_account_info(),
@@ -123,18 +165,17 @@ pub fn handler(ctx: Context<Deposit>, assets: u64, min_shares_out: u64) -> Resul
             },
             signer_seeds,
         ),
-        shares,
+        net_shares,
     )?;
 
-    // NOTE: No need to update total_assets - SVS-1 uses live balance
-    // The asset_vault.amount is automatically updated by the transfer
+    // NOTE: Entry fee shares NOT minted here - tracked in FeeConfig for later collection
 
     emit!(DepositEvent {
         vault: ctx.accounts.vault.key(),
         caller: ctx.accounts.user.key(),
         owner: ctx.accounts.user.key(),
         assets,
-        shares,
+        shares: net_shares,
     });
 
     Ok(())

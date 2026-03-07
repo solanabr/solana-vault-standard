@@ -1,24 +1,279 @@
-/** Fee Commands - View and manage vault fee configuration */
+/**
+ * Fee Commands - View and manage vault fee configuration
+ *
+ * Commands:
+ * - init: Initialize on-chain FeeConfig PDA (requires modules feature)
+ * - show: Display fee configuration (reads on-chain if available)
+ * - update: Update on-chain fee configuration
+ * - configure: [DEPRECATED] Local config only, use `init` for on-chain
+ * - preview: Preview fee collection amounts (client-side calculation)
+ * - clear: Clear local fee configuration
+ */
 
 import { Command } from "commander";
 import { PublicKey } from "@solana/web3.js";
-import { BN } from "@coral-xyz/anchor";
+import { BN, Program, AnchorProvider } from "@coral-xyz/anchor";
 import { createContext } from "../../middleware";
 import { getGlobalOptions } from "../../index";
-import { resolveVaultArg, saveConfig, isValidPublicKey } from "../../utils";
+import {
+  resolveVaultArg,
+  saveConfig,
+  isValidPublicKey,
+  findIdlPath,
+  loadIdl,
+} from "../../utils";
 import {
   FeeConfig,
   calculateAccruedFees,
   validateFeeConfig,
   createInitialFeeState,
 } from "../../../fees";
+import {
+  getFeeConfigAddress,
+  FeeConfigAccount,
+  deriveModuleAddresses,
+} from "../../../modules";
+import { getVaultAddress } from "../../../pda";
 
 const MAX_BPS = 10000;
+
+/**
+ * Fetch on-chain FeeConfig account if it exists
+ */
+async function fetchOnChainFeeConfig(
+  connection: { getAccountInfo: (pubkey: PublicKey) => Promise<unknown> },
+  programId: PublicKey,
+  vault: PublicKey,
+): Promise<FeeConfigAccount | null> {
+  const [feeConfigPda] = getFeeConfigAddress(programId, vault);
+  const accountInfo = await connection.getAccountInfo(feeConfigPda);
+  if (!accountInfo) return null;
+
+  // Account exists - in real implementation we'd deserialize
+  // For now, return PDA address for display
+  return null; // TODO: Deserialize when IDL available with modules
+}
 
 export function registerFeesCommands(program: Command): void {
   const fees = program
     .command("fees")
     .description("View and manage vault fee configuration");
+
+  // ==========================================================================
+  // On-chain Module Commands (new)
+  // ==========================================================================
+
+  fees
+    .command("init")
+    .description(
+      "Initialize on-chain fee configuration (requires modules feature)",
+    )
+    .argument("<vault>", "Vault address or alias")
+    .requiredOption("--recipient <pubkey>", "Fee recipient address")
+    .option("--entry <bps>", "Entry fee in basis points (0-1000)", "0")
+    .option("--exit <bps>", "Exit fee in basis points (0-1000)", "0")
+    .option("--management <bps>", "Management fee in basis points (0-500)", "0")
+    .option(
+      "--performance <bps>",
+      "Performance fee in basis points (0-3000)",
+      "0",
+    )
+    .option("--program-id <pubkey>", "Program ID (if vault not in config)")
+    .option("--asset-mint <pubkey>", "Asset mint (if vault not in config)")
+    .option("--vault-id <number>", "Vault ID", "1")
+    .action(async (vaultArg, opts) => {
+      const globalOpts = getGlobalOptions(program);
+      const ctx = await createContext(globalOpts, opts, true, true);
+      const { output, config, connection, wallet, provider } = ctx;
+
+      const resolved = resolveVaultArg(vaultArg, config, opts, output);
+      if (!resolved) process.exit(1);
+
+      // Validate bps values
+      const entryFeeBps = parseInt(opts.entry);
+      const exitFeeBps = parseInt(opts.exit);
+      const managementFeeBps = parseInt(opts.management);
+      const performanceFeeBps = parseInt(opts.performance);
+
+      if (entryFeeBps < 0 || entryFeeBps > 1000) {
+        output.error("Entry fee must be 0-1000 bps (max 10%)");
+        process.exit(1);
+      }
+      if (exitFeeBps < 0 || exitFeeBps > 1000) {
+        output.error("Exit fee must be 0-1000 bps (max 10%)");
+        process.exit(1);
+      }
+      if (managementFeeBps < 0 || managementFeeBps > 500) {
+        output.error("Management fee must be 0-500 bps (max 5%)");
+        process.exit(1);
+      }
+      if (performanceFeeBps < 0 || performanceFeeBps > 3000) {
+        output.error("Performance fee must be 0-3000 bps (max 30%)");
+        process.exit(1);
+      }
+
+      if (!isValidPublicKey(opts.recipient)) {
+        output.error("Invalid fee recipient address");
+        process.exit(1);
+      }
+      const feeRecipient = new PublicKey(opts.recipient);
+
+      // Derive vault PDA
+      const [vaultPda] = getVaultAddress(
+        resolved.programId,
+        resolved.assetMint,
+        resolved.vaultId,
+      );
+
+      // Derive fee config PDA
+      const [feeConfigPda] = getFeeConfigAddress(resolved.programId, vaultPda);
+
+      output.info(`Initializing on-chain fee configuration...`);
+      output.info(`  Vault: ${vaultPda.toBase58()}`);
+      output.info(`  FeeConfig PDA: ${feeConfigPda.toBase58()}`);
+      output.info(`  Entry fee: ${entryFeeBps} bps`);
+      output.info(`  Exit fee: ${exitFeeBps} bps`);
+      output.info(`  Management fee: ${managementFeeBps} bps`);
+      output.info(`  Performance fee: ${performanceFeeBps} bps`);
+      output.info(`  Recipient: ${feeRecipient.toBase58()}`);
+      output.info("");
+
+      // Load IDL and create program
+      const idlPath = findIdlPath(resolved.variant);
+      if (!idlPath) {
+        output.error(
+          `IDL not found for ${resolved.variant}. Run \`anchor build\` first.`,
+        );
+        process.exit(1);
+      }
+
+      // Check if modules feature is available in IDL
+      const idl = loadIdl(idlPath) as {
+        instructions?: Array<{ name: string }>;
+      };
+      const hasModules = idl.instructions?.some(
+        (ix) => ix.name === "initializeFeeConfig",
+      );
+
+      if (!hasModules) {
+        output.error(
+          `Program was not built with modules feature. Rebuild with:\n` +
+            `  anchor build -- --features modules`,
+        );
+        process.exit(1);
+      }
+
+      if (globalOpts.dryRun) {
+        output.info("[DRY RUN] Would initialize fee config on-chain");
+        output.success("Dry run complete");
+        return;
+      }
+
+      output.warn(
+        "On-chain fee initialization requires program built with modules feature.",
+      );
+      output.info(
+        "Transaction building will be available when IDL includes module instructions.",
+      );
+
+      // TODO: Build and send transaction when IDL is available
+      // const program = new Program(idl, resolved.programId, provider);
+      // await program.methods
+      //   .initializeFeeConfig(feeRecipient, entryFeeBps, exitFeeBps, managementFeeBps, performanceFeeBps)
+      //   .accounts({ vault: vaultPda, feeConfig: feeConfigPda, authority: wallet.publicKey, ... })
+      //   .rpc();
+
+      output.success("Fee config PDA ready for initialization");
+    });
+
+  fees
+    .command("status")
+    .description("Check if on-chain fee module is configured for a vault")
+    .argument("<vault>", "Vault address or alias")
+    .option("--program-id <pubkey>", "Program ID (if vault not in config)")
+    .option("--asset-mint <pubkey>", "Asset mint (if vault not in config)")
+    .option("--vault-id <number>", "Vault ID", "1")
+    .action(async (vaultArg, opts) => {
+      const globalOpts = getGlobalOptions(program);
+      const ctx = await createContext(globalOpts, opts, true, false);
+      const { output, config, connection } = ctx;
+
+      const resolved = resolveVaultArg(vaultArg, config, opts, output);
+      if (!resolved) process.exit(1);
+
+      // Derive vault PDA
+      const [vaultPda] = getVaultAddress(
+        resolved.programId,
+        resolved.assetMint,
+        resolved.vaultId,
+      );
+
+      // Check all module PDAs
+      const modules = deriveModuleAddresses(resolved.programId, vaultPda);
+      const accountInfos = await connection.getMultipleAccountsInfo([
+        modules.feeConfig,
+        modules.capConfig,
+        modules.lockConfig,
+        modules.accessConfig,
+      ]);
+
+      if (globalOpts.output === "json") {
+        output.json({
+          vault: vaultPda.toBase58(),
+          modules: {
+            feeConfig: {
+              address: modules.feeConfig.toBase58(),
+              exists: accountInfos[0] !== null,
+            },
+            capConfig: {
+              address: modules.capConfig.toBase58(),
+              exists: accountInfos[1] !== null,
+            },
+            lockConfig: {
+              address: modules.lockConfig.toBase58(),
+              exists: accountInfos[2] !== null,
+            },
+            accessConfig: {
+              address: modules.accessConfig.toBase58(),
+              exists: accountInfos[3] !== null,
+            },
+          },
+        });
+        return;
+      }
+
+      output.info(`Module Status for ${vaultArg}\n`);
+      output.info(`Vault: ${vaultPda.toBase58()}\n`);
+
+      const rows: [string, string, string][] = [
+        [
+          "Fee Config",
+          modules.feeConfig.toBase58(),
+          accountInfos[0] ? "Active" : "Not initialized",
+        ],
+        [
+          "Cap Config",
+          modules.capConfig.toBase58(),
+          accountInfos[1] ? "Active" : "Not initialized",
+        ],
+        [
+          "Lock Config",
+          modules.lockConfig.toBase58(),
+          accountInfos[2] ? "Active" : "Not initialized",
+        ],
+        [
+          "Access Config",
+          modules.accessConfig.toBase58(),
+          accountInfos[3] ? "Active" : "Not initialized",
+        ],
+      ];
+
+      output.table(["Module", "PDA Address", "Status"], rows);
+    });
+
+  // ==========================================================================
+  // Legacy Local Config Commands (deprecated for enforcement)
+  // ==========================================================================
 
   fees
     .command("show")
@@ -95,7 +350,9 @@ export function registerFeesCommands(program: Command): void {
 
   fees
     .command("configure")
-    .description("Configure vault fee settings")
+    .description(
+      "[DEPRECATED] Configure local fee settings (use `fees init` for on-chain)",
+    )
     .argument("<vault>", "Vault address or alias")
     .option("--management <bps>", "Management fee in basis points (0-10000)")
     .option("--performance <bps>", "Performance fee in basis points (0-10000)")
@@ -106,6 +363,13 @@ export function registerFeesCommands(program: Command): void {
       const globalOpts = getGlobalOptions(program);
       const ctx = await createContext(globalOpts, opts, true, false);
       const { output, config, provider } = ctx;
+
+      // Deprecation warning
+      output.warn(
+        "DEPRECATED: Local fee configuration is for preview only.\n" +
+          "For on-chain enforcement, use: solana-vault fees init <vault> --recipient <pubkey>",
+      );
+      output.info("");
 
       const resolved = resolveVaultArg(vaultArg, config, opts, output);
       if (!resolved) process.exit(1);

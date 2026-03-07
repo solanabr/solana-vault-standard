@@ -11,6 +11,7 @@
     "build": "yarn workspaces foreach -A run build",
     "test": "anchor test",
     "test:local": "anchor test --skip-local-validator",
+    "test:modules": "./scripts/test-modules.sh",
     "test:sdk": "yarn workspaces foreach -A run test",
     "clean": "yarn workspaces foreach -A run clean",
     "test-svs1:basic": "npx ts-node scripts/svs-1/basic.ts",

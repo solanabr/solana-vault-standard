@@ -1,5 +1,17 @@
 /**
- * Access Control Module
+ * Access Control Module (Client-Side Preview)
+ *
+ * @deprecated For enforcement, use on-chain AccessConfig module.
+ * This module is retained for client-side access PREVIEW and
+ * merkle proof generation. On-chain enforcement is handled by
+ * the svs-access module when the vault program is built with
+ * the "modules" feature.
+ *
+ * For on-chain module PDAs, see:
+ * - `getAccessConfigAddress()` from "./modules"
+ * - `getFrozenAccountAddress()` from "./modules"
+ * - `AccessConfigAccount`, `FrozenAccountState` types from "./modules"
+ * - `AccessMode` enum from "./modules" (on-chain compatible)
  *
  * Address-based access management for SVS vaults. Supports:
  * - Open mode: Anyone can deposit
@@ -14,15 +26,15 @@
  * ```ts
  * import { checkAccess, verifyMerkleProof, buildMerkleTree } from "./access-control";
  *
- * // Simple whitelist check
+ * // Simple whitelist check (PREVIEW ONLY)
  * const result = checkAccess(config, userAddress);
  * if (!result.allowed) {
  *   console.log(`Access denied: ${result.reason}`);
  * }
  *
- * // Build merkle tree for large whitelist
+ * // Build merkle tree for on-chain verification
  * const { root, proofs } = buildMerkleTree(addresses);
- * const isValid = verifyMerkleProof(root, proofs[userAddress], userAddress);
+ * // Upload root to AccessConfig on-chain, pass proof to deposit instruction
  * ```
  */
 

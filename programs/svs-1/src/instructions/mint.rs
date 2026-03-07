@@ -15,6 +15,9 @@ use crate::{
     state::Vault,
 };
 
+#[cfg(feature = "modules")]
+use crate::module_hooks;
+
 #[derive(Accounts)]
 pub struct MintShares<'info> {
     #[account(mut)]
@@ -65,6 +68,14 @@ pub struct MintShares<'info> {
 }
 
 /// Mint exact shares, paying required assets (ceiling rounding - protects vault)
+///
+/// With modules feature enabled, pass module config PDAs via remaining_accounts:
+/// - FeeConfig: applies entry fee (user receives fewer shares)
+/// - CapConfig + UserDeposit: enforces global/per-user caps
+/// - LockConfig + ShareLock: sets lock period on minted shares
+/// - AccessConfig + FrozenAccount: access control checks
+///
+/// IMPORTANT: Both deposit() and mint() enforce caps to prevent bypass.
 pub fn handler(ctx: Context<MintShares>, shares: u64, max_assets_in: u64) -> Result<()> {
     require!(shares > 0, VaultError::ZeroAmount);
 
@@ -82,6 +93,27 @@ pub fn handler(ctx: Context<MintShares>, shares: u64, max_assets_in: u64) -> Res
         vault.decimals_offset,
         Rounding::Ceiling,
     )?;
+
+    // ===== Module Hooks (if enabled) =====
+    #[cfg(feature = "modules")]
+    let net_shares = {
+        let remaining = ctx.remaining_accounts;
+        let vault_key = vault.key();
+        let user_key = ctx.accounts.user.key();
+
+        // 1. Access control check (whitelist/blacklist + frozen)
+        module_hooks::check_deposit_access(remaining, &vault_key, &user_key, &[])?;
+
+        // 2. Cap enforcement (critical: prevents cap bypass via mint)
+        module_hooks::check_deposit_caps(remaining, &vault_key, &user_key, total_assets, assets)?;
+
+        // 3. Apply entry fee - user requested `shares`, but gets fewer due to fee
+        let result = module_hooks::apply_entry_fee(remaining, &vault_key, shares)?;
+        result.net_shares
+    };
+
+    #[cfg(not(feature = "modules"))]
+    let net_shares = shares;
 
     // Slippage check
     require!(assets <= max_assets_in, VaultError::SlippageExceeded);
@@ -101,7 +133,7 @@ pub fn handler(ctx: Context<MintShares>, shares: u64, max_assets_in: u64) -> Res
         ctx.accounts.asset_mint.decimals,
     )?;
 
-    // Mint exact shares to user
+    // Prepare vault signer seeds
     let asset_mint_key = ctx.accounts.vault.asset_mint;
     let vault_id_bytes = ctx.accounts.vault.vault_id.to_le_bytes();
     let bump = ctx.accounts.vault.bump;
@@ -112,6 +144,7 @@ pub fn handler(ctx: Context<MintShares>, shares: u64, max_assets_in: u64) -> Res
         &[bump],
     ]];
 
+    // Mint net shares to user
     token_2022::mint_to(
         CpiContext::new_with_signer(
             ctx.accounts.token_2022_program.to_account_info(),
@@ -122,17 +155,17 @@ pub fn handler(ctx: Context<MintShares>, shares: u64, max_assets_in: u64) -> Res
             },
             signer_seeds,
         ),
-        shares,
+        net_shares,
     )?;
 
-    // NOTE: No need to update total_assets - SVS-1 uses live balance
+    // NOTE: Entry fee shares NOT minted here - tracked in FeeConfig for later collection
 
     emit!(DepositEvent {
         vault: ctx.accounts.vault.key(),
         caller: ctx.accounts.user.key(),
         owner: ctx.accounts.user.key(),
         assets,
-        shares,
+        shares: net_shares,
     });
 
     Ok(())

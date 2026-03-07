@@ -1,0 +1,11 @@
+[package]
+name = "svs-rewards"
+version = "0.1.0"
+edition = "2021"
+description = "Secondary reward token module for SVS vault programs - proportional distribution"
+license = "Apache-2.0"
+
+[dependencies]
+
+[dev-dependencies]
+proptest = "1.4"

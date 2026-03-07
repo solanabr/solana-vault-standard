@@ -14,6 +14,9 @@ use crate::{
     state::Vault,
 };
 
+#[cfg(feature = "modules")]
+use crate::module_hooks;
+
 #[derive(Accounts)]
 pub struct Withdraw<'info> {
     #[account(mut)]
@@ -63,18 +66,46 @@ pub struct Withdraw<'info> {
 /// Withdraw exact assets, burning required shares (ceiling rounding - protects vault)
 pub fn handler(ctx: Context<Withdraw>, assets: u64, max_shares_in: u64) -> Result<()> {
     require!(assets > 0, VaultError::ZeroAmount);
-    require!(
-        assets <= ctx.accounts.vault.total_assets,
-        VaultError::InsufficientAssets
-    );
 
     let vault = &ctx.accounts.vault;
     let total_shares = ctx.accounts.shares_mint.supply;
+    // SVS-2: Use STORED balance (vault.total_assets)
+    let total_assets = vault.total_assets;
 
-    // Calculate shares to burn (ceiling rounding - user burns more)
+    // ===== Module Hooks (if enabled) =====
+    #[cfg(feature = "modules")]
+    let (net_assets, _fee_assets) = {
+        let remaining = ctx.remaining_accounts;
+        let clock = Clock::get()?;
+        let vault_key = vault.key();
+        let user_key = ctx.accounts.user.key();
+
+        // 1. Access control check (frozen account)
+        module_hooks::check_deposit_access(remaining, &vault_key, &user_key, &[])?;
+
+        // 2. Lock check - ensure shares are not locked
+        module_hooks::check_share_lock(remaining, &vault_key, &user_key, clock.unix_timestamp)?;
+
+        // 3. Apply exit fee
+        let result = module_hooks::apply_exit_fee(remaining, &vault_key, assets)?;
+        (result.net_assets, result.fee_assets)
+    };
+
+    #[cfg(not(feature = "modules"))]
+    let net_assets = assets;
+
+    // Total assets to withdraw from vault (user gets net, fee stays in vault)
+    let total_assets_needed = assets; // User requested this much
+
+    require!(
+        total_assets_needed <= total_assets,
+        VaultError::InsufficientAssets
+    );
+
+    // Calculate shares to burn based on requested assets (ceiling rounding - user burns more)
     let shares = convert_to_shares(
-        assets,
-        vault.total_assets,
+        total_assets_needed,
+        total_assets,
         total_shares,
         vault.decimals_offset,
         Rounding::Ceiling,
@@ -124,7 +155,7 @@ pub fn handler(ctx: Context<Withdraw>, assets: u64, max_shares_in: u64) -> Resul
             },
             signer_seeds,
         ),
-        assets,
+        net_assets,
         ctx.accounts.asset_mint.decimals,
     )?;
 
@@ -132,7 +163,7 @@ pub fn handler(ctx: Context<Withdraw>, assets: u64, max_shares_in: u64) -> Resul
     let vault = &mut ctx.accounts.vault;
     vault.total_assets = vault
         .total_assets
-        .checked_sub(assets)
+        .checked_sub(net_assets)
         .ok_or(VaultError::MathOverflow)?;
 
     emit!(WithdrawEvent {
@@ -140,7 +171,7 @@ pub fn handler(ctx: Context<Withdraw>, assets: u64, max_shares_in: u64) -> Resul
         caller: ctx.accounts.user.key(),
         receiver: ctx.accounts.user.key(),
         owner: ctx.accounts.user.key(),
-        assets,
+        assets: net_assets,
         shares,
     });
 

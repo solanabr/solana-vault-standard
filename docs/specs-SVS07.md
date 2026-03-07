@@ -152,6 +152,8 @@ SVS-7 exposes both `_sol` and `_wsol` variants for each operation. This allows:
 
 ## 9. Module Compatibility
 
+**Implementation:** Build with `--features modules`. Module config PDAs passed via `remaining_accounts`.
+
 All modules from `specs-modules.md` are compatible:
 
 - **svs-fees:** Fees computed on lamport amounts. Fee assets sent as native SOL to fee_recipient.

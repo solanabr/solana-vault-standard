@@ -15,6 +15,9 @@ use crate::{
     state::Vault,
 };
 
+#[cfg(feature = "modules")]
+use crate::module_hooks;
+
 #[derive(Accounts)]
 pub struct Deposit<'info> {
     #[account(mut)]
@@ -71,18 +74,50 @@ pub fn handler(ctx: Context<Deposit>, assets: u64, min_shares_out: u64) -> Resul
 
     let vault = &ctx.accounts.vault;
     let total_shares = ctx.accounts.shares_mint.supply;
+    // SVS-2: Use STORED balance (vault.total_assets)
+    let total_assets = vault.total_assets;
 
-    // Calculate shares to mint (floor rounding - favors vault)
-    let shares = convert_to_shares(
-        assets,
-        vault.total_assets,
-        total_shares,
-        vault.decimals_offset,
-        Rounding::Floor,
-    )?;
+    // ===== Module Hooks (if enabled) =====
+    #[cfg(feature = "modules")]
+    let net_shares = {
+        let remaining = ctx.remaining_accounts;
+        let vault_key = vault.key();
+        let user_key = ctx.accounts.user.key();
 
-    // Slippage check
-    require!(shares >= min_shares_out, VaultError::SlippageExceeded);
+        // 1. Access control check (whitelist/blacklist + frozen)
+        module_hooks::check_deposit_access(remaining, &vault_key, &user_key, &[])?;
+
+        // 2. Cap enforcement
+        module_hooks::check_deposit_caps(remaining, &vault_key, &user_key, total_assets, assets)?;
+
+        // Calculate shares to mint (floor rounding - favors vault)
+        let shares = convert_to_shares(
+            assets,
+            total_assets,
+            total_shares,
+            vault.decimals_offset,
+            Rounding::Floor,
+        )?;
+
+        // 3. Apply entry fee
+        let result = module_hooks::apply_entry_fee(remaining, &vault_key, shares)?;
+        result.net_shares
+    };
+
+    #[cfg(not(feature = "modules"))]
+    let net_shares = {
+        // Calculate shares to mint (floor rounding - favors vault)
+        convert_to_shares(
+            assets,
+            total_assets,
+            total_shares,
+            vault.decimals_offset,
+            Rounding::Floor,
+        )?
+    };
+
+    // Slippage check (on net shares after fee)
+    require!(net_shares >= min_shares_out, VaultError::SlippageExceeded);
 
     // Transfer assets from user to vault
     transfer_checked(
@@ -120,7 +155,7 @@ pub fn handler(ctx: Context<Deposit>, assets: u64, min_shares_out: u64) -> Resul
             },
             signer_seeds,
         ),
-        shares,
+        net_shares,
     )?;
 
     // Update cached total assets
@@ -135,7 +170,7 @@ pub fn handler(ctx: Context<Deposit>, assets: u64, min_shares_out: u64) -> Resul
         caller: ctx.accounts.user.key(),
         owner: ctx.accounts.user.key(),
         assets,
-        shares,
+        shares: net_shares,
     });
 
     Ok(())

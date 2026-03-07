@@ -1,8 +1,15 @@
 /**
- * Timelock Module
+ * Timelock Module (Governance)
  *
  * Time-delayed admin operations for SVS vaults. Provides governance
  * safety by requiring a waiting period before sensitive changes take effect.
+ *
+ * NOTE: This module handles GOVERNANCE timelocks (admin operations).
+ * For SHARE REDEMPTION locks (user share lockup periods), see the
+ * on-chain svs-locks module:
+ * - `getLockConfigAddress()` from "./modules"
+ * - `getShareLockAddress()` from "./modules"
+ * - `LockConfigAccount`, `ShareLockAccount` types from "./modules"
  *
  * Features:
  * - Configurable delay (min/max bounds)

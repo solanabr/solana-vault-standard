@@ -1,0 +1,11 @@
+[package]
+name = "svs-oracle"
+version = "0.1.0"
+edition = "2021"
+description = "Oracle price module for SVS vault programs - price validation for async vaults"
+license = "Apache-2.0"
+
+[dependencies]
+
+[dev-dependencies]
+proptest = "1.4"
