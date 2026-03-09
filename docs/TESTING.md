@@ -48,8 +48,16 @@ cargo test --manifest-path programs/svs-1/Cargo.toml
 # Run proof backend tests (19 tests)
 cd proofs-backend && cargo test
 
-# Run fuzz tests
-cd trident-tests && cargo test
+# Build fuzz tests
+cd trident-tests && cargo build
+
+# Run fuzz tests (simulation)
+trident fuzz run fuzz_0  # SVS-1 math + modules
+trident fuzz run fuzz_1  # SVS-2 stored balance
+trident fuzz run fuzz_3  # SVS-3/4 CT state machine
+
+# Run fuzz tests (actual program calls — requires anchor build -p svs_1)
+trident fuzz run fuzz_2
 ```
 
 ## Test Categories
@@ -94,15 +102,39 @@ Located in `sdk/core/tests/`:
 
 ### Fuzz Tests (Trident)
 
-Located in `trident-tests/`:
+Located in `trident-tests/`. Uses `svs-math` and `svs-fees` crates directly — no re-implemented math.
 
-| Flow | Invariant |
-|------|-----------|
-| `flow_initialize` | Vault state setup |
-| `flow_deposit` | Positive deposit → positive shares |
-| `flow_redeem` | Cannot redeem more than available |
-| `flow_conversion_check` | Round-trip doesn't create value |
-| `end` | Shares don't exceed theoretical max |
+| Binary | Phase | Scope | Iterations |
+|--------|-------|-------|------------|
+| `fuzz_0` | 1-2 | SVS-1 math, multi-user, fees, caps, locks, access control | 5000 × 80 |
+| `fuzz_1` | 3 | SVS-2 stored balance vs actual balance, sync, yield | 5000 × 80 |
+| `fuzz_2` | 4 | SVS-1 actual program calls (dual-oracle) | 2000 × 40 |
+| `fuzz_3` | 5 | SVS-3/4 CT state machine, SVS-4 sync timing | 5000 × 80 |
+
+**fuzz_0 flows (SVS-1 simulation + modules):**
+- Core: `flow_deposit`, `flow_mint`, `flow_withdraw`, `flow_redeem`, `flow_roundtrip_deposit_redeem`, `flow_inflation_attack`, `flow_zero_edge_cases`, `flow_max_value_edge_cases`
+- Multi-user: `flow_multi_deposit`, `flow_multi_redeem` (5 users)
+- Admin: `flow_pause`, `flow_unpause`, `flow_deposit_while_paused`
+- Fees: `flow_init_fees` (validates BPS limits, fee + net = gross)
+- Caps: `flow_init_caps`, `flow_deposit_exceeds_global_cap`, `flow_deposit_at_boundary`
+- Locks: `flow_init_locks`, `flow_advance_clock`, `flow_redeem_while_locked`
+- Access: `flow_init_access_whitelist`, `flow_init_access_blacklist`, `flow_freeze_user`, `flow_frozen_user_blocked`
+- Invariants: share price monotonicity, user balance sum = total shares, no free money per user, cap enforcement
+
+**fuzz_1 flows (SVS-2 stored balance):**
+- `flow_deposit`, `flow_redeem`, `flow_external_yield`, `flow_sync`, `flow_deposit_before_sync`, `flow_sync_then_redeem`
+- Invariants: stored ≤ actual, stale price gives more shares, sync increases redemption value
+
+**fuzz_2 flows (actual program calls):**
+- `flow_initialize`, `flow_deposit`, `flow_redeem`, `flow_pause`, `flow_unpause`, `flow_deposit_while_paused`
+- `flow_preview_vs_actual_deposit` (oracle prediction as min_shares_out), `flow_max_deposit_honesty`
+- Requires: `anchor build -p svs_1`
+
+**fuzz_3 flows (CT state machine):**
+- `flow_configure_account`, `flow_ct_deposit`, `flow_apply_pending`, `flow_ct_withdraw`
+- `flow_double_apply_pending`, `flow_withdraw_insufficient_available`, `flow_freeze_account`, `flow_unfreeze_account`
+- SVS-4: `flow_external_yield`, `flow_sync`, `flow_sync_with_pending_shares`
+- Invariants: unconfigured users can't deposit, double apply is no-op, withdraw only from available, stored ≤ actual
 
 ## Running Tests
 
@@ -155,11 +187,20 @@ cargo test --manifest-path programs/svs-1/Cargo.toml -- --nocapture
 ```bash
 cd trident-tests
 
-# Run fuzz tests
-cargo test
+# Build all fuzz binaries (verifies compilation)
+cargo build
 
-# Run with more iterations
-FUZZ_ITERATIONS=10000 cargo test
+# Run individual fuzz binaries via Trident
+trident fuzz run fuzz_0  # SVS-1 simulation (math, multi-user, modules)
+trident fuzz run fuzz_1  # SVS-2 stored balance simulation
+trident fuzz run fuzz_2  # SVS-1 actual program calls (requires svs_1.so)
+trident fuzz run fuzz_3  # SVS-3/4 CT state machine simulation
+
+# Run with debug logging
+TRIDENT_FUZZ_DEBUG=1 trident fuzz run fuzz_0
+
+# Run with metrics collection
+FUZZING_METRICS=1 trident fuzz run fuzz_0
 ```
 
 ## Test Scenarios
@@ -352,18 +393,21 @@ describe("Math Functions", () => {
 ### Fuzz Test Template
 
 ```rust
+use svs_math::{convert_to_shares, convert_to_assets, Rounding};
 use trident_fuzz::fuzzing::*;
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 struct VaultTracker {
     initialized: bool,
     total_assets: u64,
     total_shares: u64,
+    decimals_offset: u8,
 }
 
 #[derive(FuzzTestMethods)]
 struct FuzzTest {
     trident: Trident,
+    fuzz_accounts: AccountAddresses,
     vault_tracker: VaultTracker,
 }
 
@@ -373,19 +417,36 @@ impl FuzzTest {
     fn flow_deposit(&mut self) {
         if !self.vault_tracker.initialized { return; }
 
-        let assets: u64 = rand::random::<u64>() % 1_000_000_000;
-        let shares = self.calculate_shares(assets);
+        let assets: u64 = (rand::random::<u64>() % 1_000_000_000).max(1000);
 
-        // Invariant check
+        // Use svs-math crate directly (not re-implemented math)
+        let shares = match convert_to_shares(
+            assets,
+            self.vault_tracker.total_assets,
+            self.vault_tracker.total_shares,
+            self.vault_tracker.decimals_offset,
+            Rounding::Floor,
+        ) {
+            Ok(s) => s,
+            Err(_) => return,
+        };
+
+        self.vault_tracker.total_assets = self.vault_tracker.total_assets.saturating_add(assets);
+        self.vault_tracker.total_shares = self.vault_tracker.total_shares.saturating_add(shares);
+
         assert!(shares > 0 || assets < 1000,
-            "Invariant: deposit should yield shares");
+            "Positive deposit to non-empty vault yielded 0 shares");
     }
 
     #[end]
     fn end(&mut self) {
-        // Final invariants
-        assert!(self.vault_tracker.total_shares <= MAX_THEORETICAL);
+        assert!(self.vault_tracker.total_redeemed <= self.vault_tracker.total_deposited,
+            "Redeemed more than deposited");
     }
+}
+
+fn main() {
+    FuzzTest::fuzz(5000, 80);
 }
 ```
 
@@ -540,8 +601,8 @@ grcov . -s . --binary-path ./target/debug/ -t html --branch --ignore-not-existin
 | Integration Tests (SVS-1/2/3/4) | 256 tests |
 | Proof Backend Tests | 19 tests |
 | SDK Tests | 460 tests |
-| Fuzz Tests | 5 flows |
-| **Total** | **735+ test cases** |
+| Fuzz Tests | 4 binaries, 40+ flows |
+| **Total** | **775+ test cases** |
 
 ## Debugging Tests
 
@@ -568,11 +629,17 @@ node --inspect-brk node_modules/.bin/mocha tests/**/*.ts
 ### Fuzz Test Debugging
 
 ```bash
-# Print test progress
-RUST_LOG=trident=debug cargo test
+# Run with debug logging
+TRIDENT_FUZZ_DEBUG=1 trident fuzz run fuzz_0
 
-# Save failing inputs
-PROPTEST_CASES=10000 cargo test 2>&1 | tee fuzz_output.log
+# Run with metrics
+FUZZING_METRICS=1 trident fuzz run fuzz_0
+
+# Build and check compilation
+cd trident-tests && cargo build
+
+# Check for banned patterns
+grep -r 'unwrap()' trident-tests/fuzz_*/test_fuzz.rs  # should find nothing
 ```
 
 ## Best Practices
@@ -649,35 +716,44 @@ trident init
 
 ### Key Flows to Fuzz
 
-| Flow | Property |
-|------|----------|
-| `initialize` → `deposit` → `redeem` | No value creation |
-| `deposit` → `yield` → `sync` → `redeem` | Yield distributed proportionally |
-| Concurrent deposits | Order-independent results |
-| Max values | No overflow |
+| Binary | Flow Sequence | Property |
+|--------|---------------|----------|
+| `fuzz_0` | `initialize` → `deposit` → `redeem` | No value creation (round-trip) |
+| `fuzz_0` | Multi-user deposits/redeems | Share balance sum = total, no free money |
+| `fuzz_0` | `init_fees` → `deposit` → `redeem` | fee + net = gross, fees favor vault |
+| `fuzz_0` | `init_caps` → `deposit` | total_assets ≤ global_cap |
+| `fuzz_0` | `init_locks` → `deposit` → `advance_clock` → `redeem` | Lock enforced until expiry |
+| `fuzz_0` | `pause` → `deposit` | Paused vault rejects all mutations |
+| `fuzz_1` | `deposit` → `external_yield` → `sync` → `redeem` | Yield distributed proportionally |
+| `fuzz_1` | `external_yield` → `deposit_before_sync` | Stale price ≥ shares vs fresh |
+| `fuzz_2` | `initialize` → `deposit` → `preview_deposit` | Oracle matches program output |
+| `fuzz_3` | `configure` → `ct_deposit` → `apply_pending` → `withdraw` | CT state machine validity |
+| `fuzz_3` | `sync` with pending shares | Sync increases share price |
 
-### Invariant Assertions
+### Invariant Summary
 
-```rust
-// In trident-tests/src/lib.rs
+All fuzz binaries assert these properties:
 
-#[invariant]
-fn shares_conservation(state: &VaultState) -> bool {
-    state.total_shares == state.user_shares.values().sum()
-}
+```
+# Share price monotonicity (fuzz_0)
+price_after >= price_before  for every deposit/mint/withdraw/redeem
 
-#[invariant]
-fn rounding_favors_vault(pre: &Snapshot, post: &Snapshot, op: &Operation) -> bool {
-    match op {
-        Operation::Deposit { assets, shares } => {
-            shares <= calculate_max_shares(assets, pre)
-        }
-        Operation::Redeem { shares, assets } => {
-            assets <= calculate_max_assets(shares, pre)
-        }
-        _ => true
-    }
-}
+# Multi-user conservation (fuzz_0)
+sum(user.shares_balance) + fee_shares == total_shares
+
+# Fee accounting (fuzz_0)
+fee + net == gross  for every fee application
+
+# Stored balance (fuzz_1)
+stored_total_assets <= actual_balance  at all times
+
+# Preview consistency (fuzz_2)
+deposit(assets, min_shares_out=oracle_prediction) succeeds
+
+# CT state machine (fuzz_3)
+unconfigured users cannot deposit
+withdraw only from available balance (not pending)
+double apply_pending is no-op
 ```
 
 ---

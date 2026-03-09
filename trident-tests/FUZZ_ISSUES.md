@@ -1,129 +1,104 @@
 # Trident Fuzz Test Status
 
-## Current Status: ✅ Fixed (SVS-1 Only)
+## Current Status: ✅ Full Suite (5 Phases)
 
-The types.rs was regenerated to only include SVS-1 (from all 4 programs merged).
-
-## What Was Fixed
-
-### Issue 2: "Round-trip created free assets" Assertion Failures
-
-The `flow_mint` function was allowing mints of huge random share amounts (up to u64::MAX) which could result in 0 required assets due to the math. This skewed the vault's share/asset ratio and caused subsequent round-trip tests to detect "free assets."
-
-**Root cause:** The fuzz test generated random shares without considering the current vault state, allowing:
-- Huge shares to be minted for 0 assets when the ratio was extreme
-- This polluted the vault state for subsequent invariant tests
-
-**Fixes applied in `test_fuzz.rs`:**
-
-1. **flow_mint guards:**
-```rust
-// Only allow mint after vault has been properly initialized via deposit
-if assets_before < 1001 {
-    return;
-}
-
-// Limit mint to 10% of current supply to prevent ratio skew
-let max_mint = shares_before / 10;
-if max_mint == 0 {
-    return;
-}
-
-// Skip if assets is 0 - this would create "free" shares
-if assets == 0 {
-    return;
-}
-
-// Skip if this would degrade the asset/share ratio by more than 1%
-let current_ratio_x1000 = (assets_before as u128 * 1000) / shares_before.max(1) as u128;
-let new_ratio_x1000 = ((assets_before + assets) as u128 * 1000) / (shares_before + shares) as u128;
-if new_ratio_x1000 < current_ratio_x1000 * 99 / 100 {
-    return;
-}
-```
-
-2. **flow_roundtrip_deposit_redeem guards:**
-```rust
-// Skip if vault hasn't been properly initialized
-if assets_before < 1001 || shares_before == 0 {
-    return;
-}
-
-// Skip if vault is in a degenerate state (ratio > 100x expected)
-let offset = 10u64.pow(self.vault_tracker.decimals_offset as u32);
-let ratio = (shares_before as u128) / (assets_before as u128).max(1);
-if ratio > offset as u128 * 100 {
-    return;
-}
-```
-
-**Note:** This was a bug in the test simulation, NOT in the actual SVS-1 program. The real program enforces minimum deposits and wouldn't allow 0-asset mints.
-
-### Issue 1: Duplicate Type Definitions
-When `trident fuzz refresh` was run, it merged types from all 4 SVS programs into a single file, causing 123 compilation errors due to duplicate structs.
-
-**Fix applied:** Extracted only the SVS-1 module and its custom types, removing:
-- SVS-2 module and types (including `VaultSynced`, `Sync` instruction)
-- SVS-3 module and types (including `ConfidentialVault`)
-- SVS-4 module and types
-
-### Files Modified
-- `fuzz_0/types.rs` - Reduced from 11,527 lines to 2,758 lines (SVS-1 only)
-- `fuzz_0/test_fuzz.rs` - Enhanced with comprehensive invariant tests
-
-## Current Fuzz Tests
-
-The `test_fuzz.rs` tests mathematical invariants through simulation:
-
-| Test Flow | What It Tests |
-|-----------|--------------|
-| `flow_initialize` | Fuzzes decimals offset (0-9) |
-| `flow_deposit` | Deposit with random amounts |
-| `flow_mint` | Exact shares minting |
-| `flow_withdraw` | Exact asset withdrawal |
-| `flow_redeem` | Exact shares redemption |
-| `flow_roundtrip_deposit_redeem` | No free assets from round-trips |
-| `flow_inflation_attack` | Virtual offset attack resistance |
-| `flow_zero_edge_cases` | Zero amount handling |
-| `flow_max_value_edge_cases` | Overflow protection |
+| Binary | Phase | Coverage | Type |
+|--------|-------|----------|------|
+| `fuzz_0` | 1-2 | SVS-1 math + modules | Simulation |
+| `fuzz_1` | 3 | SVS-2 stored balance + sync | Simulation |
+| `fuzz_2` | 4 | SVS-1 actual program calls | Program calls |
+| `fuzz_3` | 5 | SVS-3/4 CT state machine | Simulation |
 
 ## Running Fuzz Tests
 
 ```bash
 cd trident-tests
+
+# Phase 1-2: SVS-1 simulation (math, multi-user, fees, caps, locks, access)
 trident fuzz run fuzz_0
+
+# Phase 3: SVS-2 stored balance simulation
+trident fuzz run fuzz_1
+
+# Phase 4: SVS-1 actual program calls (requires: anchor build -p svs_1)
+trident fuzz run fuzz_2
+
+# Phase 5: SVS-3/4 CT state machine simulation
+trident fuzz run fuzz_3
 ```
 
-## Known Limitation
+## Phase 1: SVS-1 Simulation (fuzz_0)
 
-The current tests are **simulation-only** - they test the math formulas in isolation, not by calling the actual SVS-1 program. This is still valuable for validating:
-- Virtual offset protection against inflation attacks
-- Rounding behavior (always favors vault)
-- Round-trip invariants (no free money)
-- Edge cases
+### 1A: Uses `svs-math` crate directly
+Math helpers replaced with `svs_math::convert_to_shares()` / `convert_to_assets()` calls.
 
-## To Add Program-Calling Tests
+### 1B: Share price monotonicity
+Every mutating flow (deposit, mint, withdraw, redeem) captures price before/after and asserts `price_after >= price_before`.
 
-If you want tests that actually call the SVS-1 program:
+### 1C: Multi-user tracking
+5-user state tracking with per-user `shares_balance`, `cumulative_deposited`, `cumulative_redeemed`. End invariants: sum matches total, no free money per-user.
 
-1. Ensure SVS-1 is built: `anchor build -p svs_1`
-2. Update `test_fuzz.rs` to use the instruction types from `types.rs`
-3. Set up proper account initialization in test flows
-4. Add program client setup in the `FuzzTest::new()` function
+### 1D: Admin operations
+`flow_pause`, `flow_unpause`, `flow_deposit_while_paused`. All mutating flows check `paused` flag.
 
-## Regenerating Types (Caution!)
+### 1E: Increased iterations
+`FuzzTest::fuzz(5000, 80)` — up from `(2000, 50)`.
 
-If you need to regenerate types.rs:
+## Phase 2: Module System Fuzzing (fuzz_0)
 
-```bash
-# WARNING: This may merge all programs again!
-# Only do this if Trident.toml is correctly configured
-trident fuzz refresh fuzz_0
-```
+### 2A: Fee module
+- `flow_init_fees`: Fuzzes entry/exit BPS (0-1500), values > MAX rejected
+- Entry/exit fees applied via `svs_fees::apply_entry_fee` / `apply_exit_fee`
+- Invariant: `fee + net == gross`
 
-To prevent merging, ensure `Trident.toml` only references SVS-1:
-```toml
-[[fuzz.programs]]
-address = "SVS1VauLt1111111111111111111111111111111111"
-program = "../target/deploy/svs_1.so"
-```
+### 2B: Cap module
+- `flow_init_caps`, `flow_deposit_exceeds_global_cap`, `flow_deposit_at_boundary`
+- Invariant: `total_assets <= global_cap`
+
+### 2C: Lock module
+- `flow_init_locks`, `flow_advance_clock`, `flow_redeem_while_locked`
+- Simulated clock with per-user lock enforcement
+
+### 2D: Access control
+- Whitelist, blacklist, freeze modes
+- Invariant: blocked users cannot deposit or withdraw
+
+## Phase 3: SVS-2 Stored Balance (fuzz_1)
+
+Models `stored_total_assets` vs `actual_balance` divergence:
+- `flow_external_yield`: Increases actual without updating stored
+- `flow_sync`: Sets stored = actual
+- `flow_deposit_before_sync`: Verifies stale price gives more shares
+- `flow_sync_then_redeem`: Verifies post-sync redemption value increases
+- Invariant: `stored <= actual` always
+
+## Phase 4: Actual Program Calls (fuzz_2)
+
+Dual-oracle architecture: simulation oracle predicts results, actual program executes instructions, divergences are detected.
+
+- Uses generated instruction builders from `types.rs`
+- Initializes real vault, asset mint, token accounts via Trident SVM
+- `flow_preview_vs_actual_deposit`: Uses oracle prediction as `min_shares_out`
+- `flow_max_deposit_honesty`: View function must not fail on active vault
+- `flow_deposit_while_paused`: Must fail when paused
+
+**Prerequisites:** `anchor build -p svs_1` must produce `target/deploy/svs_1.so`
+
+## Phase 5: CT State Machine (fuzz_3)
+
+Fuzzes confidential transfer state machine transitions without ZK proofs:
+- `flow_configure_account` -> `flow_ct_deposit` -> `flow_apply_pending` -> `flow_ct_withdraw`
+- Deposit without `configure_account` blocked
+- Double `apply_pending` is no-op
+- Withdraw only from available balance (not pending)
+- SVS-4: sync timing relative to CT operations
+
+## Historical Issues
+
+### Fixed: Round-trip free assets (Phase 1)
+**Root cause:** `flow_mint` allowed huge random share mints that yielded 0 assets, skewing vault ratio.
+**Fix:** Mint capped to 10% of supply, 0-asset mints skipped, ratio degradation guard.
+
+### Fixed: Duplicate types (initial setup)
+**Root cause:** `trident fuzz refresh` merged all 4 SVS programs into one types.rs.
+**Fix:** Extracted SVS-1 only. `Trident.toml` only references SVS-1.
