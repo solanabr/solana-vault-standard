@@ -1,6 +1,6 @@
 # SVS-10: Async Vault (ERC-7540)
 
-## Status: Draft
+## Status: Implemented
 ## Authors: Superteam Brasil
 ## Date: 2026-03-06
 ## Base: ERC-7540 — Asynchronous ERC-4626 Tokenized Vaults

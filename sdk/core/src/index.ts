@@ -33,7 +33,9 @@
 
 export * from "./vault";
 export * from "./managed-vault";
+export * from "./async-vault";
 export * from "./pda";
+export * from "./async-pda";
 export * from "./math";
 
 // On-chain Module Support (v2)

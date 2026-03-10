@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+#### SVS-10: Async Vault (ERC-7540)
+- Full async request→fulfill→claim lifecycle for deposits and redeems
+- Operator model: vault-level operator for fulfillments, per-user operator approvals for claims
+- Cancel flows with configurable delay (operator liveness protection)
+- PDA-owned escrow accounts: asset_vault, share_escrow, per-user claimable_tokens
+- Vault-priced fulfillment with stored balance model
+- Delta-based deposit accounting for Token-2022 transfer fee safety
+- SDK: `AsyncVault` class and `async-pda` PDA derivation helpers
+- 39 integration tests covering all lifecycle paths, bug prevention, and edge cases
+
 ## [0.3.0] - 2026-03-06
 
 ### Added
