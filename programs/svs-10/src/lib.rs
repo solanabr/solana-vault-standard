@@ -38,8 +38,8 @@ pub mod svs_10 {
         instructions::cancel_deposit::handler(ctx)
     }
 
-    pub fn fulfill_deposit(ctx: Context<FulfillDeposit>) -> Result<()> {
-        instructions::fulfill_deposit::handler(ctx)
+    pub fn fulfill_deposit(ctx: Context<FulfillDeposit>, oracle_price: Option<u64>) -> Result<()> {
+        instructions::fulfill_deposit::handler(ctx, oracle_price)
     }
 
     pub fn claim_deposit(ctx: Context<ClaimDeposit>) -> Result<()> {
