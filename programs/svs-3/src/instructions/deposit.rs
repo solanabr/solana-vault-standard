@@ -17,6 +17,9 @@ use crate::{
     state::ConfidentialVault,
 };
 
+#[cfg(feature = "modules")]
+use svs_module_hooks as module_hooks;
+
 #[derive(Accounts)]
 pub struct Deposit<'info> {
     #[account(mut)]
@@ -82,6 +85,42 @@ pub fn handler(ctx: Context<Deposit>, assets: u64, min_shares_out: u64) -> Resul
 
     // Calculate shares to mint using live balance (floor rounding - favors vault)
     let total_assets = ctx.accounts.asset_vault.amount;
+
+    // ===== Module Hooks (if enabled) =====
+    #[cfg(feature = "modules")]
+    let shares = {
+        let remaining = ctx.remaining_accounts;
+        let vault_key = vault.key();
+        let user_key = ctx.accounts.user.key();
+
+        // 1. Access control check (whitelist/blacklist + frozen)
+        module_hooks::check_deposit_access(remaining, &crate::ID, &vault_key, &user_key, &[])?;
+
+        // 2. Cap enforcement
+        module_hooks::check_deposit_caps(
+            remaining,
+            &crate::ID,
+            &vault_key,
+            &user_key,
+            total_assets,
+            assets,
+        )?;
+
+        // Calculate shares to mint
+        let shares = convert_to_shares(
+            assets,
+            total_assets,
+            total_shares,
+            vault.decimals_offset,
+            Rounding::Floor,
+        )?;
+
+        // 3. Apply entry fee
+        let result = module_hooks::apply_entry_fee(remaining, &crate::ID, &vault_key, shares)?;
+        result.net_shares
+    };
+
+    #[cfg(not(feature = "modules"))]
     let shares = convert_to_shares(
         assets,
         total_assets,
@@ -90,7 +129,7 @@ pub fn handler(ctx: Context<Deposit>, assets: u64, min_shares_out: u64) -> Resul
         Rounding::Floor,
     )?;
 
-    // Slippage check
+    // Slippage check (on net shares after fee)
     require!(shares >= min_shares_out, VaultError::SlippageExceeded);
 
     // Transfer assets from user to vault

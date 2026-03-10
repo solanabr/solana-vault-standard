@@ -17,6 +17,9 @@ use crate::{
     state::ConfidentialVault,
 };
 
+#[cfg(feature = "modules")]
+use svs_module_hooks as module_hooks;
+
 #[derive(Accounts)]
 pub struct MintShares<'info> {
     #[account(mut)]
@@ -89,6 +92,34 @@ pub fn handler(ctx: Context<MintShares>, shares: u64, max_assets_in: u64) -> Res
         Rounding::Ceiling,
     )?;
 
+    // ===== Module Hooks (if enabled) =====
+    #[cfg(feature = "modules")]
+    let net_shares = {
+        let remaining = ctx.remaining_accounts;
+        let vault_key = vault.key();
+        let user_key = ctx.accounts.user.key();
+
+        // 1. Access control check (whitelist/blacklist + frozen)
+        module_hooks::check_deposit_access(remaining, &crate::ID, &vault_key, &user_key, &[])?;
+
+        // 2. Cap enforcement (critical: prevents cap bypass via mint)
+        module_hooks::check_deposit_caps(
+            remaining,
+            &crate::ID,
+            &vault_key,
+            &user_key,
+            vault.total_assets,
+            assets,
+        )?;
+
+        // 3. Apply entry fee - user requested `shares`, but gets fewer due to fee
+        let result = module_hooks::apply_entry_fee(remaining, &crate::ID, &vault_key, shares)?;
+        result.net_shares
+    };
+
+    #[cfg(not(feature = "modules"))]
+    let net_shares = shares;
+
     // Slippage check
     require!(assets <= max_assets_in, VaultError::SlippageExceeded);
 
@@ -128,7 +159,7 @@ pub fn handler(ctx: Context<MintShares>, shares: u64, max_assets_in: u64) -> Res
             },
             signer_seeds,
         ),
-        shares,
+        net_shares,
     )?;
 
     // Move minted shares from non-confidential to confidential pending balance
@@ -136,7 +167,7 @@ pub fn handler(ctx: Context<MintShares>, shares: u64, max_assets_in: u64) -> Res
         &ctx.accounts.token_2022_program.key(),
         &ctx.accounts.user_shares_account.key(),
         &ctx.accounts.shares_mint.key(),
-        shares,
+        net_shares,
         SHARES_DECIMALS,
         &ctx.accounts.user.key(),
         &[],
@@ -163,7 +194,7 @@ pub fn handler(ctx: Context<MintShares>, shares: u64, max_assets_in: u64) -> Res
         caller: ctx.accounts.user.key(),
         owner: ctx.accounts.user.key(),
         assets,
-        shares,
+        shares: net_shares,
     });
 
     Ok(())

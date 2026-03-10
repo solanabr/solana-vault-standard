@@ -41,39 +41,9 @@ pub enum VaultError {
     #[msg("Deposit would exceed global vault cap")]
     GlobalCapExceeded,
 
-    #[msg("Deposit would exceed per-user cap")]
-    UserCapExceeded,
-
-    #[msg("Shares are still locked")]
-    SharesLocked,
-
-    #[msg("User is not on the whitelist")]
-    NotWhitelisted,
-
-    #[msg("User is on the blacklist")]
-    Blacklisted,
-
-    #[msg("User's account is frozen")]
-    AccountFrozen,
-
-    #[msg("Invalid merkle proof")]
-    InvalidProof,
-
     #[msg("Entry fee exceeds maximum")]
     EntryFeeExceedsMax,
 
-    #[msg("Exit fee exceeds maximum")]
-    ExitFeeExceedsMax,
-
-    #[msg("Management fee exceeds maximum")]
-    ManagementFeeExceedsMax,
-
-    #[msg("Performance fee exceeds maximum")]
-    PerformanceFeeExceedsMax,
-
     #[msg("Lock duration exceeds maximum")]
     LockDurationExceedsMax,
-
-    #[msg("No rewards available to claim")]
-    NothingToClaim,
 }

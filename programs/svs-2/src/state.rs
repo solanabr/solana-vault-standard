@@ -68,15 +68,10 @@ pub enum AccessMode {
 pub mod module_state {
     use super::*;
 
-    pub const FEE_CONFIG_SEED: &[u8] = b"fee_config";
-    pub const CAP_CONFIG_SEED: &[u8] = b"cap_config";
-    pub const USER_DEPOSIT_SEED: &[u8] = b"user_deposit";
-    pub const LOCK_CONFIG_SEED: &[u8] = b"lock_config";
-    pub const SHARE_LOCK_SEED: &[u8] = b"share_lock";
-    pub const ACCESS_CONFIG_SEED: &[u8] = b"access_config";
-    pub const FROZEN_ACCOUNT_SEED: &[u8] = b"frozen";
-    pub const REWARD_CONFIG_SEED: &[u8] = b"reward_config";
-    pub const USER_REWARD_SEED: &[u8] = b"user_reward";
+    pub use svs_module_hooks::{
+        ACCESS_CONFIG_SEED, CAP_CONFIG_SEED, FEE_CONFIG_SEED, FROZEN_ACCOUNT_SEED,
+        LOCK_CONFIG_SEED, REWARD_CONFIG_SEED, SHARE_LOCK_SEED, USER_DEPOSIT_SEED, USER_REWARD_SEED,
+    };
 
     #[account]
     pub struct FeeConfig {

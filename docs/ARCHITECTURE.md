@@ -261,15 +261,15 @@ Approximate CU costs per instruction type:
 
 | Account Type | Size (bytes) | Module |
 |--------------|-------------|--------|
-| FeeConfig | ~100 | svs-fees |
-| CapConfig | ~50 | svs-caps |
-| UserDeposit | ~80 | svs-caps |
-| LockConfig | ~50 | svs-locks |
-| ShareLock | ~60 | svs-locks |
-| AccessConfig | ~70 | svs-access |
-| FrozenAccount | ~80 | svs-access |
-| RewardConfig | ~120 | svs-rewards |
-| UserReward | ~100 | svs-rewards |
+| FeeConfig | 97 | svs-fees |
+| CapConfig | 57 | svs-caps |
+| UserDeposit | 81 | svs-caps |
+| LockConfig | 49 | svs-locks |
+| ShareLock | 81 | svs-locks |
+| AccessConfig | 74 | svs-access |
+| FrozenAccount | 113 | svs-access |
+| RewardConfig | 161 | svs-rewards |
+| UserReward | 129 | svs-rewards |
 
 ---
 

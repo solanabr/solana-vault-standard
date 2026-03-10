@@ -244,7 +244,7 @@ Key math rules:
 New standards should support existing modules from day one where feasible. In the new program:
 
 1. Add module crates as optional dependencies in `Cargo.toml` (same pattern as SVS-1)
-2. Create `src/module_hooks.rs` with `#[cfg(feature = "modules")]` gates
+2. Add `svs-module-hooks` as an optional dependency and import shared hooks with `&crate::ID`
 3. Call hooks at the same points in instruction handlers (after compute, before CPI)
 4. Test that each module works correctly with the new variant's balance/privacy model
 
@@ -344,7 +344,7 @@ svs-<name> = { path = "../../modules/svs-<name>", optional = true }
 modules = ["svs-fees", "svs-caps", "svs-locks", "svs-access", "svs-<name>"]
 ```
 
-In `programs/svs-1/src/module_hooks.rs`, add hook calls gated behind `#[cfg(feature = "modules")]`. Modules hook into deposit/mint and withdraw/redeem flows.
+Add hooks to `modules/svs-module-hooks/src/hooks.rs`, updating the internal deserialization struct if needed. Hooks are gated behind `#[cfg(feature = "modules")]` in each program's instruction handlers.
 
 Decide which hook points your module needs:
 - **Pre-deposit/mint**: access control, cap enforcement, entry fee calculation

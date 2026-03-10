@@ -596,7 +596,7 @@ See [specs-modules.md](specs-modules.md) for full specification.
 | `programs/svs-1/src/events.rs` | Event definitions |
 | `programs/svs-1/src/math.rs` | Share/asset conversion |
 | `programs/svs-1/src/instructions/` | Instruction handlers |
-| `programs/svs-1/src/module_hooks.rs` | Module integration (with `modules` feature) |
+| `modules/svs-module-hooks/` | Shared module hooks and state (with `modules` feature) |
 | `programs/svs-1/src/instructions/module_admin.rs` | Module admin instructions (with `modules` feature) |
 
 ---

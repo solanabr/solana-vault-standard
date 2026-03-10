@@ -1,0 +1,13 @@
+[package]
+name = "svs-module-hooks"
+version = "0.1.0"
+edition = "2021"
+description = "Shared module state and integration hooks for SVS vault programs"
+license = "Apache-2.0"
+
+[dependencies]
+anchor-lang = "0.31.1"
+svs-fees = { path = "../svs-fees" }
+svs-caps = { path = "../svs-caps" }
+svs-locks = { path = "../svs-locks" }
+svs-access = { path = "../svs-access" }
