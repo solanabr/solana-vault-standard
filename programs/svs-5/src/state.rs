@@ -53,7 +53,7 @@ impl StreamVault {
         1 +   // bump
         1 +   // paused
         8 +   // vault_id
-        64;   // _reserved
+        64; // _reserved
 
     pub const SEED_PREFIX: &'static [u8] = VAULT_SEED;
 
@@ -88,6 +88,42 @@ impl StreamVault {
         self.base_assets
             .checked_add(accrued)
             .ok_or_else(|| error!(VaultError::MathOverflow))
+    }
+
+    /// Materialize accrued stream yield into base_assets.
+    ///
+    /// Returns the amount accrued. After checkpoint, `base_assets == effective_total_assets(now)`.
+    /// Must be called before withdraw/redeem to prevent base_assets underflow.
+    pub fn checkpoint(&mut self, now: i64) -> Result<u64> {
+        if self.stream_amount == 0 {
+            return Ok(0);
+        }
+
+        let effective = self.effective_total_assets(now)?;
+        let accrued = effective
+            .checked_sub(self.base_assets)
+            .ok_or_else(|| error!(VaultError::MathOverflow))?;
+
+        if accrued == 0 {
+            return Ok(0);
+        }
+
+        self.base_assets = effective;
+
+        if now >= self.stream_end {
+            self.stream_amount = 0;
+            self.stream_start = 0;
+            self.stream_end = 0;
+        } else {
+            self.stream_amount = self
+                .stream_amount
+                .checked_sub(accrued)
+                .ok_or_else(|| error!(VaultError::MathOverflow))?;
+            self.stream_start = now;
+        }
+
+        self.last_checkpoint = now;
+        Ok(accrued)
     }
 }
 

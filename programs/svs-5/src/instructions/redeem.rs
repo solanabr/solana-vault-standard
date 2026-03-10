@@ -72,11 +72,17 @@ pub fn handler(ctx: Context<Redeem>, shares: u64, min_assets_out: u64) -> Result
         VaultError::InsufficientShares
     );
 
-    let vault = &ctx.accounts.vault;
-    let total_shares = ctx.accounts.shares_mint.supply;
-    // SVS-5: Use INTERPOLATED balance (effective_total_assets)
     let clock = Clock::get()?;
-    let total_assets = vault.effective_total_assets(clock.unix_timestamp)?;
+    let now = clock.unix_timestamp;
+
+    // SVS-5: Auto-checkpoint to ensure base_assets covers effective_total_assets.
+    // Without this, subtracting net_assets from base_assets can underflow when
+    // there is un-checkpointed stream yield.
+    let vault = &mut ctx.accounts.vault;
+    vault.checkpoint(now)?;
+
+    let total_shares = ctx.accounts.shares_mint.supply;
+    let total_assets = vault.base_assets;
 
     let assets = convert_to_assets(
         shares,
@@ -93,9 +99,12 @@ pub fn handler(ctx: Context<Redeem>, shares: u64, min_assets_out: u64) -> Result
         let vault_key = vault.key();
         let user_key = ctx.accounts.user.key();
 
+        // 1. Access control check (frozen account)
         module_hooks::check_deposit_access(remaining, &vault_key, &user_key, &[])?;
+        // 2. Lock check - ensure shares are not locked
         module_hooks::check_share_lock(remaining, &vault_key, &user_key, clock.unix_timestamp)?;
 
+        // 3. Apply exit fee
         let result = module_hooks::apply_exit_fee(remaining, &vault_key, assets)?;
         result.net_assets
     };

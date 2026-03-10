@@ -67,11 +67,17 @@ pub struct Withdraw<'info> {
 pub fn handler(ctx: Context<Withdraw>, assets: u64, max_shares_in: u64) -> Result<()> {
     require!(assets > 0, VaultError::ZeroAmount);
 
-    let vault = &ctx.accounts.vault;
-    let total_shares = ctx.accounts.shares_mint.supply;
-    // SVS-5: Use INTERPOLATED balance (effective_total_assets)
     let clock = Clock::get()?;
-    let total_assets = vault.effective_total_assets(clock.unix_timestamp)?;
+    let now = clock.unix_timestamp;
+
+    // SVS-5: Auto-checkpoint to ensure base_assets covers effective_total_assets.
+    // Without this, subtracting net_assets from base_assets can underflow when
+    // there is un-checkpointed stream yield.
+    let vault = &mut ctx.accounts.vault;
+    vault.checkpoint(now)?;
+
+    let total_shares = ctx.accounts.shares_mint.supply;
+    let total_assets = vault.base_assets;
 
     // ===== Module Hooks (if enabled) =====
     #[cfg(feature = "modules")]
@@ -80,9 +86,12 @@ pub fn handler(ctx: Context<Withdraw>, assets: u64, max_shares_in: u64) -> Resul
         let vault_key = vault.key();
         let user_key = ctx.accounts.user.key();
 
+        // 1. Access control check (frozen account)
         module_hooks::check_deposit_access(remaining, &vault_key, &user_key, &[])?;
+        // 2. Lock check - ensure shares are not locked
         module_hooks::check_share_lock(remaining, &vault_key, &user_key, clock.unix_timestamp)?;
 
+        // 3. Apply exit fee
         let result = module_hooks::apply_exit_fee(remaining, &vault_key, assets)?;
         (result.net_assets, result.fee_assets)
     };
@@ -90,10 +99,7 @@ pub fn handler(ctx: Context<Withdraw>, assets: u64, max_shares_in: u64) -> Resul
     #[cfg(not(feature = "modules"))]
     let net_assets = assets;
 
-    require!(
-        assets <= total_assets,
-        VaultError::InsufficientAssets
-    );
+    require!(assets <= total_assets, VaultError::InsufficientAssets);
 
     // SVS-5: Safety check against actual vault balance
     require!(

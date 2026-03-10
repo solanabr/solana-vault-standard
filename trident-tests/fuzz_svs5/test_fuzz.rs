@@ -179,11 +179,15 @@ impl FuzzTest {
         }
 
         let shares = (rand::random::<u64>() % user_shares).max(1);
-        let effective = self.vault.effective_total_assets();
+
+        // SVS-5: Auto-checkpoint before redeem (matches on-chain behavior)
+        self.vault.checkpoint();
+
+        let total_assets = self.vault.base_assets;
 
         let assets = match convert_to_assets(
             shares,
-            effective,
+            total_assets,
             self.vault.total_shares,
             self.vault.decimals_offset,
             Rounding::Floor,
@@ -192,16 +196,11 @@ impl FuzzTest {
             Err(_) => return,
         };
 
-        if assets == 0 || assets > self.vault.base_assets.saturating_add(self.vault.stream_amount) {
+        if assets == 0 || assets > self.vault.base_assets {
             return;
         }
 
-        let assets_from_base = assets.min(self.vault.base_assets);
-        self.vault.base_assets = self.vault.base_assets.saturating_sub(assets_from_base);
-        if assets > assets_from_base {
-            let remainder = assets - assets_from_base;
-            self.vault.stream_amount = self.vault.stream_amount.saturating_sub(remainder);
-        }
+        self.vault.base_assets = self.vault.base_assets.saturating_sub(assets);
 
         self.vault.total_shares = self.vault.total_shares.saturating_sub(shares);
         self.vault.users[user_idx].shares_balance = self.vault.users[user_idx]
@@ -357,7 +356,7 @@ impl FuzzTest {
         self.vault.total_deposited += assets as u128;
         self.vault.total_redeemed += assets_back as u128;
 
-        self.vault.base_assets = self.vault.base_assets.saturating_add(rounding_loss);
+        // rounding_loss stays in the vault via base_assets (already reflected by the sub above)
     }
 
     #[end]

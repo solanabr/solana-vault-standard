@@ -54,38 +54,14 @@ pub fn handler(ctx: Context<DistributeYield>, yield_amount: u64, duration: i64) 
     let vault = &mut ctx.accounts.vault;
 
     // Auto-checkpoint if an active stream exists
-    if vault.stream_amount > 0 && now > vault.stream_start {
-        let accrued = vault.effective_total_assets(now)?
-            .checked_sub(vault.base_assets)
-            .ok_or(VaultError::MathOverflow)?;
-
-        if accrued > 0 {
-            vault.base_assets = vault
-                .base_assets
-                .checked_add(accrued)
-                .ok_or(VaultError::MathOverflow)?;
-
-            if now >= vault.stream_end {
-                vault.stream_amount = 0;
-                vault.stream_start = 0;
-                vault.stream_end = 0;
-            } else {
-                vault.stream_amount = vault
-                    .stream_amount
-                    .checked_sub(accrued)
-                    .ok_or(VaultError::MathOverflow)?;
-                vault.stream_start = now;
-            }
-
-            vault.last_checkpoint = now;
-
-            emit!(Checkpointed {
-                vault: vault.key(),
-                accrued,
-                new_base_assets: vault.base_assets,
-                timestamp: now,
-            });
-        }
+    let accrued = vault.checkpoint(now)?;
+    if accrued > 0 {
+        emit!(Checkpointed {
+            vault: vault.key(),
+            accrued,
+            new_base_assets: vault.base_assets,
+            timestamp: now,
+        });
     }
 
     // Transfer yield tokens from authority to asset vault
@@ -104,9 +80,7 @@ pub fn handler(ctx: Context<DistributeYield>, yield_amount: u64, duration: i64) 
     )?;
 
     // Set new stream state
-    let stream_end = now
-        .checked_add(duration)
-        .ok_or(VaultError::MathOverflow)?;
+    let stream_end = now.checked_add(duration).ok_or(VaultError::MathOverflow)?;
 
     vault.stream_amount = yield_amount;
     vault.stream_start = now;

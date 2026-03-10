@@ -85,7 +85,9 @@ pub fn handler(ctx: Context<Deposit>, assets: u64, min_shares_out: u64) -> Resul
         let vault_key = vault.key();
         let user_key = ctx.accounts.user.key();
 
+        // 1. Access control check (whitelist/blacklist + frozen)
         module_hooks::check_deposit_access(remaining, &vault_key, &user_key, &[])?;
+        // 2. Cap enforcement
         module_hooks::check_deposit_caps(remaining, &vault_key, &user_key, total_assets, assets)?;
 
         let shares = convert_to_shares(
@@ -96,6 +98,7 @@ pub fn handler(ctx: Context<Deposit>, assets: u64, min_shares_out: u64) -> Resul
             Rounding::Floor,
         )?;
 
+        // 3. Apply entry fee
         let result = module_hooks::apply_entry_fee(remaining, &vault_key, shares)?;
         result.net_shares
     };
