@@ -54,8 +54,8 @@ pub mod svs_10 {
         instructions::cancel_redeem::handler(ctx)
     }
 
-    pub fn fulfill_redeem(ctx: Context<FulfillRedeem>) -> Result<()> {
-        instructions::fulfill_redeem::handler(ctx)
+    pub fn fulfill_redeem(ctx: Context<FulfillRedeem>, oracle_price: Option<u64>) -> Result<()> {
+        instructions::fulfill_redeem::handler(ctx, oracle_price)
     }
 
     pub fn claim_redeem(ctx: Context<ClaimRedeem>) -> Result<()> {
