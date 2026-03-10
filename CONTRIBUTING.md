@@ -52,6 +52,7 @@ programs/
   svs-2/          # Public vault, stored balance (requires sync())
   svs-3/          # Confidential vault, live balance (Token-2022 CT)
   svs-4/          # Confidential vault, stored balance (Token-2022 CT + sync)
+  svs-7/          # Native SOL vault (ERC-7535 port, wSOL wrapping)
 modules/
   svs-math/       # Shared math: mul_div, rounding, conversions
   svs-fees/       # Entry/exit fee calculation
@@ -78,6 +79,7 @@ SVS defines a matrix of vault types across two dimensions:
 |--------------------|---------------------|-----------------------|
 | **Public**         | SVS-1               | SVS-2                 |
 | **Confidential**   | SVS-3               | SVS-4                 |
+| **Native SOL**     | SVS-7 (Live)        | SVS-7 (Stored)        |
 
 - **Live balance**: reads `asset_vault.amount` directly each instruction. External deposits are immediately reflected.
 - **Stored balance**: caches `vault.total_assets` on-chain. Requires `sync()` to recognize external deposits. Gives the authority control over when yield is recognized.
@@ -90,15 +92,15 @@ All variants implement the same core interface (deposit, mint, withdraw, redeem)
 
 Modules are currently wired into **SVS-1 only** via feature flags. They are designed as standalone Rust crates with no Anchor dependency so they can be integrated into any variant. When implementing a new SVS standard, you should wire in module support for all applicable modules.
 
-| Module | SVS-1 | SVS-2 | SVS-3 | SVS-4 | Notes |
-|--------|-------|-------|-------|-------|-------|
-| svs-math | built-in | built-in | built-in | built-in | Shared lib, not a hook module |
-| svs-fees | yes | planned | planned | planned | Pure math, compatible with all variants |
-| svs-caps | yes | planned | planned | planned | Reads deposit amounts, works with any balance model |
-| svs-locks | yes | planned | planned | planned | Tracks share timestamps, variant-agnostic |
-| svs-access | yes | planned | planned | planned | Whitelist/merkle, variant-agnostic |
-| svs-rewards | scaffolding | - | - | - | Needs design for confidential variants |
-| svs-oracle | scaffolding | - | - | - | Needs design for stored balance interaction |
+| Module | SVS-1 | SVS-2 | SVS-3 | SVS-4 | SVS-7 | Notes |
+|--------|-------|-------|-------|-------|-------|-------|
+| svs-math | built-in | built-in | built-in | built-in | built-in | Shared lib, not a hook module |
+| svs-fees | yes | planned | planned | planned | yes | Pure math, compatible with all variants |
+| svs-caps | yes | planned | planned | planned | yes | Reads deposit amounts, works with any balance model |
+| svs-locks | yes | planned | planned | planned | yes | Tracks share timestamps, variant-agnostic |
+| svs-access | yes | planned | planned | planned | yes | Whitelist/merkle, variant-agnostic |
+| svs-rewards | scaffolding | - | - | - | scaffolding | Needs design for native SOL distribution |
+| svs-oracle | scaffolding | - | - | - | - | SOL price needs no oracle (SOL is base asset) |
 
 **Key constraint**: Modules that read or enforce balance amounts (fees, caps) must account for the balance model. In stored-balance vaults (SVS-2/4), the module sees `vault.total_assets` rather than `asset_vault.amount`. In confidential vaults (SVS-3/4), share balances are encrypted, so modules like `svs-locks` that track share state must use the vault's internal accounting rather than reading token balances.
 

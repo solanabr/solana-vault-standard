@@ -10,6 +10,7 @@ Tokenized vault programs and TypeScript SDK for building yield-bearing vaults on
 | **SVS-2** | Public Vault (Stored) | Stored balance | None | Requires sync() | ✅ Devnet |
 | **SVS-3** | Private Vault (Live) | Live balance | Encrypted | No sync needed | ✅ Devnet |
 | **SVS-4** | Private Vault (Stored) | Stored balance | Encrypted | Requires sync() | ✅ Devnet |
+| **SVS-7** | Native SOL Vault | Live or Stored | None | Stored model only | ✅ Devnet |
 
 ### Balance Model Comparison
 
@@ -46,6 +47,7 @@ Tokenized vault programs and TypeScript SDK for building yield-bearing vaults on
 | SVS-2 | `3UrYrxh1HmVgq7WPygZ5x1gNEaWFwqTMs7geNqMnsrtD` | Same as devnet |
 | SVS-3 | `EcpnYtaCBrZ4p4uq7dDr55D3fL9nsxbCNqpyUREGpPkh` | Same as devnet |
 | SVS-4 | `2WP7LXWqrp1W4CwEJuVt2SxWPNY2n6AYmijh6Z4EeidY` | Same as devnet |
+| SVS-7 | `SVSxBmEB9ZAaHMJ4PJPsLDu56bGjoXKNsSp1bWKyMYC` | Same as devnet |
 
 ## Installation
 
@@ -249,12 +251,12 @@ const [sharesMint] = PublicKey.findProgramAddressSync(
 
 ### Admin Operations
 
-| Instruction | SVS-1 | SVS-2 | SVS-3 | SVS-4 | Description |
-|-------------|:-----:|:-----:|:-----:|:-----:|-------------|
-| `pause` | ✓ | ✓ | ✓ | ✓ | Emergency pause vault |
-| `unpause` | ✓ | ✓ | ✓ | ✓ | Resume operations |
-| `transfer_authority` | ✓ | ✓ | ✓ | ✓ | Transfer admin rights |
-| `sync` | ✗ | ✓ | ✗ | ✓ | Sync total_assets with balance |
+| Instruction | SVS-1 | SVS-2 | SVS-3 | SVS-4 | SVS-7 | Description |
+|-------------|:-----:|:-----:|:-----:|:-----:|:-----:|-------------|
+| `pause` | ✓ | ✓ | ✓ | ✓ | ✓ | Emergency pause vault |
+| `unpause` | ✓ | ✓ | ✓ | ✓ | ✓ | Resume operations |
+| `transfer_authority` | ✓ | ✓ | ✓ | ✓ | ✓ | Transfer admin rights |
+| `sync` | ✗ | ✓ | ✗ | ✓ | ✓* | Sync total_assets with balance |
 
 ### View Functions (All Programs)
 
@@ -331,7 +333,7 @@ const [sharesMint] = PublicKey.findProgramAddressSync(
 # Build all programs
 anchor build
 
-# Run all tests (130 tests, requires proof backend for SVS-3/SVS-4)
+# Run all tests (141 tests, requires proof backend for SVS-3/SVS-4)
 anchor test
 
 # Run with modules feature (includes 16 module tests)
@@ -361,7 +363,8 @@ solana-vault-standard/
 │   ├── svs-1/                    # Public vault, live balance
 │   ├── svs-2/                    # Public vault, stored balance
 │   ├── svs-3/                    # Private vault, live balance (beta)
-│   └── svs-4/                    # Private vault, stored balance (beta)
+│   ├── svs-4/                    # Private vault, stored balance (beta)
+│   └── svs-7/                    # Native SOL vault (ERC-7535 port)
 ├── modules/
 │   ├── svs-math/                 # Shared math (mul_div, rounding, conversion)
 │   ├── svs-fees/                 # Entry/exit fee calculation
@@ -383,6 +386,7 @@ solana-vault-standard/
 │   ├── svs-2.ts                  # SVS-2 stored balance + sync tests (35)
 │   ├── svs-3.ts                  # SVS-3 confidential live balance tests (42)
 │   ├── svs-4.ts                  # SVS-4 confidential stored balance tests (43)
+│   ├── svs-7.ts                  # SVS-7 native SOL vault tests (11)
 │   ├── helpers/
 │   │   └── proof-client.ts       # ZK proof backend client helpers
 │   ├── admin-extended.ts         # Admin function tests
@@ -403,7 +407,8 @@ solana-vault-standard/
     ├── SVS-1.md                 # SVS-1 spec (live balance)
     ├── SVS-2.md                 # SVS-2 spec (stored balance + sync)
     ├── SVS-3.md                 # SVS-3 spec (confidential live)
-    └── SVS-4.md                 # SVS-4 spec (confidential stored)
+    ├── SVS-4.md                 # SVS-4 spec (confidential stored)
+    └── SVS-7.md                 # SVS-7 spec (native SOL vault)
 ```
 
 ## Resources

@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+#### SVS-7: Native SOL Vault (ERC-7535 port)
+- **programs/svs-7**: Native SOL vault accepting raw SOL, wrapping to wSOL internally via SPL Token sync_native
+- **Instructions**: `initialize`, `deposit_sol`, `deposit_wsol`, `mint_sol`, `withdraw_sol`, `withdraw_wsol`, `redeem_sol`, `redeem_wsol`, `pause`, `unpause`, `transfer_authority`, `sync` (Stored model only), 11 view functions
+- **Dual balance model**: Live (reads wsol_vault.amount) or Stored (uses vault.total_assets + sync())
+- **wSOL wrapping/unwrapping**: Handles all SOL↔wSOL conversion transparently — users interact with native SOL only
+- **Module hooks**: Pre-wired for fees, caps, locks, and access modules via `#[cfg(feature = "modules")]`
+- **sdk/core/src/svs-7.ts**: `SolVaultSDK` TypeScript class for SVS-7 interaction
+- **tests/svs-7.ts**: 11 integration tests — full lifecycle (init, deposit×2, redeem, withdraw, pause/unpause, sync rejection, view functions)
+- **docs/SVS-7.md**: Full specification document
+
 ## [0.3.0] - 2026-03-06
 
 ### Added
