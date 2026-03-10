@@ -10,6 +10,8 @@ import { SolanaVault } from "../../../vault";
 import { deriveVaultAddresses } from "../../../pda";
 import { formatAddress } from "../../output";
 import { findIdlPath, loadIdl } from "../../utils";
+import { SolVaultSDK } from "../../../svs-7";
+import { SvsVariant } from "../../types";
 
 export function registerInfoCommand(program: Command): void {
   program
@@ -40,7 +42,7 @@ export function registerInfoCommand(program: Command): void {
         if (!opts.programId) {
           output.error(
             "Program ID required when using raw vault address.\n" +
-              "Either add vault to config or provide --program-id",
+            "Either add vault to config or provide --program-id",
           );
           process.exit(1);
         }
@@ -101,6 +103,47 @@ export function registerInfoCommand(program: Command): void {
       try {
         const idl = loadIdl(idlPath);
         const prog = new Program(idl as any, provider);
+
+        // ── SVS-7: native SOL vault ────────────────────────────────────────
+        // Detect variant from resolved config or a --variant flag
+        const resolvedVariant: SvsVariant | undefined = (opts as any).variant;
+        if (resolvedVariant === "svs-7") {
+          const sdk = await SolVaultSDK.load(prog, vaultId);
+          const state = await sdk.getState();
+          const totalSol = await sdk.totalAssets();
+          const totalSupply = await sdk.totalShares();
+          const balanceModel = "live" in state.balanceModel ? "Live" : "Stored";
+
+          if (globalOpts.output === "json") {
+            output.json({
+              vault: vaultAddress?.toBase58(),
+              authority: state.authority.toBase58(),
+              sharesMint: state.sharesMint.toBase58(),
+              wsolVault: state.wsolVault.toBase58(),
+              totalAssets: totalSol.toString(),
+              totalShares: totalSupply.toString(),
+              balanceModel,
+              paused: state.paused,
+              vaultId: state.vaultId.toString(),
+            });
+          } else {
+            output.success("SVS-7 Native SOL Vault State");
+            output.table(
+              ["Property", "Value"],
+              [
+                ["Authority", formatAddress(state.authority.toBase58())],
+                ["Shares Mint", formatAddress(state.sharesMint.toBase58())],
+                ["wSOL Vault", formatAddress(state.wsolVault.toBase58())],
+                ["Total Assets (SOL)", `${(totalSol.toNumber() / 1e9).toFixed(9)} SOL (${totalSol.toString()} lamports)`],
+                ["Total Shares", totalSupply.toString()],
+                ["Balance Model", balanceModel],
+                ["Paused", state.paused ? "Yes" : "No"],
+                ["Vault ID", state.vaultId.toString()],
+              ],
+            );
+          }
+          return;
+        }
 
         if (!assetMint) {
           output.error("Asset mint required to load vault state");

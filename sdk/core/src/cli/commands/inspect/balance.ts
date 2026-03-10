@@ -2,12 +2,14 @@
 
 import { Command } from "commander";
 import { PublicKey } from "@solana/web3.js";
-import { getAssociatedTokenAddress, getAccount } from "@solana/spl-token";
+import { getAssociatedTokenAddress, getAccount, TOKEN_2022_PROGRAM_ID } from "@solana/spl-token";
 import { Program, BN } from "@coral-xyz/anchor";
 import { createContext } from "../../middleware";
 import { getGlobalOptions } from "../../index";
 import { SolanaVault } from "../../../vault";
+import { SolVaultSDK } from "../../../svs-7";
 import { findIdlPath, loadIdl, resolveVaultArg } from "../../utils";
+import { SvsVariant } from "../../types";
 
 export function registerBalanceCommand(program: Command): void {
   program
@@ -27,8 +29,9 @@ export function registerBalanceCommand(program: Command): void {
       if (!resolved) process.exit(1);
 
       const user = userArg ? new PublicKey(userArg) : wallet.publicKey;
+      const variant: SvsVariant | undefined = (opts as any).variant || resolved?.variant;
 
-      const idlPath = findIdlPath();
+      const idlPath = findIdlPath(variant);
       if (!idlPath) {
         output.error("IDL not found. Run `anchor build` first.");
         process.exit(1);
@@ -37,6 +40,52 @@ export function registerBalanceCommand(program: Command): void {
       try {
         const idl = loadIdl(idlPath);
         const prog = new Program(idl as any, provider);
+
+        // ── SVS-7: native SOL vault ────────────────────────────────────────
+        if (variant === "svs-7") {
+          const sdk = await SolVaultSDK.load(prog, resolved?.vaultId || new BN(opts.vaultId || 1));
+          const userSharesAta = sdk.getUserSharesAccount(user);
+          const totalSol = await sdk.totalAssets();
+          const totalSupply = await sdk.totalShares();
+
+          let sharesBalance = new BN(0);
+          try {
+            const acc = await getAccount(connection, userSharesAta, undefined, TOKEN_2022_PROGRAM_ID);
+            sharesBalance = new BN(acc.amount.toString());
+          } catch { /* account doesn't exist */ }
+
+          let sharesValueLamports = new BN(0);
+          if (!totalSupply.isZero()) {
+            sharesValueLamports = sharesBalance.mul(totalSol).div(totalSupply);
+          }
+          const sharesValueSol = (sharesValueLamports.toNumber() / 1e9).toFixed(9);
+
+          const userSolBalance = await connection.getBalance(user);
+
+          if (globalOpts.output === "json") {
+            output.json({
+              user: user.toBase58(),
+              vault: vaultArg,
+              nativeSolBalance: userSolBalance.toString(),
+              sharesBalance: sharesBalance.toString(),
+              sharesValueLamports: sharesValueLamports.toString(),
+              sharesValueSol,
+              sharesAta: userSharesAta.toBase58(),
+            });
+          } else {
+            output.info(`User: ${user.toBase58()}`);
+            output.table(
+              ["Token", "Balance", "Value"],
+              [
+                ["Native SOL", `${(userSolBalance / 1e9).toFixed(9)} SOL`, "-"],
+                ["Shares", sharesBalance.toString(), `≈ ${sharesValueSol} SOL`],
+              ],
+            );
+          }
+          return;
+        }
+
+        // ── SVS-1/2/3/4: SPL token vault ──────────────────────────────────
         const vault = await SolanaVault.load(
           prog,
           resolved.assetMint,

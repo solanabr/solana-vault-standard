@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Solana Vault Standard (SVS) provides tokenized vault programs for Solana. Four program variants cover the matrix of public/private and live/stored balance models.
+The Solana Vault Standard (SVS) provides tokenized vault programs for Solana. Four program variants cover the matrix of public/private and live/stored balance models. SVS-7 extends the family with a native SOL vault (ERC-7535 port).
 
 ## SVS Variants Matrix
 
@@ -18,6 +18,11 @@ The Solana Vault Standard (SVS) provides tokenized vault programs for Solana. Fo
     BALANCE     |     SVS-2       |     SVS-4       |
     (With sync) |                 |                 |
                 +-----------------+-----------------+
+
+NATIVE SOL (ERC-7535):
+    SVS-7 — accepts raw SOL, wraps to wSOL internally
+    Supports both Live and Stored balance models
+    Program ID: SVSxBmEB9ZAaHMJ4PJPsLDu56bGjoXKNsSp1bWKyMYC
 ```
 
 ## Account Structure
@@ -60,6 +65,25 @@ pub struct ConfidentialVault {
 }
 ```
 
+**SolVault (SVS-7) — 193 bytes:**
+```rust
+pub struct SolVault {
+    pub authority: Pubkey,       // 32 — admin
+    pub shares_mint: Pubkey,     // 32 — LP share token (Token-2022)
+    pub wsol_vault: Pubkey,      // 32 — ATA holding wSOL (TOKEN_PROGRAM)
+    pub total_assets: u64,       // 8  — SVS-7 Live: unused; Stored: cached lamports
+    pub decimals_offset: u8,     // 1  — always 0 (SOL is 9 decimals)
+    pub bump: u8,                // 1
+    pub paused: bool,            // 1
+    pub vault_id: u64,           // 8  — allows multiple SOL vaults
+    pub balance_model: BalanceModel, // 1  — Live or Stored
+    pub _reserved: [u8; 64],     // 64
+}
+// seeds: ["sol_vault", vault_id.to_le_bytes()]
+// shares: ["shares", vault_pda]
+// wsol_vault: ATA(NATIVE_MINT, vault_pda, TOKEN_PROGRAM)
+```
+
 The different struct names mean the Anchor IDL generates different account discriminators. The core SDK (`SolanaVault`) fetches `program.account["vault"]` and will not work with SVS-3/4 programs which expose `program.account["confidentialVault"]`.
 
 ## Balance Models
@@ -91,6 +115,15 @@ total_assets = vault.total_assets  (updated via sync() or deposit/withdraw)
 - Deposit/withdraw update `vault.total_assets` arithmetically
 
 **When to use which**: If 100% of assets live in the vault ATA, use SVS-1. If assets leave the ATA (deployed to other protocols, bridged, managed off-chain), use SVS-2.
+
+### Native SOL Balance (SVS-7)
+
+SVS-7 supports both models via the `balance_model` field set at initialization:
+
+- **Live**: reads `wsol_vault.amount` directly — yield from donations reflected instantly
+- **Stored**: reads `vault.total_assets` — yield recognized only via `sync()`; same trust model as SVS-2
+
+Users always interact with native SOL. The program wraps SOL→wSOL on deposit/mint (via `system_program::transfer` + `sync_native`) and unwraps wSOL→SOL on redeem/withdraw (via SPL Token `transfer` + `close_account`).
 
 ## Math
 

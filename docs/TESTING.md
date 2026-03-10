@@ -1,6 +1,6 @@
 # Testing Guide
 
-Comprehensive guide to testing the Solana Vault Standard (SVS-1 through SVS-4).
+Comprehensive guide to testing the Solana Vault Standard (SVS-1 through SVS-4, SVS-7).
 
 ## Overview
 
@@ -33,7 +33,7 @@ SVS uses a multi-layered testing strategy:
 ## Quick Start
 
 ```bash
-# Run all integration tests (256 tests)
+# Run all integration tests (267 tests)
 anchor test
 
 # Start proof backend first (required for SVS-3/SVS-4 CT tests)
@@ -72,6 +72,7 @@ Located in `tests/`:
 | `svs-2.ts` | SVS-2 stored balance + sync | 35 |
 | `svs-3.ts` | SVS-3 confidential live balance (CT deposit + withdraw/redeem) | 42 |
 | `svs-4.ts` | SVS-4 confidential stored balance (CT deposit + sync + withdraw/redeem) | 43 |
+| `svs-7.ts` | SVS-7 native SOL vault (deposit, redeem, withdraw, dual balance model, admin) | 11 |
 | `edge-cases.ts` | Boundary conditions + view edges | 15 |
 | `multi-user.ts` | Multi-user scenarios | 15 |
 | `decimals.ts` | Token decimal handling | 12 |
@@ -79,7 +80,7 @@ Located in `tests/`:
 | `invariants.ts` | Mathematical invariants | 15 |
 | `admin-extended.ts` | Admin operations | 10 |
 | `full-lifecycle.ts` | End-to-end flows | 8 |
-| **Total** | | **256** |
+| **Total** | | **267** |
 
 **Note:** SVS-3/SVS-4 confidential transfer tests require the proof backend running (`cd proofs-backend && cargo run`). Without it, CT-dependent tests are automatically skipped.
 
@@ -598,11 +599,11 @@ grcov . -s . --binary-path ./target/debug/ -t html --branch --ignore-not-existin
 
 | Category | Coverage |
 |----------|----------|
-| Integration Tests (SVS-1/2/3/4) | 256 tests |
+| Integration Tests (SVS-1/2/3/4/7) | 267 tests |
 | Proof Backend Tests | 19 tests |
 | SDK Tests | 460 tests |
 | Fuzz Tests | 4 binaries, 40+ flows |
-| **Total** | **775+ test cases** |
+| **Total** | **786+ test cases** |
 
 ## Debugging Tests
 

@@ -1,4 +1,4 @@
-/** Sync Command - Sync stored balance with actual vault balance (SVS-2/4) */
+/** Sync Command - Sync stored balance with actual vault balance (SVS-2/4/7) */
 
 import { Command } from "commander";
 import { PublicKey } from "@solana/web3.js";
@@ -8,13 +8,14 @@ import { createContext } from "../../middleware";
 import { getGlobalOptions } from "../../index";
 import { resolveVault, isValidPublicKey } from "../../config/vault-aliases";
 import { ManagedVault } from "../../../managed-vault";
+import { SolVaultSDK } from "../../../svs-7";
 import { findIdlPath, loadIdl, checkAuthority } from "../../utils";
 import { SvsVariant } from "../../types";
 
 export function registerSyncCommand(program: Command): void {
   program
     .command("sync")
-    .description("Sync stored balance with actual vault balance (SVS-2/4 only)")
+    .description("Sync stored balance with actual vault balance (SVS-2/4/7-stored only)")
     .argument("<vault>", "Vault address or alias")
     .option("--program-id <pubkey>", "Program ID (if vault not in config)")
     .option("--asset-mint <pubkey>", "Asset mint (if vault not in config)")
@@ -42,17 +43,15 @@ export function registerSyncCommand(program: Command): void {
           const resolved = resolveVault(vaultArg, config);
           variant = resolved.variant;
 
-          if (variant !== "svs-2" && variant !== "svs-4") {
-            output.error(
-              `Sync only available for SVS-2/SVS-4. This vault is ${variant}.`,
-            );
+          if (variant !== "svs-2" && variant !== "svs-4" && variant !== "svs-7") {
+            output.error(`Sync only available for SVS-2/SVS-4/SVS-7 (Stored). This vault is ${variant}.`);
             process.exit(1);
           }
 
           if (!resolved.assetMint) {
             output.error(
               `Vault "${vaultArg}" missing assetMint. Update with:\n` +
-                `  solana-vault config update-vault ${vaultArg} --asset-mint <ADDRESS>`,
+              `  solana-vault config update-vault ${vaultArg} --asset-mint <ADDRESS>`,
             );
             process.exit(1);
           }
@@ -75,6 +74,45 @@ export function registerSyncCommand(program: Command): void {
       try {
         const idl = loadIdl(idlPath);
         const prog = new Program(idl as any, provider);
+
+        // ── SVS-7: native SOL vault (Stored model) ─────────────────────────
+        if (variant === "svs-7") {
+          const sdk = await SolVaultSDK.load(prog, vaultId);
+          const state = await sdk.getState();
+          const wsolBalance = await sdk.totalAssets();
+          const storedBalance = state.totalAssets;
+
+          output.info(`Vault: ${vaultArg}`);
+          output.info(`wSOL vault balance: ${wsolBalance.toString()}`);
+          output.info(`Stored total_assets: ${storedBalance.toString()}`);
+
+          if (wsolBalance.eq(storedBalance)) {
+            output.success("Already in sync. No action needed.");
+            return;
+          }
+
+          if (options.dryRun) {
+            output.success("Dry run complete. No transaction sent.");
+            return;
+          }
+          if (!options.yes) {
+            const confirmed = await output.confirm("Sync SVS-7 vault balance?");
+            if (!confirmed) { output.warn("Aborted."); return; }
+          }
+
+          const spinner = output.spinner("Syncing vault...");
+          spinner.start();
+          const signature = await sdk.sync();
+          spinner.succeed("Vault synced");
+          output.info(`New stored balance: ${wsolBalance.toString()}`);
+          output.info(`Signature: ${signature}`);
+          if (globalOpts.output === "json") {
+            output.json({ success: true, signature, vault: vaultArg, operation: "sync", newBalance: wsolBalance.toString() });
+          }
+          return;
+        }
+
+        // ── SVS-2/4: SPL token stored-balance vault ──────────────────────
         const vault = await ManagedVault.load(prog, assetMint, vaultId);
         const state = await vault.getState();
 
