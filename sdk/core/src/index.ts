@@ -33,6 +33,7 @@
 
 export * from "./vault";
 export * from "./managed-vault";
+export * from "./svs-7";
 export * from "./pda";
 export * from "./math";
 
