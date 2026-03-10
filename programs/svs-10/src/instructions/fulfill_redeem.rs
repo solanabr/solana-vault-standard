@@ -16,7 +16,7 @@ use crate::{
     constants::{CLAIMABLE_TOKENS_SEED, REDEEM_REQUEST_SEED, SHARE_ESCROW_SEED, VAULT_SEED},
     error::VaultError,
     events::RedeemFulfilled,
-    state::{AsyncVault, RedeemRequest, RequestStatus},
+    state::{AsyncVault, OperatorApproval, RedeemRequest, RequestStatus},
 };
 
 #[cfg(feature = "modules")]
@@ -29,7 +29,7 @@ pub struct FulfillRedeem<'info> {
 
     #[account(
         mut,
-        constraint = vault.operator == operator.key() @ VaultError::Unauthorized,
+        constraint = !vault.paused @ VaultError::VaultPaused,
     )]
     pub vault: Account<'info, AsyncVault>,
 
@@ -40,6 +40,8 @@ pub struct FulfillRedeem<'info> {
         constraint = redeem_request.status == RequestStatus::Pending @ VaultError::RequestNotPending,
     )]
     pub redeem_request: Account<'info, RedeemRequest>,
+
+    pub operator_approval: Option<Account<'info, OperatorApproval>>,
 
     #[account(
         constraint = asset_mint.key() == vault.asset_mint,
@@ -87,6 +89,22 @@ pub fn handler(ctx: Context<FulfillRedeem>, oracle_price: Option<u64>) -> Result
     let redeem_request = &ctx.accounts.redeem_request;
     let clock = &ctx.accounts.clock;
     let shares_locked = redeem_request.shares_locked;
+
+    let is_vault_operator = vault.operator == ctx.accounts.operator.key();
+    if !is_vault_operator {
+        let approval = ctx
+            .accounts
+            .operator_approval
+            .as_ref()
+            .ok_or(VaultError::OperatorNotApproved)?;
+        require!(
+            approval.can_fulfill_redeem
+                && approval.owner == redeem_request.owner
+                && approval.operator == ctx.accounts.operator.key()
+                && approval.vault == vault.key(),
+            VaultError::OperatorNotApproved
+        );
+    }
 
     #[cfg(feature = "modules")]
     {

@@ -201,7 +201,8 @@ pub fn handler(
     vault.max_staleness = 0;
     vault.max_deviation_bps = DEFAULT_MAX_DEVIATION_BPS;
     vault.bump = vault_bump;
-    vault._reserved = [0u8; 64];
+    vault.share_escrow_bump = share_escrow_bump;
+    vault._reserved = [0u8; 63];
 
     // --- 6. Emit event ---
     emit!(VaultInitialized {

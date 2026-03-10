@@ -40,6 +40,7 @@ import {
   Keypair,
   PublicKey,
   SystemProgram,
+  SYSVAR_CLOCK_PUBKEY,
   SYSVAR_RENT_PUBKEY,
 } from "@solana/web3.js";
 import * as fs from "fs";
@@ -215,15 +216,12 @@ async function main() {
 
   const fulDepSig = await program.methods
     .fulfillDeposit(null)
-    .accounts({
+    .accountsStrict({
       operator: payer.publicKey,
       vault,
-      assetMint,
-      sharesMint,
       depositRequest,
-      assetVault,
-      token2022Program: TOKEN_2022_PROGRAM_ID,
-      assetTokenProgram: TOKEN_PROGRAM_ID,
+      operatorApproval: PROGRAM_ID,
+      clock: SYSVAR_CLOCK_PUBKEY,
     })
     .rpc();
 
@@ -299,18 +297,20 @@ async function main() {
 
   const fulRedSig = await program.methods
     .fulfillRedeem(null)
-    .accounts({
+    .accountsStrict({
       operator: payer.publicKey,
       vault,
+      redeemRequest,
+      operatorApproval: PROGRAM_ID,
       assetMint,
+      assetVault,
       sharesMint,
       shareEscrow,
-      redeemRequest,
-      assetVault,
       claimableTokens,
-      token2022Program: TOKEN_2022_PROGRAM_ID,
       assetTokenProgram: TOKEN_PROGRAM_ID,
+      token2022Program: TOKEN_2022_PROGRAM_ID,
       systemProgram: SystemProgram.programId,
+      clock: SYSVAR_CLOCK_PUBKEY,
     })
     .rpc();
 

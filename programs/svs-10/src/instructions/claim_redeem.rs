@@ -20,7 +20,10 @@ pub struct ClaimRedeem<'info> {
     #[account(mut)]
     pub claimant: Signer<'info>,
 
-    #[account(mut)]
+    #[account(
+        mut,
+        constraint = !vault.paused @ VaultError::VaultPaused,
+    )]
     pub vault: Account<'info, AsyncVault>,
 
     #[account(

@@ -10,7 +10,7 @@ use crate::{
     constants::DEPOSIT_REQUEST_SEED,
     error::VaultError,
     events::DepositFulfilled,
-    state::{AsyncVault, DepositRequest, RequestStatus},
+    state::{AsyncVault, DepositRequest, OperatorApproval, RequestStatus},
 };
 
 #[cfg(feature = "modules")]
@@ -22,7 +22,7 @@ pub struct FulfillDeposit<'info> {
 
     #[account(
         mut,
-        constraint = vault.operator == operator.key() @ VaultError::Unauthorized,
+        constraint = !vault.paused @ VaultError::VaultPaused,
     )]
     pub vault: Account<'info, AsyncVault>,
 
@@ -34,6 +34,8 @@ pub struct FulfillDeposit<'info> {
     )]
     pub deposit_request: Account<'info, DepositRequest>,
 
+    pub operator_approval: Option<Account<'info, OperatorApproval>>,
+
     pub clock: Sysvar<'info, Clock>,
 }
 
@@ -41,6 +43,22 @@ pub fn handler(ctx: Context<FulfillDeposit>, oracle_price: Option<u64>) -> Resul
     let vault = &ctx.accounts.vault;
     let deposit_request = &ctx.accounts.deposit_request;
     let clock = &ctx.accounts.clock;
+
+    let is_vault_operator = vault.operator == ctx.accounts.operator.key();
+    if !is_vault_operator {
+        let approval = ctx
+            .accounts
+            .operator_approval
+            .as_ref()
+            .ok_or(VaultError::OperatorNotApproved)?;
+        require!(
+            approval.can_fulfill_deposit
+                && approval.owner == deposit_request.owner
+                && approval.operator == ctx.accounts.operator.key()
+                && approval.vault == vault.key(),
+            VaultError::OperatorNotApproved
+        );
+    }
 
     #[cfg(feature = "modules")]
     {

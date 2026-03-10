@@ -40,6 +40,20 @@ export function registerSetOperatorCommand(program: Command): void {
       const canClaim = opts.all || opts.canClaim;
       const anyApproved = !opts.revoke && (canFulfillDeposit || canFulfillRedeem || canClaim);
 
+      if (!opts.revoke && !anyApproved) {
+        output.warn(
+          "No permission flags specified. This will revoke all permissions for the operator.",
+        );
+        output.warn("Use --can-fulfill-deposit, --can-fulfill-redeem, --can-claim, or --all to grant permissions.");
+        if (!options.yes) {
+          const confirmed = await output.confirm("Continue with revoking all permissions?");
+          if (!confirmed) {
+            output.warn("Aborted.");
+            return;
+          }
+        }
+      }
+
       try {
         const idl = loadIdl(idlPath);
         const prog = new Program(idl as any, provider);

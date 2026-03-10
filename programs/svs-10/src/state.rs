@@ -22,7 +22,8 @@ pub struct AsyncVault {
     pub max_staleness: i64,
     pub max_deviation_bps: u16,
     pub bump: u8,
-    pub _reserved: [u8; 64],
+    pub share_escrow_bump: u8,
+    pub _reserved: [u8; 63],
 }
 
 impl AsyncVault {
@@ -41,7 +42,8 @@ impl AsyncVault {
         8 +   // max_staleness
         2 +   // max_deviation_bps
         1 +   // bump
-        64; // _reserved
+        1 +   // share_escrow_bump
+        63; // _reserved
 
     pub const SEED_PREFIX: &'static [u8] = VAULT_SEED;
 }
@@ -50,8 +52,6 @@ impl AsyncVault {
 pub enum RequestStatus {
     Pending,
     Fulfilled,
-    Claimed,
-    Cancelled,
 }
 
 #[account]

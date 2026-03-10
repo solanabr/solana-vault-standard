@@ -62,6 +62,7 @@ export interface RequestRedeemParams {
 export interface FulfillParams {
   owner: PublicKey;
   oraclePrice?: BN;
+  operatorApproval?: boolean;
 }
 
 export interface ClaimParams {
@@ -337,12 +338,22 @@ export class AsyncVault {
       params.owner,
     );
 
+    const operatorApproval = params.operatorApproval
+      ? getOperatorApprovalAddress(
+          this.program.programId,
+          this.vault,
+          params.owner,
+          operator,
+        )[0]
+      : undefined;
+
     return this.program.methods
       .fulfillDeposit(params.oraclePrice ?? null)
-      .accountsStrict({
+      .accountsPartial({
         operator,
         vault: this.vault,
         depositRequest,
+        operatorApproval,
         clock: SYSVAR_CLOCK_PUBKEY,
       })
       .rpc();
@@ -454,12 +465,22 @@ export class AsyncVault {
       params.owner,
     );
 
+    const operatorApproval = params.operatorApproval
+      ? getOperatorApprovalAddress(
+          this.program.programId,
+          this.vault,
+          params.owner,
+          operator,
+        )[0]
+      : undefined;
+
     return this.program.methods
       .fulfillRedeem(params.oraclePrice ?? null)
-      .accountsStrict({
+      .accountsPartial({
         operator,
         vault: this.vault,
         redeemRequest,
+        operatorApproval,
         assetMint: this.assetMint,
         assetVault: this.assetVault,
         sharesMint: this.sharesMint,

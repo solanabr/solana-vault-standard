@@ -257,6 +257,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
           operator: operator.publicKey,
           vault,
           depositRequest,
+          operatorApproval: null,
           clock: SYSVAR_CLOCK_PUBKEY,
         })
         .signers([operator])
@@ -419,6 +420,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
           operator: operator.publicKey,
           vault,
           redeemRequest,
+          operatorApproval: null,
           assetMint,
           assetVault,
           sharesMint,
@@ -551,6 +553,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
           operator: operator.publicKey,
           vault,
           depositRequest,
+          operatorApproval: null,
           clock: SYSVAR_CLOCK_PUBKEY,
         })
         .signers([operator])
@@ -609,6 +612,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
           operator: operator.publicKey,
           vault,
           redeemRequest,
+          operatorApproval: null,
           assetMint,
           assetVault,
           sharesMint,
@@ -669,6 +673,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
             operator: operator.publicKey,
             vault,
             depositRequest,
+            operatorApproval: null,
             clock: SYSVAR_CLOCK_PUBKEY,
           })
           .signers([operator])
@@ -789,6 +794,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
           operator: operator.publicKey,
           vault,
           depositRequest: user2DepositRequest,
+          operatorApproval: null,
           clock: SYSVAR_CLOCK_PUBKEY,
         })
         .signers([operator])
@@ -845,6 +851,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
           operator: operator.publicKey,
           vault,
           depositRequest: user2DepositRequest,
+          operatorApproval: null,
           clock: SYSVAR_CLOCK_PUBKEY,
         })
         .signers([operator])
@@ -1036,13 +1043,14 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
             operator: rando.publicKey,
             vault,
             depositRequest,
+            operatorApproval: null,
             clock: SYSVAR_CLOCK_PUBKEY,
           })
           .signers([rando])
           .rpc();
         expect.fail("Should have thrown");
       } catch (err: any) {
-        expect(err.toString()).to.include("Unauthorized");
+        expect(err.toString()).to.include("OperatorNotApproved");
       }
 
       // Clean up
@@ -1189,6 +1197,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
           operator: operator.publicKey,
           vault,
           depositRequest,
+          operatorApproval: null,
           clock: SYSVAR_CLOCK_PUBKEY,
         })
         .signers([operator])
@@ -1216,6 +1225,603 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
           systemProgram: SystemProgram.programId,
         })
         .rpc();
+    });
+  });
+
+  // =========================================================================
+  // Delegated Operator Fulfill
+  // =========================================================================
+  describe("Delegated Operator Fulfill", () => {
+    const delegatedOp = Keypair.generate();
+    const user3 = Keypair.generate();
+    let user3AssetAccount: PublicKey;
+    let user3SharesAccount: PublicKey;
+    let user3DepositRequest: PublicKey;
+    let user3RedeemRequest: PublicKey;
+    let fulfillApprovalPDA: PublicKey;
+
+    before(async () => {
+      const airdrop1 = await connection.requestAirdrop(delegatedOp.publicKey, 2 * anchor.web3.LAMPORTS_PER_SOL);
+      const airdrop2 = await connection.requestAirdrop(user3.publicKey, 2 * anchor.web3.LAMPORTS_PER_SOL);
+      await connection.confirmTransaction(airdrop1);
+      await connection.confirmTransaction(airdrop2);
+      await new Promise((r) => setTimeout(r, 1000));
+
+      const user3AssetAta = await getOrCreateAssociatedTokenAccount(
+        connection, payer, assetMint, user3.publicKey, false, undefined, undefined, TOKEN_PROGRAM_ID
+      );
+      user3AssetAccount = user3AssetAta.address;
+
+      await mintTo(
+        connection, payer, assetMint, user3AssetAccount, payer.publicKey,
+        1_000_000 * 10 ** ASSET_DECIMALS, [], undefined, TOKEN_PROGRAM_ID
+      );
+
+      user3SharesAccount = getAssociatedTokenAddressSync(
+        sharesMint, user3.publicKey, false, TOKEN_2022_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID
+      );
+
+      [user3DepositRequest] = getDepositRequestPDA(vault, user3.publicKey);
+      [user3RedeemRequest] = getRedeemRequestPDA(vault, user3.publicKey);
+      [fulfillApprovalPDA] = getOperatorApprovalPDA(vault, user3.publicKey, delegatedOp.publicKey);
+    });
+
+    it("delegated operator fulfills deposit via OperatorApproval", async () => {
+      // user3 grants delegatedOp fulfill permissions
+      await program.methods
+        .setOperator(delegatedOp.publicKey, true, true, false)
+        .accountsStrict({
+          owner: user3.publicKey,
+          vault,
+          operatorApproval: fulfillApprovalPDA,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([user3])
+        .rpc();
+
+      const approval = await program.account.operatorApproval.fetch(fulfillApprovalPDA);
+      expect(approval.canFulfillDeposit).to.equal(true);
+      expect(approval.canFulfillRedeem).to.equal(true);
+      expect(approval.canClaim).to.equal(false);
+
+      // user3 requests deposit
+      const depositAmount = new BN(50_000 * 10 ** ASSET_DECIMALS);
+      await program.methods
+        .requestDeposit(depositAmount, user3.publicKey)
+        .accountsStrict({
+          user: user3.publicKey,
+          vault,
+          assetMint,
+          userAssetAccount: user3AssetAccount,
+          assetVault,
+          depositRequest: user3DepositRequest,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([user3])
+        .rpc();
+
+      // delegatedOp fulfills (not the vault operator)
+      await program.methods
+        .fulfillDeposit(null)
+        .accountsStrict({
+          operator: delegatedOp.publicKey,
+          vault,
+          depositRequest: user3DepositRequest,
+          operatorApproval: fulfillApprovalPDA,
+          clock: SYSVAR_CLOCK_PUBKEY,
+        })
+        .signers([delegatedOp])
+        .rpc();
+
+      const req = await program.account.depositRequest.fetch(user3DepositRequest);
+      expect(JSON.stringify(req.status)).to.include("fulfilled");
+      expect(req.sharesClaimable.toNumber()).to.be.greaterThan(0);
+
+      // user3 claims their own deposit
+      await program.methods
+        .claimDeposit()
+        .accountsStrict({
+          claimant: user3.publicKey,
+          vault,
+          depositRequest: user3DepositRequest,
+          owner: user3.publicKey,
+          sharesMint,
+          receiverSharesAccount: user3SharesAccount,
+          receiver: user3.publicKey,
+          operatorApproval: null,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([user3])
+        .rpc();
+    });
+
+    it("delegated operator fulfills redeem via OperatorApproval", async () => {
+      const sharesAccount = await getAccount(connection, user3SharesAccount, undefined, TOKEN_2022_PROGRAM_ID);
+      const sharesToRedeem = new BN(Math.floor(Number(sharesAccount.amount) / 2));
+      const [claimableTokens] = getClaimableTokensPDA(vault, user3.publicKey);
+
+      await program.methods
+        .requestRedeem(sharesToRedeem, user3.publicKey)
+        .accountsStrict({
+          user: user3.publicKey,
+          vault,
+          sharesMint,
+          userSharesAccount: user3SharesAccount,
+          shareEscrow,
+          redeemRequest: user3RedeemRequest,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([user3])
+        .rpc();
+
+      // delegatedOp fulfills redeem
+      await program.methods
+        .fulfillRedeem(null)
+        .accountsStrict({
+          operator: delegatedOp.publicKey,
+          vault,
+          redeemRequest: user3RedeemRequest,
+          operatorApproval: fulfillApprovalPDA,
+          assetMint,
+          assetVault,
+          sharesMint,
+          shareEscrow,
+          claimableTokens,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          clock: SYSVAR_CLOCK_PUBKEY,
+        })
+        .signers([delegatedOp])
+        .rpc();
+
+      const req = await program.account.redeemRequest.fetch(user3RedeemRequest);
+      expect(JSON.stringify(req.status)).to.include("fulfilled");
+      expect(req.assetsClaimable.toNumber()).to.be.greaterThan(0);
+
+      // Clean up: user3 claims
+      await program.methods
+        .claimRedeem()
+        .accountsStrict({
+          claimant: user3.publicKey,
+          vault,
+          assetMint,
+          redeemRequest: user3RedeemRequest,
+          owner: user3.publicKey,
+          claimableTokens,
+          receiverAssetAccount: user3AssetAccount,
+          receiver: user3.publicKey,
+          operatorApproval: null,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([user3])
+        .rpc();
+    });
+
+    it("rejects delegated fulfill without can_fulfill_deposit", async () => {
+      const noFulfillOp = Keypair.generate();
+      const airdropSig = await connection.requestAirdrop(noFulfillOp.publicKey, anchor.web3.LAMPORTS_PER_SOL);
+      await connection.confirmTransaction(airdropSig);
+      await new Promise((r) => setTimeout(r, 1000));
+
+      // user3 grants claim-only approval (no fulfill)
+      const [claimOnlyApproval] = getOperatorApprovalPDA(vault, user3.publicKey, noFulfillOp.publicKey);
+      await program.methods
+        .setOperator(noFulfillOp.publicKey, false, false, true)
+        .accountsStrict({
+          owner: user3.publicKey,
+          vault,
+          operatorApproval: claimOnlyApproval,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([user3])
+        .rpc();
+
+      // user3 requests deposit
+      const depositAmount = new BN(10_000 * 10 ** ASSET_DECIMALS);
+      await program.methods
+        .requestDeposit(depositAmount, user3.publicKey)
+        .accountsStrict({
+          user: user3.publicKey,
+          vault,
+          assetMint,
+          userAssetAccount: user3AssetAccount,
+          assetVault,
+          depositRequest: user3DepositRequest,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([user3])
+        .rpc();
+
+      // noFulfillOp tries to fulfill — should fail
+      try {
+        await program.methods
+          .fulfillDeposit(null)
+          .accountsStrict({
+            operator: noFulfillOp.publicKey,
+            vault,
+            depositRequest: user3DepositRequest,
+            operatorApproval: claimOnlyApproval,
+            clock: SYSVAR_CLOCK_PUBKEY,
+          })
+          .signers([noFulfillOp])
+          .rpc();
+        expect.fail("Should have thrown");
+      } catch (err: any) {
+        expect(err.error.errorCode.code).to.equal("OperatorNotApproved");
+      }
+
+      // Clean up
+      await program.methods
+        .cancelDeposit()
+        .accountsStrict({
+          user: user3.publicKey,
+          vault,
+          assetMint,
+          userAssetAccount: user3AssetAccount,
+          assetVault,
+          depositRequest: user3DepositRequest,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([user3])
+        .rpc();
+    });
+  });
+
+  // =========================================================================
+  // Oracle Deviation Rejection
+  // =========================================================================
+  describe("Oracle Deviation Rejection", () => {
+    it("rejects oracle price exceeding max_deviation_bps", async () => {
+      const vaultState = await program.account.asyncVault.fetch(vault);
+      const vaultPrice = computeVaultPrice(vaultState.totalAssets, vaultState.totalShares);
+
+      // max_deviation_bps = 500 (5%). Use 10% deviation to ensure rejection.
+      const deviatedPrice = vaultPrice.mul(new BN(110)).div(new BN(100));
+
+      const depositAmount = new BN(10_000 * 10 ** ASSET_DECIMALS);
+      await program.methods
+        .requestDeposit(depositAmount, payer.publicKey)
+        .accountsStrict({
+          user: payer.publicKey,
+          vault,
+          assetMint,
+          userAssetAccount,
+          assetVault,
+          depositRequest,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
+
+      try {
+        await program.methods
+          .fulfillDeposit(deviatedPrice)
+          .accountsStrict({
+            operator: operator.publicKey,
+            vault,
+            depositRequest,
+            operatorApproval: null,
+            clock: SYSVAR_CLOCK_PUBKEY,
+          })
+          .signers([operator])
+          .rpc();
+        expect.fail("Should have thrown");
+      } catch (err: any) {
+        expect(err.error.errorCode.code).to.equal("OracleDeviationExceeded");
+      }
+
+      // Clean up
+      await program.methods
+        .cancelDeposit()
+        .accountsStrict({
+          user: payer.publicKey,
+          vault,
+          assetMint,
+          userAssetAccount,
+          assetVault,
+          depositRequest,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
+    });
+  });
+
+  // =========================================================================
+  // Receiver != Owner
+  // =========================================================================
+  describe("Receiver != Owner", () => {
+    const receiver = Keypair.generate();
+    let receiverSharesAccount: PublicKey;
+
+    before(async () => {
+      const airdropSig = await connection.requestAirdrop(receiver.publicKey, anchor.web3.LAMPORTS_PER_SOL);
+      await connection.confirmTransaction(airdropSig);
+      await new Promise((r) => setTimeout(r, 1000));
+
+      receiverSharesAccount = getAssociatedTokenAddressSync(
+        sharesMint, receiver.publicKey, false, TOKEN_2022_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID
+      );
+    });
+
+    it("deposit with different receiver gets shares minted to receiver", async () => {
+      const depositAmount = new BN(20_000 * 10 ** ASSET_DECIMALS);
+
+      await program.methods
+        .requestDeposit(depositAmount, receiver.publicKey)
+        .accountsStrict({
+          user: payer.publicKey,
+          vault,
+          assetMint,
+          userAssetAccount,
+          assetVault,
+          depositRequest,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
+
+      await program.methods
+        .fulfillDeposit(null)
+        .accountsStrict({
+          operator: operator.publicKey,
+          vault,
+          depositRequest,
+          operatorApproval: null,
+          clock: SYSVAR_CLOCK_PUBKEY,
+        })
+        .signers([operator])
+        .rpc();
+
+      // receiver claims (receiver is claimant since receiver == deposit_request.receiver)
+      await program.methods
+        .claimDeposit()
+        .accountsStrict({
+          claimant: receiver.publicKey,
+          vault,
+          depositRequest,
+          owner: payer.publicKey,
+          sharesMint,
+          receiverSharesAccount,
+          receiver: receiver.publicKey,
+          operatorApproval: null,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([receiver])
+        .rpc();
+
+      const sharesAccount = await getAccount(connection, receiverSharesAccount, undefined, TOKEN_2022_PROGRAM_ID);
+      expect(Number(sharesAccount.amount)).to.be.greaterThan(0);
+      console.log("  Receiver got shares:", Number(sharesAccount.amount));
+    });
+
+    it("redeem with different receiver gets assets sent to receiver", async () => {
+      const sharesAccount = await getAccount(connection, receiverSharesAccount, undefined, TOKEN_2022_PROGRAM_ID);
+      const sharesToRedeem = new BN(Number(sharesAccount.amount));
+      const [receiverRedeemRequest] = getRedeemRequestPDA(vault, receiver.publicKey);
+      const [claimableTokens] = getClaimableTokensPDA(vault, receiver.publicKey);
+
+      // receiver requests redeem with payer as asset receiver
+      await program.methods
+        .requestRedeem(sharesToRedeem, payer.publicKey)
+        .accountsStrict({
+          user: receiver.publicKey,
+          vault,
+          sharesMint,
+          userSharesAccount: receiverSharesAccount,
+          shareEscrow,
+          redeemRequest: receiverRedeemRequest,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([receiver])
+        .rpc();
+
+      await program.methods
+        .fulfillRedeem(null)
+        .accountsStrict({
+          operator: operator.publicKey,
+          vault,
+          redeemRequest: receiverRedeemRequest,
+          operatorApproval: null,
+          assetMint,
+          assetVault,
+          sharesMint,
+          shareEscrow,
+          claimableTokens,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          clock: SYSVAR_CLOCK_PUBKEY,
+        })
+        .signers([operator])
+        .rpc();
+
+      const userAssetBefore = await getAccount(connection, userAssetAccount);
+
+      // payer claims (payer is the receiver for this redeem)
+      await program.methods
+        .claimRedeem()
+        .accountsStrict({
+          claimant: payer.publicKey,
+          vault,
+          assetMint,
+          redeemRequest: receiverRedeemRequest,
+          owner: receiver.publicKey,
+          claimableTokens,
+          receiverAssetAccount: userAssetAccount,
+          receiver: payer.publicKey,
+          operatorApproval: null,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
+
+      const userAssetAfter = await getAccount(connection, userAssetAccount);
+      expect(Number(userAssetAfter.amount)).to.be.greaterThan(Number(userAssetBefore.amount));
+      console.log("  Receiver got assets:", Number(userAssetAfter.amount) - Number(userAssetBefore.amount));
+    });
+  });
+
+  // =========================================================================
+  // Operator Claim for Redeem
+  // =========================================================================
+  describe("Operator Claim for Redeem", () => {
+    it("approved operator claims redeem on behalf of user", async () => {
+      const user4 = Keypair.generate();
+      const airdropSig = await connection.requestAirdrop(user4.publicKey, 2 * anchor.web3.LAMPORTS_PER_SOL);
+      await connection.confirmTransaction(airdropSig);
+      await new Promise((r) => setTimeout(r, 1000));
+
+      // Fund user4 with assets
+      const user4AssetAta = await getOrCreateAssociatedTokenAccount(
+        connection, payer, assetMint, user4.publicKey, false, undefined, undefined, TOKEN_PROGRAM_ID
+      );
+      await mintTo(
+        connection, payer, assetMint, user4AssetAta.address, payer.publicKey,
+        500_000 * 10 ** ASSET_DECIMALS, [], undefined, TOKEN_PROGRAM_ID
+      );
+
+      const user4SharesAccount = getAssociatedTokenAddressSync(
+        sharesMint, user4.publicKey, false, TOKEN_2022_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID
+      );
+
+      // Deposit flow for user4
+      const [user4DepositRequest] = getDepositRequestPDA(vault, user4.publicKey);
+      const depositAmount = new BN(100_000 * 10 ** ASSET_DECIMALS);
+
+      await program.methods
+        .requestDeposit(depositAmount, user4.publicKey)
+        .accountsStrict({
+          user: user4.publicKey,
+          vault,
+          assetMint,
+          userAssetAccount: user4AssetAta.address,
+          assetVault,
+          depositRequest: user4DepositRequest,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([user4])
+        .rpc();
+
+      await program.methods
+        .fulfillDeposit(null)
+        .accountsStrict({
+          operator: operator.publicKey,
+          vault,
+          depositRequest: user4DepositRequest,
+          operatorApproval: null,
+          clock: SYSVAR_CLOCK_PUBKEY,
+        })
+        .signers([operator])
+        .rpc();
+
+      await program.methods
+        .claimDeposit()
+        .accountsStrict({
+          claimant: user4.publicKey,
+          vault,
+          depositRequest: user4DepositRequest,
+          owner: user4.publicKey,
+          sharesMint,
+          receiverSharesAccount: user4SharesAccount,
+          receiver: user4.publicKey,
+          operatorApproval: null,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([user4])
+        .rpc();
+
+      // User4 approves payer as claim operator
+      const [claimApproval] = getOperatorApprovalPDA(vault, user4.publicKey, payer.publicKey);
+      await program.methods
+        .setOperator(payer.publicKey, false, false, true)
+        .accountsStrict({
+          owner: user4.publicKey,
+          vault,
+          operatorApproval: claimApproval,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([user4])
+        .rpc();
+
+      // Redeem flow
+      const sharesAccount = await getAccount(connection, user4SharesAccount, undefined, TOKEN_2022_PROGRAM_ID);
+      const sharesToRedeem = new BN(Number(sharesAccount.amount));
+      const [user4RedeemRequest] = getRedeemRequestPDA(vault, user4.publicKey);
+      const [claimableTokens] = getClaimableTokensPDA(vault, user4.publicKey);
+
+      await program.methods
+        .requestRedeem(sharesToRedeem, user4.publicKey)
+        .accountsStrict({
+          user: user4.publicKey,
+          vault,
+          sharesMint,
+          userSharesAccount: user4SharesAccount,
+          shareEscrow,
+          redeemRequest: user4RedeemRequest,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([user4])
+        .rpc();
+
+      await program.methods
+        .fulfillRedeem(null)
+        .accountsStrict({
+          operator: operator.publicKey,
+          vault,
+          redeemRequest: user4RedeemRequest,
+          operatorApproval: null,
+          assetMint,
+          assetVault,
+          sharesMint,
+          shareEscrow,
+          claimableTokens,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          clock: SYSVAR_CLOCK_PUBKEY,
+        })
+        .signers([operator])
+        .rpc();
+
+      // payer (approved operator) claims redeem on behalf of user4
+      const user4AssetBefore = await getAccount(connection, user4AssetAta.address);
+
+      await program.methods
+        .claimRedeem()
+        .accountsStrict({
+          claimant: payer.publicKey,
+          vault,
+          assetMint,
+          redeemRequest: user4RedeemRequest,
+          owner: user4.publicKey,
+          claimableTokens,
+          receiverAssetAccount: user4AssetAta.address,
+          receiver: user4.publicKey,
+          operatorApproval: claimApproval,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
+
+      const user4AssetAfter = await getAccount(connection, user4AssetAta.address);
+      expect(Number(user4AssetAfter.amount)).to.be.greaterThan(Number(user4AssetBefore.amount));
+      console.log("  Operator claimed assets for user4:", Number(user4AssetAfter.amount) - Number(user4AssetBefore.amount));
     });
   });
 });

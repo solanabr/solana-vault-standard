@@ -50,6 +50,11 @@ pub fn unpause(ctx: Context<Admin>) -> Result<()> {
 }
 
 pub fn transfer_authority(ctx: Context<Admin>, new_authority: Pubkey) -> Result<()> {
+    require!(
+        new_authority != Pubkey::default(),
+        VaultError::InvalidAddress
+    );
+
     let vault = &mut ctx.accounts.vault;
     let previous_authority = vault.authority;
 
@@ -65,6 +70,11 @@ pub fn transfer_authority(ctx: Context<Admin>, new_authority: Pubkey) -> Result<
 }
 
 pub fn set_vault_operator(ctx: Context<Admin>, new_operator: Pubkey) -> Result<()> {
+    require!(
+        new_operator != Pubkey::default(),
+        VaultError::InvalidAddress
+    );
+
     let vault = &mut ctx.accounts.vault;
     let old_operator = vault.operator;
 

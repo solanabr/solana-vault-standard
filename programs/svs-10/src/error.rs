@@ -58,4 +58,7 @@ pub enum VaultError {
 
     #[msg("Lock duration exceeds maximum")]
     LockDurationExceedsMax,
+
+    #[msg("Invalid address: cannot be the zero address")]
+    InvalidAddress,
 }

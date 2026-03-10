@@ -17,7 +17,10 @@ pub struct CancelDeposit<'info> {
     #[account(mut)]
     pub user: Signer<'info>,
 
-    #[account(mut)]
+    #[account(
+        mut,
+        constraint = !vault.paused @ VaultError::VaultPaused,
+    )]
     pub vault: Account<'info, AsyncVault>,
 
     #[account(

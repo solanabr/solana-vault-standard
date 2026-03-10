@@ -45,7 +45,7 @@ The `total_pending_deposits` field ensures that assets waiting in deposit reques
 #[account]
 pub struct AsyncVault {
     pub authority: Pubkey,              // 32 — admin (pause/unpause/transfer)
-    pub operator: Pubkey,               // 32 — fulfills requests
+    pub operator: Pubkey,               // 32 — vault operator (fulfills requests)
     pub asset_mint: Pubkey,             // 32 — underlying token
     pub shares_mint: Pubkey,            // 32 — LP share token (Token-2022)
     pub asset_vault: Pubkey,            // 32 — ATA holding vault assets
@@ -55,39 +55,42 @@ pub struct AsyncVault {
     pub total_pending_deposits: u64,    // 8  — isolated pending deposit liquidity
     pub decimals_offset: u8,            // 1  — 9 - asset_decimals
     pub paused: bool,                   // 1
-    pub max_staleness: u64,             // 8  — max oracle age in seconds
+    pub max_staleness: i64,             // 8  — max oracle age in seconds
     pub max_deviation_bps: u16,         // 2  — max oracle vs vault price deviation (default 500 = 5%)
-    pub bump: u8,                       // 1  — stored PDA bump
-    pub _reserved: [u8; 64],            // 64
+    pub bump: u8,                       // 1  — stored vault PDA bump
+    pub share_escrow_bump: u8,          // 1  — stored share escrow PDA bump
+    pub _reserved: [u8; 63],            // 63
 }
 
 #[account]
 pub struct DepositRequest {
-    pub vault: Pubkey,                  // 32
     pub owner: Pubkey,                  // 32
-    pub assets: u64,                    // 8  — assets locked
-    pub shares: u64,                    // 8  — computed at fulfill (0 until then)
+    pub receiver: Pubkey,               // 32 — who receives the shares on claim
+    pub vault: Pubkey,                  // 32
+    pub assets_locked: u64,             // 8  — assets locked by depositor
+    pub shares_claimable: u64,          // 8  — computed at fulfill (0 until then)
     pub status: RequestStatus,          // 1  — Pending | Fulfilled
+    pub requested_at: i64,              // 8  — unix timestamp of request
+    pub fulfilled_at: i64,              // 8  — unix timestamp of fulfillment (0 until then)
     pub bump: u8,                       // 1
 }
 
 #[account]
 pub struct RedeemRequest {
-    pub vault: Pubkey,                  // 32
     pub owner: Pubkey,                  // 32
-    pub shares: u64,                    // 8  — shares locked in escrow
-    pub assets: u64,                    // 8  — computed at fulfill (0 until then)
+    pub receiver: Pubkey,               // 32 — who receives the assets on claim
+    pub vault: Pubkey,                  // 32
+    pub shares_locked: u64,             // 8  — shares locked in escrow
+    pub assets_claimable: u64,          // 8  — computed at fulfill (0 until then)
     pub status: RequestStatus,          // 1  — Pending | Fulfilled
+    pub requested_at: i64,              // 8  — unix timestamp of request
+    pub fulfilled_at: i64,              // 8  — unix timestamp of fulfillment (0 until then)
     pub bump: u8,                       // 1
 }
 
-#[account]
-pub struct ClaimableTokens {
-    pub vault: Pubkey,                  // 32
-    pub owner: Pubkey,                  // 32
-    pub assets: u64,                    // 8  — assets available to claim
-    pub bump: u8,                       // 1
-}
+// ClaimableTokens: raw SPL TokenAccount PDA (not a custom struct)
+// Seeds: ["claimable_tokens", vault_pubkey, owner_pubkey]
+// Authority: Vault PDA. Holds assets between fulfill_redeem and claim_redeem.
 
 #[account]
 pub struct OperatorApproval {
@@ -115,12 +118,12 @@ pub enum RequestStatus {
 | `initialize` | `payer` | Create vault, shares mint (Token-2022), asset vault ATA, share escrow |
 | `request_deposit` | `owner` | Lock assets, create pending DepositRequest, increment `total_pending_deposits` |
 | `cancel_deposit` | `owner` | Return assets to owner, close DepositRequest PDA (synchronous, ERC-7887 deviation) |
-| `fulfill_deposit` | `operator` | Compute shares via oracle or vault price, move assets into AUM, set status Fulfilled |
-| `claim_deposit` | `receiver` or `operator` | Mint shares via Token-2022 CPI, close DepositRequest PDA |
+| `fulfill_deposit` | `vault_operator` or `delegated_operator` | Compute shares via oracle or vault price, move assets into AUM, set status Fulfilled |
+| `claim_deposit` | `receiver` or `delegated_operator` | Mint shares via Token-2022 CPI, close DepositRequest PDA |
 | `request_redeem` | `owner` | Lock shares in Share Escrow, create pending RedeemRequest |
 | `cancel_redeem` | `owner` | Return shares from Share Escrow, close RedeemRequest PDA |
-| `fulfill_redeem` | `operator` | Compute assets, burn shares from escrow, transfer assets to ClaimableTokens PDA |
-| `claim_redeem` | `receiver` or `operator` | Transfer assets from ClaimableTokens to receiver, close PDAs |
+| `fulfill_redeem` | `vault_operator` or `delegated_operator` | Compute assets, burn shares from escrow, transfer assets to ClaimableTokens PDA |
+| `claim_redeem` | `receiver` or `delegated_operator` | Transfer assets from ClaimableTokens to receiver, close PDAs |
 
 ### Admin Instructions
 
@@ -132,16 +135,16 @@ pub enum RequestStatus {
 | `set_vault_operator` | `authority` | Set or replace vault operator |
 | `set_operator` | `owner` | Delegate granular permissions to an operator (fulfill_deposit, fulfill_redeem, claim) |
 
-### View Functions
+### View Instructions
 
-All view functions use `set_return_data()` for CPI composability.
+On-chain instructions that use `set_return_data()` for CPI composability. For direct access, read request account state via `program.account.depositRequest.fetch()` or equivalent.
 
-| Function | Returns |
-|----------|---------|
+| Instruction | Returns |
+|-------------|---------|
 | `pending_deposit_request` | Assets in pending DepositRequest for owner |
 | `claimable_deposit_request` | Shares in fulfilled DepositRequest ready to claim |
 | `pending_redeem_request` | Shares in pending RedeemRequest for owner |
-| `claimable_redeem_request` | Assets in ClaimableTokens for owner |
+| `claimable_redeem_request` | Assets in ClaimableTokens account for owner |
 
 ### Deposit Lifecycle Detail
 
@@ -258,11 +261,9 @@ await vault.fulfillRedeem(operator, { owner: user.publicKey });
 // User: claim redeemed assets
 await vault.claimRedeem(user, { owner: user.publicKey, receiver: user.publicKey });
 
-// View pending/claimable state
-const pendingDeposit = await vault.pendingDepositRequest(user.publicKey);
-const claimableDeposit = await vault.claimableDepositRequest(user.publicKey);
-const pendingRedeem = await vault.pendingRedeemRequest(user.publicKey);
-const claimableRedeem = await vault.claimableRedeemRequest(user.publicKey);
+// Read request state from on-chain accounts
+const depositRequest = await vault.fetchDepositRequest(user.publicKey);
+const redeemRequest = await vault.fetchRedeemRequest(user.publicKey);
 
 // Delegate granular permissions to operator
 await vault.setOperator(user, {
@@ -306,8 +307,9 @@ The operator role is semi-trusted:
 
 When `vault.paused = true`:
 - All user-facing instructions fail (`request_deposit`, `cancel_deposit`, `claim_deposit`, `request_redeem`, `cancel_redeem`, `claim_redeem`)
-- Operator fulfill instructions also fail
-- View functions and `transfer_authority` still work
+- Operator fulfill instructions also fail (`fulfill_deposit`, `fulfill_redeem`)
+- Admin instructions still work (`unpause`, `transfer_authority`, `set_vault_operator`)
+- View instructions still work
 
 ## Design Decisions
 
@@ -333,27 +335,27 @@ Between `fulfill_deposit` and `claim_deposit`, the operator has computed and res
 
 **Program ID**: `CpjFjyxRwTGYxR6JWXpfQ1923z5wVwpyBvgPFjm9jamJ`
 
-**Example Vault**: [`6GtJk7GoexcfMVL6bJqEmN5fUB5MBrx59N6VVyEC7Jgd`](https://explorer.solana.com/address/6GtJk7GoexcfMVL6bJqEmN5fUB5MBrx59N6VVyEC7Jgd?cluster=devnet)
+**Example Vault**: [`7jaQ3FrdELsKq2A23LRNtGUFwSgkrhCnJ8bE2F8BMQMf`](https://explorer.solana.com/address/7jaQ3FrdELsKq2A23LRNtGUFwSgkrhCnJ8bE2F8BMQMf?cluster=devnet)
 
 #### Example Transactions (All Instructions)
 
 | Step | Transaction |
 |------|-------------|
-| Initialize vault | [`56NWB6...`](https://explorer.solana.com/tx/56NWB62ceGDsT1w3L5eHaZ5V9HeeYPLdG5ny84G3k8sj7GJcneVByiQ6VL2d8f3vmkoUyPBRFz2qG6wan5G58DYS?cluster=devnet) |
-| Request deposit | [`NszGH3...`](https://explorer.solana.com/tx/NszGH3tCj4xwxGZRygzofvGKDrj9onmqZL4nc4bVsXczf9xqYqwgsBDWp35zgRU5MoqJi3U5G8DEcgXqFUSNoUx?cluster=devnet) |
-| Fulfill deposit | [`57kb9u...`](https://explorer.solana.com/tx/57kb9usH85TakzEuQWu6mbh2SxDxitrFeohihcYepDUBDqfzZvwi8zC3wCAoYQVdCdgcVWFJWVS3vKhEnT4V2rs8?cluster=devnet) |
-| Claim deposit | [`4HnyVd...`](https://explorer.solana.com/tx/4HnyVdm2yfRyEvBhHrU2myzqmaUWHCP4bNeappmCg3QPdnGXveH7kwoUj1TxzKiXXucACqFE4X1da2wfZfixX5vt?cluster=devnet) |
-| Request redeem | [`2FFvD8...`](https://explorer.solana.com/tx/2FFvD8tENH9wfoSaab4H2UZccHqgzatjRGfukp6YXHf7RGsaPWWW1ukxp9KSwFzkRrXWpaVzQh5bQ5TqwyNoLwe?cluster=devnet) |
-| Fulfill redeem | [`TfLxVe...`](https://explorer.solana.com/tx/TfLxVeLRuMegCcBA8k3QQLHT236vQM7t5xmp2K7RVhMUcxyoqZZGC9oTrcM8uc5P8TudYvL8duWMeMKM6Dk8cVz?cluster=devnet) |
-| Claim redeem | [`51hrrD...`](https://explorer.solana.com/tx/51hrrDukbhBbWeW7uXxQptJFYKmVeKjHcQher12ZQ2qKXUDzMVbZp3bRDRPNf6rGtdhg2eR9wTL7eHEGyamGZcZr?cluster=devnet) |
-| Cancel deposit | [`5jN1Gc...`](https://explorer.solana.com/tx/5jN1Gc2JYwQ1Qfa3mmD55xQWAt13nHszr3VuEcNsS2nnr1YZ3NA3vHuUpdbWGiruxriHzwvrFAuVXfXo1jLjYFPv?cluster=devnet) |
-| Cancel redeem | [`2LUgQ8...`](https://explorer.solana.com/tx/2LUgQ8FuUXytd4GGmtYN6drCrbwsyvA6MiCFH5ajBrmSvri6G6tKz7bL3wR8Jc6H6uU2VuvGDDqJ3KVWPUThaFZi?cluster=devnet) |
-| Set operator (approve) | [`34xWhb...`](https://explorer.solana.com/tx/34xWhbtPMMHpdigMWn5rb9th5tiA9VuKSsDDTPRHBLe7wK5yFQz7NiNxBFza1NfTPahsAj2v56aKstjgSyDcfcur?cluster=devnet) |
-| Set operator (revoke) | [`4MfRat...`](https://explorer.solana.com/tx/4MfRatMo1rCZqqqKaUnb49TxMVPHxQx3ejbqpePCNypySSWDbKe1FoEdrfhkAeuTdiUQ2JUw5Qug9VKneVCgGvLZ?cluster=devnet) |
-| Set vault operator | [`LAhujY...`](https://explorer.solana.com/tx/LAhujY3FtdjbpRJfRqgDHtzVwtU21fy9VYZZKzfoKU8TPxFMF6jfRDyE9PJaCVshuYW6StTbbWGf7VY92fvEAG5?cluster=devnet) |
-| Transfer authority | [`2urexP...`](https://explorer.solana.com/tx/2urexPQaBvMFxkFy8iRb5qoCDJH8FXeUpfP1u7z51d3BJc3nBQpd4kBiL4aiUSZFbQLHRe5pvGUeKWdFNDJZ39Lk?cluster=devnet) |
-| Pause vault | [`zg75UB...`](https://explorer.solana.com/tx/zg75UBU9T1xqQsEkMmhGyiDBJGGB7Rn4SZVXVzUXRv1PnuaDEHPfDrpYM4qWNAVfA9pyZANe8eT4k6GNm8QX15Z?cluster=devnet) |
-| Unpause vault | [`3WiAHu...`](https://explorer.solana.com/tx/3WiAHue1jjD3gZBzqWrbQxUcmtFmBvvqkFMRomoniqvPzWnE2wMgjdBw2TbJhmHaA5FdSHosAZh6udweWwspCcrQ?cluster=devnet) |
+| Initialize vault | [`4KaJXA...`](https://explorer.solana.com/tx/4KaJXAVW2JhmDoSM1hYDTmGHpP1UNUe94FKNjDD78CNG5eMZS4qnBNZTScrVB4hmZjgjZBcFbLWd8HSBDQgQX2WL?cluster=devnet) |
+| Request deposit | [`fFD8gw...`](https://explorer.solana.com/tx/fFD8gwmW5hgdf552TqcVSP91bKXy7EqiNajLn9ezTxudr7kyBbu8d5nTHiRXhoVtzhw9L6CjSQKHpXPYnJHkzDm?cluster=devnet) |
+| Fulfill deposit | [`4zF3t8...`](https://explorer.solana.com/tx/4zF3t8rzxVbY5NJJR3iphf33vKe64yfSFgoCdMWLU8XaUn21PvL3KfaMPg2Ev9nS3tWYRCed83qztv9YL6uTm4XA?cluster=devnet) |
+| Claim deposit | [`459gq9...`](https://explorer.solana.com/tx/459gq98E3oafRTz9EjpuZF7gb9zvNkzRkvMrrZDnPkXaVqj3G9CuongWpp4HfjenuGCaZVo3Yre8pEb1dRUFFrF?cluster=devnet) |
+| Request redeem | [`QMHN2R...`](https://explorer.solana.com/tx/QMHN2RsW7NWK5q6fXCCcyCDG9ArxJM9H5zYhDjDMDakw9xfEkwzvaNtJ7Vn9o3XJxbuCmyB1hMmX8os5hpoD5QV?cluster=devnet) |
+| Fulfill redeem | [`m8rK77...`](https://explorer.solana.com/tx/m8rK77e9FLgYxPn67NuJdfG5izKZUViTF6U5pf7TfKzprUjGPyBzhjNvGpGN7rqF8JuC6iCbL5hjXnwYPeoi8WQ?cluster=devnet) |
+| Claim redeem | [`41EpHh...`](https://explorer.solana.com/tx/41EpHhgNJXtFxtK2Wdmbeu7dCjYLABNXUAGaKA8VemYQMS5bh4f3scBQREJkav8KDozcyg8CdmSDtauXmsacMda8?cluster=devnet) |
+| Cancel deposit | [`63Brg7...`](https://explorer.solana.com/tx/63Brg73NMZ91NQy3zAHXFGbBYdHSY2bD1a3aznUGXhuxN5H7AkAUcQiuEdn4ZiMMs7RUUc45Y3EfRdjy9Kxd8jgF?cluster=devnet) |
+| Cancel redeem | [`3EWDsA...`](https://explorer.solana.com/tx/3EWDsALBZEueaFhhqPxcSg5xmdnVS5YJrs3EigbrSA8Qejz8NYoHFNjceQk4NDAD9FSjyhMM4VytngVuK6Ue85q9?cluster=devnet) |
+| Set operator (approve) | [`2NW9ue...`](https://explorer.solana.com/tx/2NW9uefmQrWRUsKfwfmrMmNPL8YkxZTaGb45UNinxQk8QpKGAGDbj4HcqiSDUCt7tsXhWgC8Uz1UnQS9hUjcxjUw?cluster=devnet) |
+| Set operator (revoke) | [`332Wmt...`](https://explorer.solana.com/tx/332Wmtu8jyzQmeqWoD3aAM1gPBbmCNvDMgtEaNLcQDB6TpKWQypRYqR4B52PGsjy561koaVJJ8Z6pS42smaLGDdE?cluster=devnet) |
+| Set vault operator | [`DPzBc9...`](https://explorer.solana.com/tx/DPzBc9in8mSayhWZ596TpCddtXQHXkggTmbqmMoUBbGzGUTdmMmJckJGn2sWvQ9P9Kt43U2cuRHjahgYZxhEt2u?cluster=devnet) |
+| Transfer authority | [`5SjGuD...`](https://explorer.solana.com/tx/5SjGuDicMQZuheWE3EgynY7hTJueMtNJMJZLZeYRKmrxnNsCvSbuQXyFKs94anGMbujkyUYMjrxf4NLbZJc5fRBP?cluster=devnet) |
+| Pause vault | [`HG9PLc...`](https://explorer.solana.com/tx/HG9PLcec3xPpr6T99mjYSaMXL9bFT9iVVPVcVgXSB3ZmHTpkdM2h5BWqaBGMAQ8Zzd9Nv82938GEzk112JURvnQ?cluster=devnet) |
+| Unpause vault | [`2cxipo...`](https://explorer.solana.com/tx/2cxipok1Nqk6hNoAodVGJGbavEJ3TeKY6cjNSBXbkRt2R9E53jhA8YqJS9QQA1NtfxcSfKBdzujedF8MWxmUzZmu?cluster=devnet) |
 
 Run the full lifecycle yourself:
 
@@ -380,17 +382,23 @@ npx ts-node scripts/e2e-svs10-devnet.ts
 |------|------|---------|
 | 6000 | `ZeroAmount` | Amount must be greater than zero |
 | 6001 | `VaultPaused` | Vault is paused |
-| 6002 | `Unauthorized` | Unauthorized |
-| 6003 | `InvalidStatus` | Request is not in the expected status |
-| 6004 | `RequestAlreadyExists` | A request already exists for this owner |
-| 6005 | `NoRequestFound` | No request found for this owner |
-| 6006 | `OracleDeviationExceeded` | Oracle price deviates too far from vault price |
-| 6007 | `OracleStaleness` | Oracle price exceeds max staleness |
-| 6008 | `MathOverflow` | Arithmetic overflow |
-| 6009 | `InsufficientShares` | Insufficient shares balance |
-| 6010 | `InsufficientAssets` | Insufficient assets in vault |
-| 6011 | `InvalidAssetDecimals` | Asset decimals must be <= 9 |
-| 6012 | `VaultNotPaused` | Vault is not paused |
+| 6002 | `InvalidAssetDecimals` | Asset decimals must be <= 9 |
+| 6003 | `MathOverflow` | Arithmetic overflow |
+| 6004 | `DivisionByZero` | Division by zero |
+| 6005 | `Unauthorized` | Unauthorized - caller is not vault authority |
+| 6006 | `DepositTooSmall` | Deposit amount below minimum threshold |
+| 6007 | `VaultNotPaused` | Vault is not paused |
+| 6008 | `RequestNotPending` | Request is not in pending status |
+| 6009 | `RequestNotFulfilled` | Request is not in fulfilled status |
+| 6010 | `OperatorNotApproved` | Operator not approved for this action |
+| 6011 | `OracleStale` | Oracle price data is stale |
+| 6012 | `InsufficientLiquidity` | Insufficient liquidity in vault |
+| 6013 | `OracleDeviationExceeded` | Oracle price deviation exceeds maximum |
+| 6014 | `InvalidRequestOwner` | Caller is not the request owner |
+| 6015 | `GlobalCapExceeded` | Deposit would exceed global vault cap |
+| 6016 | `EntryFeeExceedsMax` | Entry fee exceeds maximum |
+| 6017 | `LockDurationExceedsMax` | Lock duration exceeds maximum |
+| 6018 | `InvalidAddress` | Invalid address: cannot be the zero address |
 
 ## Differences from Synchronous Variants
 
