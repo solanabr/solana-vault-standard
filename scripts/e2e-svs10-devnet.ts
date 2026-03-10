@@ -1,13 +1,18 @@
 /**
  * SVS-10 Async Vault — End-to-End Devnet Lifecycle Script
  *
- * Exercises the full request→fulfill→claim lifecycle on devnet:
- *   1. Create asset mint & fund wallet
- *   2. Initialize async vault
- *   3. Request deposit → fulfill → claim shares
- *   4. Request redeem → fulfill → claim assets
- *   5. Cancel deposit (cancel flow)
- *   6. Pause / unpause
+ * Exercises every SVS-10 instruction on devnet:
+ *   1.  Create asset mint & fund wallet
+ *   2.  Initialize async vault
+ *   3.  Request deposit → fulfill → claim shares
+ *   4.  Request redeem → fulfill → claim assets
+ *   5.  Cancel deposit flow
+ *   6.  Cancel redeem flow
+ *   7.  Set operator (granular permissions)
+ *   8.  Transfer authority & transfer back
+ *   9.  Set vault operator
+ *   10. Pause / unpause
+ *   11. View functions (pending/claimable queries)
  *
  * Usage:
  *   ANCHOR_PROVIDER_URL=https://api.devnet.solana.com \
@@ -83,6 +88,13 @@ function getRedeemRequestPDA(vault: PublicKey, user: PublicKey): [PublicKey, num
 function getClaimableTokensPDA(vault: PublicKey, user: PublicKey): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
     [Buffer.from("claimable_tokens"), vault.toBuffer(), user.toBuffer()],
+    PROGRAM_ID,
+  );
+}
+
+function getOperatorApprovalPDA(vault: PublicKey, owner: PublicKey, operator: PublicKey): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from("operator_approval"), vault.toBuffer(), owner.toBuffer(), operator.toBuffer()],
     PROGRAM_ID,
   );
 }
@@ -375,9 +387,149 @@ async function main() {
   console.log();
 
   // ─────────────────────────────────────────────────────────────────────
-  // Step 10: Pause / Unpause
+  // Step 10: Cancel redeem flow
   // ─────────────────────────────────────────────────────────────────────
-  console.log("Step 10: Testing pause/unpause...");
+  console.log("Step 10: Testing cancel redeem flow...");
+
+  // First request a new redeem so we can cancel it
+  const cancelRedeemShares = new BN(100_000_000); // small amount
+  const [redeemRequest2] = getRedeemRequestPDA(vault, payer.publicKey);
+
+  const reqRed2Sig = await program.methods
+    .requestRedeem(cancelRedeemShares, payer.publicKey)
+    .accounts({
+      user: payer.publicKey,
+      vault,
+      sharesMint,
+      userSharesAccount: userSharesAta,
+      shareEscrow,
+      redeemRequest: redeemRequest2,
+      token2022Program: TOKEN_2022_PROGRAM_ID,
+      systemProgram: SystemProgram.programId,
+    })
+    .rpc();
+
+  results.push({ step: "Request redeem (cancel test)", sig: reqRed2Sig });
+
+  const cancelRedSig = await program.methods
+    .cancelRedeem()
+    .accounts({
+      user: payer.publicKey,
+      vault,
+      sharesMint,
+      userSharesAccount: userSharesAta,
+      shareEscrow,
+      redeemRequest: redeemRequest2,
+      token2022Program: TOKEN_2022_PROGRAM_ID,
+      systemProgram: SystemProgram.programId,
+    })
+    .rpc();
+
+  results.push({ step: "Cancel redeem", sig: cancelRedSig });
+  console.log(`  OK: ${explorerLink(cancelRedSig)}`);
+  console.log();
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Step 11: Set operator (granular permissions)
+  // ─────────────────────────────────────────────────────────────────────
+  console.log("Step 11: Setting operator with granular permissions...");
+
+  const operatorKp = Keypair.generate();
+  const [operatorApproval] = getOperatorApprovalPDA(vault, payer.publicKey, operatorKp.publicKey);
+
+  const setOpSig = await program.methods
+    .setOperator(operatorKp.publicKey, true, true, true)
+    .accounts({
+      owner: payer.publicKey,
+      vault,
+      operatorApproval,
+      systemProgram: SystemProgram.programId,
+    })
+    .rpc();
+
+  results.push({ step: "Set operator (approve all)", sig: setOpSig });
+  console.log(`  Operator: ${operatorKp.publicKey.toBase58()}`);
+  console.log(`  OK: ${explorerLink(setOpSig)}`);
+
+  // Revoke operator
+  const revokeOpSig = await program.methods
+    .setOperator(operatorKp.publicKey, false, false, false)
+    .accounts({
+      owner: payer.publicKey,
+      vault,
+      operatorApproval,
+      systemProgram: SystemProgram.programId,
+    })
+    .rpc();
+
+  results.push({ step: "Set operator (revoke)", sig: revokeOpSig });
+  console.log(`  Revoked: ${explorerLink(revokeOpSig)}`);
+  console.log();
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Step 12: Set vault operator (admin)
+  // ─────────────────────────────────────────────────────────────────────
+  console.log("Step 12: Setting vault operator...");
+
+  const newOperatorKp = Keypair.generate();
+  const setVaultOpSig = await program.methods
+    .setVaultOperator(newOperatorKp.publicKey)
+    .accounts({ authority: payer.publicKey, vault })
+    .rpc();
+
+  results.push({ step: "Set vault operator", sig: setVaultOpSig });
+  console.log(`  New operator: ${newOperatorKp.publicKey.toBase58()}`);
+  console.log(`  OK: ${explorerLink(setVaultOpSig)}`);
+
+  // Restore original operator so remaining steps work
+  const restoreOpSig = await program.methods
+    .setVaultOperator(payer.publicKey)
+    .accounts({ authority: payer.publicKey, vault })
+    .rpc();
+
+  results.push({ step: "Restore vault operator", sig: restoreOpSig });
+  console.log(`  Restored: ${explorerLink(restoreOpSig)}`);
+  console.log();
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Step 13: Transfer authority & transfer back
+  // ─────────────────────────────────────────────────────────────────────
+  console.log("Step 13: Testing transfer authority...");
+
+  const tempAuthority = Keypair.generate();
+  const transferAuthSig = await program.methods
+    .transferAuthority(tempAuthority.publicKey)
+    .accounts({ authority: payer.publicKey, vault })
+    .rpc();
+
+  results.push({ step: "Transfer authority", sig: transferAuthSig });
+  console.log(`  Transferred to: ${tempAuthority.publicKey.toBase58()}`);
+  console.log(`  OK: ${explorerLink(transferAuthSig)}`);
+
+  // Transfer back (need to fund temp authority for tx fee)
+  const fundTx = new anchor.web3.Transaction().add(
+    SystemProgram.transfer({
+      fromPubkey: payer.publicKey,
+      toPubkey: tempAuthority.publicKey,
+      lamports: 10_000_000, // 0.01 SOL for tx fee
+    }),
+  );
+  await provider.sendAndConfirm(fundTx);
+
+  const transferBackSig = await program.methods
+    .transferAuthority(payer.publicKey)
+    .accounts({ authority: tempAuthority.publicKey, vault })
+    .signers([tempAuthority])
+    .rpc();
+
+  results.push({ step: "Transfer authority back", sig: transferBackSig });
+  console.log(`  Restored: ${explorerLink(transferBackSig)}`);
+  console.log();
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Step 14: Pause / Unpause
+  // ─────────────────────────────────────────────────────────────────────
+  console.log("Step 14: Testing pause/unpause...");
 
   const pauseSig = await program.methods
     .pause()
@@ -393,6 +545,59 @@ async function main() {
 
   results.push({ step: "Unpause vault", sig: unpauseSig });
   console.log(`  OK: ${explorerLink(unpauseSig)}`);
+  console.log();
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Step 15: View functions
+  // ─────────────────────────────────────────────────────────────────────
+  console.log("Step 15: Testing view functions...");
+
+  // Create a deposit request to query
+  const viewDepAmount = new BN(200_000_000);
+  const [viewDepRequest] = getDepositRequestPDA(vault, payer.publicKey);
+
+  const viewReqSig = await program.methods
+    .requestDeposit(viewDepAmount, payer.publicKey)
+    .accounts({
+      user: payer.publicKey,
+      vault,
+      assetMint,
+      userAssetAccount: userAta.address,
+      assetVault,
+      depositRequest: viewDepRequest,
+      assetTokenProgram: TOKEN_PROGRAM_ID,
+      systemProgram: SystemProgram.programId,
+    })
+    .rpc();
+
+  results.push({ step: "Request deposit (view test)", sig: viewReqSig });
+
+  // Query pending deposit via simulate
+  const pendingDepSig = await program.methods
+    .pendingDepositRequest()
+    .accounts({ vault })
+    .remainingAccounts([{ pubkey: viewDepRequest, isWritable: false, isSigner: false }])
+    .simulate();
+
+  console.log(`  pendingDepositRequest: simulated OK (return data present: ${!!pendingDepSig.raw})`);
+
+  // Clean up: cancel the view test deposit
+  const viewCancelSig = await program.methods
+    .cancelDeposit()
+    .accounts({
+      user: payer.publicKey,
+      vault,
+      assetMint,
+      userAssetAccount: userAta.address,
+      assetVault,
+      depositRequest: viewDepRequest,
+      assetTokenProgram: TOKEN_PROGRAM_ID,
+      systemProgram: SystemProgram.programId,
+    })
+    .rpc();
+
+  results.push({ step: "View + cancel cleanup", sig: viewCancelSig });
+  console.log(`  OK: ${explorerLink(viewCancelSig)}`);
   console.log();
 
   // ─────────────────────────────────────────────────────────────────────
@@ -412,7 +617,7 @@ async function main() {
   }
 
   console.log();
-  console.log("All 10 steps completed successfully!");
+  console.log(`All ${results.length} steps completed successfully!`);
 }
 
 main().catch((err) => {

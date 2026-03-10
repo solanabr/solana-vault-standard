@@ -91,10 +91,12 @@ pub struct ClaimableTokens {
 
 #[account]
 pub struct OperatorApproval {
-    pub vault: Pubkey,                  // 32
     pub owner: Pubkey,                  // 32
     pub operator: Pubkey,               // 32
-    pub approved: bool,                 // 1
+    pub vault: Pubkey,                  // 32
+    pub can_fulfill_deposit: bool,      // 1
+    pub can_fulfill_redeem: bool,       // 1
+    pub can_claim: bool,                // 1
     pub bump: u8,                       // 1
 }
 
@@ -128,7 +130,7 @@ pub enum RequestStatus {
 | `unpause` | `authority` | Set `paused = false` |
 | `transfer_authority` | `authority` | Transfer vault authority to new pubkey |
 | `set_vault_operator` | `authority` | Set or replace vault operator |
-| `set_operator` | `owner` | Delegate claim rights to an operator (creates OperatorApproval PDA) |
+| `set_operator` | `owner` | Delegate granular permissions to an operator (fulfill_deposit, fulfill_redeem, claim) |
 
 ### View Functions
 
@@ -262,8 +264,13 @@ const claimableDeposit = await vault.claimableDepositRequest(user.publicKey);
 const pendingRedeem = await vault.pendingRedeemRequest(user.publicKey);
 const claimableRedeem = await vault.claimableRedeemRequest(user.publicKey);
 
-// Delegate claim rights to operator
-await vault.setOperator(user, { operator: operator.publicKey, approved: true });
+// Delegate granular permissions to operator
+await vault.setOperator(user, {
+  operator: operator.publicKey,
+  canFulfillDeposit: true,
+  canFulfillRedeem: true,
+  canClaim: true,
+});
 ```
 
 ## Security
@@ -326,22 +333,27 @@ Between `fulfill_deposit` and `claim_deposit`, the operator has computed and res
 
 **Program ID**: `CpjFjyxRwTGYxR6JWXpfQ1923z5wVwpyBvgPFjm9jamJ`
 
-**Example Vault**: [`4g5u3fshiu9rsy8ECaccqRoySNgJckzZQ14yjuP8fNYQ`](https://explorer.solana.com/address/4g5u3fshiu9rsy8ECaccqRoySNgJckzZQ14yjuP8fNYQ?cluster=devnet)
+**Example Vault**: [`6GtJk7GoexcfMVL6bJqEmN5fUB5MBrx59N6VVyEC7Jgd`](https://explorer.solana.com/address/6GtJk7GoexcfMVL6bJqEmN5fUB5MBrx59N6VVyEC7Jgd?cluster=devnet)
 
-#### Example Transactions (Full Lifecycle)
+#### Example Transactions (All Instructions)
 
 | Step | Transaction |
 |------|-------------|
-| Initialize vault | [`4Q7qcy...`](https://explorer.solana.com/tx/4Q7qcywkP3GjfGJTEvscrrHrnbxEp6SVY2vSGW7NsV4sUzozJ8hB6DTcysSBdHEwpfFGL73ULUpcUYGg19zyL8bz?cluster=devnet) |
-| Request deposit | [`56ki6L...`](https://explorer.solana.com/tx/56ki6LbVExuXaLMdzTiqtprkgGk9XTP7DqCX8cTxkWzCWT8dmF4oq9cBGYobp4TTwAma5YESncmMrXxGAPrr9Yk1?cluster=devnet) |
-| Fulfill deposit | [`49xtXQ...`](https://explorer.solana.com/tx/49xtXQV9t7FGiTBDcyxWvW5gy9b5GPvcydVuWo3QmwqHCpfPQayaRhofkUd41yaJTxfndcQnRkDeBLnu5mKmvykc?cluster=devnet) |
-| Claim deposit | [`25LmjP...`](https://explorer.solana.com/tx/25LmjPNJzmhJTQFBgJpZoUYxYihz8fTwZaQPE8PPKpsXMQR19dPxp2Gvfg7XnFKskVpFnqKgvgcPVm1W6GiurgMv?cluster=devnet) |
-| Request redeem | [`5ncQCs...`](https://explorer.solana.com/tx/5ncQCsBMnheaSuHRekJDmCfjD6GJ7sH9UQtfMRcXQ5oi6o1sMpRauc3bbBaWiPcQDKdf1NyabreSWa2BiGywg4yp?cluster=devnet) |
-| Fulfill redeem | [`5jFzfW...`](https://explorer.solana.com/tx/5jFzfWTCCUMmjahkVgimgu2qPvioUmtQ9cUPmgtcHCa8Yp3xGqHCzg5hcEr1pWpVHdeqH1xYSX65nxL8SVJDpeRj?cluster=devnet) |
-| Claim redeem | [`5XZJNz...`](https://explorer.solana.com/tx/5XZJNz8eqU7z6bUQX36mZ4pdvyEPG8PcviV1EMZ3nMyLZQRLSD5Ldhy7pSVdZNPqcKRrZdfw4HAMAdd1T2XjzpJC?cluster=devnet) |
-| Cancel deposit | [`2HhiDo...`](https://explorer.solana.com/tx/2HhiDoYpd3PKuLnVYFVH1gqens31VQrDc4uh1652tA7QNgortXzqtVzv3Gpq5Nk6yJZMiCgC5UZutQYJLgDV7TJS?cluster=devnet) |
-| Pause vault | [`4qQKTn...`](https://explorer.solana.com/tx/4qQKTnhqUKNxfnFNbLB9xbXfbfaZxci6Jz89FTdmkNsvjnjwaQnRqrjkx2L6u4G7ytDAUCdmRyMi4qJMcV6N1Jth?cluster=devnet) |
-| Unpause vault | [`5TmZRR...`](https://explorer.solana.com/tx/5TmZRRfzdNDeKctnxA924wSXxo1V7HWN3ZjvdQp3LC8JadYWneTDy8CUtkj7ri5pRiKPiNnzYfFU1SvchcHiE5va?cluster=devnet) |
+| Initialize vault | [`56NWB6...`](https://explorer.solana.com/tx/56NWB62ceGDsT1w3L5eHaZ5V9HeeYPLdG5ny84G3k8sj7GJcneVByiQ6VL2d8f3vmkoUyPBRFz2qG6wan5G58DYS?cluster=devnet) |
+| Request deposit | [`NszGH3...`](https://explorer.solana.com/tx/NszGH3tCj4xwxGZRygzofvGKDrj9onmqZL4nc4bVsXczf9xqYqwgsBDWp35zgRU5MoqJi3U5G8DEcgXqFUSNoUx?cluster=devnet) |
+| Fulfill deposit | [`57kb9u...`](https://explorer.solana.com/tx/57kb9usH85TakzEuQWu6mbh2SxDxitrFeohihcYepDUBDqfzZvwi8zC3wCAoYQVdCdgcVWFJWVS3vKhEnT4V2rs8?cluster=devnet) |
+| Claim deposit | [`4HnyVd...`](https://explorer.solana.com/tx/4HnyVdm2yfRyEvBhHrU2myzqmaUWHCP4bNeappmCg3QPdnGXveH7kwoUj1TxzKiXXucACqFE4X1da2wfZfixX5vt?cluster=devnet) |
+| Request redeem | [`2FFvD8...`](https://explorer.solana.com/tx/2FFvD8tENH9wfoSaab4H2UZccHqgzatjRGfukp6YXHf7RGsaPWWW1ukxp9KSwFzkRrXWpaVzQh5bQ5TqwyNoLwe?cluster=devnet) |
+| Fulfill redeem | [`TfLxVe...`](https://explorer.solana.com/tx/TfLxVeLRuMegCcBA8k3QQLHT236vQM7t5xmp2K7RVhMUcxyoqZZGC9oTrcM8uc5P8TudYvL8duWMeMKM6Dk8cVz?cluster=devnet) |
+| Claim redeem | [`51hrrD...`](https://explorer.solana.com/tx/51hrrDukbhBbWeW7uXxQptJFYKmVeKjHcQher12ZQ2qKXUDzMVbZp3bRDRPNf6rGtdhg2eR9wTL7eHEGyamGZcZr?cluster=devnet) |
+| Cancel deposit | [`5jN1Gc...`](https://explorer.solana.com/tx/5jN1Gc2JYwQ1Qfa3mmD55xQWAt13nHszr3VuEcNsS2nnr1YZ3NA3vHuUpdbWGiruxriHzwvrFAuVXfXo1jLjYFPv?cluster=devnet) |
+| Cancel redeem | [`2LUgQ8...`](https://explorer.solana.com/tx/2LUgQ8FuUXytd4GGmtYN6drCrbwsyvA6MiCFH5ajBrmSvri6G6tKz7bL3wR8Jc6H6uU2VuvGDDqJ3KVWPUThaFZi?cluster=devnet) |
+| Set operator (approve) | [`34xWhb...`](https://explorer.solana.com/tx/34xWhbtPMMHpdigMWn5rb9th5tiA9VuKSsDDTPRHBLe7wK5yFQz7NiNxBFza1NfTPahsAj2v56aKstjgSyDcfcur?cluster=devnet) |
+| Set operator (revoke) | [`4MfRat...`](https://explorer.solana.com/tx/4MfRatMo1rCZqqqKaUnb49TxMVPHxQx3ejbqpePCNypySSWDbKe1FoEdrfhkAeuTdiUQ2JUw5Qug9VKneVCgGvLZ?cluster=devnet) |
+| Set vault operator | [`LAhujY...`](https://explorer.solana.com/tx/LAhujY3FtdjbpRJfRqgDHtzVwtU21fy9VYZZKzfoKU8TPxFMF6jfRDyE9PJaCVshuYW6StTbbWGf7VY92fvEAG5?cluster=devnet) |
+| Transfer authority | [`2urexP...`](https://explorer.solana.com/tx/2urexPQaBvMFxkFy8iRb5qoCDJH8FXeUpfP1u7z51d3BJc3nBQpd4kBiL4aiUSZFbQLHRe5pvGUeKWdFNDJZ39Lk?cluster=devnet) |
+| Pause vault | [`zg75UB...`](https://explorer.solana.com/tx/zg75UBU9T1xqQsEkMmhGyiDBJGGB7Rn4SZVXVzUXRv1PnuaDEHPfDrpYM4qWNAVfA9pyZANe8eT4k6GNm8QX15Z?cluster=devnet) |
+| Unpause vault | [`3WiAHu...`](https://explorer.solana.com/tx/3WiAHue1jjD3gZBzqWrbQxUcmtFmBvvqkFMRomoniqvPzWnE2wMgjdBw2TbJhmHaA5FdSHosAZh6udweWwspCcrQ?cluster=devnet) |
 
 Run the full lifecycle yourself:
 
