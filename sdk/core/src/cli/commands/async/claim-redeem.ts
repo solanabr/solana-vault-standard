@@ -36,7 +36,11 @@ export function registerClaimRedeemCommand(program: Command): void {
       try {
         const idl = loadIdl(idlPath);
         const prog = new Program(idl as any, provider);
-        const vault = await AsyncVault.load(prog, resolved.assetMint, resolved.vaultId);
+        const vault = await AsyncVault.load(
+          prog,
+          resolved.assetMint,
+          resolved.vaultId,
+        );
 
         output.info(`Vault: ${vaultArg}`);
         output.info(`Claiming redeem for owner: ${owner.toBase58()}`);
@@ -49,23 +53,38 @@ export function registerClaimRedeemCommand(program: Command): void {
 
         if (!options.yes) {
           const confirmed = await output.confirm("Proceed?");
-          if (!confirmed) { output.warn("Aborted."); return; }
+          if (!confirmed) {
+            output.warn("Aborted.");
+            return;
+          }
         }
 
         const spinner = output.spinner("Sending transaction...");
         spinner.start();
 
-        const sig = await vault.claimRedeem(wallet.publicKey, { owner, receiver });
+        const sig = await vault.claimRedeem(wallet.publicKey, {
+          owner,
+          receiver,
+        });
 
         spinner.succeed("Transaction confirmed");
         output.success(`Redeem claimed for ${owner.toBase58()}`);
         output.info(`Signature: ${sig}`);
 
         if (globalOpts.output === "json") {
-          output.json({ success: true, signature: sig, vault: vaultArg, operation: "claim-redeem", owner: owner.toBase58(), receiver: receiver.toBase58() });
+          output.json({
+            success: true,
+            signature: sig,
+            vault: vaultArg,
+            operation: "claim-redeem",
+            owner: owner.toBase58(),
+            receiver: receiver.toBase58(),
+          });
         }
       } catch (error) {
-        output.error(`Claim redeem failed: ${error instanceof Error ? error.message : String(error)}`);
+        output.error(
+          `Claim redeem failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
         process.exit(1);
       }
     });

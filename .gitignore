@@ -308,6 +308,7 @@ bower_components
 .node_repl_history
 *.tgz
 .yarn-integrity
+.yarn/
 .eslintcache
 .stylelintcache
 .cache

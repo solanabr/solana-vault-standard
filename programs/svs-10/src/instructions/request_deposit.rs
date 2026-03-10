@@ -57,7 +57,7 @@ pub struct RequestDeposit<'info> {
     pub system_program: Program<'info, System>,
 }
 
-pub fn handler(ctx: Context<RequestDeposit>, assets: u64) -> Result<()> {
+pub fn handler(ctx: Context<RequestDeposit>, assets: u64, receiver: Pubkey) -> Result<()> {
     require!(assets > 0, VaultError::ZeroAmount);
     require!(assets >= MIN_DEPOSIT_AMOUNT, VaultError::DepositTooSmall);
 
@@ -106,7 +106,7 @@ pub fn handler(ctx: Context<RequestDeposit>, assets: u64) -> Result<()> {
 
     let deposit_request = &mut ctx.accounts.deposit_request;
     deposit_request.owner = ctx.accounts.user.key();
-    deposit_request.receiver = ctx.accounts.user.key();
+    deposit_request.receiver = receiver;
     deposit_request.vault = vault.key();
     deposit_request.assets_locked = assets;
     deposit_request.shares_claimable = 0;
@@ -118,7 +118,7 @@ pub fn handler(ctx: Context<RequestDeposit>, assets: u64) -> Result<()> {
     emit!(DepositRequested {
         vault: vault.key(),
         owner: ctx.accounts.user.key(),
-        receiver: ctx.accounts.user.key(),
+        receiver,
         assets,
     });
 

@@ -35,7 +35,11 @@ export function registerFulfillRedeemCommand(program: Command): void {
       try {
         const idl = loadIdl(idlPath);
         const prog = new Program(idl as any, provider);
-        const vault = await AsyncVault.load(prog, resolved.assetMint, resolved.vaultId);
+        const vault = await AsyncVault.load(
+          prog,
+          resolved.assetMint,
+          resolved.vaultId,
+        );
 
         output.info(`Vault: ${vaultArg}`);
         output.info(`Fulfilling redeem for owner: ${owner.toBase58()}`);
@@ -47,7 +51,10 @@ export function registerFulfillRedeemCommand(program: Command): void {
 
         if (!options.yes) {
           const confirmed = await output.confirm("Proceed?");
-          if (!confirmed) { output.warn("Aborted."); return; }
+          if (!confirmed) {
+            output.warn("Aborted.");
+            return;
+          }
         }
 
         const spinner = output.spinner("Sending transaction...");
@@ -63,10 +70,18 @@ export function registerFulfillRedeemCommand(program: Command): void {
         output.info(`Signature: ${sig}`);
 
         if (globalOpts.output === "json") {
-          output.json({ success: true, signature: sig, vault: vaultArg, operation: "fulfill-redeem", owner: owner.toBase58() });
+          output.json({
+            success: true,
+            signature: sig,
+            vault: vaultArg,
+            operation: "fulfill-redeem",
+            owner: owner.toBase58(),
+          });
         }
       } catch (error) {
-        output.error(`Fulfill redeem failed: ${error instanceof Error ? error.message : String(error)}`);
+        output.error(
+          `Fulfill redeem failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
         process.exit(1);
       }
     });

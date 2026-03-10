@@ -49,10 +49,14 @@ export interface CreateAsyncVaultParams {
 
 export interface RequestDepositParams {
   assets: BN;
+  /** Receiver of shares. Defaults to user (signer) if omitted. */
+  receiver?: PublicKey;
 }
 
 export interface RequestRedeemParams {
   shares: BN;
+  /** Receiver of assets. Defaults to user (signer) if omitted. */
+  receiver?: PublicKey;
 }
 
 export interface FulfillParams {
@@ -112,7 +116,11 @@ export class AsyncVault {
   ): Promise<AsyncVault> {
     const provider = program.provider as AnchorProvider;
     const id = typeof vaultId === "number" ? new BN(vaultId) : vaultId;
-    const addresses = deriveAsyncVaultAddresses(program.programId, assetMint, id);
+    const addresses = deriveAsyncVaultAddresses(
+      program.programId,
+      assetMint,
+      id,
+    );
 
     const assetTokenProgram = await getTokenProgramForMint(
       provider.connection,
@@ -243,8 +251,10 @@ export class AsyncVault {
     );
     const userAssetAccount = this.getUserAssetAccount(user);
 
+    const receiver = params.receiver ?? user;
+
     return this.program.methods
-      .requestDeposit(params.assets)
+      .requestDeposit(params.assets, receiver)
       .accountsStrict({
         user,
         vault: this.vault,
@@ -314,7 +324,7 @@ export class AsyncVault {
     const receiverSharesAccount = this.getUserSharesAccount(params.receiver);
 
     const operatorApproval = claimant.equals(params.receiver)
-      ? null
+      ? undefined
       : getOperatorApprovalAddress(
           this.program.programId,
           this.vault,
@@ -353,8 +363,10 @@ export class AsyncVault {
     );
     const userSharesAccount = this.getUserSharesAccount(user);
 
+    const receiver = params.receiver ?? user;
+
     return this.program.methods
-      .requestRedeem(params.shares)
+      .requestRedeem(params.shares, receiver)
       .accountsStrict({
         user,
         vault: this.vault,
@@ -425,10 +437,7 @@ export class AsyncVault {
       .rpc();
   }
 
-  async claimRedeem(
-    claimant: PublicKey,
-    params: ClaimParams,
-  ): Promise<string> {
+  async claimRedeem(claimant: PublicKey, params: ClaimParams): Promise<string> {
     const [redeemRequest] = getRedeemRequestAddress(
       this.program.programId,
       this.vault,
@@ -442,7 +451,7 @@ export class AsyncVault {
     const receiverAssetAccount = this.getUserAssetAccount(params.receiver);
 
     const operatorApproval = claimant.equals(params.receiver)
-      ? null
+      ? undefined
       : getOperatorApprovalAddress(
           this.program.programId,
           this.vault,

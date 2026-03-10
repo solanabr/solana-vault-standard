@@ -36,7 +36,11 @@ export function registerClaimDepositCommand(program: Command): void {
       try {
         const idl = loadIdl(idlPath);
         const prog = new Program(idl as any, provider);
-        const vault = await AsyncVault.load(prog, resolved.assetMint, resolved.vaultId);
+        const vault = await AsyncVault.load(
+          prog,
+          resolved.assetMint,
+          resolved.vaultId,
+        );
 
         output.info(`Vault: ${vaultArg}`);
         output.info(`Claiming deposit for owner: ${owner.toBase58()}`);
@@ -49,23 +53,38 @@ export function registerClaimDepositCommand(program: Command): void {
 
         if (!options.yes) {
           const confirmed = await output.confirm("Proceed?");
-          if (!confirmed) { output.warn("Aborted."); return; }
+          if (!confirmed) {
+            output.warn("Aborted.");
+            return;
+          }
         }
 
         const spinner = output.spinner("Sending transaction...");
         spinner.start();
 
-        const sig = await vault.claimDeposit(wallet.publicKey, { owner, receiver });
+        const sig = await vault.claimDeposit(wallet.publicKey, {
+          owner,
+          receiver,
+        });
 
         spinner.succeed("Transaction confirmed");
         output.success(`Deposit claimed for ${owner.toBase58()}`);
         output.info(`Signature: ${sig}`);
 
         if (globalOpts.output === "json") {
-          output.json({ success: true, signature: sig, vault: vaultArg, operation: "claim-deposit", owner: owner.toBase58(), receiver: receiver.toBase58() });
+          output.json({
+            success: true,
+            signature: sig,
+            vault: vaultArg,
+            operation: "claim-deposit",
+            owner: owner.toBase58(),
+            receiver: receiver.toBase58(),
+          });
         }
       } catch (error) {
-        output.error(`Claim deposit failed: ${error instanceof Error ? error.message : String(error)}`);
+        output.error(
+          `Claim deposit failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
         process.exit(1);
       }
     });

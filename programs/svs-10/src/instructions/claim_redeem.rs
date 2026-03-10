@@ -76,6 +76,7 @@ pub fn handler(ctx: Context<ClaimRedeem>) -> Result<()> {
             .ok_or(VaultError::OperatorNotApproved)?;
         require!(
             approval.approved
+                && approval.owner == redeem_request.owner
                 && approval.operator == ctx.accounts.claimant.key()
                 && approval.vault == ctx.accounts.vault.key(),
             VaultError::OperatorNotApproved

@@ -1,5 +1,6 @@
 import { Command } from "commander";
 import { Program, BN } from "@coral-xyz/anchor";
+import { PublicKey } from "@solana/web3.js";
 import { createContext } from "../../middleware";
 import { getGlobalOptions } from "../../index";
 import { AsyncVault } from "../../../async-vault";
@@ -13,6 +14,7 @@ export function registerRequestRedeemCommand(program: Command): void {
     .requiredOption("-s, --shares <number>", "Amount of shares to redeem")
     .option("--program-id <pubkey>", "Program ID")
     .option("--asset-mint <pubkey>", "Asset mint")
+    .option("--receiver <pubkey>", "Receiver of assets (defaults to signer)")
     .option("--vault-id <number>", "Vault ID", "1")
     .action(async (vaultArg, opts) => {
       const globalOpts = getGlobalOptions(program);
@@ -33,7 +35,11 @@ export function registerRequestRedeemCommand(program: Command): void {
       try {
         const idl = loadIdl(idlPath);
         const prog = new Program(idl as any, provider);
-        const vault = await AsyncVault.load(prog, resolved.assetMint, resolved.vaultId);
+        const vault = await AsyncVault.load(
+          prog,
+          resolved.assetMint,
+          resolved.vaultId,
+        );
 
         output.info(`Vault: ${vaultArg}`);
         output.info(`Requesting redeem: ${shares.toString()} shares`);
@@ -45,23 +51,40 @@ export function registerRequestRedeemCommand(program: Command): void {
 
         if (!options.yes) {
           const confirmed = await output.confirm("Proceed?");
-          if (!confirmed) { output.warn("Aborted."); return; }
+          if (!confirmed) {
+            output.warn("Aborted.");
+            return;
+          }
         }
 
         const spinner = output.spinner("Sending transaction...");
         spinner.start();
 
-        const sig = await vault.requestRedeem(wallet.publicKey, { shares });
+        const receiver = opts.receiver
+          ? new PublicKey(opts.receiver)
+          : undefined;
+        const sig = await vault.requestRedeem(wallet.publicKey, {
+          shares,
+          receiver,
+        });
 
         spinner.succeed("Transaction confirmed");
         output.success(`Redeem requested: ${shares.toString()} shares`);
         output.info(`Signature: ${sig}`);
 
         if (globalOpts.output === "json") {
-          output.json({ success: true, signature: sig, vault: vaultArg, operation: "request-redeem", shares: shares.toString() });
+          output.json({
+            success: true,
+            signature: sig,
+            vault: vaultArg,
+            operation: "request-redeem",
+            shares: shares.toString(),
+          });
         }
       } catch (error) {
-        output.error(`Request redeem failed: ${error instanceof Error ? error.message : String(error)}`);
+        output.error(
+          `Request redeem failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
         process.exit(1);
       }
     });

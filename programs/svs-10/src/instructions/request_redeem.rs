@@ -59,7 +59,7 @@ pub struct RequestRedeem<'info> {
     pub system_program: Program<'info, System>,
 }
 
-pub fn handler(ctx: Context<RequestRedeem>, shares: u64) -> Result<()> {
+pub fn handler(ctx: Context<RequestRedeem>, shares: u64, receiver: Pubkey) -> Result<()> {
     require!(shares > 0, VaultError::ZeroAmount);
 
     #[cfg(feature = "modules")]
@@ -97,7 +97,7 @@ pub fn handler(ctx: Context<RequestRedeem>, shares: u64) -> Result<()> {
 
     let redeem_request = &mut ctx.accounts.redeem_request;
     redeem_request.owner = ctx.accounts.user.key();
-    redeem_request.receiver = ctx.accounts.user.key();
+    redeem_request.receiver = receiver;
     redeem_request.vault = ctx.accounts.vault.key();
     redeem_request.shares_locked = shares;
     redeem_request.assets_claimable = 0;
@@ -109,7 +109,7 @@ pub fn handler(ctx: Context<RequestRedeem>, shares: u64) -> Result<()> {
     emit!(RedeemRequested {
         vault: ctx.accounts.vault.key(),
         owner: ctx.accounts.user.key(),
-        receiver: ctx.accounts.user.key(),
+        receiver,
         shares,
     });
 

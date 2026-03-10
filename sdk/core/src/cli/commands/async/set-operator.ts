@@ -36,7 +36,11 @@ export function registerSetOperatorCommand(program: Command): void {
       try {
         const idl = loadIdl(idlPath);
         const prog = new Program(idl as any, provider);
-        const vault = await AsyncVault.load(prog, resolved.assetMint, resolved.vaultId);
+        const vault = await AsyncVault.load(
+          prog,
+          resolved.assetMint,
+          resolved.vaultId,
+        );
 
         output.info(`Vault: ${vaultArg}`);
         output.info(`Operator: ${operator.toBase58()}`);
@@ -49,23 +53,40 @@ export function registerSetOperatorCommand(program: Command): void {
 
         if (!options.yes) {
           const confirmed = await output.confirm("Proceed?");
-          if (!confirmed) { output.warn("Aborted."); return; }
+          if (!confirmed) {
+            output.warn("Aborted.");
+            return;
+          }
         }
 
         const spinner = output.spinner("Sending transaction...");
         spinner.start();
 
-        const sig = await vault.setOperator(wallet.publicKey, { operator, approved });
+        const sig = await vault.setOperator(wallet.publicKey, {
+          operator,
+          approved,
+        });
 
         spinner.succeed("Transaction confirmed");
-        output.success(`Operator ${approved ? "approved" : "revoked"}: ${operator.toBase58()}`);
+        output.success(
+          `Operator ${approved ? "approved" : "revoked"}: ${operator.toBase58()}`,
+        );
         output.info(`Signature: ${sig}`);
 
         if (globalOpts.output === "json") {
-          output.json({ success: true, signature: sig, vault: vaultArg, operation: "set-operator", operator: operator.toBase58(), approved });
+          output.json({
+            success: true,
+            signature: sig,
+            vault: vaultArg,
+            operation: "set-operator",
+            operator: operator.toBase58(),
+            approved,
+          });
         }
       } catch (error) {
-        output.error(`Set operator failed: ${error instanceof Error ? error.message : String(error)}`);
+        output.error(
+          `Set operator failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
         process.exit(1);
       }
     });

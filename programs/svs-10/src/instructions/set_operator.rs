@@ -29,12 +29,19 @@ pub struct SetOperator<'info> {
 }
 
 pub fn handler(ctx: Context<SetOperator>, operator: Pubkey, approved: bool) -> Result<()> {
-    let approval = &mut ctx.accounts.operator_approval;
-    approval.owner = ctx.accounts.owner.key();
-    approval.operator = operator;
-    approval.vault = ctx.accounts.vault.key();
-    approval.approved = approved;
-    approval.bump = ctx.bumps.operator_approval;
+    if approved {
+        let approval = &mut ctx.accounts.operator_approval;
+        approval.owner = ctx.accounts.owner.key();
+        approval.operator = operator;
+        approval.vault = ctx.accounts.vault.key();
+        approval.approved = true;
+        approval.bump = ctx.bumps.operator_approval;
+    } else {
+        // Close the PDA to recover rent when revoking
+        ctx.accounts
+            .operator_approval
+            .close(ctx.accounts.owner.to_account_info())?;
+    }
 
     emit!(OperatorSet {
         vault: ctx.accounts.vault.key(),

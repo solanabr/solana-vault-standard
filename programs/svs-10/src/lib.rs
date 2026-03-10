@@ -30,8 +30,12 @@ pub mod svs_10 {
         instructions::initialize::handler(ctx, vault_id, name, symbol, uri)
     }
 
-    pub fn request_deposit(ctx: Context<RequestDeposit>, assets: u64) -> Result<()> {
-        instructions::request_deposit::handler(ctx, assets)
+    pub fn request_deposit(
+        ctx: Context<RequestDeposit>,
+        assets: u64,
+        receiver: Pubkey,
+    ) -> Result<()> {
+        instructions::request_deposit::handler(ctx, assets, receiver)
     }
 
     pub fn cancel_deposit(ctx: Context<CancelDeposit>) -> Result<()> {
@@ -46,8 +50,12 @@ pub mod svs_10 {
         instructions::claim_deposit::handler(ctx)
     }
 
-    pub fn request_redeem(ctx: Context<RequestRedeem>, shares: u64) -> Result<()> {
-        instructions::request_redeem::handler(ctx, shares)
+    pub fn request_redeem(
+        ctx: Context<RequestRedeem>,
+        shares: u64,
+        receiver: Pubkey,
+    ) -> Result<()> {
+        instructions::request_redeem::handler(ctx, shares, receiver)
     }
 
     pub fn cancel_redeem(ctx: Context<CancelRedeem>) -> Result<()> {

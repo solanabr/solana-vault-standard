@@ -198,7 +198,7 @@ pub fn handler(
     vault.total_pending_deposits = 0;
     vault.decimals_offset = MAX_DECIMALS - asset_decimals;
     vault.paused = false;
-    vault.max_staleness = 3600;
+    vault.max_staleness = 0;
     vault.max_deviation_bps = DEFAULT_MAX_DEVIATION_BPS;
     vault.bump = vault_bump;
     vault._reserved = [0u8; 64];

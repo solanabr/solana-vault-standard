@@ -225,7 +225,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
 
     it("user requests deposit", async () => {
       await program.methods
-        .requestDeposit(new BN(depositAmount))
+        .requestDeposit(new BN(depositAmount), payer.publicKey)
         .accountsStrict({
           user: payer.publicKey,
           vault,
@@ -311,7 +311,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
 
     it("user cancels pending deposit", async () => {
       await program.methods
-        .requestDeposit(new BN(cancelDepositAmount))
+        .requestDeposit(new BN(cancelDepositAmount), payer.publicKey)
         .accountsStrict({
           user: payer.publicKey,
           vault,
@@ -392,7 +392,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
       sharesToRedeem = new BN(Math.floor(Number(sharesAccount.amount) / 2));
 
       await program.methods
-        .requestRedeem(sharesToRedeem)
+        .requestRedeem(sharesToRedeem, payer.publicKey)
         .accountsStrict({
           user: payer.publicKey,
           vault,
@@ -480,7 +480,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
       const sharesToLock = new BN(Math.floor(Number(sharesAccount.amount) / 4));
 
       await program.methods
-        .requestRedeem(sharesToLock)
+        .requestRedeem(sharesToLock, payer.publicKey)
         .accountsStrict({
           user: payer.publicKey,
           vault,
@@ -532,7 +532,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
       const oracleDepositAmount = 10_000 * 10 ** ASSET_DECIMALS;
 
       await program.methods
-        .requestDeposit(new BN(oracleDepositAmount))
+        .requestDeposit(new BN(oracleDepositAmount), payer.publicKey)
         .accountsStrict({
           user: payer.publicKey,
           vault,
@@ -590,7 +590,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
       const [claimableTokens] = getClaimableTokensPDA(vault, payer.publicKey);
 
       await program.methods
-        .requestRedeem(sharesToRedeem)
+        .requestRedeem(sharesToRedeem, payer.publicKey)
         .accountsStrict({
           user: payer.publicKey,
           vault,
@@ -649,7 +649,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
       const amount = 10_000 * 10 ** ASSET_DECIMALS;
 
       await program.methods
-        .requestDeposit(new BN(amount))
+        .requestDeposit(new BN(amount), payer.publicKey)
         .accountsStrict({
           user: payer.publicKey,
           vault,
@@ -767,7 +767,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
     it("operator claims deposit on behalf of user", async () => {
       const depositAmount = new BN(50_000 * 10 ** ASSET_DECIMALS);
       await program.methods
-        .requestDeposit(depositAmount)
+        .requestDeposit(depositAmount, user2.publicKey)
         .accountsStrict({
           user: user2.publicKey,
           vault,
@@ -823,7 +823,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
       // user2 does another deposit
       const depositAmount = new BN(10_000 * 10 ** ASSET_DECIMALS);
       await program.methods
-        .requestDeposit(depositAmount)
+        .requestDeposit(depositAmount, user2.publicKey)
         .accountsStrict({
           user: user2.publicKey,
           vault,
@@ -913,7 +913,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
     it("rejects requests when paused", async () => {
       try {
         await program.methods
-          .requestDeposit(new BN(10_000 * 10 ** ASSET_DECIMALS))
+          .requestDeposit(new BN(10_000 * 10 ** ASSET_DECIMALS), payer.publicKey)
           .accountsStrict({
             user: payer.publicKey,
             vault,
@@ -1009,7 +1009,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
       const amount = 10_000 * 10 ** ASSET_DECIMALS;
 
       await program.methods
-        .requestDeposit(new BN(amount))
+        .requestDeposit(new BN(amount), payer.publicKey)
         .accountsStrict({
           user: payer.publicKey,
           vault,
@@ -1067,7 +1067,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
 
       const amount = 10_000 * 10 ** ASSET_DECIMALS;
       await program.methods
-        .requestDeposit(new BN(amount))
+        .requestDeposit(new BN(amount), payer.publicKey)
         .accountsStrict({
           user: payer.publicKey,
           vault,
@@ -1126,7 +1126,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
     it("rejects zero amount deposit", async () => {
       try {
         await program.methods
-          .requestDeposit(new BN(0))
+          .requestDeposit(new BN(0), payer.publicKey)
           .accountsStrict({
             user: payer.publicKey,
             vault,
@@ -1147,7 +1147,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
     it("rejects deposit below minimum", async () => {
       try {
         await program.methods
-          .requestDeposit(new BN(999)) // MIN_DEPOSIT_AMOUNT = 1000
+          .requestDeposit(new BN(999), payer.publicKey) // MIN_DEPOSIT_AMOUNT = 1000
           .accountsStrict({
             user: payer.publicKey,
             vault,
@@ -1168,7 +1168,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
     it("rounding favors vault on fulfill", async () => {
       const smallAmount = 1_001; // just above minimum
       await program.methods
-        .requestDeposit(new BN(smallAmount))
+        .requestDeposit(new BN(smallAmount), payer.publicKey)
         .accountsStrict({
           user: payer.publicKey,
           vault,
