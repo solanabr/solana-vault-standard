@@ -326,13 +326,29 @@ Between `fulfill_deposit` and `claim_deposit`, the operator has computed and res
 
 **Program ID**: `CpjFjyxRwTGYxR6JWXpfQ1923z5wVwpyBvgPFjm9jamJ`
 
+**Example Vault**: [`4g5u3fshiu9rsy8ECaccqRoySNgJckzZQ14yjuP8fNYQ`](https://explorer.solana.com/address/4g5u3fshiu9rsy8ECaccqRoySNgJckzZQ14yjuP8fNYQ?cluster=devnet)
+
+#### Example Transactions (Full Lifecycle)
+
+| Step | Transaction |
+|------|-------------|
+| Initialize vault | [`4Q7qcy...`](https://explorer.solana.com/tx/4Q7qcywkP3GjfGJTEvscrrHrnbxEp6SVY2vSGW7NsV4sUzozJ8hB6DTcysSBdHEwpfFGL73ULUpcUYGg19zyL8bz?cluster=devnet) |
+| Request deposit | [`56ki6L...`](https://explorer.solana.com/tx/56ki6LbVExuXaLMdzTiqtprkgGk9XTP7DqCX8cTxkWzCWT8dmF4oq9cBGYobp4TTwAma5YESncmMrXxGAPrr9Yk1?cluster=devnet) |
+| Fulfill deposit | [`49xtXQ...`](https://explorer.solana.com/tx/49xtXQV9t7FGiTBDcyxWvW5gy9b5GPvcydVuWo3QmwqHCpfPQayaRhofkUd41yaJTxfndcQnRkDeBLnu5mKmvykc?cluster=devnet) |
+| Claim deposit | [`25LmjP...`](https://explorer.solana.com/tx/25LmjPNJzmhJTQFBgJpZoUYxYihz8fTwZaQPE8PPKpsXMQR19dPxp2Gvfg7XnFKskVpFnqKgvgcPVm1W6GiurgMv?cluster=devnet) |
+| Request redeem | [`5ncQCs...`](https://explorer.solana.com/tx/5ncQCsBMnheaSuHRekJDmCfjD6GJ7sH9UQtfMRcXQ5oi6o1sMpRauc3bbBaWiPcQDKdf1NyabreSWa2BiGywg4yp?cluster=devnet) |
+| Fulfill redeem | [`5jFzfW...`](https://explorer.solana.com/tx/5jFzfWTCCUMmjahkVgimgu2qPvioUmtQ9cUPmgtcHCa8Yp3xGqHCzg5hcEr1pWpVHdeqH1xYSX65nxL8SVJDpeRj?cluster=devnet) |
+| Claim redeem | [`5XZJNz...`](https://explorer.solana.com/tx/5XZJNz8eqU7z6bUQX36mZ4pdvyEPG8PcviV1EMZ3nMyLZQRLSD5Ldhy7pSVdZNPqcKRrZdfw4HAMAdd1T2XjzpJC?cluster=devnet) |
+| Cancel deposit | [`2HhiDo...`](https://explorer.solana.com/tx/2HhiDoYpd3PKuLnVYFVH1gqens31VQrDc4uh1652tA7QNgortXzqtVzv3Gpq5Nk6yJZMiCgC5UZutQYJLgDV7TJS?cluster=devnet) |
+| Pause vault | [`4qQKTn...`](https://explorer.solana.com/tx/4qQKTnhqUKNxfnFNbLB9xbXfbfaZxci6Jz89FTdmkNsvjnjwaQnRqrjkx2L6u4G7ytDAUCdmRyMi4qJMcV6N1Jth?cluster=devnet) |
+| Unpause vault | [`5TmZRR...`](https://explorer.solana.com/tx/5TmZRRfzdNDeKctnxA924wSXxo1V7HWN3ZjvdQp3LC8JadYWneTDy8CUtkj7ri5pRiKPiNnzYfFU1SvchcHiE5va?cluster=devnet) |
+
+Run the full lifecycle yourself:
+
 ```bash
-# Initialize a new async vault
-anchor run initialize-async-vault -- \
-  --asset-mint EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v \
-  --vault-id 1 \
-  --asset-decimals 6 \
-  --max-deviation-bps 500
+ANCHOR_PROVIDER_URL=https://api.devnet.solana.com \
+ANCHOR_WALLET=~/.config/solana/id.json \
+npx ts-node scripts/e2e-svs10-devnet.ts
 ```
 
 ### Mainnet
