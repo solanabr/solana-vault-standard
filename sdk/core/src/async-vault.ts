@@ -482,7 +482,7 @@ export class AsyncVault {
     );
 
     return this.program.methods
-      .setOperator(params.approved)
+      .setOperator(params.operator, params.approved)
       .accountsStrict({
         owner,
         vault: this.vault,
