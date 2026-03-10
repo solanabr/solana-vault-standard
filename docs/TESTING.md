@@ -33,7 +33,7 @@ SVS uses a multi-layered testing strategy:
 ## Quick Start
 
 ```bash
-# Run all integration tests (256 tests)
+# Run all integration tests (291 tests)
 anchor test
 
 # Start proof backend first (required for SVS-3/SVS-4 CT tests)
@@ -44,6 +44,9 @@ cd sdk && yarn test
 
 # Run Rust unit tests
 cargo test --manifest-path programs/svs-1/Cargo.toml
+
+# Run SVS-10 tests (35 tests)
+anchor test -- tests/svs-10.ts
 
 # Run proof backend tests (19 tests)
 cd proofs-backend && cargo test

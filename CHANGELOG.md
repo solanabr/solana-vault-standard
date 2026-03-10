@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+#### SVS-10: Async Vault (ERC-7540)
+- Async request/fulfill/claim lifecycle for deposits and redemptions
+- Dual pricing: vault-priced (svs-math) or oracle-priced with deviation protection
+- Operator-managed fulfillment with delegation via OperatorApproval PDA
+- Synchronous cancel (ERC-7887 deviation)
+- Liquidity isolation via total_pending_deposits
+- Share escrow for locked redemptions
+- Full module compatibility (fees, caps, locks, access)
+- TypeScript SDK: AsyncVault class with all lifecycle methods
+- CLI: 9 async vault commands (request/cancel/fulfill/claim deposit/redeem + set-operator)
+- 35 integration tests covering lifecycle, oracle, permissions, and edge cases
+
 ## [0.3.0] - 2026-03-06
 
 ### Added
