@@ -58,4 +58,22 @@ pub enum VaultError {
 
     #[msg("Invalid max staleness")]
     InvalidMaxStaleness,
+
+    #[msg("Oracle price is stale")]
+    StaleOraclePrice,
+
+    #[msg("Invalid oracle price")]
+    InvalidOraclePrice,
+
+    #[msg("Oracle vault mismatch")]
+    OracleVaultMismatch,
+
+    #[msg("Deposit would exceed global vault cap")]
+    GlobalCapExceeded,
+
+    #[msg("Entry fee exceeds maximum")]
+    EntryFeeExceedsMax,
+
+    #[msg("Lock duration exceeds maximum")]
+    LockDurationExceedsMax,
 }

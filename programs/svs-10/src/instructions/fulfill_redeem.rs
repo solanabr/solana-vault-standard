@@ -12,8 +12,11 @@ use crate::{
     error::VaultError,
     events::RedeemFulfilled,
     math::{convert_to_assets, Rounding},
-    state::{AsyncVault, ClaimableEscrow, RedeemRequest, RequestStatus},
+    state::{AsyncVault, ClaimableEscrow, OraclePrice, RedeemRequest, RequestStatus},
 };
+
+#[cfg(feature = "modules")]
+use svs_module_hooks as module_hooks;
 
 #[derive(Accounts)]
 pub struct FulfillRedeem<'info> {
@@ -82,6 +85,28 @@ pub struct FulfillRedeem<'info> {
     pub rent: Sysvar<'info, Rent>,
 }
 
+fn find_oracle_price<'info>(
+    remaining_accounts: &[AccountInfo<'info>],
+    program_id: &Pubkey,
+    vault_key: &Pubkey,
+) -> Result<Option<(u64, i64)>> {
+    let (expected_pda, _) =
+        Pubkey::find_program_address(&[ORACLE_PRICE_SEED, vault_key.as_ref()], program_id);
+
+    for account in remaining_accounts {
+        if account.key() == expected_pda {
+            let data = account.try_borrow_data()?;
+            if data.len() >= OraclePrice::LEN {
+                let oracle: OraclePrice = AnchorDeserialize::deserialize(&mut &data[8..])?;
+                require!(oracle.vault == *vault_key, VaultError::OracleVaultMismatch);
+                return Ok(Some((oracle.price, oracle.updated_at)));
+            }
+        }
+    }
+
+    Ok(None)
+}
+
 pub fn handler(ctx: Context<FulfillRedeem>) -> Result<()> {
     let request = &ctx.accounts.redeem_request;
 
@@ -91,23 +116,46 @@ pub fn handler(ctx: Context<FulfillRedeem>) -> Result<()> {
     );
 
     let vault = &ctx.accounts.vault;
+    let vault_key = vault.key();
     let shares_locked = request.shares_locked;
 
-    // Bug #2: Use stored total_assets, not asset_vault.amount
-    let assets = convert_to_assets(
-        shares_locked,
-        vault.total_assets,
-        vault.total_shares,
-        vault.decimals_offset,
-        Rounding::Floor,
-    )?;
+    // Compute gross assets: Mode A (oracle) or Mode B (vault-priced)
+    let gross_assets = if let Some((price, updated_at)) =
+        find_oracle_price(ctx.remaining_accounts, &crate::ID, &vault_key)?
+    {
+        let clock = Clock::get()?;
+        svs_oracle::validate_oracle(price, updated_at, clock.unix_timestamp, vault.max_staleness)
+            .map_err(|e| match e {
+            svs_oracle::OracleError::StalePrice => VaultError::StaleOraclePrice,
+            _ => VaultError::InvalidOraclePrice,
+        })?;
+        svs_oracle::shares_to_assets(shares_locked, price).map_err(|_| VaultError::MathOverflow)?
+    } else {
+        convert_to_assets(
+            shares_locked,
+            vault.total_assets,
+            vault.total_shares,
+            vault.decimals_offset,
+            Rounding::Floor,
+        )?
+    };
+
+    // Apply module hooks if enabled
+    #[cfg(feature = "modules")]
+    let assets = {
+        let remaining = ctx.remaining_accounts;
+        let result = module_hooks::apply_exit_fee(remaining, &crate::ID, &vault_key, gross_assets)?;
+        result.net_assets
+    };
+
+    #[cfg(not(feature = "modules"))]
+    let assets = gross_assets;
 
     require!(
         ctx.accounts.asset_vault.amount >= assets,
         VaultError::InsufficientAssets
     );
 
-    let vault_key = vault.key();
     let asset_mint_key = vault.asset_mint;
     let vault_id_bytes = vault.vault_id.to_le_bytes();
     let vault_bump = vault.bump;
