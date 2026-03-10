@@ -10,7 +10,7 @@
 
 **Synchronous cancel (intentional ERC-7887 deviation):** SVS-10 uses synchronous cancel — assets (or shares) are returned immediately in the cancel transaction. ERC-7887's async cancel flow (where cancel itself goes through request→fulfill) is out of scope. This is an intentional simplification appropriate for Solana's execution model.
 
-**Oracle front-running mitigation:** To prevent oracle manipulation, AsyncVault includes a `max_deviation_bps` field (default 500 = 5%). During oracle-priced fulfillment, the operator calls `svs_oracle::validate_deviation(oracle_price, vault_computed_price, max_deviation_bps)` to ensure the oracle price hasn't deviated excessively from the vault's own computed price. This limits the damage from stale or manipulated oracle feeds.
+**Oracle front-running mitigation:** To prevent oracle manipulation, AsyncVault includes a `max_deviation_bps` field (default 500 = 5%). During oracle-priced fulfillment, the operator calls `svs_oracle::validate_deviation(oracle_price, vault_computed_price, max_deviation_bps)` to ensure the oracle price hasn't deviated excessively from the vault's own computed price. This limits the damage from stale or manipulated oracle feeds. **Empty vault exception:** When `total_assets == 0 && total_shares == 0`, the deviation check is skipped — the vault-computed price is purely synthetic from the virtual offset and doesn't represent real market conditions.
 
 **Tech Stack:** Anchor 0.31.1, Rust, Token-2022, svs-math, svs-oracle, svs-module-hooks, TypeScript SDK, Commander CLI
 
@@ -259,7 +259,7 @@ git commit -m "feat(svs-10): add deposit request and cancel flows"
   - Note: `check_deposit_access` is reused for both deposit and redeem access checks (same function, different context). This matches SVS-1 behavior.
 - **Dual pricing mode:**
   - Check `ctx.remaining_accounts` for an oracle account (svs-oracle OraclePrice PDA)
-  - If oracle present: `svs_oracle::validate_oracle(price, updated_at, clock, vault.max_staleness)`, then `shares = svs_oracle::assets_to_shares(assets_locked, price)`. Also call `svs_oracle::validate_deviation(oracle_price, vault_computed_price, vault.max_deviation_bps)` to prevent front-running.
+  - If oracle present: `svs_oracle::validate_oracle(price, updated_at, clock, vault.max_staleness)`, then `shares = svs_oracle::assets_to_shares(assets_locked, price)`. Also call `svs_oracle::validate_deviation(oracle_price, vault_computed_price, vault.max_deviation_bps)` to prevent front-running. **Empty vault exception:** Skip deviation check when `total_assets == 0 && total_shares == 0` — the vault-computed price is purely synthetic from the virtual offset, so deviation comparison is meaningless.
   - If no oracle: `shares = svs_math::convert_to_shares(assets_locked, total_assets, total_shares, decimals_offset, Rounding::Floor)`
 - Module hooks (feature-gated): `apply_entry_fee` on computed shares
 - Update request: `shares_claimable = net_shares`, `status = Fulfilled`, `fulfilled_at = clock`
@@ -344,7 +344,7 @@ git commit -m "feat(svs-10): add redeem request and cancel flows"
 - Validate: signer == `vault.operator`, `request.status == Pending`
 - **Access re-check (feature-gated):** Call `check_deposit_access` module hook (reused for redeem access, same function as deposit, matches SVS-1) to verify access hasn't been revoked between request and fulfillment.
 - **Dual pricing:**
-  - Oracle present: `assets = svs_oracle::shares_to_assets(shares_locked, price)`. Also call `svs_oracle::validate_deviation(oracle_price, vault_computed_price, vault.max_deviation_bps)`.
+  - Oracle present: `assets = svs_oracle::shares_to_assets(shares_locked, price)`. Also call `svs_oracle::validate_deviation(oracle_price, vault_computed_price, vault.max_deviation_bps)`. **Empty vault exception:** Skip deviation check when `total_assets == 0 && total_shares == 0` (same rationale as fulfill_deposit).
   - No oracle: `assets = svs_math::convert_to_assets(shares_locked, total_assets, total_shares, decimals_offset, Rounding::Floor)`
 - Module hooks (feature-gated): `apply_exit_fee` on computed assets
 - **Liquidity isolation check:** Require `asset_vault.amount - vault.total_pending_deposits >= net_assets` (`InsufficientLiquidity`). This prevents fulfilling redeems with assets that are reserved for pending deposits.
@@ -519,6 +519,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
     it("fulfill_redeem with oracle price");
     it("rejects stale oracle");
     it("rejects oracle price exceeding max_deviation_bps from vault price");
+    it("skips deviation check on empty vault (total_assets == 0 && total_shares == 0)");
   });
 
   describe("Operator Approval", () => {
