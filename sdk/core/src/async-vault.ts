@@ -71,7 +71,43 @@ export interface ClaimParams {
 
 export interface SetOperatorParams {
   operator: PublicKey;
-  approved: boolean;
+  canFulfillDeposit: boolean;
+  canFulfillRedeem: boolean;
+  canClaim: boolean;
+}
+
+export interface DepositRequestState {
+  owner: PublicKey;
+  receiver: PublicKey;
+  vault: PublicKey;
+  assetsLocked: BN;
+  sharesClaimable: BN;
+  status: { pending: {} } | { fulfilled: {} } | { claimed: {} } | { cancelled: {} };
+  requestedAt: BN;
+  fulfilledAt: BN;
+  bump: number;
+}
+
+export interface RedeemRequestState {
+  owner: PublicKey;
+  receiver: PublicKey;
+  vault: PublicKey;
+  sharesLocked: BN;
+  assetsClaimable: BN;
+  status: { pending: {} } | { fulfilled: {} } | { claimed: {} } | { cancelled: {} };
+  requestedAt: BN;
+  fulfilledAt: BN;
+  bump: number;
+}
+
+export interface OperatorApprovalState {
+  owner: PublicKey;
+  operator: PublicKey;
+  vault: PublicKey;
+  canFulfillDeposit: boolean;
+  canFulfillRedeem: boolean;
+  canClaim: boolean;
+  bump: number;
 }
 
 export class AsyncVault {
@@ -491,7 +527,7 @@ export class AsyncVault {
     );
 
     return this.program.methods
-      .setOperator(params.operator, params.approved)
+      .setOperator(params.operator, params.canFulfillDeposit, params.canFulfillRedeem, params.canClaim)
       .accountsStrict({
         owner,
         vault: this.vault,
@@ -551,7 +587,7 @@ export class AsyncVault {
 
   // ============ View Helpers ============
 
-  async getDepositRequest(owner: PublicKey): Promise<unknown> {
+  async getDepositRequest(owner: PublicKey): Promise<DepositRequestState> {
     const [depositRequest] = getDepositRequestAddress(
       this.program.programId,
       this.vault,
@@ -559,12 +595,12 @@ export class AsyncVault {
     );
     const accountNs = this.program.account as Record<
       string,
-      { fetch: (addr: PublicKey) => Promise<unknown> }
+      { fetch: (addr: PublicKey) => Promise<DepositRequestState> }
     >;
     return accountNs["depositRequest"].fetch(depositRequest);
   }
 
-  async getRedeemRequest(owner: PublicKey): Promise<unknown> {
+  async getRedeemRequest(owner: PublicKey): Promise<RedeemRequestState> {
     const [redeemRequest] = getRedeemRequestAddress(
       this.program.programId,
       this.vault,
@@ -572,7 +608,7 @@ export class AsyncVault {
     );
     const accountNs = this.program.account as Record<
       string,
-      { fetch: (addr: PublicKey) => Promise<unknown> }
+      { fetch: (addr: PublicKey) => Promise<RedeemRequestState> }
     >;
     return accountNs["redeemRequest"].fetch(redeemRequest);
   }
@@ -580,7 +616,7 @@ export class AsyncVault {
   async getOperatorApproval(
     owner: PublicKey,
     operator: PublicKey,
-  ): Promise<unknown> {
+  ): Promise<OperatorApprovalState> {
     const [operatorApproval] = getOperatorApprovalAddress(
       this.program.programId,
       this.vault,
@@ -589,7 +625,7 @@ export class AsyncVault {
     );
     const accountNs = this.program.account as Record<
       string,
-      { fetch: (addr: PublicKey) => Promise<unknown> }
+      { fetch: (addr: PublicKey) => Promise<OperatorApprovalState> }
     >;
     return accountNs["operatorApproval"].fetch(operatorApproval);
   }

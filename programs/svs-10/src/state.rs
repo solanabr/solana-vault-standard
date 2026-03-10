@@ -115,7 +115,9 @@ pub struct OperatorApproval {
     pub owner: Pubkey,
     pub operator: Pubkey,
     pub vault: Pubkey,
-    pub approved: bool,
+    pub can_fulfill_deposit: bool,
+    pub can_fulfill_redeem: bool,
+    pub can_claim: bool,
     pub bump: u8,
 }
 
@@ -124,8 +126,14 @@ impl OperatorApproval {
         32 +  // owner
         32 +  // operator
         32 +  // vault
-        1 +   // approved
+        1 +   // can_fulfill_deposit
+        1 +   // can_fulfill_redeem
+        1 +   // can_claim
         1; // bump
+
+    pub fn is_approved(&self) -> bool {
+        self.can_fulfill_deposit || self.can_fulfill_redeem || self.can_claim
+    }
 
     pub const SEED_PREFIX: &'static [u8] = OPERATOR_APPROVAL_SEED;
 }

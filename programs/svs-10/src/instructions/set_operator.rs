@@ -9,7 +9,7 @@ use crate::{
 };
 
 #[derive(Accounts)]
-#[instruction(operator: Pubkey, approved: bool)]
+#[instruction(operator: Pubkey, can_fulfill_deposit: bool, can_fulfill_redeem: bool, can_claim: bool)]
 pub struct SetOperator<'info> {
     #[account(mut)]
     pub owner: Signer<'info>,
@@ -28,16 +28,26 @@ pub struct SetOperator<'info> {
     pub system_program: Program<'info, System>,
 }
 
-pub fn handler(ctx: Context<SetOperator>, operator: Pubkey, approved: bool) -> Result<()> {
-    if approved {
+pub fn handler(
+    ctx: Context<SetOperator>,
+    operator: Pubkey,
+    can_fulfill_deposit: bool,
+    can_fulfill_redeem: bool,
+    can_claim: bool,
+) -> Result<()> {
+    let any_approved = can_fulfill_deposit || can_fulfill_redeem || can_claim;
+
+    if any_approved {
         let approval = &mut ctx.accounts.operator_approval;
         approval.owner = ctx.accounts.owner.key();
         approval.operator = operator;
         approval.vault = ctx.accounts.vault.key();
-        approval.approved = true;
+        approval.can_fulfill_deposit = can_fulfill_deposit;
+        approval.can_fulfill_redeem = can_fulfill_redeem;
+        approval.can_claim = can_claim;
         approval.bump = ctx.bumps.operator_approval;
     } else {
-        // Close the PDA to recover rent when revoking
+        // Close the PDA to recover rent when revoking all permissions
         ctx.accounts
             .operator_approval
             .close(ctx.accounts.owner.to_account_info())?;
@@ -47,7 +57,7 @@ pub fn handler(ctx: Context<SetOperator>, operator: Pubkey, approved: bool) -> R
         vault: ctx.accounts.vault.key(),
         owner: ctx.accounts.owner.key(),
         operator,
-        approved,
+        approved: any_approved,
     });
 
     Ok(())

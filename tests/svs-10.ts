@@ -748,7 +748,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
 
     it("user sets operator approval", async () => {
       await program.methods
-        .setOperator(payer.publicKey, true)
+        .setOperator(payer.publicKey, true, true, true)
         .accountsStrict({
           owner: user2.publicKey,
           vault,
@@ -759,7 +759,9 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
         .rpc();
 
       const approval = await program.account.operatorApproval.fetch(operatorApprovalPDA);
-      expect(approval.approved).to.equal(true);
+      expect(approval.canClaim).to.equal(true);
+      expect(approval.canFulfillDeposit).to.equal(true);
+      expect(approval.canFulfillRedeem).to.equal(true);
       expect(approval.operator.toBase58()).to.equal(payer.publicKey.toBase58());
       expect(approval.owner.toBase58()).to.equal(user2.publicKey.toBase58());
     });

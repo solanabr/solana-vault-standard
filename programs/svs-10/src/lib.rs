@@ -86,8 +86,20 @@ pub mod svs_10 {
         instructions::admin::set_vault_operator(ctx, new_operator)
     }
 
-    pub fn set_operator(ctx: Context<SetOperator>, operator: Pubkey, approved: bool) -> Result<()> {
-        instructions::set_operator::handler(ctx, operator, approved)
+    pub fn set_operator(
+        ctx: Context<SetOperator>,
+        operator: Pubkey,
+        can_fulfill_deposit: bool,
+        can_fulfill_redeem: bool,
+        can_claim: bool,
+    ) -> Result<()> {
+        instructions::set_operator::handler(
+            ctx,
+            operator,
+            can_fulfill_deposit,
+            can_fulfill_redeem,
+            can_claim,
+        )
     }
 
     // ============ View Functions ============
