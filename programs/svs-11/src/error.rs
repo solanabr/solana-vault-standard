@@ -70,4 +70,10 @@ pub enum VaultError {
 
     #[msg("Deposit would exceed global vault cap")]
     GlobalCapExceeded,
+
+    #[msg("Entry fee exceeds maximum")]
+    EntryFeeExceedsMax,
+
+    #[msg("Lock duration exceeds maximum")]
+    LockDurationExceedsMax,
 }

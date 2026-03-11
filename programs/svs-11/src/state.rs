@@ -4,6 +4,14 @@ use crate::constants::{
     FROZEN_ACCOUNT_SEED, INVESTMENT_REQUEST_SEED, REDEMPTION_REQUEST_SEED, VAULT_SEED,
 };
 
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, Default)]
+pub enum AccessMode {
+    #[default]
+    Open,
+    Whitelist,
+    Blacklist,
+}
+
 #[account]
 pub struct CreditVault {
     pub authority: Pubkey,
@@ -138,3 +146,71 @@ impl FrozenAccount {
 
     pub const SEED_PREFIX: &'static [u8] = FROZEN_ACCOUNT_SEED;
 }
+
+// =============================================================================
+// Module State Accounts (conditionally compiled with "modules" feature)
+// =============================================================================
+
+#[cfg(feature = "modules")]
+pub mod module_state {
+    use super::*;
+
+    pub use svs_module_hooks::{
+        ACCESS_CONFIG_SEED, CAP_CONFIG_SEED, FEE_CONFIG_SEED, LOCK_CONFIG_SEED,
+    };
+
+    #[account]
+    pub struct FeeConfig {
+        pub vault: Pubkey,
+        pub fee_recipient: Pubkey,
+        pub entry_fee_bps: u16,
+        pub exit_fee_bps: u16,
+        pub management_fee_bps: u16,
+        pub performance_fee_bps: u16,
+        pub high_water_mark: u64,
+        pub last_fee_collection: i64,
+        pub bump: u8,
+    }
+
+    impl FeeConfig {
+        pub const LEN: usize = 8 + 32 + 32 + 2 + 2 + 2 + 2 + 8 + 8 + 1;
+    }
+
+    #[account]
+    pub struct CapConfig {
+        pub vault: Pubkey,
+        pub global_cap: u64,
+        pub per_user_cap: u64,
+        pub bump: u8,
+    }
+
+    impl CapConfig {
+        pub const LEN: usize = 8 + 32 + 8 + 8 + 1;
+    }
+
+    #[account]
+    pub struct LockConfig {
+        pub vault: Pubkey,
+        pub lock_duration: i64,
+        pub bump: u8,
+    }
+
+    impl LockConfig {
+        pub const LEN: usize = 8 + 32 + 8 + 1;
+    }
+
+    #[account]
+    pub struct AccessConfig {
+        pub vault: Pubkey,
+        pub mode: super::AccessMode,
+        pub merkle_root: [u8; 32],
+        pub bump: u8,
+    }
+
+    impl AccessConfig {
+        pub const LEN: usize = 8 + 32 + 1 + 32 + 1;
+    }
+}
+
+#[cfg(feature = "modules")]
+pub use module_state::*;

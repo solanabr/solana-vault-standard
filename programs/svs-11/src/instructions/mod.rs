@@ -14,6 +14,9 @@ pub mod repay;
 pub mod request_deposit;
 pub mod request_redeem;
 
+#[cfg(feature = "modules")]
+pub mod module_admin;
+
 #[allow(ambiguous_glob_reexports)]
 pub use admin::*;
 #[allow(ambiguous_glob_reexports)]
@@ -44,3 +47,7 @@ pub use repay::*;
 pub use request_deposit::*;
 #[allow(ambiguous_glob_reexports)]
 pub use request_redeem::*;
+
+#[cfg(feature = "modules")]
+#[allow(ambiguous_glob_reexports)]
+pub use module_admin::*;
