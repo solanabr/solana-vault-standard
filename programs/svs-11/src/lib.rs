@@ -80,4 +80,44 @@ pub mod svs_11 {
     pub fn cancel_redeem(ctx: Context<CancelRedeem>) -> Result<()> {
         instructions::cancel_redeem::handler(ctx)
     }
+
+    pub fn repay(ctx: Context<Repay>, amount: u64) -> Result<()> {
+        instructions::repay::handler(ctx, amount)
+    }
+
+    pub fn draw_down(ctx: Context<DrawDown>, amount: u64) -> Result<()> {
+        instructions::draw_down::handler(ctx, amount)
+    }
+
+    pub fn freeze_account(ctx: Context<FreezeAccount>) -> Result<()> {
+        instructions::compliance::freeze_handler(ctx)
+    }
+
+    pub fn unfreeze_account(ctx: Context<UnfreezeAccount>) -> Result<()> {
+        instructions::compliance::unfreeze_handler(ctx)
+    }
+
+    pub fn pause(ctx: Context<Admin>) -> Result<()> {
+        instructions::admin::pause_handler(ctx)
+    }
+
+    pub fn unpause(ctx: Context<Admin>) -> Result<()> {
+        instructions::admin::unpause_handler(ctx)
+    }
+
+    pub fn transfer_authority(ctx: Context<Admin>, new_authority: Pubkey) -> Result<()> {
+        instructions::admin::transfer_authority_handler(ctx, new_authority)
+    }
+
+    pub fn set_manager(ctx: Context<Admin>, new_manager: Pubkey) -> Result<()> {
+        instructions::admin::set_manager_handler(ctx, new_manager)
+    }
+
+    pub fn update_sas_config(
+        ctx: Context<Admin>,
+        new_credential: Pubkey,
+        new_schema: Pubkey,
+    ) -> Result<()> {
+        instructions::admin::update_sas_config_handler(ctx, new_credential, new_schema)
+    }
 }
