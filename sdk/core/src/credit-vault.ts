@@ -351,6 +351,7 @@ export class CreditVault {
   async rejectDeposit(
     manager: PublicKey,
     investor: PublicKey,
+    reasonCode: number = 0,
   ): Promise<string> {
     const [investmentRequest] = getInvestmentRequestAddress(
       this.program.programId,
@@ -360,7 +361,7 @@ export class CreditVault {
     const investorTokenAccount = this.getInvestorTokenAccount(investor);
 
     return this.program.methods
-      .rejectDeposit()
+      .rejectDeposit(reasonCode)
       .accountsPartial({
         manager,
         vault: this.vault,
@@ -400,7 +401,12 @@ export class CreditVault {
 
   // ============ Redeem Lifecycle ============
 
-  async requestRedeem(investor: PublicKey, shares: BN): Promise<string> {
+  async requestRedeem(
+    investor: PublicKey,
+    shares: BN,
+    attestation: PublicKey,
+    frozenCheck?: PublicKey,
+  ): Promise<string> {
     const [redemptionRequest] = getRedemptionRequestAddress(
       this.program.programId,
       this.vault,
@@ -417,6 +423,8 @@ export class CreditVault {
         sharesMint: this.sharesMint,
         investorSharesAccount,
         redemptionEscrow: this.redemptionEscrow,
+        attestation,
+        frozenCheck: frozenCheck ?? null,
         token2022Program: TOKEN_2022_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
         clock: SYSVAR_CLOCK_PUBKEY,

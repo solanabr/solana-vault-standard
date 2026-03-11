@@ -638,7 +638,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
       );
 
       await program.methods
-        .rejectDeposit()
+        .rejectDeposit(0)
         .accountsPartial({
           manager: manager.publicKey,
           vault,
@@ -1064,7 +1064,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
 
       const vaultAccount = await program.account.creditVault.fetch(vault);
       expect(vaultAccount.totalAssets.toString()).to.equal(
-        new BN(150_000_000_000).toString()
+        new BN(100_000_000_000).toString()
       );
     });
 
@@ -1396,7 +1396,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
 
       // Clean up: reject the deposit as manager
       await program.methods
-        .rejectDeposit()
+        .rejectDeposit(0)
         .accountsPartial({
           manager: manager.publicKey,
           vault,

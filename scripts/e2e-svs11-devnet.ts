@@ -731,7 +731,7 @@ async function main() {
   results.push({ step: "Request deposit (reject test)", sig: reqDep3Sig });
 
   const rejectSig = await program.methods
-    .rejectDeposit()
+    .rejectDeposit(0)
     .accountsPartial({
       manager: payer.publicKey,
       vault,

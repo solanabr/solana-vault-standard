@@ -51,7 +51,7 @@ pub struct RejectDeposit<'info> {
     pub asset_token_program: Interface<'info, TokenInterface>,
 }
 
-pub fn handler(ctx: Context<RejectDeposit>) -> Result<()> {
+pub fn handler(ctx: Context<RejectDeposit>, reason_code: u8) -> Result<()> {
     let amount_locked = ctx.accounts.investment_request.amount_locked;
 
     let asset_mint_key = ctx.accounts.vault.asset_mint;
@@ -89,6 +89,7 @@ pub fn handler(ctx: Context<RejectDeposit>) -> Result<()> {
         vault: vault.key(),
         investor: ctx.accounts.investor.key(),
         amount: amount_locked,
+        reason_code,
     });
 
     Ok(())

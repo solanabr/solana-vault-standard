@@ -1,3 +1,4 @@
+use crate::constants::VAULT_SEED;
 use anchor_lang::prelude::*;
 
 use crate::error::VaultError;
@@ -17,6 +18,8 @@ pub struct InitializeFeeConfig<'info> {
 
     #[account(
         has_one = authority @ VaultError::Unauthorized,
+        seeds = [VAULT_SEED, vault.asset_mint.as_ref(), &vault.vault_id.to_le_bytes()],
+        bump = vault.bump,
     )]
     pub vault: Account<'info, CreditVault>,
 
@@ -70,6 +73,8 @@ pub struct UpdateFeeConfig<'info> {
 
     #[account(
         has_one = authority @ VaultError::Unauthorized,
+        seeds = [VAULT_SEED, vault.asset_mint.as_ref(), &vault.vault_id.to_le_bytes()],
+        bump = vault.bump,
     )]
     pub vault: Account<'info, CreditVault>,
 
@@ -118,6 +123,8 @@ pub struct InitializeCapConfig<'info> {
 
     #[account(
         has_one = authority @ VaultError::Unauthorized,
+        seeds = [VAULT_SEED, vault.asset_mint.as_ref(), &vault.vault_id.to_le_bytes()],
+        bump = vault.bump,
     )]
     pub vault: Account<'info, CreditVault>,
 
@@ -156,6 +163,8 @@ pub struct UpdateCapConfig<'info> {
 
     #[account(
         has_one = authority @ VaultError::Unauthorized,
+        seeds = [VAULT_SEED, vault.asset_mint.as_ref(), &vault.vault_id.to_le_bytes()],
+        bump = vault.bump,
     )]
     pub vault: Account<'info, CreditVault>,
 
@@ -198,6 +207,8 @@ pub struct InitializeLockConfig<'info> {
 
     #[account(
         has_one = authority @ VaultError::Unauthorized,
+        seeds = [VAULT_SEED, vault.asset_mint.as_ref(), &vault.vault_id.to_le_bytes()],
+        bump = vault.bump,
     )]
     pub vault: Account<'info, CreditVault>,
 
@@ -234,6 +245,8 @@ pub struct UpdateLockConfig<'info> {
 
     #[account(
         has_one = authority @ VaultError::Unauthorized,
+        seeds = [VAULT_SEED, vault.asset_mint.as_ref(), &vault.vault_id.to_le_bytes()],
+        bump = vault.bump,
     )]
     pub vault: Account<'info, CreditVault>,
 
@@ -266,6 +279,8 @@ pub struct InitializeAccessConfig<'info> {
 
     #[account(
         has_one = authority @ VaultError::Unauthorized,
+        seeds = [VAULT_SEED, vault.asset_mint.as_ref(), &vault.vault_id.to_le_bytes()],
+        bump = vault.bump,
     )]
     pub vault: Account<'info, CreditVault>,
 
@@ -301,6 +316,8 @@ pub struct UpdateAccessConfig<'info> {
 
     #[account(
         has_one = authority @ VaultError::Unauthorized,
+        seeds = [VAULT_SEED, vault.asset_mint.as_ref(), &vault.vault_id.to_le_bytes()],
+        bump = vault.bump,
     )]
     pub vault: Account<'info, CreditVault>,
 

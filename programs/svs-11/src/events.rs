@@ -38,6 +38,7 @@ pub struct InvestmentRejected {
     pub vault: Pubkey,
     pub investor: Pubkey,
     pub amount: u64,
+    pub reason_code: u8,
 }
 
 #[event]

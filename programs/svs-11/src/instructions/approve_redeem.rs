@@ -91,6 +91,7 @@ pub struct ApproveRedeem<'info> {
 }
 
 pub fn handler(ctx: Context<ApproveRedeem>) -> Result<()> {
+    require!(!ctx.accounts.vault.paused, VaultError::VaultPaused);
     require!(
         ctx.accounts.frozen_check.is_none(),
         VaultError::AccountFrozen

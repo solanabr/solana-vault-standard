@@ -57,8 +57,8 @@ pub mod svs_11 {
         instructions::claim_deposit::handler(ctx)
     }
 
-    pub fn reject_deposit(ctx: Context<RejectDeposit>) -> Result<()> {
-        instructions::reject_deposit::handler(ctx)
+    pub fn reject_deposit(ctx: Context<RejectDeposit>, reason_code: u8) -> Result<()> {
+        instructions::reject_deposit::handler(ctx, reason_code)
     }
 
     pub fn cancel_deposit(ctx: Context<CancelDeposit>) -> Result<()> {
