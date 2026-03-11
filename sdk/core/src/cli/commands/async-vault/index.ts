@@ -57,12 +57,9 @@ async function loadAsyncVault(
   const resolved = resolveVaultArg(vaultArg, config, vaultOpts, output);
   if (!resolved) process.exit(1);
 
-  if (resolved.variant !== "svs-10") {
-    output.error(
-      `This command is for SVS-10 async vaults only. Vault "${vaultArg}" is ${resolved.variant}.`,
-    );
-    process.exit(1);
-  }
+  // These commands are exclusively SVS-10. When using a raw address,
+  // resolveVaultArg defaults variant to "svs-1" — override it here.
+  resolved.variant = "svs-10";
 
   const idlPath = findIdlPath("svs-10");
   if (!idlPath) {

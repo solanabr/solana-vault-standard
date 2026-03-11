@@ -8,6 +8,8 @@ import {
 import {
   TOKEN_2022_PROGRAM_ID,
   getAssociatedTokenAddressSync,
+  createAssociatedTokenAccountIdempotentInstruction,
+  ASSOCIATED_TOKEN_PROGRAM_ID,
 } from "@solana/spl-token";
 
 import {
@@ -232,6 +234,15 @@ export class AsyncVault {
       TOKEN_2022_PROGRAM_ID,
     );
 
+    const createAtaIx = createAssociatedTokenAccountIdempotentInstruction(
+      claimer.publicKey,
+      receiverSharesAccount,
+      req.receiver,
+      this.sharesMint,
+      TOKEN_2022_PROGRAM_ID,
+      ASSOCIATED_TOKEN_PROGRAM_ID,
+    );
+
     return this.program.methods
       .claimDeposit()
       .accountsStrict({
@@ -244,6 +255,7 @@ export class AsyncVault {
         rentReceiver: owner,
         token2022Program: TOKEN_2022_PROGRAM_ID,
       })
+      .preInstructions([createAtaIx])
       .signers([claimer])
       .rpc();
   }
