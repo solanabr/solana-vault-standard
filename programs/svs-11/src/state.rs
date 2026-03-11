@@ -56,7 +56,7 @@ impl CreditVault {
         1 +   // bump
         1 +   // redemption_escrow_bump
         1 +   // paused
-        64;   // _reserved
+        64; // _reserved
 
     pub const SEED_PREFIX: &'static [u8] = VAULT_SEED;
 }
@@ -88,7 +88,7 @@ impl InvestmentRequest {
         1 +   // status
         8 +   // requested_at
         8 +   // fulfilled_at
-        1;    // bump
+        1; // bump
 
     pub const SEED_PREFIX: &'static [u8] = INVESTMENT_REQUEST_SEED;
 }
@@ -114,7 +114,7 @@ impl RedemptionRequest {
         1 +   // status
         8 +   // requested_at
         8 +   // fulfilled_at
-        1;    // bump
+        1; // bump
 
     pub const SEED_PREFIX: &'static [u8] = REDEMPTION_REQUEST_SEED;
 }
@@ -134,7 +134,7 @@ impl FrozenAccount {
         32 +  // vault
         32 +  // frozen_by
         8 +   // frozen_at
-        1;    // bump
+        1; // bump
 
     pub const SEED_PREFIX: &'static [u8] = FROZEN_ACCOUNT_SEED;
 }

@@ -1,5 +1,5 @@
-use anchor_lang::solana_program::pubkey;
 use anchor_lang::prelude::Pubkey;
+use anchor_lang::solana_program::pubkey;
 
 pub const VAULT_SEED: &[u8] = b"credit_vault";
 pub const SHARES_MINT_SEED: &[u8] = b"shares";

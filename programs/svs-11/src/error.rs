@@ -8,6 +8,9 @@ pub enum VaultError {
     #[msg("Vault is paused")]
     VaultPaused,
 
+    #[msg("Vault is not paused")]
+    VaultNotPaused,
+
     #[msg("Asset decimals must be <= 9")]
     InvalidAssetDecimals,
 

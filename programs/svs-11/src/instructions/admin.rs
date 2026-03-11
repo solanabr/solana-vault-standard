@@ -28,7 +28,7 @@ pub fn pause_handler(ctx: Context<Admin>) -> Result<()> {
 }
 
 pub fn unpause_handler(ctx: Context<Admin>) -> Result<()> {
-    require!(ctx.accounts.vault.paused, VaultError::Unauthorized);
+    require!(ctx.accounts.vault.paused, VaultError::VaultNotPaused);
     ctx.accounts.vault.paused = false;
 
     emit!(VaultStatusChanged {

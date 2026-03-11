@@ -25,12 +25,19 @@ impl NavOracleData {
         let data = account.try_borrow_data()?;
         require!(data.len() >= 8 + Self::LEN, VaultError::OracleInvalidPrice);
         let price_per_share = u64::from_le_bytes(
-            data[8..16].try_into().map_err(|_| error!(VaultError::OracleInvalidPrice))?
+            data[8..16]
+                .try_into()
+                .map_err(|_| error!(VaultError::OracleInvalidPrice))?,
         );
         let updated_at = i64::from_le_bytes(
-            data[16..24].try_into().map_err(|_| error!(VaultError::OracleInvalidPrice))?
+            data[16..24]
+                .try_into()
+                .map_err(|_| error!(VaultError::OracleInvalidPrice))?,
         );
-        Ok(Self { price_per_share, updated_at })
+        Ok(Self {
+            price_per_share,
+            updated_at,
+        })
     }
 }
 
@@ -39,8 +46,14 @@ pub fn read_and_validate_oracle(
     vault: &CreditVault,
     clock: &Clock,
 ) -> Result<u64> {
-    require!(*oracle_account.key == vault.nav_oracle, VaultError::OracleInvalidPrice);
-    require!(*oracle_account.owner == vault.oracle_program, VaultError::OracleInvalidProgram);
+    require!(
+        *oracle_account.key == vault.nav_oracle,
+        VaultError::OracleInvalidPrice
+    );
+    require!(
+        *oracle_account.owner == vault.oracle_program,
+        VaultError::OracleInvalidProgram
+    );
     let data = NavOracleData::try_from_account(oracle_account)?;
     crate::math::validate_oracle(
         data.price_per_share,

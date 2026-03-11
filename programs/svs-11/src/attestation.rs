@@ -30,8 +30,8 @@ pub fn validate_sas_attestation(
     );
 
     let data = attestation_info.try_borrow_data()?;
-    let attestation = Attestation::from_bytes(&data)
-        .map_err(|_| error!(VaultError::InvalidAttestation))?;
+    let attestation =
+        Attestation::from_bytes(&data).map_err(|_| error!(VaultError::InvalidAttestation))?;
 
     require!(
         attestation.credential == vault.sas_credential,
