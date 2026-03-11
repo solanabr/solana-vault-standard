@@ -264,6 +264,7 @@ pub fn handler(ctx: Context<FulfillRedeem>) -> Result<()> {
             &[
                 ctx.accounts.claimable_tokens.to_account_info(),
                 ctx.accounts.asset_mint.to_account_info(),
+                ctx.accounts.asset_token_program.to_account_info(),
             ],
             &[claimable_tokens_seeds],
         )?;

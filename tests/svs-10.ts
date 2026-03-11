@@ -7,6 +7,7 @@ import {
   TOKEN_PROGRAM_ID,
   TOKEN_2022_PROGRAM_ID,
   getAccount,
+  getMint,
   getAssociatedTokenAddressSync,
   ASSOCIATED_TOKEN_PROGRAM_ID,
 } from "@solana/spl-token";
@@ -237,8 +238,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
           vaultId,
           "SVS Async Vault",
           "svAVLT",
-          "https://example.com/svs-10.json",
-          operatorKeypair.publicKey
+          "https://example.com/svs-10.json"
         )
         .accountsStrict({
           authority: payer.publicKey,
@@ -549,7 +549,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
 
     it("fulfill_redeem: operator burns shares, creates claimable accounts", async () => {
       const vaultBefore = await program.account.asyncVault.fetch(vault);
-      const sharesMintBefore = await getAccount(
+      const sharesMintBefore = await getMint(
         connection,
         sharesMint,
         undefined,
@@ -583,7 +583,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
       const escrowAccount = await program.account.claimableEscrow.fetch(
         claimableEscrow
       );
-      const sharesMintAfter = await getAccount(
+      const sharesMintAfter = await getMint(
         connection,
         sharesMint,
         undefined,
@@ -592,7 +592,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
 
       // Shares burned
       expect(
-        Number(sharesMintBefore.amount) - Number(sharesMintAfter.amount)
+        Number(sharesMintBefore.supply) - Number(sharesMintAfter.supply)
       ).to.equal(sharesToRedeem.toNumber());
 
       // Vault state reduced
