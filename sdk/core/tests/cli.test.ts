@@ -86,6 +86,9 @@ describe("CLI Module", () => {
       expect(commands).to.include("timelock");
       expect(commands).to.include("strategy");
       expect(commands).to.include("portfolio");
+
+      // Async vault (SVS-10)
+      expect(commands).to.include("async");
     });
 
     it("has correct version", () => {
