@@ -741,7 +741,7 @@ await vault.unpause(authority);
 await vault.setVaultOperator(authority, newOperator);
 
 // Operator approvals (delegated claims)
-await vault.approveOperator(owner, operatorPubkey, true);
+await vault.approveOperator(owner, operatorPubkey, false, false, true);
 await vault.revokeOperator(owner, operatorPubkey);
 ```
 

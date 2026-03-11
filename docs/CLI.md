@@ -595,6 +595,142 @@ Generate batch file template.
 
 ---
 
+### Async Vault Commands (SVS-10)
+
+Commands for async vaults with request→fulfill→claim lifecycle.
+
+All async commands live under the `async` subcommand:
+
+```bash
+solana-vault async <command> [options]
+```
+
+#### `async request-deposit`
+Lock assets and create a deposit request.
+
+```bash
+solana-vault async request-deposit --vault <VAULT_ADDRESS> --amount 1000000
+```
+
+| Option | Description |
+|--------|-------------|
+| `--vault <address>` | Vault address (required) |
+| `--amount <amount>` | Asset amount to deposit (required) |
+| `--receiver <pubkey>` | Receiver of shares (default: signer) |
+
+#### `async fulfill-deposit`
+Operator fulfills a pending deposit request.
+
+```bash
+solana-vault async fulfill-deposit --vault <VAULT_ADDRESS> --owner <USER_PUBKEY>
+```
+
+| Option | Description |
+|--------|-------------|
+| `--vault <address>` | Vault address (required) |
+| `--owner <pubkey>` | Request owner (required) |
+
+#### `async claim-deposit`
+Claim shares from a fulfilled deposit.
+
+```bash
+solana-vault async claim-deposit --vault <VAULT_ADDRESS> --owner <USER_PUBKEY>
+```
+
+#### `async cancel-deposit`
+Cancel a pending deposit and reclaim assets (after cancel delay).
+
+```bash
+solana-vault async cancel-deposit --vault <VAULT_ADDRESS>
+```
+
+#### `async request-redeem`
+Lock shares and create a redeem request.
+
+```bash
+solana-vault async request-redeem --vault <VAULT_ADDRESS> --shares 500000000000
+```
+
+| Option | Description |
+|--------|-------------|
+| `--vault <address>` | Vault address (required) |
+| `--shares <amount>` | Share amount to redeem (required) |
+| `--receiver <pubkey>` | Receiver of assets (default: signer) |
+
+#### `async fulfill-redeem`
+Operator fulfills a pending redeem request.
+
+```bash
+solana-vault async fulfill-redeem --vault <VAULT_ADDRESS> --owner <USER_PUBKEY>
+```
+
+#### `async claim-redeem`
+Claim assets from a fulfilled redeem.
+
+```bash
+solana-vault async claim-redeem --vault <VAULT_ADDRESS> --owner <USER_PUBKEY>
+```
+
+#### `async cancel-redeem`
+Cancel a pending redeem and reclaim shares.
+
+```bash
+solana-vault async cancel-redeem --vault <VAULT_ADDRESS>
+```
+
+#### `async show-request`
+Display all request states for a user.
+
+```bash
+solana-vault async show-request --vault <VAULT_ADDRESS> --owner <USER_PUBKEY>
+```
+
+#### `async init-oracle`
+Initialize an oracle price account for a vault.
+
+```bash
+solana-vault async init-oracle --vault <VAULT_ADDRESS> --price 1000000000
+```
+
+| Option | Description |
+|--------|-------------|
+| `--vault <address>` | Vault address (required) |
+| `--price <amount>` | Initial price (scaled by 1e9) (required) |
+
+#### `async update-oracle`
+Update the oracle price.
+
+```bash
+solana-vault async update-oracle --vault <VAULT_ADDRESS> --price 1050000000
+```
+
+#### Complete Async Vault Lifecycle
+
+```bash
+# 1. User requests deposit
+solana-vault async request-deposit --vault <VAULT> --amount 1000000
+
+# 2. Operator fulfills
+solana-vault async fulfill-deposit --vault <VAULT> --owner <USER>
+
+# 3. User claims shares
+solana-vault async claim-deposit --vault <VAULT> --owner <USER>
+
+# 4. User requests redeem
+solana-vault async request-redeem --vault <VAULT> --shares 500000000000
+
+# 5. Operator fulfills
+solana-vault async fulfill-redeem --vault <VAULT> --owner <USER>
+
+# 6. User claims assets
+solana-vault async claim-redeem --vault <VAULT> --owner <USER>
+
+# Check request status at any point
+solana-vault async show-request --vault <VAULT> --owner <USER>
+```
+
+---
+
 ### Confidential Commands (SVS-3/SVS-4)
 
 Commands for vaults with Token-2022 confidential transfers.
@@ -977,3 +1113,4 @@ solana-vault fees show my-vault
 - [SVS-2](./SVS-2.md) - Stored balance vault specification
 - [SVS-3](./SVS-3.md) - Confidential live balance vault
 - [SVS-4](./SVS-4.md) - Confidential stored balance vault
+- [SVS-10](./SVS-10.md) - Async vault (ERC-7540)
