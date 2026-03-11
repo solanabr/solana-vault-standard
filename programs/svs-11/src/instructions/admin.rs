@@ -1,5 +1,6 @@
 use anchor_lang::prelude::*;
 
+use crate::constants::VAULT_SEED;
 use crate::error::VaultError;
 use crate::events::{AuthorityTransferred, ManagerChanged, SasConfigUpdated, VaultStatusChanged};
 use crate::state::CreditVault;
@@ -11,7 +12,11 @@ pub struct Admin<'info> {
     )]
     pub authority: Signer<'info>,
 
-    #[account(mut)]
+    #[account(
+        mut,
+        seeds = [VAULT_SEED, vault.asset_mint.as_ref(), &vault.vault_id.to_le_bytes()],
+        bump = vault.bump,
+    )]
     pub vault: Account<'info, CreditVault>,
 }
 
