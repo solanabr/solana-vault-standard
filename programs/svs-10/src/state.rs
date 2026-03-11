@@ -23,7 +23,8 @@ pub struct AsyncVault {
     pub max_deviation_bps: u16,
     pub bump: u8,
     pub share_escrow_bump: u8,
-    pub _reserved: [u8; 63],
+    pub cancel_after: i64,
+    pub _reserved: [u8; 64],
 }
 
 impl AsyncVault {
@@ -43,7 +44,8 @@ impl AsyncVault {
         2 +   // max_deviation_bps
         1 +   // bump
         1 +   // share_escrow_bump
-        63; // _reserved
+        8 +   // cancel_after
+        64; // _reserved
 
     pub const SEED_PREFIX: &'static [u8] = VAULT_SEED;
 }

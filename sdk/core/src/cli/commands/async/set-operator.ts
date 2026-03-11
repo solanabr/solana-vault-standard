@@ -12,7 +12,11 @@ export function registerSetOperatorCommand(program: Command): void {
     .description("Set or revoke an operator for an SVS-10 vault")
     .argument("<vault>", "Vault address or alias")
     .requiredOption("--operator <pubkey>", "Operator address")
-    .option("--can-fulfill-deposit", "Allow operator to fulfill deposits", false)
+    .option(
+      "--can-fulfill-deposit",
+      "Allow operator to fulfill deposits",
+      false,
+    )
     .option("--can-fulfill-redeem", "Allow operator to fulfill redeems", false)
     .option("--can-claim", "Allow operator to claim on behalf of owner", false)
     .option("--all", "Grant all permissions", false)
@@ -38,15 +42,20 @@ export function registerSetOperatorCommand(program: Command): void {
       const canFulfillDeposit = opts.all || opts.canFulfillDeposit;
       const canFulfillRedeem = opts.all || opts.canFulfillRedeem;
       const canClaim = opts.all || opts.canClaim;
-      const anyApproved = !opts.revoke && (canFulfillDeposit || canFulfillRedeem || canClaim);
+      const anyApproved =
+        !opts.revoke && (canFulfillDeposit || canFulfillRedeem || canClaim);
 
       if (!opts.revoke && !anyApproved) {
         output.warn(
           "No permission flags specified. This will revoke all permissions for the operator.",
         );
-        output.warn("Use --can-fulfill-deposit, --can-fulfill-redeem, --can-claim, or --all to grant permissions.");
+        output.warn(
+          "Use --can-fulfill-deposit, --can-fulfill-redeem, --can-claim, or --all to grant permissions.",
+        );
         if (!options.yes) {
-          const confirmed = await output.confirm("Continue with revoking all permissions?");
+          const confirmed = await output.confirm(
+            "Continue with revoking all permissions?",
+          );
           if (!confirmed) {
             output.warn("Aborted.");
             return;
@@ -68,7 +77,9 @@ export function registerSetOperatorCommand(program: Command): void {
         if (opts.revoke) {
           output.info("Action: Revoke all permissions");
         } else {
-          output.info(`Permissions: fulfill_deposit=${canFulfillDeposit} fulfill_redeem=${canFulfillRedeem} claim=${canClaim}`);
+          output.info(
+            `Permissions: fulfill_deposit=${canFulfillDeposit} fulfill_redeem=${canFulfillRedeem} claim=${canClaim}`,
+          );
         }
 
         if (options.dryRun) {

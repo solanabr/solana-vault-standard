@@ -101,3 +101,9 @@ pub struct VaultOperatorChanged {
     pub old_operator: Pubkey,
     pub new_operator: Pubkey,
 }
+
+#[event]
+pub struct CancelAfterChanged {
+    pub vault: Pubkey,
+    pub cancel_after: i64,
+}

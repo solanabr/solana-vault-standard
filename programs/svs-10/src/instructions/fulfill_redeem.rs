@@ -106,6 +106,14 @@ pub fn handler(ctx: Context<FulfillRedeem>, oracle_price: Option<u64>) -> Result
         );
     }
 
+    if vault.cancel_after > 0 {
+        let deadline = redeem_request
+            .requested_at
+            .checked_add(vault.cancel_after)
+            .ok_or(VaultError::MathOverflow)?;
+        require!(clock.unix_timestamp < deadline, VaultError::RequestExpired);
+    }
+
     #[cfg(feature = "modules")]
     {
         let remaining = ctx.remaining_accounts;

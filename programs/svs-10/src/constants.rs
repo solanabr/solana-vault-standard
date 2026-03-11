@@ -1,6 +1,6 @@
 //! Program constants: PDA seeds, limits, and decimals configuration.
 
-pub const VAULT_SEED: &[u8] = b"vault";
+pub const VAULT_SEED: &[u8] = b"async_vault";
 pub const SHARES_MINT_SEED: &[u8] = b"shares";
 pub const SHARE_ESCROW_SEED: &[u8] = b"share_escrow";
 pub const DEPOSIT_REQUEST_SEED: &[u8] = b"deposit_request";
@@ -12,3 +12,4 @@ pub const MAX_DECIMALS: u8 = 9;
 pub const SHARES_DECIMALS: u8 = 9;
 pub const MIN_DEPOSIT_AMOUNT: u64 = 1000;
 pub const DEFAULT_MAX_DEVIATION_BPS: u16 = 500; // 5%
+pub const DEFAULT_CANCEL_AFTER: i64 = 0; // disabled by default

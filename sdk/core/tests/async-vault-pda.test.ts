@@ -36,7 +36,7 @@ describe("SDK Async Vault PDA Module", () => {
 
   describe("Seed constants", () => {
     it("ASYNC_VAULT_SEED is correct", () => {
-      expect(ASYNC_VAULT_SEED.toString()).to.equal("vault");
+      expect(ASYNC_VAULT_SEED.toString()).to.equal("async_vault");
     });
 
     it("ASYNC_SHARES_MINT_SEED is correct", () => {

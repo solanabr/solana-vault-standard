@@ -200,9 +200,10 @@ pub fn handler(
     vault.paused = false;
     vault.max_staleness = 0;
     vault.max_deviation_bps = DEFAULT_MAX_DEVIATION_BPS;
+    vault.cancel_after = crate::constants::DEFAULT_CANCEL_AFTER;
     vault.bump = vault_bump;
     vault.share_escrow_bump = share_escrow_bump;
-    vault._reserved = [0u8; 63];
+    vault._reserved = [0u8; 64];
 
     // --- 6. Emit event ---
     emit!(VaultInitialized {

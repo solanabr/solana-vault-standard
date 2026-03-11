@@ -4,7 +4,7 @@ use anchor_lang::prelude::*;
 
 use crate::{
     error::VaultError,
-    events::{AuthorityTransferred, VaultOperatorChanged, VaultStatusChanged},
+    events::{AuthorityTransferred, CancelAfterChanged, VaultOperatorChanged, VaultStatusChanged},
     state::AsyncVault,
 };
 
@@ -86,5 +86,17 @@ pub fn set_vault_operator(ctx: Context<Admin>, new_operator: Pubkey) -> Result<(
         new_operator,
     });
 
+    Ok(())
+}
+
+pub fn set_cancel_after(ctx: Context<Admin>, cancel_after: i64) -> Result<()> {
+    require!(cancel_after >= 0, VaultError::InvalidParameter);
+
+    ctx.accounts.vault.cancel_after = cancel_after;
+
+    emit!(CancelAfterChanged {
+        vault: ctx.accounts.vault.key(),
+        cancel_after,
+    });
     Ok(())
 }

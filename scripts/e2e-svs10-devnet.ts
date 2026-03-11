@@ -59,7 +59,7 @@ function accountLink(addr: string): string {
 // PDA helpers
 function getVaultPDA(assetMint: PublicKey, vaultId: BN): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
-    [Buffer.from("vault"), assetMint.toBuffer(), vaultId.toArrayLike(Buffer, "le", 8)],
+    [Buffer.from("async_vault"), assetMint.toBuffer(), vaultId.toArrayLike(Buffer, "le", 8)],
     PROGRAM_ID,
   );
 }
@@ -379,6 +379,7 @@ async function main() {
       depositRequest: depositRequest2,
       assetTokenProgram: TOKEN_PROGRAM_ID,
       systemProgram: SystemProgram.programId,
+      clock: SYSVAR_CLOCK_PUBKEY,
     })
     .rpc();
 
@@ -422,6 +423,7 @@ async function main() {
       redeemRequest: redeemRequest2,
       token2022Program: TOKEN_2022_PROGRAM_ID,
       systemProgram: SystemProgram.programId,
+      clock: SYSVAR_CLOCK_PUBKEY,
     })
     .rpc();
 
@@ -593,6 +595,7 @@ async function main() {
       depositRequest: viewDepRequest,
       assetTokenProgram: TOKEN_PROGRAM_ID,
       systemProgram: SystemProgram.programId,
+      clock: SYSVAR_CLOCK_PUBKEY,
     })
     .rpc();
 

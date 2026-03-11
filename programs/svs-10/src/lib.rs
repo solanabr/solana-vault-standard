@@ -86,6 +86,10 @@ pub mod svs_10 {
         instructions::admin::set_vault_operator(ctx, new_operator)
     }
 
+    pub fn set_cancel_after(ctx: Context<Admin>, cancel_after: i64) -> Result<()> {
+        instructions::admin::set_cancel_after(ctx, cancel_after)
+    }
+
     pub fn set_operator(
         ctx: Context<SetOperator>,
         operator: Pubkey,

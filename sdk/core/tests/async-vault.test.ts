@@ -33,10 +33,12 @@ const AsyncVaultErrorCode = {
   InsufficientLiquidity: 6012,
   OracleDeviationExceeded: 6013,
   InvalidRequestOwner: 6014,
-  GlobalCapExceeded: 6015,
-  EntryFeeExceedsMax: 6016,
-  LockDurationExceedsMax: 6017,
-  InvalidAddress: 6018,
+  RequestExpired: 6015,
+  GlobalCapExceeded: 6016,
+  EntryFeeExceedsMax: 6017,
+  LockDurationExceedsMax: 6018,
+  InvalidAddress: 6019,
+  InvalidParameter: 6020,
 } as const;
 
 function parseAsyncVaultError(
@@ -90,7 +92,9 @@ describe("SDK Async Vault Module", () => {
         paused: false,
         maxStaleness: new BN(60),
         maxDeviationBps: 500,
+        cancelAfter: new BN(86400),
         bump: 255,
+        shareEscrowBump: 254,
       };
 
       expect(state.authority).to.be.instanceOf(PublicKey);
@@ -106,7 +110,9 @@ describe("SDK Async Vault Module", () => {
       expect(state.paused).to.be.a("boolean");
       expect(state.maxStaleness).to.be.instanceOf(BN);
       expect(state.maxDeviationBps).to.be.a("number");
+      expect(state.cancelAfter).to.be.instanceOf(BN);
       expect(state.bump).to.be.a("number");
+      expect(state.shareEscrowBump).to.be.a("number");
     });
 
     it("supports paused state", () => {
@@ -124,7 +130,9 @@ describe("SDK Async Vault Module", () => {
         paused: true,
         maxStaleness: new BN(60),
         maxDeviationBps: 500,
+        cancelAfter: new BN(86400),
         bump: 254,
+        shareEscrowBump: 253,
       };
 
       expect(state.paused).to.be.true;
@@ -145,7 +153,9 @@ describe("SDK Async Vault Module", () => {
         paused: false,
         maxStaleness: new BN(3600),
         maxDeviationBps: 1000,
+        cancelAfter: new BN(3600),
         bump: 255,
+        shareEscrowBump: 254,
       };
 
       expect(state.totalAssets.toString()).to.equal("18446744073709551615");
@@ -167,7 +177,9 @@ describe("SDK Async Vault Module", () => {
         paused: false,
         maxStaleness: new BN(60),
         maxDeviationBps: 500,
+        cancelAfter: new BN(86400),
         bump: 255,
+        shareEscrowBump: 254,
       };
 
       expect(state.totalPendingDeposits.toNumber()).to.equal(5_000_000);
@@ -552,10 +564,12 @@ describe("SDK Async Vault Module", () => {
       expect(AsyncVaultErrorCode.InsufficientLiquidity).to.equal(6012);
       expect(AsyncVaultErrorCode.OracleDeviationExceeded).to.equal(6013);
       expect(AsyncVaultErrorCode.InvalidRequestOwner).to.equal(6014);
-      expect(AsyncVaultErrorCode.GlobalCapExceeded).to.equal(6015);
-      expect(AsyncVaultErrorCode.EntryFeeExceedsMax).to.equal(6016);
-      expect(AsyncVaultErrorCode.LockDurationExceedsMax).to.equal(6017);
-      expect(AsyncVaultErrorCode.InvalidAddress).to.equal(6018);
+      expect(AsyncVaultErrorCode.RequestExpired).to.equal(6015);
+      expect(AsyncVaultErrorCode.GlobalCapExceeded).to.equal(6016);
+      expect(AsyncVaultErrorCode.EntryFeeExceedsMax).to.equal(6017);
+      expect(AsyncVaultErrorCode.LockDurationExceedsMax).to.equal(6018);
+      expect(AsyncVaultErrorCode.InvalidAddress).to.equal(6019);
+      expect(AsyncVaultErrorCode.InvalidParameter).to.equal(6020);
     });
 
     it("error codes are sequential from 6000", () => {

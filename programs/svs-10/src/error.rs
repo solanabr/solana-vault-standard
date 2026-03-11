@@ -49,6 +49,9 @@ pub enum VaultError {
     #[msg("Caller is not the request owner")]
     InvalidRequestOwner,
 
+    #[msg("Request has expired past cancel_after deadline")]
+    RequestExpired,
+
     // Module errors (available with "modules" feature)
     #[msg("Deposit would exceed global vault cap")]
     GlobalCapExceeded,
@@ -61,4 +64,7 @@ pub enum VaultError {
 
     #[msg("Invalid address: cannot be the zero address")]
     InvalidAddress,
+
+    #[msg("Invalid parameter value")]
+    InvalidParameter,
 }

@@ -30,7 +30,7 @@ The `total_pending_deposits` field ensures that assets waiting in deposit reques
 
 | Account | Seeds | Authority |
 |---------|-------|-----------|
-| Vault | `["vault", asset_mint, vault_id.to_le_bytes()]` | User-specified on `initialize` |
+| Vault | `["async_vault", asset_mint, vault_id.to_le_bytes()]` | User-specified on `initialize` |
 | Shares Mint | `["shares", vault_pubkey]` | Vault PDA |
 | Asset Vault | ATA of `asset_mint` for Vault PDA | Vault PDA |
 | Share Escrow | `["share_escrow", vault_pubkey]` | Vault PDA |
@@ -59,7 +59,8 @@ pub struct AsyncVault {
     pub max_deviation_bps: u16,         // 2  — max oracle vs vault price deviation (default 500 = 5%)
     pub bump: u8,                       // 1  — stored vault PDA bump
     pub share_escrow_bump: u8,          // 1  — stored share escrow PDA bump
-    pub _reserved: [u8; 63],            // 63
+    pub cancel_after: i64,              // 8  — operator liveness timeout (0 = disabled)
+    pub _reserved: [u8; 64],            // 64
 }
 
 #[account]
@@ -102,6 +103,10 @@ pub struct OperatorApproval {
     pub can_claim: bool,                // 1
     pub bump: u8,                       // 1
 }
+// The implementation uses granular permissions (can_fulfill_deposit,
+// can_fulfill_redeem, can_claim) as an enhancement over the spec's simple
+// approved: bool, enabling more flexible delegation patterns such as
+// granting an operator fulfillment rights without claim authority.
 
 pub enum RequestStatus {
     Pending,
@@ -134,6 +139,7 @@ pub enum RequestStatus {
 | `transfer_authority` | `authority` | Transfer vault authority to new pubkey |
 | `set_vault_operator` | `authority` | Set or replace vault operator |
 | `set_operator` | `owner` | Delegate granular permissions to an operator (fulfill_deposit, fulfill_redeem, claim) |
+| `set_cancel_after` | `authority` | Set operator liveness timeout (authority only). 0 = disabled. |
 
 ### View Instructions
 
@@ -303,6 +309,10 @@ The operator role is semi-trusted:
 - Operator cannot drain the vault — `fulfill_redeem` only burns escrowed shares and transfers from vault AUM
 - Authority can replace operator at any time via `set_vault_operator`
 
+### Operator Liveness Protection
+
+The `cancel_after` field on `AsyncVault` is configurable by the authority (default `0` = disabled). When set to a non-zero duration in seconds, any request whose age exceeds `cancel_after` can be cancelled by the owner even if the vault is paused. Operators cannot fulfill expired requests. This protects users from permanently stuck funds if the operator goes offline or becomes unresponsive — the owner always retains a path to recover locked assets or shares after the timeout elapses.
+
 ### Pause Mechanism
 
 When `vault.paused = true`:
@@ -310,6 +320,8 @@ When `vault.paused = true`:
 - Operator fulfill instructions also fail (`fulfill_deposit`, `fulfill_redeem`)
 - Admin instructions still work (`unpause`, `transfer_authority`, `set_vault_operator`)
 - View instructions still work
+
+**Pause bypass for expired cancellations**: When `cancel_after > 0` and a request has aged past the `cancel_after` deadline, `cancel_deposit` and `cancel_redeem` are allowed even while the vault is paused. This is the escape hatch that prevents a malicious authority from pausing the vault and going offline to permanently lock user funds. The owner always retains a path to recover locked assets or shares after the timeout elapses, regardless of pause state.
 
 ## Design Decisions
 
@@ -395,10 +407,12 @@ npx ts-node scripts/e2e-svs10-devnet.ts
 | 6012 | `InsufficientLiquidity` | Insufficient liquidity in vault |
 | 6013 | `OracleDeviationExceeded` | Oracle price deviation exceeds maximum |
 | 6014 | `InvalidRequestOwner` | Caller is not the request owner |
-| 6015 | `GlobalCapExceeded` | Deposit would exceed global vault cap |
-| 6016 | `EntryFeeExceedsMax` | Entry fee exceeds maximum |
-| 6017 | `LockDurationExceedsMax` | Lock duration exceeds maximum |
-| 6018 | `InvalidAddress` | Invalid address: cannot be the zero address |
+| 6015 | `RequestExpired` | Request has expired past cancel_after deadline |
+| 6016 | `GlobalCapExceeded` | Deposit would exceed global vault cap |
+| 6017 | `EntryFeeExceedsMax` | Entry fee exceeds maximum |
+| 6018 | `LockDurationExceedsMax` | Lock duration exceeds maximum |
+| 6019 | `InvalidAddress` | Invalid address: cannot be the zero address |
+| 6020 | `InvalidParameter` | Invalid parameter value |
 
 ## Differences from Synchronous Variants
 

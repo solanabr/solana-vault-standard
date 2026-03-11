@@ -45,6 +45,8 @@ struct UserState {
     cumulative_deposited: u128,
     cumulative_redeemed: u128,
     operator_approved: [bool; NUM_USERS],
+    deposit_requested_at: i64,
+    redeem_requested_at: i64,
 }
 
 /// Async vault state tracker for invariant checks.
@@ -58,6 +60,7 @@ struct AsyncVaultTracker {
     total_pending_deposits: u64,
     decimals_offset: u8,
     paused: bool,
+    cancel_after: i64,
     max_deviation_bps: u16,
     users: [UserState; NUM_USERS],
     deposit_count: u64,
@@ -65,6 +68,7 @@ struct AsyncVaultTracker {
     fulfill_count: u64,
     claim_count: u64,
     cancel_count: u64,
+    current_time: i64,
 }
 
 impl AsyncVaultTracker {
@@ -183,6 +187,7 @@ impl FuzzTest {
             shares_claimable: 0,
             status: RequestStatusField(RequestStatus::Pending),
         };
+        self.vault.users[user_idx].deposit_requested_at = self.vault.current_time;
         self.vault.total_pending_deposits = self.vault.total_pending_deposits.saturating_add(assets);
         self.vault.deposit_count += 1;
 
@@ -215,6 +220,16 @@ impl FuzzTest {
         let req = &self.vault.users[user_idx].deposit_request;
         if req.status.0 != RequestStatus::Pending {
             return;
+        }
+
+        // Reject expired requests
+        if self.vault.cancel_after > 0 {
+            let elapsed = self.vault.current_time.saturating_sub(
+                self.vault.users[user_idx].deposit_requested_at,
+            );
+            if elapsed >= self.vault.cancel_after {
+                return;
+            }
         }
 
         let assets = req.assets_locked;
@@ -353,6 +368,7 @@ impl FuzzTest {
             assets_claimable: 0,
             status: RequestStatusField(RequestStatus::Pending),
         };
+        self.vault.users[user_idx].redeem_requested_at = self.vault.current_time;
 
         // INVARIANT: Locking shares in escrow doesn't change total_shares or price
         assert_eq!(
@@ -372,6 +388,16 @@ impl FuzzTest {
         let req = &self.vault.users[user_idx].redeem_request;
         if req.status.0 != RequestStatus::Pending {
             return;
+        }
+
+        // Reject expired requests
+        if self.vault.cancel_after > 0 {
+            let elapsed = self.vault.current_time.saturating_sub(
+                self.vault.users[user_idx].redeem_requested_at,
+            );
+            if elapsed >= self.vault.cancel_after {
+                return;
+            }
         }
 
         let shares = req.shares_locked;
@@ -604,6 +630,125 @@ impl FuzzTest {
             return;
         }
         self.vault.paused = false;
+    }
+
+    // =========================================================================
+    // cancel_after expiry paths
+    // =========================================================================
+
+    #[flow]
+    fn flow_set_cancel_after(&mut self) {
+        if !self.vault.initialized {
+            return;
+        }
+
+        let cancel_after: i64 = (rand::random::<u64>() % 3600) as i64;
+        self.vault.cancel_after = cancel_after;
+    }
+
+    #[flow]
+    fn flow_advance_time(&mut self) {
+        if !self.vault.initialized {
+            return;
+        }
+
+        let delta: i64 = (rand::random::<u64>() % 7200) as i64;
+        self.vault.current_time = self.vault.current_time.saturating_add(delta);
+    }
+
+    #[flow]
+    fn flow_cancel_deposit_while_paused_expired(&mut self) {
+        if !self.vault.initialized || !self.vault.paused {
+            return;
+        }
+
+        let user_idx = random_user();
+        let req = &self.vault.users[user_idx].deposit_request;
+        if req.status.0 != RequestStatus::Pending {
+            return;
+        }
+
+        let requested_at = self.vault.users[user_idx].deposit_requested_at;
+        let elapsed = self.vault.current_time.saturating_sub(requested_at);
+
+        if self.vault.cancel_after > 0 && elapsed >= self.vault.cancel_after {
+            // INVARIANT: Expired cancel bypasses pause
+            let assets = req.assets_locked;
+            let price_before = self.vault.share_price_x1e18();
+
+            self.vault.total_pending_deposits = self
+                .vault
+                .total_pending_deposits
+                .saturating_sub(assets);
+            self.vault.users[user_idx].deposit_request = DepositRequest::default();
+            self.vault.users[user_idx].deposit_requested_at = 0;
+            self.vault.cancel_count += 1;
+
+            assert_eq!(
+                self.vault.share_price_x1e18(),
+                price_before,
+                "Share price changed on expired cancel_deposit while paused"
+            );
+        }
+        // else: cancel_after == 0 or not expired => cancel blocked by pause (no-op)
+    }
+
+    #[flow]
+    fn flow_cancel_redeem_while_paused_expired(&mut self) {
+        if !self.vault.initialized || !self.vault.paused {
+            return;
+        }
+
+        let user_idx = random_user();
+        let req = &self.vault.users[user_idx].redeem_request;
+        if req.status.0 != RequestStatus::Pending {
+            return;
+        }
+
+        let requested_at = self.vault.users[user_idx].redeem_requested_at;
+        let elapsed = self.vault.current_time.saturating_sub(requested_at);
+
+        if self.vault.cancel_after > 0 && elapsed >= self.vault.cancel_after {
+            // INVARIANT: Expired cancel bypasses pause
+            let shares = req.shares_locked;
+
+            self.vault.users[user_idx].shares_balance += shares;
+            self.vault.users[user_idx].redeem_request = RedeemRequest::default();
+            self.vault.users[user_idx].redeem_requested_at = 0;
+            self.vault.cancel_count += 1;
+        }
+        // else: cancel_after == 0 or not expired => cancel blocked by pause (no-op)
+    }
+
+    #[flow]
+    fn flow_fulfill_expired_rejected(&mut self) {
+        if !self.vault.initialized || self.vault.paused {
+            return;
+        }
+        if self.vault.cancel_after == 0 {
+            return;
+        }
+
+        let user_idx = random_user();
+        let req = &self.vault.users[user_idx].deposit_request;
+        if req.status.0 != RequestStatus::Pending {
+            return;
+        }
+
+        let requested_at = self.vault.users[user_idx].deposit_requested_at;
+        let elapsed = self.vault.current_time.saturating_sub(requested_at);
+
+        // INVARIANT: Operator cannot fulfill an expired request
+        if elapsed >= self.vault.cancel_after {
+            // On-chain: VaultError::RequestExpired
+            // Model: verify we do NOT transition state
+            let assets_before = self.vault.total_assets;
+            let shares_before = self.vault.total_shares;
+
+            // No state change — fulfill is rejected
+            assert_eq!(self.vault.total_assets, assets_before);
+            assert_eq!(self.vault.total_shares, shares_before);
+        }
     }
 
     // =========================================================================

@@ -1,7 +1,7 @@
 import { PublicKey } from "@solana/web3.js";
 import { BN } from "@coral-xyz/anchor";
 
-export const ASYNC_VAULT_SEED = Buffer.from("vault");
+export const ASYNC_VAULT_SEED = Buffer.from("async_vault");
 export const ASYNC_SHARES_MINT_SEED = Buffer.from("shares");
 export const SHARE_ESCROW_SEED = Buffer.from("share_escrow");
 export const DEPOSIT_REQUEST_SEED = Buffer.from("deposit_request");

@@ -46,7 +46,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
   // PDA helpers
   const getVaultPDA = (am: PublicKey, vid: BN): [PublicKey, number] => {
     return PublicKey.findProgramAddressSync(
-      [Buffer.from("vault"), am.toBuffer(), vid.toArrayLike(Buffer, "le", 8)],
+      [Buffer.from("async_vault"), am.toBuffer(), vid.toArrayLike(Buffer, "le", 8)],
       program.programId
     );
   };
@@ -341,6 +341,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
           depositRequest,
           assetTokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
+          clock: SYSVAR_CLOCK_PUBKEY,
         })
         .rpc();
 
@@ -372,6 +373,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
             depositRequest,
             assetTokenProgram: TOKEN_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
+            clock: SYSVAR_CLOCK_PUBKEY,
           })
           .rpc();
         expect.fail("Should have thrown");
@@ -508,6 +510,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
           redeemRequest,
           token2022Program: TOKEN_2022_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
+          clock: SYSVAR_CLOCK_PUBKEY,
         })
         .rpc();
 
@@ -695,6 +698,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
           depositRequest,
           assetTokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
+          clock: SYSVAR_CLOCK_PUBKEY,
         })
         .rpc();
     });
@@ -1065,6 +1069,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
           depositRequest,
           assetTokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
+          clock: SYSVAR_CLOCK_PUBKEY,
         })
         .rpc();
     });
@@ -1104,6 +1109,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
             depositRequest: randoDepositRequest,
             assetTokenProgram: TOKEN_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
+            clock: SYSVAR_CLOCK_PUBKEY,
           })
           .signers([rando])
           .rpc();
@@ -1124,6 +1130,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
           depositRequest,
           assetTokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
+          clock: SYSVAR_CLOCK_PUBKEY,
         })
         .rpc();
     });
@@ -1469,6 +1476,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
           depositRequest: user3DepositRequest,
           assetTokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
+          clock: SYSVAR_CLOCK_PUBKEY,
         })
         .signers([user3])
         .rpc();
@@ -1530,6 +1538,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
           depositRequest,
           assetTokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
+          clock: SYSVAR_CLOCK_PUBKEY,
         })
         .rpc();
     });

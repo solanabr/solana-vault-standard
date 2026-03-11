@@ -17,10 +17,7 @@ pub struct CancelDeposit<'info> {
     #[account(mut)]
     pub user: Signer<'info>,
 
-    #[account(
-        mut,
-        constraint = !vault.paused @ VaultError::VaultPaused,
-    )]
+    #[account(mut)]
     pub vault: Account<'info, AsyncVault>,
 
     #[account(
@@ -52,10 +49,25 @@ pub struct CancelDeposit<'info> {
     pub deposit_request: Account<'info, DepositRequest>,
 
     pub asset_token_program: Interface<'info, TokenInterface>,
+    pub clock: Sysvar<'info, Clock>,
     pub system_program: Program<'info, System>,
 }
 
 pub fn handler(ctx: Context<CancelDeposit>) -> Result<()> {
+    let vault = &ctx.accounts.vault;
+    let is_expired = vault.cancel_after > 0
+        && ctx.accounts.clock.unix_timestamp
+            >= ctx
+                .accounts
+                .deposit_request
+                .requested_at
+                .checked_add(vault.cancel_after)
+                .ok_or(VaultError::MathOverflow)?;
+
+    if vault.paused && !is_expired {
+        return Err(VaultError::VaultPaused.into());
+    }
+
     let assets_to_return = ctx.accounts.deposit_request.assets_locked;
 
     let asset_mint_key = ctx.accounts.vault.asset_mint;

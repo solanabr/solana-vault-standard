@@ -35,7 +35,9 @@ export interface AsyncVaultState {
   paused: boolean;
   maxStaleness: BN;
   maxDeviationBps: number;
+  cancelAfter: BN;
   bump: number;
+  shareEscrowBump: number;
 }
 
 export interface CreateAsyncVaultParams {
@@ -83,7 +85,7 @@ export interface DepositRequestState {
   vault: PublicKey;
   assetsLocked: BN;
   sharesClaimable: BN;
-  status: { pending: {} } | { fulfilled: {} } | { claimed: {} } | { cancelled: {} };
+  status: { pending: {} } | { fulfilled: {} };
   requestedAt: BN;
   fulfilledAt: BN;
   bump: number;
@@ -95,7 +97,7 @@ export interface RedeemRequestState {
   vault: PublicKey;
   sharesLocked: BN;
   assetsClaimable: BN;
-  status: { pending: {} } | { fulfilled: {} } | { claimed: {} } | { cancelled: {} };
+  status: { pending: {} } | { fulfilled: {} };
   requestedAt: BN;
   fulfilledAt: BN;
   bump: number;
@@ -324,6 +326,7 @@ export class AsyncVault {
         depositRequest,
         assetTokenProgram: this.assetTokenProgram,
         systemProgram: SystemProgram.programId,
+        clock: SYSVAR_CLOCK_PUBKEY,
       })
       .rpc();
   }
@@ -446,6 +449,7 @@ export class AsyncVault {
         redeemRequest,
         token2022Program: TOKEN_2022_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
+        clock: SYSVAR_CLOCK_PUBKEY,
       })
       .rpc();
   }
@@ -548,7 +552,12 @@ export class AsyncVault {
     );
 
     return this.program.methods
-      .setOperator(params.operator, params.canFulfillDeposit, params.canFulfillRedeem, params.canClaim)
+      .setOperator(
+        params.operator,
+        params.canFulfillDeposit,
+        params.canFulfillRedeem,
+        params.canClaim,
+      )
       .accountsStrict({
         owner,
         vault: this.vault,
@@ -602,6 +611,16 @@ export class AsyncVault {
       .accountsStrict({
         authority,
         vault: this.vault,
+      })
+      .rpc();
+  }
+
+  async setCancelAfter(cancelAfter: BN): Promise<string> {
+    return this.program.methods
+      .setCancelAfter(cancelAfter)
+      .accounts({
+        vault: this.vault,
+        authority: this.provider.wallet.publicKey,
       })
       .rpc();
   }

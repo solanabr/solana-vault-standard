@@ -60,6 +60,14 @@ pub fn handler(ctx: Context<FulfillDeposit>, oracle_price: Option<u64>) -> Resul
         );
     }
 
+    if vault.cancel_after > 0 {
+        let deadline = deposit_request
+            .requested_at
+            .checked_add(vault.cancel_after)
+            .ok_or(VaultError::MathOverflow)?;
+        require!(clock.unix_timestamp < deadline, VaultError::RequestExpired);
+    }
+
     #[cfg(feature = "modules")]
     {
         let remaining = ctx.remaining_accounts;
