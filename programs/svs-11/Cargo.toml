@@ -1,0 +1,24 @@
+[package]
+name = "svs-11"
+version = "0.1.0"
+description = "SVS-11: Credit Markets Vault — KYC-gated, NAV-oracle, investment windows"
+edition = "2021"
+license = "MIT"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "svs_11"
+
+[features]
+default = []
+cpi = ["no-entrypoint"]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
+
+[dependencies]
+anchor-lang = { version = "0.31.1", features = ["init-if-needed"] }
+anchor-spl = { version = "0.31.1", features = ["token", "token_2022", "associated_token"] }
+spl-token-2022 = "6.0.0"
+svs-math = { path = "../../modules/svs-math" }
