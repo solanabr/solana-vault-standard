@@ -16,8 +16,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - PDA-owned escrow accounts: asset_vault, share_escrow, per-user claimable_tokens
 - Vault-priced fulfillment with stored balance model
 - Delta-based deposit accounting for Token-2022 transfer fee safety
-- SDK: `AsyncVault` class and `async-pda` PDA derivation helpers
-- 39 integration tests covering all lifecycle paths, bug prevention, and edge cases
+- Oracle-priced fulfillment (Mode A) with `OraclePrice` PDA and `svs-oracle` validation
+- Vault-priced fallback (Mode B) when no oracle account provided
+- Module compatibility (`--features modules`): fees, caps, locks, access hooks
+- Module admin instructions: init/update for fee, cap, lock, access configs
+- Security hardening: 8 findings patched + 14 regression tests
+- SDK: `AsyncVault` class with full typed IDL (zero `any` types) and `async-pda` PDA helpers
+- SDK: 25 unit tests for async PDA derivation
+- CLI: SVS-10 registered as variant with program ID
+- Documentation: `docs/SVS-10.md` with full specification
+- 154 integration tests (59 SVS-10 including 7 oracle tests)
 
 ## [0.3.0] - 2026-03-06
 

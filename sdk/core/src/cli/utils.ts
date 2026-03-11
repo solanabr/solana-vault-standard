@@ -60,7 +60,13 @@ export function findIdlPath(variant?: SvsVariant): string | null {
   }
 
   // Fall back to first available IDL
-  const idlNames = ["svs_1.json", "svs_2.json", "svs_3.json", "svs_4.json"];
+  const idlNames = [
+    "svs_1.json",
+    "svs_2.json",
+    "svs_3.json",
+    "svs_4.json",
+    "svs_10.json",
+  ];
   for (const name of idlNames) {
     const idlPath = path.join(IDL_BASE_PATH, name);
     if (fs.existsSync(idlPath)) {

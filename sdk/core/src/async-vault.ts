@@ -6,7 +6,6 @@ import {
   Keypair,
 } from "@solana/web3.js";
 import {
-  TOKEN_PROGRAM_ID,
   TOKEN_2022_PROGRAM_ID,
   getAssociatedTokenAddressSync,
 } from "@solana/spl-token";
@@ -24,6 +23,7 @@ import {
   getOperatorApprovalAddress,
 } from "./async-pda";
 import { getTokenProgramForMint } from "./vault";
+import type { Svs10 } from "../../../target/types/svs_10";
 
 export interface AsyncVaultState {
   authority: PublicKey;
@@ -58,7 +58,7 @@ export class AsyncVault {
   private _state: AsyncVaultState | null = null;
 
   private constructor(
-    readonly program: Program<any>,
+    readonly program: Program<Svs10>,
     readonly assetMint: PublicKey,
     readonly vaultId: BN,
   ) {
@@ -77,7 +77,7 @@ export class AsyncVault {
   }
 
   static async load(
-    program: Program<any>,
+    program: Program<Svs10>,
     assetMint: PublicKey,
     vaultId: BN | number,
   ): Promise<AsyncVault> {
@@ -91,13 +91,11 @@ export class AsyncVault {
   }
 
   async refresh(): Promise<void> {
-    this._state = await (this.program.account as any).asyncVault.fetch(
-      this.address,
-    );
+    this._state = await this.program.account.asyncVault.fetch(this.address);
   }
 
   static async initialize(
-    program: Program<any>,
+    program: Program<Svs10>,
     params: InitializeAsyncVaultParams,
     authority: Keypair,
   ): Promise<AsyncVault> {
@@ -226,9 +224,7 @@ export class AsyncVault {
       this.address,
       owner,
     );
-    const req = await (this.program.account as any).depositRequest.fetch(
-      depositRequest,
-    );
+    const req = await this.program.account.depositRequest.fetch(depositRequest);
     const receiverSharesAccount = getAssociatedTokenAddressSync(
       this.sharesMint,
       req.receiver,
@@ -324,9 +320,7 @@ export class AsyncVault {
       this.address,
       owner,
     );
-    const req = await (this.program.account as any).redeemRequest.fetch(
-      redeemRequest,
-    );
+    const req = await this.program.account.redeemRequest.fetch(redeemRequest);
     const assetTokenProgram = await getTokenProgramForMint(
       this.program.provider.connection,
       this.assetMint,
@@ -534,7 +528,7 @@ export class AsyncVault {
     const [pda] = getDepositRequestAddress(this.programId, this.address, owner);
     const info = await this.program.provider.connection.getAccountInfo(pda);
     if (!info) return new BN(0);
-    const req = await (this.program.account as any).depositRequest.fetch(pda);
+    const req = await this.program.account.depositRequest.fetch(pda);
     return req.status.pending ? req.assetsLocked : new BN(0);
   }
 
@@ -542,7 +536,7 @@ export class AsyncVault {
     const [pda] = getDepositRequestAddress(this.programId, this.address, owner);
     const info = await this.program.provider.connection.getAccountInfo(pda);
     if (!info) return new BN(0);
-    const req = await (this.program.account as any).depositRequest.fetch(pda);
+    const req = await this.program.account.depositRequest.fetch(pda);
     return req.status.fulfilled ? req.sharesClaimable : new BN(0);
   }
 
@@ -550,7 +544,7 @@ export class AsyncVault {
     const [pda] = getRedeemRequestAddress(this.programId, this.address, owner);
     const info = await this.program.provider.connection.getAccountInfo(pda);
     if (!info) return new BN(0);
-    const req = await (this.program.account as any).redeemRequest.fetch(pda);
+    const req = await this.program.account.redeemRequest.fetch(pda);
     return req.status.pending ? req.sharesLocked : new BN(0);
   }
 
@@ -562,9 +556,7 @@ export class AsyncVault {
     );
     const info = await this.program.provider.connection.getAccountInfo(pda);
     if (!info) return new BN(0);
-    const escrow = await (this.program.account as any).claimableEscrow.fetch(
-      pda,
-    );
+    const escrow = await this.program.account.claimableEscrow.fetch(pda);
     return escrow.amount;
   }
 }

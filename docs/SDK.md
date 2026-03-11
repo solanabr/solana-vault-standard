@@ -4,7 +4,7 @@ Complete guide to using the SVS TypeScript SDKs.
 
 | SDK | Package | Purpose |
 |-----|---------|---------|
-| Core | `@stbr/solana-vault` | SVS-1/SVS-2 public vaults |
+| Core | `@stbr/solana-vault` | SVS-1/SVS-2 public vaults + SVS-10 async vaults |
 | Privacy | `@stbr/svs-privacy-sdk` | SVS-3/SVS-4 confidential vaults + Privacy Cash |
 
 ---
@@ -695,6 +695,74 @@ if (variant === "svs-1" || variant === "svs-2") {
 - [Events](./EVENTS.md) - Event definitions for indexers
 - [Security](./SECURITY.md) - Security considerations
 - [Testing](./TESTING.md) - Test coverage
+
+---
+
+# SVS-10 Async Vault SDK
+
+The Core SDK includes `AsyncVault` for SVS-10 async vaults (ERC-7540 port).
+
+## Quick Start
+
+```typescript
+import { AsyncVault } from "@stbr/solana-vault";
+import { BN } from "@coral-xyz/anchor";
+
+// Load existing async vault
+const vault = await AsyncVault.load(program, assetMint, vaultId);
+
+// Deposit lifecycle
+await vault.requestDeposit(user, new BN(1_000_000));     // Lock assets
+await vault.fulfillDeposit(operator, user.publicKey);     // Operator fulfills
+await vault.claimDeposit(user, user.publicKey);           // Claim shares
+
+// Redeem lifecycle
+await vault.requestRedeem(user, new BN(500_000));         // Lock shares
+await vault.fulfillRedeem(operator, user.publicKey);      // Operator fulfills
+await vault.claimRedeem(user, user.publicKey);            // Claim assets
+
+// Cancel (after cancel_delay elapses)
+await vault.cancelDeposit(user);
+await vault.cancelRedeem(user);
+
+// View request status
+const pending = await vault.pendingDepositRequest(user.publicKey);
+const claimable = await vault.claimableDepositRequest(user.publicKey);
+```
+
+## Admin Operations
+
+```typescript
+// Pause/unpause
+await vault.pause(authority);
+await vault.unpause(authority);
+
+// Change operator
+await vault.setVaultOperator(authority, newOperator);
+
+// Operator approvals (delegated claims)
+await vault.approveOperator(owner, operatorPubkey, true);
+await vault.revokeOperator(owner, operatorPubkey);
+```
+
+## PDA Derivation
+
+```typescript
+import {
+  getAsyncVaultAddress,
+  getDepositRequestAddress,
+  getRedeemRequestAddress,
+  getOperatorApprovalAddress,
+  deriveAsyncVaultAddresses,
+} from "@stbr/solana-vault";
+
+const [vault] = getAsyncVaultAddress(programId, assetMint, vaultId);
+const [depositReq] = getDepositRequestAddress(programId, vault, owner);
+const [redeemReq] = getRedeemRequestAddress(programId, vault, owner);
+const addrs = deriveAsyncVaultAddresses(programId, assetMint, vaultId);
+```
+
+See [SVS-10.md](./SVS-10.md) for full specification.
 
 ---
 

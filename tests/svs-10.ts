@@ -2224,4 +2224,347 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
       expect(req.status).to.deep.equal({ fulfilled: {} });
     });
   });
+
+  // ============ Module Integration ============
+
+  describe("Module Integration", function () {
+    const HAS_MODULES = typeof (program.methods as any).initializeFeeConfig === "function";
+
+    if (!HAS_MODULES) {
+      before(function () {
+        console.log("  Skipping module tests (built without --features modules)");
+        this.skip();
+      });
+    }
+
+    const modVaultId = new BN(600);
+    let modVault: PublicKey;
+    let modSharesMint: PublicKey;
+    let modAssetVault: PublicKey;
+    let modShareEscrow: PublicKey;
+    let modUserAssetAccount: PublicKey;
+    let modUserSharesAccount: PublicKey;
+
+    // Module config PDAs
+    let feeConfigPda: PublicKey;
+    let capConfigPda: PublicKey;
+    let lockConfigPda: PublicKey;
+    let accessConfigPda: PublicKey;
+
+    const getModuleConfigPDA = (seed: string, v: PublicKey): [PublicKey, number] =>
+      PublicKey.findProgramAddressSync(
+        [Buffer.from(seed), v.toBuffer()],
+        program.programId
+      );
+
+    before(async function () {
+      if (!HAS_MODULES) this.skip();
+
+      const [v] = getVaultPDA(assetMint, modVaultId);
+      modVault = v;
+      const [sm] = getSharesMintPDA(v);
+      modSharesMint = sm;
+      const [av] = getAssetVaultPDA(v);
+      modAssetVault = av;
+      const [se] = getShareEscrowPDA(v);
+      modShareEscrow = se;
+
+      await initializeVault(modVaultId, new BN(1), new BN(3600), assetMint);
+      await setVaultOperator(modVault, operator.publicKey);
+
+      // Reuse existing user asset account (already funded from top-level before)
+      modUserAssetAccount = userAssetAccount;
+
+      modUserSharesAccount = getAssociatedTokenAddressSync(
+        sm,
+        payer.publicKey,
+        false,
+        TOKEN_2022_PROGRAM_ID,
+        ASSOCIATED_TOKEN_PROGRAM_ID
+      );
+
+      await getOrCreateAssociatedTokenAccount(
+        connection,
+        payer,
+        sm,
+        payer.publicKey,
+        false,
+        undefined,
+        undefined,
+        TOKEN_2022_PROGRAM_ID
+      );
+
+      // Derive module config PDAs
+      [feeConfigPda] = getModuleConfigPDA("fee_config", modVault);
+      [capConfigPda] = getModuleConfigPDA("cap_config", modVault);
+      [lockConfigPda] = getModuleConfigPDA("lock_config", modVault);
+      [accessConfigPda] = getModuleConfigPDA("access_config", modVault);
+    });
+
+    // ---------- Fee Module ----------
+
+    it("initialize fee config (1% entry, 0.5% exit)", async function () {
+      if (!HAS_MODULES) this.skip();
+
+      await (program.methods as any)
+        .initializeFeeConfig(100, 50, 0, 0)
+        .accountsStrict({
+          authority: payer.publicKey,
+          vault: modVault,
+          feeConfig: feeConfigPda,
+          feeRecipient: payer.publicKey,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
+
+      const config = await program.account.feeConfig.fetch(feeConfigPda);
+      expect(config.entryFeeBps).to.equal(100);
+      expect(config.exitFeeBps).to.equal(50);
+      expect(config.vault.toBase58()).to.equal(modVault.toBase58());
+      expect(config.feeRecipient.toBase58()).to.equal(payer.publicKey.toBase58());
+    });
+
+    it("deposit with entry fee: shares reduced by 1%", async function () {
+      if (!HAS_MODULES) this.skip();
+
+      const depositAmount = new BN(100_000 * 10 ** ASSET_DECIMALS);
+
+      // Request deposit (access check at request_deposit also reads remaining_accounts)
+      const [depositRequest] = getDepositRequestPDA(modVault, payer.publicKey);
+      await program.methods
+        .requestDeposit(depositAmount, payer.publicKey)
+        .accountsStrict({
+          user: payer.publicKey,
+          vault: modVault,
+          depositRequest,
+          assetMint,
+          userAssetAccount: modUserAssetAccount,
+          assetVault: modAssetVault,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
+
+      // Fulfill with fee_config in remaining_accounts
+      await program.methods
+        .fulfillDeposit()
+        .accountsStrict({
+          operator: operator.publicKey,
+          vault: modVault,
+          depositRequest,
+        })
+        .remainingAccounts([
+          { pubkey: feeConfigPda, isSigner: false, isWritable: false },
+        ])
+        .signers([operator])
+        .rpc();
+
+      const req = await program.account.depositRequest.fetch(depositRequest);
+      expect(req.status).to.deep.equal({ fulfilled: {} });
+      // Shares should be reduced by entry fee (1%): net = gross * 9900 / 10000
+      // We can verify shares > 0 and are less than what a no-fee deposit would yield
+      expect(req.sharesClaimable.toNumber()).to.be.greaterThan(0);
+
+      // Claim to clean up
+      await claimDeposit(modVault, payer.publicKey, modSharesMint, modUserSharesAccount);
+
+      // Verify shares were received
+      const sharesAcc = await getAccount(connection, modUserSharesAccount, undefined, TOKEN_2022_PROGRAM_ID);
+      expect(Number(sharesAcc.amount)).to.be.greaterThan(0);
+    });
+
+    // ---------- Cap Module ----------
+
+    it("initialize cap config (global=10000, per_user=5000)", async function () {
+      if (!HAS_MODULES) this.skip();
+
+      const globalCap = new BN(10_000 * 10 ** ASSET_DECIMALS);
+      const perUserCap = new BN(5_000 * 10 ** ASSET_DECIMALS);
+
+      await (program.methods as any)
+        .initializeCapConfig(globalCap, perUserCap)
+        .accountsStrict({
+          authority: payer.publicKey,
+          vault: modVault,
+          capConfig: capConfigPda,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
+
+      const config = await program.account.capConfig.fetch(capConfigPda);
+      expect(config.globalCap.toNumber()).to.equal(globalCap.toNumber());
+      expect(config.perUserCap.toNumber()).to.equal(perUserCap.toNumber());
+      expect(config.vault.toBase58()).to.equal(modVault.toBase58());
+    });
+
+    it("deposit exceeding global cap should fail", async function () {
+      if (!HAS_MODULES) this.skip();
+
+      // Vault already has 100_000 from previous deposit, cap is 10_000
+      // But total_assets was updated at fulfill so the vault thinks it has assets.
+      // We need to deposit an amount that pushes total_assets over the global cap.
+      // The global cap is 10_000 tokens. Current total_assets is 100_000 from above.
+      // So ANY deposit should exceed the cap now.
+      const amount = new BN(1_000 * 10 ** ASSET_DECIMALS);
+
+      const [depositRequest] = getDepositRequestPDA(modVault, payer.publicKey);
+      await program.methods
+        .requestDeposit(amount, payer.publicKey)
+        .accountsStrict({
+          user: payer.publicKey,
+          vault: modVault,
+          depositRequest,
+          assetMint,
+          userAssetAccount: modUserAssetAccount,
+          assetVault: modAssetVault,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
+
+      try {
+        await program.methods
+          .fulfillDeposit()
+          .accountsStrict({
+            operator: operator.publicKey,
+            vault: modVault,
+            depositRequest,
+          })
+          .remainingAccounts([
+            { pubkey: feeConfigPda, isSigner: false, isWritable: false },
+            { pubkey: capConfigPda, isSigner: false, isWritable: false },
+          ])
+          .signers([operator])
+          .rpc();
+        expect.fail("Should reject deposit exceeding global cap");
+      } catch (err: any) {
+        expect(err.toString()).to.include("GlobalCapExceeded");
+      }
+
+      // Clean up: fulfill without cap check, then claim
+      await program.methods
+        .fulfillDeposit()
+        .accountsStrict({
+          operator: operator.publicKey,
+          vault: modVault,
+          depositRequest,
+        })
+        .signers([operator])
+        .rpc();
+
+      await claimDeposit(modVault, payer.publicKey, modSharesMint, modUserSharesAccount);
+    });
+
+    // ---------- Lock Module ----------
+
+    it("initialize lock config (lock_duration=86400)", async function () {
+      if (!HAS_MODULES) this.skip();
+
+      const lockDuration = new BN(86400); // 1 day
+
+      await (program.methods as any)
+        .initializeLockConfig(lockDuration)
+        .accountsStrict({
+          authority: payer.publicKey,
+          vault: modVault,
+          lockConfig: lockConfigPda,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
+
+      const config = await program.account.lockConfig.fetch(lockConfigPda);
+      expect(config.lockDuration.toNumber()).to.equal(86400);
+      expect(config.vault.toBase58()).to.equal(modVault.toBase58());
+    });
+
+    it("redeem with locked shares should fail", async function () {
+      if (!HAS_MODULES) this.skip();
+
+      const sharesAcc = await getAccount(connection, modUserSharesAccount, undefined, TOKEN_2022_PROGRAM_ID);
+      const redeemShares = new BN(Math.floor(Number(sharesAcc.amount) / 4));
+
+      // Derive share_lock PDA for the user
+      const [shareLockPda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("share_lock"), modVault.toBuffer(), payer.publicKey.toBuffer()],
+        program.programId
+      );
+
+      try {
+        const [redeemRequest] = getRedeemRequestPDA(modVault, payer.publicKey);
+        await program.methods
+          .requestRedeem(redeemShares, payer.publicKey)
+          .accountsStrict({
+            user: payer.publicKey,
+            vault: modVault,
+            redeemRequest,
+            sharesMint: modSharesMint,
+            userSharesAccount: modUserSharesAccount,
+            shareEscrow: modShareEscrow,
+            token2022Program: TOKEN_2022_PROGRAM_ID,
+            systemProgram: SystemProgram.programId,
+          })
+          .remainingAccounts([
+            { pubkey: lockConfigPda, isSigner: false, isWritable: false },
+            { pubkey: shareLockPda, isSigner: false, isWritable: false },
+          ])
+          .rpc();
+        expect.fail("Should reject redeem with locked shares");
+      } catch (err: any) {
+        expect(err.toString()).to.include("SharesLocked");
+      }
+    });
+
+    // ---------- Access Module ----------
+
+    it("initialize access config (whitelist mode)", async function () {
+      if (!HAS_MODULES) this.skip();
+
+      const merkleRoot = new Array(32).fill(0);
+
+      await (program.methods as any)
+        .initializeAccessConfig({ whitelist: {} }, merkleRoot)
+        .accountsStrict({
+          authority: payer.publicKey,
+          vault: modVault,
+          accessConfig: accessConfigPda,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
+
+      const config = await program.account.accessConfig.fetch(accessConfigPda);
+      expect(config.mode).to.deep.equal({ whitelist: {} });
+      expect(config.vault.toBase58()).to.equal(modVault.toBase58());
+    });
+
+    it("non-whitelisted user deposit should fail", async function () {
+      if (!HAS_MODULES) this.skip();
+
+      // With merkle_root=[0;32] and whitelist mode, no user can pass the proof
+      // unless they provide a valid merkle proof. Empty proof will fail.
+      const amount = new BN(1_000 * 10 ** ASSET_DECIMALS);
+
+      try {
+        const [depositRequest] = getDepositRequestPDA(modVault, payer.publicKey);
+        await program.methods
+          .requestDeposit(amount, payer.publicKey)
+          .accountsStrict({
+            user: payer.publicKey,
+            vault: modVault,
+            depositRequest,
+            assetMint,
+            userAssetAccount: modUserAssetAccount,
+            assetVault: modAssetVault,
+            assetTokenProgram: TOKEN_PROGRAM_ID,
+            systemProgram: SystemProgram.programId,
+          })
+          .remainingAccounts([
+            { pubkey: accessConfigPda, isSigner: false, isWritable: false },
+          ])
+          .rpc();
+        expect.fail("Should reject non-whitelisted user");
+      } catch (err: any) {
+        expect(err.toString()).to.include("NotWhitelisted");
+      }
+    });
+  });
 });

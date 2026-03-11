@@ -68,6 +68,7 @@ import { registerEmergencyCommands } from "./commands/emergency";
 import { registerTimelockCommands } from "./commands/timelock";
 import { registerStrategyCommands } from "./commands/strategy";
 import { registerPortfolioCommands } from "./commands/portfolio";
+import { registerAsyncVaultCommands } from "./commands/async-vault";
 
 /**
  * Create and configure the CLI program.
@@ -102,6 +103,9 @@ export function createCli(): Command {
   registerTimelockCommands(program);
   registerStrategyCommands(program);
   registerPortfolioCommands(program);
+
+  // Async vault (SVS-10)
+  registerAsyncVaultCommands(program);
 
   return program;
 }

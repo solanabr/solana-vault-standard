@@ -10,6 +10,7 @@ export const REDEEM_REQUEST_SEED = Buffer.from("redeem_request");
 export const CLAIMABLE_SEED = Buffer.from("claimable");
 export const CLAIMABLE_TOKENS_SEED = Buffer.from("claimable_tokens");
 export const OPERATOR_APPROVAL_SEED = Buffer.from("operator_approval");
+export const ORACLE_PRICE_SEED = Buffer.from("oracle_price");
 
 export function getAsyncVaultAddress(
   programId: PublicKey,
@@ -110,6 +111,16 @@ export function getOperatorApprovalAddress(
       owner.toBuffer(),
       operator.toBuffer(),
     ],
+    programId,
+  );
+}
+
+export function getOraclePriceAddress(
+  programId: PublicKey,
+  vault: PublicKey,
+): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [ORACLE_PRICE_SEED, vault.toBuffer()],
     programId,
   );
 }
