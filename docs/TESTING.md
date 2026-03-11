@@ -1,6 +1,6 @@
 # Testing Guide
 
-Comprehensive guide to testing the Solana Vault Standard (SVS-1 through SVS-4).
+Comprehensive guide to testing the Solana Vault Standard (SVS-1 through SVS-4, SVS-10).
 
 ## Overview
 
@@ -45,8 +45,11 @@ cd sdk && yarn test
 # Run Rust unit tests
 cargo test --manifest-path programs/svs-1/Cargo.toml
 
-# Run SVS-10 tests (35 tests)
+# Run SVS-10 tests (88 tests)
 anchor test -- tests/svs-10.ts
+
+# Run SVS-10 SDK tests (70 tests)
+cd sdk/core && npx mocha --no-config -r ts-node/register --timeout 10000 --exit tests/async-vault-pda.test.ts tests/async-vault.test.ts
 
 # Run proof backend tests (19 tests)
 cd proofs-backend && cargo test
@@ -58,6 +61,7 @@ cd trident-tests && cargo build
 trident fuzz run fuzz_0  # SVS-1 math + modules
 trident fuzz run fuzz_1  # SVS-2 stored balance
 trident fuzz run fuzz_3  # SVS-3/4 CT state machine
+trident fuzz run fuzz_4  # SVS-10 async vault
 
 # Run fuzz tests (actual program calls — requires anchor build -p svs_1)
 trident fuzz run fuzz_2
@@ -82,7 +86,8 @@ Located in `tests/`:
 | `invariants.ts` | Mathematical invariants | 15 |
 | `admin-extended.ts` | Admin operations | 10 |
 | `full-lifecycle.ts` | End-to-end flows | 8 |
-| **Total** | | **256** |
+| `svs-10.ts` | SVS-10 async vault lifecycle, operators, oracle | 88 |
+| **Total** | | **344** |
 
 **Note:** SVS-3/SVS-4 confidential transfer tests require the proof backend running (`cd proofs-backend && cargo run`). Without it, CT-dependent tests are automatically skipped.
 
@@ -100,8 +105,10 @@ Located in `sdk/core/tests/`:
 
 | File | Category | Tests |
 |------|----------|-------|
-| All test files | Full SDK coverage | 460 |
-| **Total** | | **460** |
+| SVS-1/2/3/4 test files | Core SDK coverage | 460 |
+| `async-vault-pda.test.ts` | SVS-10 PDA derivation | 29 |
+| `async-vault.test.ts` | SVS-10 interfaces, params, errors | 41 |
+| **Total** | | **530** |
 
 ### Fuzz Tests (Trident)
 
@@ -113,6 +120,7 @@ Located in `trident-tests/`. Uses `svs-math` and `svs-fees` crates directly — 
 | `fuzz_1` | 3 | SVS-2 stored balance vs actual balance, sync, yield | 5000 × 80 |
 | `fuzz_2` | 4 | SVS-1 actual program calls (dual-oracle) | 2000 × 40 |
 | `fuzz_3` | 5 | SVS-3/4 CT state machine, SVS-4 sync timing | 5000 × 80 |
+| `fuzz_4` | 6 | SVS-10 async vault state machine, operator permissions | 5000 × 80 |
 
 **fuzz_0 flows (SVS-1 simulation + modules):**
 - Core: `flow_deposit`, `flow_mint`, `flow_withdraw`, `flow_redeem`, `flow_roundtrip_deposit_redeem`, `flow_inflation_attack`, `flow_zero_edge_cases`, `flow_max_value_edge_cases`
@@ -138,6 +146,15 @@ Located in `trident-tests/`. Uses `svs-math` and `svs-fees` crates directly — 
 - `flow_double_apply_pending`, `flow_withdraw_insufficient_available`, `flow_freeze_account`, `flow_unfreeze_account`
 - SVS-4: `flow_external_yield`, `flow_sync`, `flow_sync_with_pending_shares`
 - Invariants: unconfigured users can't deposit, double apply is no-op, withdraw only from available, stored ≤ actual
+
+**fuzz_4 flows (SVS-10 async vault):**
+- Core: `flow_request_deposit`, `flow_fulfill_deposit`, `flow_claim_deposit`, `flow_cancel_deposit`
+- Redeem: `flow_request_redeem`, `flow_fulfill_redeem`, `flow_claim_redeem`, `flow_cancel_redeem`
+- Oracle: `flow_fulfill_deposit_oracle` (deviation check)
+- Operator: `flow_set_operator`, `flow_operator_claim_deposit`
+- Admin: `flow_pause`, `flow_unpause`
+- Round-trip: `flow_full_roundtrip` (deposit→fulfill→claim→redeem→fulfill→claim)
+- Invariants: share price monotonicity, round-trip no free assets, share accounting, inflation attack resistance
 
 ## Running Tests
 
@@ -601,11 +618,11 @@ grcov . -s . --binary-path ./target/debug/ -t html --branch --ignore-not-existin
 
 | Category | Coverage |
 |----------|----------|
-| Integration Tests (SVS-1/2/3/4) | 256 tests |
+| Integration Tests (SVS-1/2/3/4/10) | 344 tests |
 | Proof Backend Tests | 19 tests |
-| SDK Tests | 460 tests |
-| Fuzz Tests | 4 binaries, 40+ flows |
-| **Total** | **775+ test cases** |
+| SDK Tests | 530 tests |
+| Fuzz Tests | 5 binaries, 60+ flows |
+| **Total** | **933+ test cases** |
 
 ## Debugging Tests
 
@@ -690,6 +707,17 @@ For attacker donating D tokens to empty vault:
 After sync(): vault.total_assets == asset_vault.amount
 ```
 
+### 7. Async Pending Isolation (SVS-10)
+```
+total_pending_deposits does not affect share price
+available_liquidity = asset_vault.amount - total_pending_deposits
+```
+
+### 8. Async Round-Trip Safety (SVS-10)
+```
+claim_redeem(fulfill_redeem(request_redeem(claim_deposit(fulfill_deposit(request_deposit(X)))))) <= X
+```
+
 ---
 
 ## Test File Naming Convention
@@ -732,6 +760,10 @@ trident init
 | `fuzz_2` | `initialize` → `deposit` → `preview_deposit` | Oracle matches program output |
 | `fuzz_3` | `configure` → `ct_deposit` → `apply_pending` → `withdraw` | CT state machine validity |
 | `fuzz_3` | `sync` with pending shares | Sync increases share price |
+| `fuzz_4` | `request_deposit` → `fulfill` → `claim` → `redeem` → `fulfill` → `claim` | No free assets (round-trip) |
+| `fuzz_4` | `set_operator` → `operator_claim_deposit` | Unapproved operator blocked |
+| `fuzz_4` | `pause` → `request_deposit` | Paused vault rejects operations |
+| `fuzz_4` | `fulfill_deposit_oracle` with deviation | Oracle deviation > 500 BPS rejected |
 
 ### Invariant Summary
 
@@ -757,6 +789,12 @@ deposit(assets, min_shares_out=oracle_prediction) succeeds
 unconfigured users cannot deposit
 withdraw only from available balance (not pending)
 double apply_pending is no-op
+
+# Async vault (fuzz_4)
+share price never decreases on fulfill
+round-trip: assets_back <= assets_in
+sum(pending_deposits) == total_pending_deposits
+unapproved operators cannot fulfill or claim
 ```
 
 ---
