@@ -57,8 +57,10 @@ pub fn handler(ctx: Context<FulfillDeposit>) -> Result<()> {
             svs_oracle::OracleError::UnauthorizedUpdate => VaultError::Unauthorized,
             svs_oracle::OracleError::PriceDeviationExceeded => VaultError::InvalidOraclePrice,
         })?;
-        svs_oracle::assets_to_shares(request.assets_locked, price)
-            .map_err(|_| VaultError::MathOverflow)?
+        svs_oracle::assets_to_shares(request.assets_locked, price).map_err(|e| match e {
+            svs_oracle::OracleError::MathOverflow => VaultError::MathOverflow,
+            _ => VaultError::InvalidOraclePrice,
+        })?
     } else {
         convert_to_shares(
             request.assets_locked,
@@ -92,6 +94,8 @@ pub fn handler(ctx: Context<FulfillDeposit>) -> Result<()> {
 
     #[cfg(not(feature = "modules"))]
     let shares = gross_shares;
+
+    require!(shares > 0, VaultError::ZeroAmount);
 
     // Bug #1: Increment totals HERE only (claim_deposit must NOT touch these)
     let vault = &mut ctx.accounts.vault;

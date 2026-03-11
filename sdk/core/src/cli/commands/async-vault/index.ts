@@ -867,10 +867,16 @@ export function registerAsyncVaultCommands(program: Command): void {
           ? await vault.program.account.depositRequest
               .fetch(depositPda)
               .catch((err: Error) => {
-                output.warn(
-                  `Could not deserialize deposit request: ${err.message}`,
-                );
-                return null;
+                if (
+                  err.message.includes("discriminator") ||
+                  err.message.includes("Account does not exist")
+                ) {
+                  output.warn(
+                    `Could not deserialize deposit request: ${err.message}`,
+                  );
+                  return null;
+                }
+                throw err;
               })
           : null;
 
@@ -878,10 +884,16 @@ export function registerAsyncVaultCommands(program: Command): void {
           ? await vault.program.account.redeemRequest
               .fetch(redeemPda)
               .catch((err: Error) => {
-                output.warn(
-                  `Could not deserialize redeem request: ${err.message}`,
-                );
-                return null;
+                if (
+                  err.message.includes("discriminator") ||
+                  err.message.includes("Account does not exist")
+                ) {
+                  output.warn(
+                    `Could not deserialize redeem request: ${err.message}`,
+                  );
+                  return null;
+                }
+                throw err;
               })
           : null;
 
@@ -889,10 +901,16 @@ export function registerAsyncVaultCommands(program: Command): void {
           ? await vault.program.account.claimableEscrow
               .fetch(claimablePda)
               .catch((err: Error) => {
-                output.warn(
-                  `Could not deserialize claimable escrow: ${err.message}`,
-                );
-                return null;
+                if (
+                  err.message.includes("discriminator") ||
+                  err.message.includes("Account does not exist")
+                ) {
+                  output.warn(
+                    `Could not deserialize claimable escrow: ${err.message}`,
+                  );
+                  return null;
+                }
+                throw err;
               })
           : null;
 
@@ -900,10 +918,16 @@ export function registerAsyncVaultCommands(program: Command): void {
           ? await vault.program.account.oraclePrice
               .fetch(oraclePda)
               .catch((err: Error) => {
-                output.warn(
-                  `Could not deserialize oracle price: ${err.message}`,
-                );
-                return null;
+                if (
+                  err.message.includes("discriminator") ||
+                  err.message.includes("Account does not exist")
+                ) {
+                  output.warn(
+                    `Could not deserialize oracle price: ${err.message}`,
+                  );
+                  return null;
+                }
+                throw err;
               })
           : null;
 

@@ -47,6 +47,8 @@ pub struct UserState {
     pub redeem_request: RedeemRequestState,
     pub cumulative_deposited: u128,
     pub cumulative_redeemed: u128,
+    /// Number of completed deposit+redeem roundtrips (for rounding tolerance)
+    pub roundtrip_count: u64,
     /// Tracks previous deposit request status for monotonicity checking
     pub previous_deposit_status: RequestStatus,
     /// Tracks previous redeem request status for monotonicity checking

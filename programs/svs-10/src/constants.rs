@@ -11,7 +11,6 @@ pub const OPERATOR_APPROVAL_SEED: &[u8] = b"operator_approval";
 pub const MAX_DECIMALS: u8 = 9;
 pub const SHARES_DECIMALS: u8 = 9;
 
-pub const DEFAULT_CANCEL_DELAY: i64 = 86400; // 24 hours
 pub const MAX_CANCEL_DELAY: i64 = 604800; // 7 days
 
 pub const ORACLE_PRICE_SEED: &[u8] = b"oracle_price";

@@ -111,7 +111,10 @@ pub fn handler(ctx: Context<FulfillRedeem>) -> Result<()> {
             svs_oracle::OracleError::UnauthorizedUpdate => VaultError::Unauthorized,
             svs_oracle::OracleError::PriceDeviationExceeded => VaultError::InvalidOraclePrice,
         })?;
-        svs_oracle::shares_to_assets(shares_locked, price).map_err(|_| VaultError::MathOverflow)?
+        svs_oracle::shares_to_assets(shares_locked, price).map_err(|e| match e {
+            svs_oracle::OracleError::MathOverflow => VaultError::MathOverflow,
+            _ => VaultError::InvalidOraclePrice,
+        })?
     } else {
         convert_to_assets(
             shares_locked,
@@ -133,6 +136,8 @@ pub fn handler(ctx: Context<FulfillRedeem>) -> Result<()> {
 
     #[cfg(not(feature = "modules"))]
     let assets = gross_assets;
+
+    require!(assets > 0, VaultError::ZeroAmount);
 
     require!(
         ctx.accounts.asset_vault.amount >= assets,
@@ -163,7 +168,7 @@ pub fn handler(ctx: Context<FulfillRedeem>) -> Result<()> {
         shares_locked,
     )?;
 
-    // Create per-user claimable_tokens account if needed
+    // Create per-user claimable_tokens account (handles pre-funded PDAs)
     let claimable_tokens_bump = ctx.bumps.claimable_tokens;
     let owner_key = request.owner;
     let claimable_tokens_seeds: &[&[u8]] = &[
@@ -176,22 +181,58 @@ pub fn handler(ctx: Context<FulfillRedeem>) -> Result<()> {
     let token_account_size = spl_token_2022::state::Account::LEN;
     let rent = &ctx.accounts.rent;
     let lamports = rent.minimum_balance(token_account_size);
+    let claimable_tokens_info = ctx.accounts.claimable_tokens.to_account_info();
 
-    invoke_signed(
-        &anchor_lang::solana_program::system_instruction::create_account(
-            &ctx.accounts.operator.key(),
-            &ctx.accounts.claimable_tokens.key(),
-            lamports,
-            token_account_size as u64,
-            &ctx.accounts.asset_token_program.key(),
-        ),
-        &[
-            ctx.accounts.operator.to_account_info(),
-            ctx.accounts.claimable_tokens.to_account_info(),
-            ctx.accounts.system_program.to_account_info(),
-        ],
-        &[claimable_tokens_seeds],
-    )?;
+    if claimable_tokens_info.lamports() > 0 {
+        // PDA was pre-funded (griefing) — use allocate+assign instead of create_account
+        let deficit = lamports.saturating_sub(claimable_tokens_info.lamports());
+        if deficit > 0 {
+            anchor_lang::solana_program::program::invoke(
+                &anchor_lang::solana_program::system_instruction::transfer(
+                    &ctx.accounts.operator.key(),
+                    &ctx.accounts.claimable_tokens.key(),
+                    deficit,
+                ),
+                &[
+                    ctx.accounts.operator.to_account_info(),
+                    claimable_tokens_info.clone(),
+                    ctx.accounts.system_program.to_account_info(),
+                ],
+            )?;
+        }
+        invoke_signed(
+            &anchor_lang::solana_program::system_instruction::allocate(
+                &ctx.accounts.claimable_tokens.key(),
+                token_account_size as u64,
+            ),
+            &[claimable_tokens_info.clone()],
+            &[claimable_tokens_seeds],
+        )?;
+        invoke_signed(
+            &anchor_lang::solana_program::system_instruction::assign(
+                &ctx.accounts.claimable_tokens.key(),
+                &ctx.accounts.asset_token_program.key(),
+            ),
+            &[claimable_tokens_info.clone()],
+            &[claimable_tokens_seeds],
+        )?;
+    } else {
+        invoke_signed(
+            &anchor_lang::solana_program::system_instruction::create_account(
+                &ctx.accounts.operator.key(),
+                &ctx.accounts.claimable_tokens.key(),
+                lamports,
+                token_account_size as u64,
+                &ctx.accounts.asset_token_program.key(),
+            ),
+            &[
+                ctx.accounts.operator.to_account_info(),
+                claimable_tokens_info.clone(),
+                ctx.accounts.system_program.to_account_info(),
+            ],
+            &[claimable_tokens_seeds],
+        )?;
+    }
 
     invoke_signed(
         &spl_token_2022::instruction::initialize_account3(
@@ -201,7 +242,7 @@ pub fn handler(ctx: Context<FulfillRedeem>) -> Result<()> {
             &vault_key,
         )?,
         &[
-            ctx.accounts.claimable_tokens.to_account_info(),
+            claimable_tokens_info,
             ctx.accounts.asset_mint.to_account_info(),
         ],
         &[claimable_tokens_seeds],

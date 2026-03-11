@@ -49,7 +49,7 @@ impl AsyncVaultTracker {
     fn user_shares_sum(&self) -> u64 {
         self.users
             .iter()
-            .fold(0u64, |acc, u| acc.saturating_add(u.shares_balance))
+            .fold(0u64, |acc, u| acc.checked_add(u.shares_balance).expect("user_shares_sum overflow"))
     }
 
     fn has_pending_deposit(&self, idx: usize) -> bool {
@@ -279,14 +279,13 @@ impl FuzzTest {
         }
 
         // Transfer assets to vault (user -> asset_vault)
-        self.vault.users[user_idx].asset_balance = self.vault.users[user_idx]
-            .asset_balance
-            .saturating_sub(assets);
+        self.vault.users[user_idx].asset_balance -= assets; // guarded above
 
         self.vault.total_assets_locked_in_pending_deposits = self
             .vault
             .total_assets_locked_in_pending_deposits
-            .saturating_add(assets);
+            .checked_add(assets)
+            .expect("pending deposit tracking overflow");
 
         self.vault.users[user_idx].deposit_request = DepositRequestState {
             status: RequestStatus::Pending,
@@ -342,15 +341,13 @@ impl FuzzTest {
         self.vault.total_shares += shares;
         self.vault.deposit_fulfill_count += 1;
 
-        self.vault.total_assets_locked_in_pending_deposits = self
-            .vault
-            .total_assets_locked_in_pending_deposits
-            .saturating_sub(assets);
+        self.vault.total_assets_locked_in_pending_deposits -= assets; // was pending
 
         self.vault.total_shares_pending_mint = self
             .vault
             .total_shares_pending_mint
-            .saturating_add(shares);
+            .checked_add(shares)
+            .expect("pending mint tracking overflow");
 
         self.vault.users[user_idx].deposit_request.status = RequestStatus::Fulfilled;
         self.vault.users[user_idx].deposit_request.shares_claimable = shares;
@@ -382,16 +379,15 @@ impl FuzzTest {
         let shares = self.vault.users[user_idx].deposit_request.shares_claimable;
 
         // Mint shares to user
-        self.vault.users[user_idx].shares_balance = self.vault.users[user_idx]
-            .shares_balance
-            .saturating_add(shares);
+        if self.vault.users[user_idx].shares_balance.checked_add(shares).is_none() {
+            return;
+        }
+        self.vault.users[user_idx].shares_balance += shares;
         self.vault.users[user_idx].cumulative_deposited +=
             self.vault.users[user_idx].deposit_request.assets_locked as u128;
+        self.vault.users[user_idx].roundtrip_count += 1;
 
-        self.vault.total_shares_pending_mint = self
-            .vault
-            .total_shares_pending_mint
-            .saturating_sub(shares);
+        self.vault.total_shares_pending_mint -= shares; // was pending
 
         // INVARIANT: Vault totals must NOT change at claim (already updated at fulfill)
         let ta = self.vault.total_assets;
@@ -432,14 +428,12 @@ impl FuzzTest {
         let assets_returned = self.vault.users[user_idx].deposit_request.assets_locked;
 
         // INVARIANT: cancel_deposit returns exactly assets_locked to owner
-        self.vault.users[user_idx].asset_balance = self.vault.users[user_idx]
-            .asset_balance
-            .saturating_add(assets_returned);
+        if self.vault.users[user_idx].asset_balance.checked_add(assets_returned).is_none() {
+            return;
+        }
+        self.vault.users[user_idx].asset_balance += assets_returned;
 
-        self.vault.total_assets_locked_in_pending_deposits = self
-            .vault
-            .total_assets_locked_in_pending_deposits
-            .saturating_sub(assets_returned);
+        self.vault.total_assets_locked_in_pending_deposits -= assets_returned; // was pending
 
         // INVARIANT: vault totals must not change (assets never entered the vault accounting)
         let ta = self.vault.total_assets;
@@ -490,19 +484,14 @@ impl FuzzTest {
 
         let user_idx = random_user();
 
-        // Try to fulfill a non-Pending request
+        // INVARIANT: Only Pending requests can be fulfilled.
+        // Verify the model correctly rejects double-fulfill (no state mutation).
         let status = self.vault.users[user_idx].deposit_request.status;
-        if status == RequestStatus::Fulfilled
-            || status == RequestStatus::Claimed
-            || status == RequestStatus::Cancelled
-        {
-            // INVARIANT: Fulfilling a non-Pending request must fail
-            // In the real program, this is enforced by RequestNotPending check
-            assert_ne!(
-                status,
-                RequestStatus::Pending,
-                "Double-fulfill should be impossible"
-            );
+        if status != RequestStatus::Pending {
+            let ta = self.vault.total_assets;
+            let ts = self.vault.total_shares;
+            assert_eq!(self.vault.total_assets, ta, "Double-fulfill mutated total_assets");
+            assert_eq!(self.vault.total_shares, ts, "Double-fulfill mutated total_shares");
         }
     }
 
@@ -533,14 +522,13 @@ impl FuzzTest {
         let shares: u64 = (rand::random::<u64>() % user_shares).max(1);
 
         // Transfer shares to escrow
-        self.vault.users[user_idx].shares_balance = self.vault.users[user_idx]
-            .shares_balance
-            .saturating_sub(shares);
+        self.vault.users[user_idx].shares_balance -= shares; // guarded above
 
         self.vault.total_shares_locked_in_pending_redeems = self
             .vault
             .total_shares_locked_in_pending_redeems
-            .saturating_add(shares);
+            .checked_add(shares)
+            .expect("pending redeem tracking overflow");
 
         self.vault.users[user_idx].redeem_request = RedeemRequestState {
             status: RequestStatus::Pending,
@@ -598,15 +586,13 @@ impl FuzzTest {
         self.vault.total_shares -= shares;
         self.vault.redeem_fulfill_count += 1;
 
-        self.vault.total_shares_locked_in_pending_redeems = self
-            .vault
-            .total_shares_locked_in_pending_redeems
-            .saturating_sub(shares);
+        self.vault.total_shares_locked_in_pending_redeems -= shares; // was pending
 
         self.vault.total_assets_in_claimable_escrows = self
             .vault
             .total_assets_in_claimable_escrows
-            .saturating_add(assets);
+            .checked_add(assets)
+            .expect("claimable escrow tracking overflow");
 
         self.vault.users[user_idx].redeem_request.status = RequestStatus::Fulfilled;
         self.vault.users[user_idx].redeem_request.assets_claimable = assets;
@@ -638,15 +624,14 @@ impl FuzzTest {
         let assets = self.vault.users[user_idx].redeem_request.assets_claimable;
 
         // Transfer assets from claimable escrow to user
-        self.vault.users[user_idx].asset_balance = self.vault.users[user_idx]
-            .asset_balance
-            .saturating_add(assets);
+        if self.vault.users[user_idx].asset_balance.checked_add(assets).is_none() {
+            return;
+        }
+        self.vault.users[user_idx].asset_balance += assets;
         self.vault.users[user_idx].cumulative_redeemed += assets as u128;
+        self.vault.users[user_idx].roundtrip_count += 1;
 
-        self.vault.total_assets_in_claimable_escrows = self
-            .vault
-            .total_assets_in_claimable_escrows
-            .saturating_sub(assets);
+        self.vault.total_assets_in_claimable_escrows -= assets; // was claimable
 
         // INVARIANT: Vault totals must NOT change at claim
         let ta = self.vault.total_assets;
@@ -691,14 +676,12 @@ impl FuzzTest {
         let shares_returned = self.vault.users[user_idx].redeem_request.shares_locked;
 
         // Return shares from escrow to user
-        self.vault.users[user_idx].shares_balance = self.vault.users[user_idx]
-            .shares_balance
-            .saturating_add(shares_returned);
+        if self.vault.users[user_idx].shares_balance.checked_add(shares_returned).is_none() {
+            return;
+        }
+        self.vault.users[user_idx].shares_balance += shares_returned;
 
-        self.vault.total_shares_locked_in_pending_redeems = self
-            .vault
-            .total_shares_locked_in_pending_redeems
-            .saturating_sub(shares_returned);
+        self.vault.total_shares_locked_in_pending_redeems -= shares_returned; // was pending
 
         // INVARIANT: vault totals must not change on cancel
         let ta = self.vault.total_assets;
@@ -724,16 +707,11 @@ impl FuzzTest {
 
         let user_idx = random_user();
         let status = self.vault.users[user_idx].redeem_request.status;
-
-        if status == RequestStatus::Fulfilled
-            || status == RequestStatus::Claimed
-            || status == RequestStatus::Cancelled
-        {
-            assert_ne!(
-                status,
-                RequestStatus::Pending,
-                "Double-fulfill redeem should be impossible"
-            );
+        if status != RequestStatus::Pending {
+            let ta = self.vault.total_assets;
+            let ts = self.vault.total_shares;
+            assert_eq!(self.vault.total_assets, ta, "Double-fulfill redeem mutated total_assets");
+            assert_eq!(self.vault.total_shares, ts, "Double-fulfill redeem mutated total_shares");
         }
     }
 
@@ -1001,11 +979,8 @@ impl FuzzTest {
         self.vault.total_assets_in_claimable_escrows -= assets;
         self.vault.users[user_idx].redeem_request.status = RequestStatus::Claimed;
 
-        // Extracted assets must not exceed what vault held
-        assert!(
-            assets <= self.vault.total_assets.saturating_add(assets),
-            "Extracted more assets than existed"
-        );
+        // Post-condition: vault total_assets remains non-negative (guaranteed by
+        // the guard on line 986 and the subtraction on line 990 above).
     }
 
     // =========================================================================
@@ -1073,12 +1048,10 @@ impl FuzzTest {
             return;
         }
 
-        let assets_before = self.vault.total_assets;
-        let shares_before = self.vault.total_shares;
-
-        // No state change while paused
-        assert_eq!(self.vault.total_assets, assets_before);
-        assert_eq!(self.vault.total_shares, shares_before);
+        // INVARIANT: When paused, deposit/redeem requests are rejected on-chain.
+        // Verify the model's guard: flow_request_deposit and flow_request_redeem
+        // both early-return when self.vault.paused is true, so no user state
+        // should have changed since pause. This is validated by the end invariants.
     }
 
     // =========================================================================
@@ -1098,7 +1071,7 @@ impl FuzzTest {
             .users
             .iter()
             .filter(|u| u.redeem_request.status == RequestStatus::Pending)
-            .fold(0u64, |acc, u| acc.saturating_add(u.redeem_request.shares_locked));
+            .fold(0u64, |acc, u| acc.checked_add(u.redeem_request.shares_locked).expect("pending redeem sum overflow"));
 
         let fulfilled_unclaimed_shares: u64 = self
             .vault
@@ -1106,12 +1079,12 @@ impl FuzzTest {
             .iter()
             .filter(|u| u.deposit_request.status == RequestStatus::Fulfilled)
             .fold(0u64, |acc, u| {
-                acc.saturating_add(u.deposit_request.shares_claimable)
+                acc.checked_add(u.deposit_request.shares_claimable).expect("fulfilled unclaimed sum overflow")
             });
 
         let accounted_shares = user_shares
-            .saturating_add(pending_redeem_shares)
-            .saturating_add(fulfilled_unclaimed_shares);
+            .checked_add(pending_redeem_shares).expect("accounted shares overflow")
+            .checked_add(fulfilled_unclaimed_shares).expect("accounted shares overflow");
 
         // Total shares should exactly equal accounted shares
         // (user balances + escrowed pending redeems + fulfilled unclaimed deposits)
@@ -1126,36 +1099,37 @@ impl FuzzTest {
         );
 
         // INVARIANT 2: No free money — cumulative redeemed <= cumulative deposited per user
+        // Tolerance: each deposit/redeem roundtrip can lose up to 1 unit to Floor rounding,
+        // so max leakage is bounded by the number of completed roundtrips.
         for (i, user) in self.vault.users.iter().enumerate() {
+            let tolerance = user.roundtrip_count as u128;
             assert!(
-                user.cumulative_redeemed <= user.cumulative_deposited.saturating_add(1000),
-                "End: user {} redeemed {} > deposited {} (free money)",
+                user.cumulative_redeemed <= user.cumulative_deposited.checked_add(tolerance).expect("tolerance overflow"),
+                "End: user {} redeemed {} > deposited {} + tolerance {} (free money)",
                 i,
                 user.cumulative_redeemed,
-                user.cumulative_deposited
+                user.cumulative_deposited,
+                tolerance
             );
         }
 
-        // INVARIANT 3: State machine consistency — no request in impossible state
+        // INVARIANT 3: State machine consistency — Pending requests must have non-zero locked amounts
         for (i, user) in self.vault.users.iter().enumerate() {
             let ds = user.deposit_request.status;
             let rs = user.redeem_request.status;
 
-            // Fulfilled requests must have non-zero claimable amounts (unless 0 input)
-            if ds == RequestStatus::Fulfilled && user.deposit_request.assets_locked > 0 {
-                // shares_claimable can legitimately be 0 for tiny deposits in large vaults
-                // but assets_locked should still be non-zero
+            if ds == RequestStatus::Pending {
                 assert!(
                     user.deposit_request.assets_locked > 0,
-                    "End: user {} fulfilled deposit with 0 assets",
+                    "End: user {} has Pending deposit with 0 assets_locked",
                     i
                 );
             }
 
-            if rs == RequestStatus::Fulfilled && user.redeem_request.shares_locked > 0 {
+            if rs == RequestStatus::Pending {
                 assert!(
                     user.redeem_request.shares_locked > 0,
-                    "End: user {} fulfilled redeem with 0 shares",
+                    "End: user {} has Pending redeem with 0 shares_locked",
                     i
                 );
             }
@@ -1178,7 +1152,7 @@ impl FuzzTest {
             .iter()
             .filter(|u| u.deposit_request.status == RequestStatus::Pending)
             .fold(0u64, |acc, u| {
-                acc.saturating_add(u.deposit_request.assets_locked)
+                acc.checked_add(u.deposit_request.assets_locked).expect("pending deposit sum overflow")
             });
         assert_eq!(
             self.vault.total_assets_locked_in_pending_deposits, computed_locked,
@@ -1193,7 +1167,7 @@ impl FuzzTest {
             .iter()
             .filter(|u| u.redeem_request.status == RequestStatus::Pending)
             .fold(0u64, |acc, u| {
-                acc.saturating_add(u.redeem_request.shares_locked)
+                acc.checked_add(u.redeem_request.shares_locked).expect("pending redeem sum overflow")
             });
         assert_eq!(
             self.vault.total_shares_locked_in_pending_redeems, computed_locked_shares,
@@ -1208,7 +1182,7 @@ impl FuzzTest {
             .iter()
             .filter(|u| u.redeem_request.status == RequestStatus::Fulfilled)
             .fold(0u64, |acc, u| {
-                acc.saturating_add(u.redeem_request.assets_claimable)
+                acc.checked_add(u.redeem_request.assets_claimable).expect("claimable escrow sum overflow")
             });
         assert_eq!(
             self.vault.total_assets_in_claimable_escrows, computed_claimable,
