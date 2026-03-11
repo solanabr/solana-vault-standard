@@ -11,8 +11,9 @@ use crate::{
     constants::*,
     error::VaultError,
     events::RedeemFulfilled,
+    instructions::oracle_lookup::find_oracle_price,
     math::{convert_to_assets, Rounding},
-    state::{AsyncVault, ClaimableEscrow, OraclePrice, RedeemRequest, RequestStatus},
+    state::{AsyncVault, ClaimableEscrow, RedeemRequest, RequestStatus},
 };
 
 #[cfg(feature = "modules")]
@@ -85,28 +86,6 @@ pub struct FulfillRedeem<'info> {
     pub rent: Sysvar<'info, Rent>,
 }
 
-fn find_oracle_price<'info>(
-    remaining_accounts: &[AccountInfo<'info>],
-    program_id: &Pubkey,
-    vault_key: &Pubkey,
-) -> Result<Option<(u64, i64)>> {
-    let (expected_pda, _) =
-        Pubkey::find_program_address(&[ORACLE_PRICE_SEED, vault_key.as_ref()], program_id);
-
-    for account in remaining_accounts {
-        if account.key() == expected_pda {
-            let data = account.try_borrow_data()?;
-            if data.len() >= OraclePrice::LEN {
-                let oracle: OraclePrice = AnchorDeserialize::deserialize(&mut &data[8..])?;
-                require!(oracle.vault == *vault_key, VaultError::OracleVaultMismatch);
-                return Ok(Some((oracle.price, oracle.updated_at)));
-            }
-        }
-    }
-
-    Ok(None)
-}
-
 pub fn handler(ctx: Context<FulfillRedeem>) -> Result<()> {
     let request = &ctx.accounts.redeem_request;
 
@@ -127,7 +106,10 @@ pub fn handler(ctx: Context<FulfillRedeem>) -> Result<()> {
         svs_oracle::validate_oracle(price, updated_at, clock.unix_timestamp, vault.max_staleness)
             .map_err(|e| match e {
             svs_oracle::OracleError::StalePrice => VaultError::StaleOraclePrice,
-            _ => VaultError::InvalidOraclePrice,
+            svs_oracle::OracleError::InvalidPrice => VaultError::InvalidOraclePrice,
+            svs_oracle::OracleError::MathOverflow => VaultError::MathOverflow,
+            svs_oracle::OracleError::UnauthorizedUpdate => VaultError::Unauthorized,
+            svs_oracle::OracleError::PriceDeviationExceeded => VaultError::InvalidOraclePrice,
         })?;
         svs_oracle::shares_to_assets(shares_locked, price).map_err(|_| VaultError::MathOverflow)?
     } else {

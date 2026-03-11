@@ -1,11 +1,12 @@
 use anchor_lang::prelude::*;
 
 use crate::{
-    constants::{DEPOSIT_REQUEST_SEED, ORACLE_PRICE_SEED},
+    constants::DEPOSIT_REQUEST_SEED,
     error::VaultError,
     events::DepositFulfilled,
+    instructions::oracle_lookup::find_oracle_price,
     math::{convert_to_shares, Rounding},
-    state::{AsyncVault, DepositRequest, OraclePrice, RequestStatus},
+    state::{AsyncVault, DepositRequest, RequestStatus},
 };
 
 #[cfg(feature = "modules")]
@@ -32,28 +33,6 @@ pub struct FulfillDeposit<'info> {
     pub deposit_request: Account<'info, DepositRequest>,
 }
 
-fn find_oracle_price<'info>(
-    remaining_accounts: &[AccountInfo<'info>],
-    program_id: &Pubkey,
-    vault_key: &Pubkey,
-) -> Result<Option<(u64, i64)>> {
-    let (expected_pda, _) =
-        Pubkey::find_program_address(&[ORACLE_PRICE_SEED, vault_key.as_ref()], program_id);
-
-    for account in remaining_accounts {
-        if account.key() == expected_pda {
-            let data = account.try_borrow_data()?;
-            if data.len() >= OraclePrice::LEN {
-                let oracle: OraclePrice = AnchorDeserialize::deserialize(&mut &data[8..])?;
-                require!(oracle.vault == *vault_key, VaultError::OracleVaultMismatch);
-                return Ok(Some((oracle.price, oracle.updated_at)));
-            }
-        }
-    }
-
-    Ok(None)
-}
-
 pub fn handler(ctx: Context<FulfillDeposit>) -> Result<()> {
     let request = &ctx.accounts.deposit_request;
 
@@ -73,7 +52,10 @@ pub fn handler(ctx: Context<FulfillDeposit>) -> Result<()> {
         svs_oracle::validate_oracle(price, updated_at, clock.unix_timestamp, vault.max_staleness)
             .map_err(|e| match e {
             svs_oracle::OracleError::StalePrice => VaultError::StaleOraclePrice,
-            _ => VaultError::InvalidOraclePrice,
+            svs_oracle::OracleError::InvalidPrice => VaultError::InvalidOraclePrice,
+            svs_oracle::OracleError::MathOverflow => VaultError::MathOverflow,
+            svs_oracle::OracleError::UnauthorizedUpdate => VaultError::Unauthorized,
+            svs_oracle::OracleError::PriceDeviationExceeded => VaultError::InvalidOraclePrice,
         })?;
         svs_oracle::assets_to_shares(request.assets_locked, price)
             .map_err(|_| VaultError::MathOverflow)?

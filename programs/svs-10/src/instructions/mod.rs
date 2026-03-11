@@ -7,6 +7,7 @@ pub mod claim_redeem;
 pub mod fulfill_deposit;
 pub mod fulfill_redeem;
 pub mod initialize;
+pub mod oracle_lookup;
 pub mod request_deposit;
 pub mod request_redeem;
 pub mod revoke_operator;

@@ -68,6 +68,8 @@ pub fn handler(ctx: Context<RequestRedeem>, shares: u64, receiver: Pubkey) -> Re
         let vault_key = ctx.accounts.vault.key();
         let user_key = ctx.accounts.user.key();
         let clock = Clock::get()?;
+        // svs-module-hooks only exposes check_deposit_access as the general access gate;
+        // it covers both deposit and redeem (whitelist/blacklist checks are symmetric)
         module_hooks::check_deposit_access(remaining, &crate::ID, &vault_key, &user_key, &[])?;
         module_hooks::check_share_lock(
             remaining,

@@ -45,7 +45,16 @@ async function loadAsyncVault(
   const ctx = await createContext(globalOpts, opts, true, true);
   const { output, config, provider } = ctx;
 
-  const resolved = resolveVaultArg(vaultArg, config, opts as any, output);
+  const vaultOpts: {
+    programId?: string;
+    assetMint?: string;
+    vaultId?: string;
+  } = {
+    programId: opts.programId as string | undefined,
+    assetMint: opts.assetMint as string | undefined,
+    vaultId: opts.vaultId as string | undefined,
+  };
+  const resolved = resolveVaultArg(vaultArg, config, vaultOpts, output);
   if (!resolved) process.exit(1);
 
   if (resolved.variant !== "svs-10") {
@@ -62,8 +71,10 @@ async function loadAsyncVault(
   }
 
   const idl = loadIdl(idlPath);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- IDL loaded from JSON, same pattern as all other CLI commands
   const prog = new Program(idl as any, provider);
   const vault = await AsyncVault.load(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic IDL → typed Program bridge
     prog as any,
     resolved.assetMint,
     resolved.vaultId,
@@ -126,8 +137,8 @@ export function registerAsyncVaultCommands(program: Command): void {
         }
       }
 
+      const spinner = output.spinner("Sending transaction...");
       try {
-        const spinner = output.spinner("Sending transaction...");
         spinner.start();
 
         const signature = await vault.requestDeposit(wallet, amount, receiver);
@@ -150,6 +161,7 @@ export function registerAsyncVaultCommands(program: Command): void {
           });
         }
       } catch (error) {
+        spinner.fail("Transaction failed");
         output.error(
           `Request deposit failed: ${error instanceof Error ? error.message : String(error)}`,
         );
@@ -191,8 +203,8 @@ export function registerAsyncVaultCommands(program: Command): void {
         }
       }
 
+      const spinner = output.spinner("Sending transaction...");
       try {
-        const spinner = output.spinner("Sending transaction...");
         spinner.start();
 
         const signature = await vault.cancelDeposit(wallet);
@@ -211,6 +223,7 @@ export function registerAsyncVaultCommands(program: Command): void {
           });
         }
       } catch (error) {
+        spinner.fail("Transaction failed");
         output.error(
           `Cancel deposit failed: ${error instanceof Error ? error.message : String(error)}`,
         );
@@ -257,8 +270,8 @@ export function registerAsyncVaultCommands(program: Command): void {
         }
       }
 
+      const spinner = output.spinner("Sending transaction...");
       try {
-        const spinner = output.spinner("Sending transaction...");
         spinner.start();
 
         const signature = await vault.claimDeposit(wallet, owner);
@@ -277,6 +290,7 @@ export function registerAsyncVaultCommands(program: Command): void {
           });
         }
       } catch (error) {
+        spinner.fail("Transaction failed");
         output.error(
           `Claim deposit failed: ${error instanceof Error ? error.message : String(error)}`,
         );
@@ -329,8 +343,8 @@ export function registerAsyncVaultCommands(program: Command): void {
         }
       }
 
+      const spinner = output.spinner("Sending transaction...");
       try {
-        const spinner = output.spinner("Sending transaction...");
         spinner.start();
 
         const signature = await vault.requestRedeem(wallet, shares, receiver);
@@ -355,6 +369,7 @@ export function registerAsyncVaultCommands(program: Command): void {
           });
         }
       } catch (error) {
+        spinner.fail("Transaction failed");
         output.error(
           `Request redeem failed: ${error instanceof Error ? error.message : String(error)}`,
         );
@@ -396,8 +411,8 @@ export function registerAsyncVaultCommands(program: Command): void {
         }
       }
 
+      const spinner = output.spinner("Sending transaction...");
       try {
-        const spinner = output.spinner("Sending transaction...");
         spinner.start();
 
         const signature = await vault.cancelRedeem(wallet);
@@ -416,6 +431,7 @@ export function registerAsyncVaultCommands(program: Command): void {
           });
         }
       } catch (error) {
+        spinner.fail("Transaction failed");
         output.error(
           `Cancel redeem failed: ${error instanceof Error ? error.message : String(error)}`,
         );
@@ -462,8 +478,8 @@ export function registerAsyncVaultCommands(program: Command): void {
         }
       }
 
+      const spinner = output.spinner("Sending transaction...");
       try {
-        const spinner = output.spinner("Sending transaction...");
         spinner.start();
 
         const signature = await vault.claimRedeem(wallet, owner);
@@ -482,6 +498,7 @@ export function registerAsyncVaultCommands(program: Command): void {
           });
         }
       } catch (error) {
+        spinner.fail("Transaction failed");
         output.error(
           `Claim redeem failed: ${error instanceof Error ? error.message : String(error)}`,
         );
@@ -535,8 +552,8 @@ export function registerAsyncVaultCommands(program: Command): void {
         }
       }
 
+      const spinner = output.spinner("Sending transaction...");
       try {
-        const spinner = output.spinner("Sending transaction...");
         spinner.start();
 
         const signature = await vault.fulfillDeposit(wallet, owner);
@@ -556,6 +573,7 @@ export function registerAsyncVaultCommands(program: Command): void {
           });
         }
       } catch (error) {
+        spinner.fail("Transaction failed");
         output.error(
           `Fulfill deposit failed: ${error instanceof Error ? error.message : String(error)}`,
         );
@@ -605,8 +623,8 @@ export function registerAsyncVaultCommands(program: Command): void {
         }
       }
 
+      const spinner = output.spinner("Sending transaction...");
       try {
-        const spinner = output.spinner("Sending transaction...");
         spinner.start();
 
         const signature = await vault.fulfillRedeem(wallet, owner);
@@ -626,6 +644,7 @@ export function registerAsyncVaultCommands(program: Command): void {
           });
         }
       } catch (error) {
+        spinner.fail("Transaction failed");
         output.error(
           `Fulfill redeem failed: ${error instanceof Error ? error.message : String(error)}`,
         );
@@ -689,8 +708,8 @@ export function registerAsyncVaultCommands(program: Command): void {
         }
       }
 
+      const spinner = output.spinner("Sending transaction...");
       try {
-        const spinner = output.spinner("Sending transaction...");
         spinner.start();
 
         const signature = await vault.program.methods
@@ -719,6 +738,7 @@ export function registerAsyncVaultCommands(program: Command): void {
           });
         }
       } catch (error) {
+        spinner.fail("Transaction failed");
         output.error(
           `Init oracle failed: ${error instanceof Error ? error.message : String(error)}`,
         );
@@ -758,8 +778,8 @@ export function registerAsyncVaultCommands(program: Command): void {
         }
       }
 
+      const spinner = output.spinner("Sending transaction...");
       try {
-        const spinner = output.spinner("Sending transaction...");
         spinner.start();
 
         const signature = await vault.program.methods
@@ -786,6 +806,7 @@ export function registerAsyncVaultCommands(program: Command): void {
           });
         }
       } catch (error) {
+        spinner.fail("Transaction failed");
         output.error(
           `Update oracle failed: ${error instanceof Error ? error.message : String(error)}`,
         );
@@ -845,25 +866,45 @@ export function registerAsyncVaultCommands(program: Command): void {
         const depositStatus = depositInfo
           ? await vault.program.account.depositRequest
               .fetch(depositPda)
-              .catch(() => null)
+              .catch((err: Error) => {
+                output.warn(
+                  `Could not deserialize deposit request: ${err.message}`,
+                );
+                return null;
+              })
           : null;
 
         const redeemStatus = redeemInfo
           ? await vault.program.account.redeemRequest
               .fetch(redeemPda)
-              .catch(() => null)
+              .catch((err: Error) => {
+                output.warn(
+                  `Could not deserialize redeem request: ${err.message}`,
+                );
+                return null;
+              })
           : null;
 
         const claimableStatus = claimableInfo
           ? await vault.program.account.claimableEscrow
               .fetch(claimablePda)
-              .catch(() => null)
+              .catch((err: Error) => {
+                output.warn(
+                  `Could not deserialize claimable escrow: ${err.message}`,
+                );
+                return null;
+              })
           : null;
 
         const oracleStatus = oracleInfo
           ? await vault.program.account.oraclePrice
               .fetch(oraclePda)
-              .catch(() => null)
+              .catch((err: Error) => {
+                output.warn(
+                  `Could not deserialize oracle price: ${err.message}`,
+                );
+                return null;
+              })
           : null;
 
         if (globalOpts.output === "json") {

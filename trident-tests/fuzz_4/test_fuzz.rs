@@ -332,8 +332,14 @@ impl FuzzTest {
         };
 
         // Update vault totals (at fulfillment, not claim)
-        self.vault.total_assets = self.vault.total_assets.saturating_add(assets);
-        self.vault.total_shares = self.vault.total_shares.saturating_add(shares);
+        // Skip if overflow would occur (matches on-chain checked_add behavior)
+        if self.vault.total_assets.checked_add(assets).is_none()
+            || self.vault.total_shares.checked_add(shares).is_none()
+        {
+            return;
+        }
+        self.vault.total_assets += assets;
+        self.vault.total_shares += shares;
         self.vault.deposit_fulfill_count += 1;
 
         self.vault.total_assets_locked_in_pending_deposits = self
@@ -584,8 +590,12 @@ impl FuzzTest {
         }
 
         // Update vault totals (at fulfillment, not claim)
-        self.vault.total_assets = self.vault.total_assets.saturating_sub(assets);
-        self.vault.total_shares = self.vault.total_shares.saturating_sub(shares);
+        // Skip if underflow would occur (matches on-chain checked_sub behavior)
+        if self.vault.total_assets < assets || self.vault.total_shares < shares {
+            return;
+        }
+        self.vault.total_assets -= assets;
+        self.vault.total_shares -= shares;
         self.vault.redeem_fulfill_count += 1;
 
         self.vault.total_shares_locked_in_pending_redeems = self
@@ -741,35 +751,34 @@ impl FuzzTest {
             let ds = self.vault.users[i].deposit_request.status;
             let rs = self.vault.users[i].redeem_request.status;
 
-            // INVARIANT: Fulfilled/Claimed/Cancelled cannot transition back to Pending
-            // (enforced by PDA init/close semantics + status checks)
-            if ds == RequestStatus::Fulfilled
-                || ds == RequestStatus::Claimed
-                || ds == RequestStatus::Cancelled
-            {
-                // No flow should have set this back to Pending
-                // (We don't actively mutate — just verify the invariant holds)
+            // INVARIANT: No backward transitions in the state machine.
+            // Valid forward transitions: None→Pending, Pending→Fulfilled,
+            // Fulfilled→Claimed, Pending→Cancelled, Claimed/Cancelled→None (PDA closed).
+            // The previous_*_status fields track the last-seen status per user.
+            let prev_ds = self.vault.users[i].previous_deposit_status;
+            let prev_rs = self.vault.users[i].previous_redeem_status;
+
+            // Detect regression: if previously Fulfilled, must not be Pending now
+            if prev_ds == RequestStatus::Fulfilled {
                 assert_ne!(
                     ds,
                     RequestStatus::Pending,
-                    "Deposit request for user {} went back to Pending from {:?}",
+                    "Deposit request for user {} regressed from Fulfilled to Pending",
                     i,
-                    ds
                 );
             }
-
-            if rs == RequestStatus::Fulfilled
-                || rs == RequestStatus::Claimed
-                || rs == RequestStatus::Cancelled
-            {
+            if prev_rs == RequestStatus::Fulfilled {
                 assert_ne!(
                     rs,
                     RequestStatus::Pending,
-                    "Redeem request for user {} went back to Pending from {:?}",
+                    "Redeem request for user {} regressed from Fulfilled to Pending",
                     i,
-                    rs
                 );
             }
+
+            // Update tracked status
+            self.vault.users[i].previous_deposit_status = ds;
+            self.vault.users[i].previous_redeem_status = rs;
         }
     }
 
@@ -1104,12 +1113,16 @@ impl FuzzTest {
             .saturating_add(pending_redeem_shares)
             .saturating_add(fulfilled_unclaimed_shares);
 
-        // Total shares should be >= accounted shares (vault may hold fee shares)
-        assert!(
-            self.vault.total_shares >= user_shares,
-            "End: total_shares {} < user_shares_sum {}",
+        // Total shares should exactly equal accounted shares
+        // (user balances + escrowed pending redeems + fulfilled unclaimed deposits)
+        assert_eq!(
+            self.vault.total_shares, accounted_shares,
+            "End: total_shares {} != accounted_shares {} (user={}, pending_redeem={}, fulfilled_unclaimed={})",
             self.vault.total_shares,
-            user_shares
+            accounted_shares,
+            user_shares,
+            pending_redeem_shares,
+            fulfilled_unclaimed_shares
         );
 
         // INVARIANT 2: No free money — cumulative redeemed <= cumulative deposited per user

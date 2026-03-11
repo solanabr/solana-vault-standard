@@ -215,11 +215,7 @@ pub fn handler(
     vault.bump = vault_bump;
     vault.paused = false;
     vault.vault_id = vault_id;
-    vault.cancel_delay = if cancel_delay > 0 {
-        cancel_delay
-    } else {
-        DEFAULT_CANCEL_DELAY
-    };
+    vault.cancel_delay = cancel_delay;
     vault.max_staleness = max_staleness;
     vault._reserved = [0u8; 64];
 

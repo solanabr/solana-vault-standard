@@ -61,6 +61,7 @@ Cargo.lock
 .anchor/
 test-ledger/
 .program-keys/
+**/keypair.json
 
 #############
 # Python
