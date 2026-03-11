@@ -28,11 +28,18 @@ pub struct ApproveOperator<'info> {
     pub system_program: Program<'info, System>,
 }
 
-pub fn handler(ctx: Context<ApproveOperator>, can_claim: bool) -> Result<()> {
+pub fn handler(
+    ctx: Context<ApproveOperator>,
+    can_fulfill_deposit: bool,
+    can_fulfill_redeem: bool,
+    can_claim: bool,
+) -> Result<()> {
     let approval = &mut ctx.accounts.operator_approval;
     approval.vault = ctx.accounts.vault.key();
     approval.owner = ctx.accounts.owner.key();
     approval.operator = ctx.accounts.operator.key();
+    approval.can_fulfill_deposit = can_fulfill_deposit;
+    approval.can_fulfill_redeem = can_fulfill_redeem;
     approval.can_claim = can_claim;
     approval.bump = ctx.bumps.operator_approval;
 
@@ -40,6 +47,8 @@ pub fn handler(ctx: Context<ApproveOperator>, can_claim: bool) -> Result<()> {
         vault: ctx.accounts.vault.key(),
         owner: ctx.accounts.owner.key(),
         operator: ctx.accounts.operator.key(),
+        can_fulfill_deposit,
+        can_fulfill_redeem,
         can_claim,
     });
 

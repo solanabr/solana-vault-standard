@@ -119,6 +119,8 @@ pub struct OperatorApproval {
     pub vault: Pubkey,
     pub owner: Pubkey,
     pub operator: Pubkey,
+    pub can_fulfill_deposit: bool,
+    pub can_fulfill_redeem: bool,
     pub can_claim: bool,
     pub bump: u8,
 }
@@ -128,6 +130,8 @@ impl OperatorApproval {
         32 +  // vault
         32 +  // owner
         32 +  // operator
+        1 +   // can_fulfill_deposit
+        1 +   // can_fulfill_redeem
         1 +   // can_claim
         1; // bump
 }

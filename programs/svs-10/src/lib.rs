@@ -64,8 +64,18 @@ pub mod svs_10 {
         instructions::cancel_redeem::handler(ctx)
     }
 
-    pub fn approve_operator(ctx: Context<ApproveOperator>, can_claim: bool) -> Result<()> {
-        instructions::approve_operator::handler(ctx, can_claim)
+    pub fn approve_operator(
+        ctx: Context<ApproveOperator>,
+        can_fulfill_deposit: bool,
+        can_fulfill_redeem: bool,
+        can_claim: bool,
+    ) -> Result<()> {
+        instructions::approve_operator::handler(
+            ctx,
+            can_fulfill_deposit,
+            can_fulfill_redeem,
+            can_claim,
+        )
     }
 
     pub fn revoke_operator(ctx: Context<RevokeOperator>) -> Result<()> {

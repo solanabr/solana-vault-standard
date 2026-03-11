@@ -428,6 +428,8 @@ export class AsyncVault {
   async approveOperator(
     owner: Keypair,
     operator: PublicKey,
+    canFulfillDeposit = false,
+    canFulfillRedeem = false,
     canClaim = true,
   ): Promise<string> {
     const [operatorApproval] = getOperatorApprovalAddress(
@@ -438,7 +440,7 @@ export class AsyncVault {
     );
 
     return this.program.methods
-      .approveOperator(canClaim)
+      .approveOperator(canFulfillDeposit, canFulfillRedeem, canClaim)
       .accountsStrict({
         owner: owner.publicKey,
         vault: this.address,

@@ -126,6 +126,7 @@ pub fn handler(ctx: Context<FulfillRedeem>) -> Result<()> {
     #[cfg(feature = "modules")]
     let assets = {
         let remaining = ctx.remaining_accounts;
+        module_hooks::check_deposit_access(remaining, &crate::ID, &vault_key, &request.owner, &[])?;
         let result = module_hooks::apply_exit_fee(remaining, &crate::ID, &vault_key, gross_assets)?;
         result.net_assets
     };

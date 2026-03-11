@@ -76,6 +76,8 @@ pub struct OperatorSet {
     pub vault: Pubkey,
     pub owner: Pubkey,
     pub operator: Pubkey,
+    pub can_fulfill_deposit: bool,
+    pub can_fulfill_redeem: bool,
     pub can_claim: bool,
 }
 

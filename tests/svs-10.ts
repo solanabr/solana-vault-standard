@@ -994,7 +994,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
       // Approve third party as operator with claim permission
       const [approval] = getOperatorApprovalPDA(vault, payer.publicKey, thirdParty.publicKey);
       await program.methods
-        .approveOperator(true)
+        .approveOperator(false, false, true)
         .accountsStrict({
           owner: payer.publicKey,
           vault,
@@ -1006,6 +1006,8 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
 
       const approvalAccount = await program.account.operatorApproval.fetch(approval);
       expect(approvalAccount.canClaim).to.equal(true);
+      expect(approvalAccount.canFulfillDeposit).to.equal(false);
+      expect(approvalAccount.canFulfillRedeem).to.equal(false);
       expect(approvalAccount.operator.toBase58()).to.equal(thirdParty.publicKey.toBase58());
 
       // Third party claims on behalf of payer (receiver = payer)
@@ -1066,7 +1068,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
       // Approve operator for alt vault
       const [altApproval] = getOperatorApprovalPDA(altVault, payer.publicKey, thirdParty.publicKey);
       await program.methods
-        .approveOperator(true)
+        .approveOperator(false, false, true)
         .accountsStrict({
           owner: payer.publicKey,
           vault: altVault,
@@ -1624,7 +1626,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
 
       const [approval] = getOperatorApprovalPDA(vault, payer.publicKey, randomUser.publicKey);
       await program.methods
-        .approveOperator(false)
+        .approveOperator(false, false, false)
         .accountsStrict({
           owner: payer.publicKey,
           vault,
