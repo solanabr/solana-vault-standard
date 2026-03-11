@@ -1,0 +1,70 @@
+use anchor_lang::prelude::*;
+
+#[error_code]
+pub enum VaultError {
+    #[msg("Amount must be greater than zero")]
+    ZeroAmount,
+
+    #[msg("Vault is paused")]
+    VaultPaused,
+
+    #[msg("Asset decimals must be <= 9")]
+    InvalidAssetDecimals,
+
+    #[msg("Arithmetic overflow")]
+    MathOverflow,
+
+    #[msg("Division by zero")]
+    DivisionByZero,
+
+    #[msg("Unauthorized")]
+    Unauthorized,
+
+    #[msg("Deposit amount below minimum investment")]
+    DepositTooSmall,
+
+    #[msg("Request is not in pending status")]
+    RequestNotPending,
+
+    #[msg("Request is not in approved status")]
+    RequestNotApproved,
+
+    #[msg("Insufficient liquidity in vault")]
+    InsufficientLiquidity,
+
+    #[msg("Investment window is closed")]
+    InvestmentWindowClosed,
+
+    #[msg("Invalid address: cannot be the zero address")]
+    InvalidAddress,
+
+    #[msg("Account is frozen")]
+    AccountFrozen,
+
+    #[msg("Attestation account not owned by SAS program")]
+    InvalidAttestationProgram,
+
+    #[msg("Attestation PDA address mismatch")]
+    InvalidAttestation,
+
+    #[msg("Attestation credential does not match vault")]
+    InvalidCredential,
+
+    #[msg("Attestation schema does not match vault")]
+    InvalidSchema,
+
+    #[msg("Attestation has expired")]
+    AttestationExpired,
+
+    #[msg("Oracle price data is stale")]
+    OracleStale,
+
+    #[msg("Oracle price is invalid")]
+    OracleInvalidPrice,
+
+    #[msg("Oracle account owner does not match vault.oracle_program")]
+    OracleInvalidProgram,
+
+    #[msg("Deposit would exceed global vault cap")]
+    GlobalCapExceeded,
+}
