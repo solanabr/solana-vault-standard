@@ -64,4 +64,20 @@ pub mod svs_11 {
     pub fn cancel_deposit(ctx: Context<CancelDeposit>) -> Result<()> {
         instructions::cancel_deposit::handler(ctx)
     }
+
+    pub fn request_redeem(ctx: Context<RequestRedeem>, shares: u64) -> Result<()> {
+        instructions::request_redeem::handler(ctx, shares)
+    }
+
+    pub fn approve_redeem(ctx: Context<ApproveRedeem>) -> Result<()> {
+        instructions::approve_redeem::handler(ctx)
+    }
+
+    pub fn claim_redeem(ctx: Context<ClaimRedeem>) -> Result<()> {
+        instructions::claim_redeem::handler(ctx)
+    }
+
+    pub fn cancel_redeem(ctx: Context<CancelRedeem>) -> Result<()> {
+        instructions::cancel_redeem::handler(ctx)
+    }
 }
