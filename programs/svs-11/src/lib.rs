@@ -44,4 +44,24 @@ pub mod svs_11 {
     pub fn close_investment_window(ctx: Context<InvestmentWindow>) -> Result<()> {
         instructions::investment_window::close_handler(ctx)
     }
+
+    pub fn request_deposit(ctx: Context<RequestDeposit>, amount: u64) -> Result<()> {
+        instructions::request_deposit::handler(ctx, amount)
+    }
+
+    pub fn approve_deposit(ctx: Context<ApproveDeposit>) -> Result<()> {
+        instructions::approve_deposit::handler(ctx)
+    }
+
+    pub fn claim_deposit(ctx: Context<ClaimDeposit>) -> Result<()> {
+        instructions::claim_deposit::handler(ctx)
+    }
+
+    pub fn reject_deposit(ctx: Context<RejectDeposit>) -> Result<()> {
+        instructions::reject_deposit::handler(ctx)
+    }
+
+    pub fn cancel_deposit(ctx: Context<CancelDeposit>) -> Result<()> {
+        instructions::cancel_deposit::handler(ctx)
+    }
 }
