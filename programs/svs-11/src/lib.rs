@@ -36,4 +36,12 @@ pub mod svs_11 {
             max_staleness,
         )
     }
+
+    pub fn open_investment_window(ctx: Context<InvestmentWindow>) -> Result<()> {
+        instructions::investment_window::open_handler(ctx)
+    }
+
+    pub fn close_investment_window(ctx: Context<InvestmentWindow>) -> Result<()> {
+        instructions::investment_window::close_handler(ctx)
+    }
 }
