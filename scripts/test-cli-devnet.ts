@@ -132,12 +132,29 @@ async function main() {
   await runCmd(["async", "init-oracle", V, "--price", "1000000000", ...common, "--dry-run"]);
   await runCmd(["async", "update-oracle", V, "--price", "1050000000", ...common, "--dry-run"]);
 
-  // 3. Real lifecycle via CLI
-  console.log("\n-- Live Transaction Commands --");
+  // 3. Real deposit lifecycle via CLI
+  console.log("\n-- Live Deposit Lifecycle --");
   await runCmd(["async", "request-deposit", V, "-a", String(1000 * 10 ** ASSET_DECIMALS), ...common]);
   await runCmd(["async", "fulfill-deposit", V, "--owner", OWNER, ...common]);
   await runCmd(["async", "claim-deposit", V, "--owner", OWNER, ...common]);
   await runCmd(["async", "show-request", V, "--owner", OWNER, ...common]);
+
+  // 4. Cancel deposit flow
+  console.log("\n-- Live Cancel Deposit --");
+  await runCmd(["async", "request-deposit", V, "-a", String(100 * 10 ** ASSET_DECIMALS), ...common]);
+  await runCmd(["async", "cancel-deposit", V, ...common]);
+
+  // 5. Redeem lifecycle via CLI (uses shares from deposit claim)
+  console.log("\n-- Live Redeem Lifecycle --");
+  await runCmd(["async", "request-redeem", V, "--shares", String(500 * 10 ** (ASSET_DECIMALS + 3)), ...common]);
+  await runCmd(["async", "fulfill-redeem", V, "--owner", OWNER, ...common]);
+  await runCmd(["async", "claim-redeem", V, "--owner", OWNER, ...common]);
+  await runCmd(["async", "show-request", V, "--owner", OWNER, ...common]);
+
+  // 6. Oracle live transactions
+  console.log("\n-- Live Oracle Commands --");
+  await runCmd(["async", "init-oracle", V, "--price", "1000000000", ...common]);
+  await runCmd(["async", "update-oracle", V, "--price", "2000000000", ...common]);
 
   // Summary
   const total = passed + failed;

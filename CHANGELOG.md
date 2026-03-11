@@ -20,15 +20,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Vault-priced fallback (Mode B) when no oracle account provided
 - Module compatibility (`--features modules`): fees, caps, locks, access hooks
 - Module admin instructions: init/update for fee, cap, lock, access configs
+- OperatorApproval: granular `can_fulfill_deposit`, `can_fulfill_redeem` permissions (spec Section 14)
 - Security hardening: 8 findings patched + 14 regression tests
+- PR review hardening: oracle discriminator validation, exhaustive error matching, zero-share/zero-asset guards
 - SDK: `AsyncVault` class with full typed IDL (zero `any` types) and `async-pda` PDA helpers
+- SDK: `claimDeposit` auto-creates receiver shares ATA (idempotent) for first-time receivers
 - SDK: 25 unit tests for async PDA derivation
 - SDK: 34 CLI integration tests (command registration, options, PDA consistency)
 - CLI: 11 commands under `async` subcommand (request/cancel/claim/fulfill deposit+redeem, init/update oracle, show-request)
 - CLI: SVS-10 registered as variant with program ID
-- Documentation: `docs/SVS-10.md` with full specification
+- CLI: 23/23 commands verified on devnet (deposit lifecycle, cancel, redeem lifecycle, oracle init/update)
+- Documentation: `docs/SVS-10.md` specification, `docs/CLI.md` async section, `docs/SDK.md` async section
+- Devnet: deployed to `149FyatCNUNW8FnfU6D4zBvieANZ7BEyFwDDA2wo96G9` with IDL on-chain
 - Fuzz: `fuzz_4` state-machine fuzzer with 24 flows and 7 accounting invariants
-- 162 integration tests (67 SVS-10 including 7 oracle + 8 module tests)
+- 154 integration tests (67 SVS-10 including 7 oracle + 8 module tests)
 
 ## [0.3.0] - 2026-03-06
 
