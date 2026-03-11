@@ -147,6 +147,7 @@ async function createFundedWsolAccount(
 // Helper: ensure a user's wSOL ATA exists (empty, 0-balance).
 // Used as the landing pad for withdraw_sol / redeem_sol.
 // If it already exists (e.g. from a previous test), this is a no-op.
+// Includes retry logic for blockhash timeout issues on local validator.
 // ─────────────────────────────────────────────────────────────────────────────
 async function ensureEmptyWsolAccount(
   connection: anchor.web3.Connection,
@@ -156,35 +157,62 @@ async function ensureEmptyWsolAccount(
   const wsolATA = getUserWsolATA(owner);
 
   // Check if it already exists
-  const info = await connection.getAccountInfo(wsolATA);
+  const info = await connection.getAccountInfo(wsolATA, "confirmed");
   if (info !== null) {
     return wsolATA;
   }
 
-  const tx = new Transaction().add(
-    createAssociatedTokenAccountInstruction(
-      payer.publicKey,
-      wsolATA,
-      owner,
-      NATIVE_MINT,
-      TOKEN_PROGRAM_ID,
-      ASSOCIATED_TOKEN_PROGRAM_ID
-    )
-  );
+  const maxRetries = 3;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const tx = new Transaction().add(
+        createAssociatedTokenAccountInstruction(
+          payer.publicKey,
+          wsolATA,
+          owner,
+          NATIVE_MINT,
+          TOKEN_PROGRAM_ID,
+          ASSOCIATED_TOKEN_PROGRAM_ID
+        )
+      );
 
-  await sendAndConfirmTransaction(connection, tx, [payer]);
+      await sendAndConfirmTransaction(connection, tx, [payer]);
+      return wsolATA;
+    } catch (err: any) {
+      if (attempt === maxRetries) throw err;
+      // If "already in use", the ATA was created between our check and creation
+      if (err.toString().includes("already in use")) return wsolATA;
+      // Blockhash timeout — wait briefly and retry
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+  }
+
   return wsolATA;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Helper: read a u64 LE value out of the simulateTransaction return data.
+// Helper: read a u64 LE value out of simulation logs.
+// The program uses set_return_data() which emits a log line:
+//   "Program return: <programId> <base64data>"
+// Anchor's MethodsBuilder.simulate() returns { events, raw: logs } without
+// a separate returnData field, so we parse it from the log lines directly.
 // ─────────────────────────────────────────────────────────────────────────────
 function parseReturnU64(
   logs: string[] | null | undefined,
-  returnData: { data: [string, string] } | null | undefined
+  _returnData?: unknown
 ): BN | null {
-  if (!returnData) return null;
-  const [base64Data] = returnData.data;
+  if (!logs) return null;
+
+  // Look for "Program return: <programId> <base64>" in logs
+  const returnPrefix = "Program return: ";
+  const returnLog = logs.find((l) => l.startsWith(returnPrefix));
+  if (!returnLog) return null;
+
+  // Format: "Program return: <programId> <base64data>"
+  const parts = returnLog.slice(returnPrefix.length).split(" ");
+  if (parts.length < 2) return null;
+  const base64Data = parts[1];
+
   const buf = Buffer.from(base64Data, "base64");
   if (buf.length < 8) return null;
   // u64 little-endian
@@ -692,6 +720,12 @@ describe("svs-7: Live Balance Model", () => {
           )
         );
         await sendAndConfirmTransaction(connection, closeTx, [payer]);
+        // Wait for close to propagate so ensureEmptyWsolAccount sees null
+        for (let i = 0; i < 10; i++) {
+          const check = await connection.getAccountInfo(wsolATA, "confirmed");
+          if (check === null) break;
+          await new Promise((r) => setTimeout(r, 400));
+        }
       }
       const userWsolAccount = await ensureEmptyWsolAccount(connection, payer, payer.publicKey);
 
@@ -1309,6 +1343,12 @@ describe("svs-7: Stored Balance Model", () => {
           createCloseAccountInstruction(wsolATA, payer.publicKey, payer.publicKey, [], TOKEN_PROGRAM_ID)
         );
         await sendAndConfirmTransaction(connection, closeTx, [payer]);
+        // Wait for close to propagate so ensureEmptyWsolAccount sees null
+        for (let i = 0; i < 10; i++) {
+          const check = await connection.getAccountInfo(wsolATA, "confirmed");
+          if (check === null) break;
+          await new Promise((r) => setTimeout(r, 400));
+        }
       }
       const userWsolAccount = await ensureEmptyWsolAccount(connection, payer, payer.publicKey);
 
@@ -1448,7 +1488,9 @@ describe("svs-7: Stored Balance Model", () => {
     });
 
     it("deposit_wsol fails when paused", async () => {
-      const fakeWsol = getUserWsolATA(payer.publicKey);
+      // Ensure the wSOL ATA exists so Anchor can deserialize it before
+      // evaluating the vault.paused constraint
+      const userWsolAccount = await ensureEmptyWsolAccount(connection, payer, payer.publicKey);
       const userSharesAccount = getUserSharesATA(ctx.sharesMint, payer.publicKey);
 
       // We only need to verify the paused constraint fires before any transfer occurs
@@ -1459,7 +1501,7 @@ describe("svs-7: Stored Balance Model", () => {
             user: payer.publicKey,
             vault: ctx.vault,
             nativeMint: NATIVE_MINT,
-            userWsolAccount: fakeWsol,
+            userWsolAccount,
             wsolVault: ctx.wsolVault,
             sharesMint: ctx.sharesMint,
             userSharesAccount,
