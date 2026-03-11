@@ -377,6 +377,6 @@ pub const MAX_CANCEL_DELAY: i64 = 604800;     // 7 days
 
 ---
 
-**Program ID**: `E6gqyoVDQ33cWFJ9LpdSu68fNw6EKmoKR4db288RpFgJ`
+**Program ID**: `149FyatCNUNW8FnfU6D4zBvieANZ7BEyFwDDA2wo96G9`
 **Specification**: [specs-SVS10.md](specs-SVS10.md)
 **Last Updated**: 2026-03-10

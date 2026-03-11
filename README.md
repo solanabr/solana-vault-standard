@@ -47,7 +47,7 @@ Tokenized vault programs and TypeScript SDK for building yield-bearing vaults on
 | SVS-2 | `3UrYrxh1HmVgq7WPygZ5x1gNEaWFwqTMs7geNqMnsrtD` | Same as devnet |
 | SVS-3 | `EcpnYtaCBrZ4p4uq7dDr55D3fL9nsxbCNqpyUREGpPkh` | Same as devnet |
 | SVS-4 | `2WP7LXWqrp1W4CwEJuVt2SxWPNY2n6AYmijh6Z4EeidY` | Same as devnet |
-| SVS-10 | `E6gqyoVDQ33cWFJ9LpdSu68fNw6EKmoKR4db288RpFgJ` | Same as devnet |
+| SVS-10 | `149FyatCNUNW8FnfU6D4zBvieANZ7BEyFwDDA2wo96G9` | Same as devnet |
 
 ## Installation
 

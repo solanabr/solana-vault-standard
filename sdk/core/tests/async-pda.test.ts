@@ -27,7 +27,7 @@ import {
 
 describe("Async PDA Module", () => {
   const PROGRAM_ID = new PublicKey(
-    "E6gqyoVDQ33cWFJ9LpdSu68fNw6EKmoKR4db288RpFgJ",
+    "149FyatCNUNW8FnfU6D4zBvieANZ7BEyFwDDA2wo96G9",
   );
   const ASSET_MINT = new PublicKey(
     "So11111111111111111111111111111111111111112",

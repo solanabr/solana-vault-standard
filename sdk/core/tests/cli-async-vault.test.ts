@@ -228,7 +228,7 @@ describe("Async Vault CLI (SVS-10)", () => {
 
     it("svs-10 has devnet program ID", () => {
       expect(SVS_PROGRAMS["svs-10"].devnet).to.equal(
-        "E6gqyoVDQ33cWFJ9LpdSu68fNw6EKmoKR4db288RpFgJ",
+        "149FyatCNUNW8FnfU6D4zBvieANZ7BEyFwDDA2wo96G9",
       );
     });
 

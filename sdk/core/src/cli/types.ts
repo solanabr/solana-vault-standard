@@ -381,7 +381,7 @@ export const SVS_PROGRAMS: Record<
     devnet: "2WP7LXWqrp1W4CwEJuVt2SxWPNY2n6AYmijh6Z4EeidY",
   },
   "svs-10": {
-    devnet: "E6gqyoVDQ33cWFJ9LpdSu68fNw6EKmoKR4db288RpFgJ",
+    devnet: "149FyatCNUNW8FnfU6D4zBvieANZ7BEyFwDDA2wo96G9",
   },
 };
 
