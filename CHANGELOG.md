@@ -23,9 +23,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Security hardening: 8 findings patched + 14 regression tests
 - SDK: `AsyncVault` class with full typed IDL (zero `any` types) and `async-pda` PDA helpers
 - SDK: 25 unit tests for async PDA derivation
+- SDK: 34 CLI integration tests (command registration, options, PDA consistency)
+- CLI: 11 commands under `async` subcommand (request/cancel/claim/fulfill deposit+redeem, init/update oracle, show-request)
 - CLI: SVS-10 registered as variant with program ID
 - Documentation: `docs/SVS-10.md` with full specification
-- 154 integration tests (59 SVS-10 including 7 oracle tests)
+- Fuzz: `fuzz_4` state-machine fuzzer with 24 flows and 7 accounting invariants
+- 162 integration tests (67 SVS-10 including 7 oracle + 8 module tests)
 
 ## [0.3.0] - 2026-03-06
 
