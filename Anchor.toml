@@ -18,7 +18,7 @@ svs_3 = "EcpnYtaCBrZ4p4uq7dDr55D3fL9nsxbCNqpyUREGpPkh"
 svs_4 = "2WP7LXWqrp1W4CwEJuVt2SxWPNY2n6AYmijh6Z4EeidY"
 svs_11 = "Bf17gDR2JdKTWdoTWK3Va9YQtkpePRAAVxMCaokj8ZFW"
 mock_oracle = "EbFcZZApkGcX6LqRmzSWVLasnDM457wY4WvhJRnVjdZF"
-mock_sas = "4azCqYgLHDRmsiR6kmYu6v5qvzamaYGqZcmx8MrnrKMc"
+mock_sas = "22zoJMtdu4tQc2PzL74ZUT7FrwgB1Udec8DdW4yw4BdG"
 
 [registry]
 url = "https://api.apr.dev"

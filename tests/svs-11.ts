@@ -33,11 +33,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
 
   const program = anchor.workspace.Svs11 as Program<Svs11>;
   const oracleProgram = anchor.workspace.MockOracle as Program<MockOracle>;
-  const sasProgram = new Program(
-    anchor.workspace.MockSas.idl,
-    SAS_PROGRAM_ID,
-    provider
-  ) as Program<MockSas>;
+  const sasProgram = anchor.workspace.MockSas as Program<MockSas>;
   const connection = provider.connection;
   const payer = (provider.wallet as anchor.Wallet).payer;
 
@@ -1017,9 +1013,9 @@ describe("svs-11 (Credit Markets Vault)", () => {
         undefined,
         TOKEN_2022_PROGRAM_ID
       );
-      expect(BigInt(sharesAfter.amount.toString())).to.be.greaterThan(
-        BigInt(sharesBefore.amount.toString())
-      );
+      expect(
+        BigInt(sharesAfter.amount.toString()) > BigInt(sharesBefore.amount.toString())
+      ).to.be.true;
 
       const info = await connection.getAccountInfo(redemptionRequest);
       expect(info).to.be.null;
@@ -1046,10 +1042,8 @@ describe("svs-11 (Credit Markets Vault)", () => {
 
       const depositVaultAccount = await getAccount(connection, depositVault);
       expect(
-        BigInt(depositVaultAccount.amount.toString())
-      ).to.be.lessThan(
-        BigInt(vaultBefore.totalAssets.toString())
-      );
+        BigInt(depositVaultAccount.amount.toString()) < BigInt(vaultBefore.totalAssets.toString())
+      ).to.be.true;
     });
 
     it("manager repays assets", async () => {

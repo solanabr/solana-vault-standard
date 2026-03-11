@@ -29,7 +29,7 @@ pub struct RejectDeposit<'info> {
     )]
     pub investment_request: Account<'info, InvestmentRequest>,
 
-    #[account(constraint = investor.key() == investment_request.investor)]
+    #[account(mut, constraint = investor.key() == investment_request.investor)]
     pub investor: SystemAccount<'info>,
 
     #[account(
