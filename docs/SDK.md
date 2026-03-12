@@ -1026,8 +1026,79 @@ Output in `dist/`:
 - `dist/index.js` - CommonJS build
 - `dist/index.d.ts` - TypeScript declarations
 
+---
+
+# Credit Vault SDK (SVS-11)
+
+The `CreditVault` class provides a typed SDK for SVS-11 credit markets vaults.
+
+## Loading
+
+```typescript
+import { CreditVault } from "@stbr/solana-vault";
+
+const vault = await CreditVault.load(program, assetMint, 1);
+```
+
+## Investor Methods
+
+```typescript
+await vault.requestDeposit(investor, amount, attestationPda);
+await vault.cancelDeposit(investor);
+await vault.requestRedeem(investor, shares, attestationPda);
+await vault.cancelRedeem(investor);
+await vault.claimRedemption(investor);
+```
+
+## Manager Methods
+
+```typescript
+await vault.approveDeposit(manager, investorPk, oraclePda, attestationPda);
+await vault.rejectDeposit(manager, investorPk, reasonCode);
+await vault.approveRedeem(manager, investorPk, oraclePda);
+await vault.repay(manager, amount);
+await vault.openWindow(manager);
+await vault.closeWindow(manager);
+await vault.freezeAccount(manager, investorPk);
+await vault.unfreezeAccount(manager, investorPk);
+```
+
+## Admin Methods
+
+```typescript
+await vault.pause(authority);
+await vault.unpause(authority);
+await vault.transferAuthority(authority, newAuthority);
+await vault.setManager(authority, newManager);
+await vault.updateAttester(authority, newAttester);
+```
+
+## View Methods
+
+```typescript
+const request = await vault.getInvestmentRequest(investorPk);
+const redeem = await vault.getRedemptionRequest(investorPk);
+const claimable = await vault.getClaimableEscrow(investorPk);
+const frozen = await vault.isFrozen(investorPk);
+```
+
+## PDA Derivation
+
+```typescript
+import {
+  getCreditVaultAddress,
+  deriveCreditVaultAddresses,
+  getInvestmentRequestAddress,
+  getFrozenAccountAddress,
+} from "@stbr/solana-vault";
+
+const [vault, bump] = getCreditVaultAddress(programId, assetMint, vaultId);
+const allAddrs = deriveCreditVaultAddresses(programId, assetMint, vaultId);
+```
+
 ## See Also
 
+- [SVS-11 Specification](./SVS-11.md) - Credit markets vault details
 - [SVS-3 Specification](./SVS-3.md) - Confidential live balance vault
 - [SVS-4 Specification](./SVS-4.md) - Confidential stored balance vault
 - [Privacy Architecture](./PRIVACY.md) - Detailed privacy documentation

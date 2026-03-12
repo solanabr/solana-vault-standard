@@ -34,6 +34,8 @@
 export * from "./vault";
 export * from "./managed-vault";
 export * from "./pda";
+export * from "./credit-pda";
+export * from "./credit-vault";
 export * from "./math";
 
 // On-chain Module Support (v2)

@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+#### SVS-11: Credit Markets Vault
+- **Program**: Manager-gated credit vault with 18 instructions (initialize, deposit flow, redemption flow, repayment, compliance, admin)
+- **Oracle**: External NAV oracle-only pricing (no vault-priced fallback)
+- **KYC**: Built-in attestation validation via remaining_accounts pattern
+- **Compliance**: Investment window gating, account freeze/unfreeze
+- **Repayment**: Manager repay instruction with delta-based T22 accounting
+- **1-step approval**: `approve_deposit` mints shares directly (no claim step)
+- **Reject**: `reject_deposit` returns locked assets with reason code
+- **Modules**: Feature-gated svs-fees/svs-caps/svs-locks/svs-access support
+
+#### SVS-11 SDK
+- `CreditVault` class with investor, manager, admin, and view methods
+- 10 PDA derivation functions in `credit-pda.ts`
+- 15 CLI commands under `credit` subcommand
+
+#### Mock Programs (test infrastructure)
+- `mock-oracle`: OraclePrice account creation/update for integration tests
+- `mock-attestation`: Attestation account creation/revocation for integration tests
+
+#### Tests
+- 149 integration tests for SVS-11 program
+- 19 PDA derivation unit tests
+- 20 CLI command registration tests
+
 ## [0.3.0] - 2026-03-06
 
 ### Added

@@ -9,12 +9,18 @@ svs_1 = "Bv8aVSQ3DJUe3B7TqQZRZgrNvVTh8TjfpwpoeR1ckDMC"
 svs_2 = "3UrYrxh1HmVgq7WPygZ5x1gNEaWFwqTMs7geNqMnsrtD"
 svs_3 = "EcpnYtaCBrZ4p4uq7dDr55D3fL9nsxbCNqpyUREGpPkh"
 svs_4 = "2WP7LXWqrp1W4CwEJuVt2SxWPNY2n6AYmijh6Z4EeidY"
+svs_11 = "SVS8w4PozVex3B2RWbPJDjvacZaWZm4xaCwbtZb1dqA"
+mock_oracle = "GY7S95LwZ45F3EdkTV5LDwjv1GRkmUfadakd2an6qeSu"
+mock_attestation = "3hkiaCkrdWay9xJzGYEZ69H4H1xnUrcy9ABwcuYNs1NK"
 
 [programs.localnet]
 svs_1 = "Bv8aVSQ3DJUe3B7TqQZRZgrNvVTh8TjfpwpoeR1ckDMC"
 svs_2 = "3UrYrxh1HmVgq7WPygZ5x1gNEaWFwqTMs7geNqMnsrtD"
 svs_3 = "EcpnYtaCBrZ4p4uq7dDr55D3fL9nsxbCNqpyUREGpPkh"
 svs_4 = "2WP7LXWqrp1W4CwEJuVt2SxWPNY2n6AYmijh6Z4EeidY"
+svs_11 = "SVS8w4PozVex3B2RWbPJDjvacZaWZm4xaCwbtZb1dqA"
+mock_oracle = "GY7S95LwZ45F3EdkTV5LDwjv1GRkmUfadakd2an6qeSu"
+mock_attestation = "3hkiaCkrdWay9xJzGYEZ69H4H1xnUrcy9ABwcuYNs1NK"
 
 [registry]
 url = "https://api.apr.dev"

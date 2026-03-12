@@ -964,6 +964,43 @@ solana-vault fees show my-vault
 
 ---
 
+## Credit Vault Commands (SVS-11)
+
+Credit vault operations under the `credit` subcommand:
+
+```bash
+# View vault state
+solana-vault credit show <vault> [--investor <pubkey>]
+
+# Investor operations
+solana-vault credit request-deposit <vault> -a <amount> --attestation <PDA>
+solana-vault credit cancel-deposit <vault>
+solana-vault credit request-redeem <vault> -s <shares> --attestation <PDA>
+solana-vault credit cancel-redeem <vault>
+solana-vault credit claim <vault>
+
+# Manager operations
+solana-vault credit approve-deposit <vault> --investor <PK> --oracle <PDA> --attestation <PDA>
+solana-vault credit reject-deposit <vault> --investor <PK> [--reason <code>]
+solana-vault credit approve-redeem <vault> --investor <PK> --oracle <PDA>
+solana-vault credit repay <vault> -a <amount>
+solana-vault credit window open <vault>
+solana-vault credit window close <vault>
+solana-vault credit freeze <vault> --investor <PK>
+solana-vault credit unfreeze <vault> --investor <PK>
+
+# Admin
+solana-vault credit admin pause <vault>
+solana-vault credit admin unpause <vault>
+solana-vault credit admin transfer-authority <vault> --new-authority <PK>
+solana-vault credit admin set-manager <vault> --new-manager <PK>
+solana-vault credit admin update-attester <vault> --new-attester <PK>
+```
+
+All credit subcommands accept `--program-id`, `--asset-mint`, and `--vault-id` options.
+
+---
+
 ## See Also
 
 - [SDK Documentation](./SDK.md) - TypeScript SDK reference

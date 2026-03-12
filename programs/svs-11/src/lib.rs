@@ -1,0 +1,183 @@
+use anchor_lang::prelude::*;
+
+pub mod constants;
+pub mod error;
+pub mod events;
+pub mod instructions;
+pub mod math;
+pub mod state;
+
+use instructions::*;
+
+declare_id!("SVS8w4PozVex3B2RWbPJDjvacZaWZm4xaCwbtZb1dqA");
+
+#[program]
+pub mod svs_11 {
+    use super::*;
+
+    pub fn initialize_pool(
+        ctx: Context<Initialize>,
+        vault_id: u64,
+        minimum_investment: u64,
+        max_staleness: i64,
+    ) -> Result<()> {
+        instructions::initialize::handler(ctx, vault_id, minimum_investment, max_staleness)
+    }
+
+    pub fn open_investment_window(ctx: Context<InvestmentWindow>) -> Result<()> {
+        instructions::investment_window::open_investment_window(ctx)
+    }
+
+    pub fn close_investment_window(ctx: Context<InvestmentWindow>) -> Result<()> {
+        instructions::investment_window::close_investment_window(ctx)
+    }
+
+    pub fn request_deposit(ctx: Context<RequestDeposit>, amount: u64) -> Result<()> {
+        instructions::request_deposit::handler(ctx, amount)
+    }
+
+    pub fn approve_deposit(ctx: Context<ApproveDeposit>) -> Result<()> {
+        instructions::approve_deposit::handler(ctx)
+    }
+
+    pub fn reject_deposit(ctx: Context<RejectDeposit>, reason_code: u8) -> Result<()> {
+        instructions::reject_deposit::handler(ctx, reason_code)
+    }
+
+    pub fn cancel_deposit(ctx: Context<CancelDeposit>) -> Result<()> {
+        instructions::cancel_deposit::handler(ctx)
+    }
+
+    pub fn request_redeem(ctx: Context<RequestRedeem>, shares: u64) -> Result<()> {
+        instructions::request_redeem::handler(ctx, shares)
+    }
+
+    pub fn approve_redeem(ctx: Context<ApproveRedeem>) -> Result<()> {
+        instructions::approve_redeem::handler(ctx)
+    }
+
+    pub fn cancel_redeem(ctx: Context<CancelRedeem>) -> Result<()> {
+        instructions::cancel_redeem::handler(ctx)
+    }
+
+    pub fn claim_redemption(ctx: Context<ClaimRedemption>) -> Result<()> {
+        instructions::claim_redemption::handler(ctx)
+    }
+
+    pub fn repay(ctx: Context<Repay>, amount: u64) -> Result<()> {
+        instructions::repay::handler(ctx, amount)
+    }
+
+    pub fn freeze_account(ctx: Context<FreezeAccount>) -> Result<()> {
+        instructions::freeze::freeze_account(ctx)
+    }
+
+    pub fn unfreeze_account(ctx: Context<UnfreezeAccount>) -> Result<()> {
+        instructions::freeze::unfreeze_account(ctx)
+    }
+
+    pub fn pause(ctx: Context<Admin>) -> Result<()> {
+        instructions::admin::pause(ctx)
+    }
+
+    pub fn unpause(ctx: Context<Admin>) -> Result<()> {
+        instructions::admin::unpause(ctx)
+    }
+
+    pub fn transfer_authority(ctx: Context<Admin>, new_authority: Pubkey) -> Result<()> {
+        instructions::admin::transfer_authority(ctx, new_authority)
+    }
+
+    pub fn set_manager(ctx: Context<Admin>, new_manager: Pubkey) -> Result<()> {
+        instructions::admin::set_manager(ctx, new_manager)
+    }
+
+    pub fn update_attester(ctx: Context<Admin>, new_attester: Pubkey) -> Result<()> {
+        instructions::admin::update_attester(ctx, new_attester)
+    }
+
+    // ============ Module Admin Instructions (requires "modules" feature) ============
+
+    #[cfg(feature = "modules")]
+    pub fn initialize_fee_config(
+        ctx: Context<InitializeFeeConfig>,
+        entry_fee_bps: u16,
+        exit_fee_bps: u16,
+        management_fee_bps: u16,
+        performance_fee_bps: u16,
+    ) -> Result<()> {
+        instructions::module_admin::initialize_fee_config(
+            ctx,
+            entry_fee_bps,
+            exit_fee_bps,
+            management_fee_bps,
+            performance_fee_bps,
+        )
+    }
+
+    #[cfg(feature = "modules")]
+    pub fn update_fee_config(
+        ctx: Context<UpdateFeeConfig>,
+        entry_fee_bps: Option<u16>,
+        exit_fee_bps: Option<u16>,
+        management_fee_bps: Option<u16>,
+        performance_fee_bps: Option<u16>,
+    ) -> Result<()> {
+        instructions::module_admin::update_fee_config(
+            ctx,
+            entry_fee_bps,
+            exit_fee_bps,
+            management_fee_bps,
+            performance_fee_bps,
+        )
+    }
+
+    #[cfg(feature = "modules")]
+    pub fn initialize_cap_config(
+        ctx: Context<InitializeCapConfig>,
+        global_cap: u64,
+        per_user_cap: u64,
+    ) -> Result<()> {
+        instructions::module_admin::initialize_cap_config(ctx, global_cap, per_user_cap)
+    }
+
+    #[cfg(feature = "modules")]
+    pub fn update_cap_config(
+        ctx: Context<UpdateCapConfig>,
+        global_cap: Option<u64>,
+        per_user_cap: Option<u64>,
+    ) -> Result<()> {
+        instructions::module_admin::update_cap_config(ctx, global_cap, per_user_cap)
+    }
+
+    #[cfg(feature = "modules")]
+    pub fn initialize_lock_config(
+        ctx: Context<InitializeLockConfig>,
+        lock_duration: i64,
+    ) -> Result<()> {
+        instructions::module_admin::initialize_lock_config(ctx, lock_duration)
+    }
+
+    #[cfg(feature = "modules")]
+    pub fn update_lock_config(ctx: Context<UpdateLockConfig>, lock_duration: i64) -> Result<()> {
+        instructions::module_admin::update_lock_config(ctx, lock_duration)
+    }
+
+    #[cfg(feature = "modules")]
+    pub fn initialize_access_config(
+        ctx: Context<InitializeAccessConfig>,
+        mode: state::AccessMode,
+        merkle_root: [u8; 32],
+    ) -> Result<()> {
+        instructions::module_admin::initialize_access_config(ctx, mode, merkle_root)
+    }
+
+    #[cfg(feature = "modules")]
+    pub fn update_access_config(
+        ctx: Context<UpdateAccessConfig>,
+        mode: Option<state::AccessMode>,
+        merkle_root: Option<[u8; 32]>,
+    ) -> Result<()> {
+        instructions::module_admin::update_access_config(ctx, mode, merkle_root)
+    }
+}
