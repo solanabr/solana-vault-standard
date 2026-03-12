@@ -6,8 +6,8 @@
  * 2. Initialize vault (sequential waterfall)
  * 3. Add senior tranche (priority=0, sub=2000bps, yield=500bps, cap=6000bps)
  * 4. Add junior tranche (priority=1, sub=0, yield=0, cap=10000bps)
- * 5. Deposit into junior (1000 USDC)
- * 6. Deposit into senior (3000 USDC)
+ * 5. Deposit into junior (2000 USDC)
+ * 6. Deposit into senior (2000 USDC)
  * 7. Distribute yield (200 USDC) — verify senior gets target, junior gets residual
  * 8. Record loss (500 USDC) — verify junior absorbs
  * 9. Redeem from junior
@@ -199,10 +199,10 @@ async function main() {
     undefined, undefined, TOKEN_2022_PROGRAM_ID,
   );
 
-  // 5. Deposit 1000 into junior
+  // 5. Deposit 2000 into junior
   try {
     const sig = await program.methods
-      .deposit(new BN(1000 * LAMPORTS), new BN(0))
+      .deposit(new BN(2000 * LAMPORTS), new BN(0))
       .accounts({
         user: payer.publicKey,
         vault,
@@ -219,16 +219,16 @@ async function main() {
         token2022Program: TOKEN_2022_PROGRAM_ID,
       })
       .rpc();
-    pass("Deposit 1000 into junior", sig);
+    pass("Deposit 2000 into junior", sig);
   } catch (e) {
     fail("Deposit junior", String(e));
     return;
   }
 
-  // 6. Deposit 3000 into senior
+  // 6. Deposit 2000 into senior (cap=60%, 2000/4000=50% OK)
   try {
     const sig = await program.methods
-      .deposit(new BN(3000 * LAMPORTS), new BN(0))
+      .deposit(new BN(2000 * LAMPORTS), new BN(0))
       .accounts({
         user: payer.publicKey,
         vault,
@@ -245,7 +245,7 @@ async function main() {
         token2022Program: TOKEN_2022_PROGRAM_ID,
       })
       .rpc();
-    pass("Deposit 3000 into senior", sig);
+    pass("Deposit 2000 into senior", sig);
   } catch (e) {
     fail("Deposit senior", String(e));
     return;
@@ -271,8 +271,8 @@ async function main() {
 
     const seniorState = await program.account.tranche.fetch(seniorTranche);
     const juniorState = await program.account.tranche.fetch(juniorTranche);
-    const seniorYield = seniorState.totalAssetsAllocated.toNumber() - 3000 * LAMPORTS;
-    const juniorYield = juniorState.totalAssetsAllocated.toNumber() - 1000 * LAMPORTS;
+    const seniorYield = seniorState.totalAssetsAllocated.toNumber() - 2000 * LAMPORTS;
+    const juniorYield = juniorState.totalAssetsAllocated.toNumber() - 2000 * LAMPORTS;
     pass(
       "Distribute yield (200)",
       sig,

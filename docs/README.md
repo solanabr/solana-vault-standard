@@ -119,7 +119,7 @@ Optional on-chain modules for additional functionality:
 | SVS-2 | `3UrYrxh1HmVgq7WPygZ5x1gNEaWFwqTMs7geNqMnsrtD` |
 | SVS-3 | `EcpnYtaCBrZ4p4uq7dDr55D3fL9nsxbCNqpyUREGpPkh` |
 | SVS-4 | `2WP7LXWqrp1W4CwEJuVt2SxWPNY2n6AYmijh6Z4EeidY` |
-| SVS-12 | `85wwufKdhpHxiBe4kMeFBfidL1Kqo62T65DHb46qNugA` |
+| SVS-12 | `FM3ZfmPSdQzFniZSDXc6FfXKFvXRSNQXeTdPKC8tz5C` |
 
 ### Mainnet
 

@@ -9,7 +9,7 @@ pub mod waterfall;
 
 use instructions::*;
 
-declare_id!("85wwufKdhpHxiBe4kMeFBfidL1Kqo62T65DHb46qNugA");
+declare_id!("FM3ZfmPSdQzFniZSDXc6FfXKFvXRSNQXeTdPKC8tz5C");
 
 #[program]
 pub mod svs_12 {
