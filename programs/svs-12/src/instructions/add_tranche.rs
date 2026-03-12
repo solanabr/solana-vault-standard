@@ -6,9 +6,7 @@ use anchor_spl::token_2022::{
 };
 
 use crate::{
-    constants::{
-        MAX_TRANCHES, SHARES_DECIMALS, SHARES_MINT_SEED, TRANCHED_VAULT_SEED, TRANCHE_SEED,
-    },
+    constants::{MAX_TRANCHES, SHARES_DECIMALS, SHARES_MINT_SEED, TRANCHE_SEED},
     error::TranchedVaultError,
     events::TrancheAdded,
     state::{Tranche, TranchedVault},
@@ -112,16 +110,6 @@ pub fn handler(
     )?;
 
     // Initialize mint with vault PDA as mint authority
-    let asset_mint_key = vault.asset_mint;
-    let vault_id_bytes = vault.vault_id.to_le_bytes();
-    let vault_bump = vault.bump;
-    let _vault_seeds: &[&[u8]] = &[
-        TRANCHED_VAULT_SEED,
-        asset_mint_key.as_ref(),
-        &vault_id_bytes,
-        &[vault_bump],
-    ];
-
     let init_mint_ix = initialize_mint2(
         &ctx.accounts.token_2022_program.key(),
         &ctx.accounts.shares_mint.key(),

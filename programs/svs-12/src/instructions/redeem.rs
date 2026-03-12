@@ -61,8 +61,9 @@ pub struct Redeem<'info> {
 
     #[account(
         mut,
-        constraint = user_shares_account.mint == target_tranche.shares_mint,
-        constraint = user_shares_account.owner == user.key(),
+        associated_token::mint = shares_mint,
+        associated_token::authority = user,
+        associated_token::token_program = token_2022_program,
     )]
     pub user_shares_account: InterfaceAccount<'info, TokenAccount>,
 

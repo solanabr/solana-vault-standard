@@ -28,7 +28,7 @@ Designed for structured credit products (CLO-style senior/mezzanine/junior), rea
 
 ## Account Structures
 
-### TranchedVault (281 bytes + 8 disc)
+### TranchedVault (280 bytes + 8 disc = 288 total)
 
 | Field | Type | Description |
 |-------|------|-------------|
