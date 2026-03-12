@@ -136,12 +136,12 @@ pub struct WindowClosed {
 }
 
 #[event]
-pub struct SasConfigUpdated {
+pub struct AttesterUpdated {
     pub vault: Pubkey,
-    pub old_credential: Pubkey,
-    pub new_credential: Pubkey,
-    pub old_schema: Pubkey,
-    pub new_schema: Pubkey,
+    pub old_attester: Pubkey,
+    pub new_attester: Pubkey,
+    pub old_attestation_program: Pubkey,
+    pub new_attestation_program: Pubkey,
 }
 
 #[event]

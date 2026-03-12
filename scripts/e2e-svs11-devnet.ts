@@ -4,7 +4,7 @@
  * Exercises every SVS-11 instruction on devnet:
  *   1.  Create asset mint & fund wallet
  *   2.  Set oracle price (mock oracle)
- *   3.  Create SAS attestation (mock SAS)
+ *   3.  Create attestation (mock attestation program)
  *   4.  Initialize credit vault
  *   5.  Open investment window
  *   6.  Request deposit → approve → claim shares
@@ -15,7 +15,7 @@
  *   11. Freeze / unfreeze (compliance)
  *   12. Pause / unpause
  *   13. Set manager / transfer authority
- *   14. Update SAS config
+ *   14. Update attester config
  *   15. Reject deposit
  *
  * Usage:
@@ -33,7 +33,7 @@ import * as anchor from "@coral-xyz/anchor";
 import { Program, BN } from "@coral-xyz/anchor";
 import { Svs11 } from "../target/types/svs_11";
 import { MockOracle } from "../target/types/mock_oracle";
-import { MockSas } from "../target/types/mock_sas";
+import { MockSas as MockAttestation } from "../target/types/mock_sas";
 import {
   createMint,
   getOrCreateAssociatedTokenAccount,
@@ -64,7 +64,7 @@ import {
 
 const PROGRAM_ID = new PublicKey("Bf17gDR2JdKTWdoTWK3Va9YQtkpePRAAVxMCaokj8ZFW");
 const MOCK_ORACLE_ID = new PublicKey("EbFcZZApkGcX6LqRmzSWVLasnDM457wY4WvhJRnVjdZF");
-const SAS_PROGRAM_ID = new PublicKey("4azCqYgLHDRmsiR6kmYu6v5qvzamaYGqZcmx8MrnrKMc");
+const ATTESTATION_PROGRAM_ID = new PublicKey("4azCqYgLHDRmsiR6kmYu6v5qvzamaYGqZcmx8MrnrKMc");
 const PRICE_SCALE = new BN(1_000_000_000);
 
 function explorerLink(sig: string): string {
@@ -83,11 +83,11 @@ function getOracleDataPDA(): [PublicKey, number] {
   );
 }
 
-// PDA helpers — Mock SAS
-function getAttestationPDA(credential: PublicKey, schema: PublicKey, investor: PublicKey): [PublicKey, number] {
+// PDA helpers — Mock Attestation
+function getAttestationPDA(subject: PublicKey, issuer: PublicKey, attestationType: number): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
-    [credential.toBuffer(), schema.toBuffer(), investor.toBuffer()],
-    SAS_PROGRAM_ID,
+    [Buffer.from("attestation"), subject.toBuffer(), issuer.toBuffer(), Buffer.from([attestationType])],
+    ATTESTATION_PROGRAM_ID,
   );
 }
 
@@ -102,18 +102,18 @@ async function main() {
 
   const svs11Idl = JSON.parse(fs.readFileSync(path.resolve(__dirname, "../target/idl/svs_11.json"), "utf-8"));
   const oracleIdl = JSON.parse(fs.readFileSync(path.resolve(__dirname, "../target/idl/mock_oracle.json"), "utf-8"));
-  const sasIdl = JSON.parse(fs.readFileSync(path.resolve(__dirname, "../target/idl/mock_sas.json"), "utf-8"));
+  const attestationIdl = JSON.parse(fs.readFileSync(path.resolve(__dirname, "../target/idl/mock_sas.json"), "utf-8"));
 
   const program = new Program<Svs11>(svs11Idl, provider);
   const oracleProgram = new Program<MockOracle>(oracleIdl, provider);
-  const sasProgram = new Program<MockSas>(sasIdl, provider);
+  const attestationProgram = new Program<MockAttestation>(attestationIdl, provider);
 
   const connection = provider.connection;
   const payer = (provider.wallet as anchor.Wallet).payer;
 
   console.log(`Program ID:     ${PROGRAM_ID.toBase58()}`);
   console.log(`Mock Oracle:    ${MOCK_ORACLE_ID.toBase58()}`);
-  console.log(`SAS Program:    ${SAS_PROGRAM_ID.toBase58()}`);
+  console.log(`Attestation:    ${ATTESTATION_PROGRAM_ID.toBase58()}`);
   console.log(`Payer:          ${payer.publicKey.toBase58()}`);
   console.log(`RPC:            ${connection.rpcEndpoint}`);
 
@@ -123,9 +123,10 @@ async function main() {
 
   const results: { step: string; sig: string }[] = [];
 
-  const sasCredential = Keypair.generate();
-  const sasSchema = Keypair.generate();
+  const attester = Keypair.generate();
   const investor = Keypair.generate();
+  const attestationType = 0; // KYC
+  const countryCode = [66, 82]; // "BR"
 
   // ─────────────────────────────────────────────────────────────────────
   // Step 1: Create asset mint and fund accounts
@@ -195,25 +196,26 @@ async function main() {
   console.log();
 
   // ─────────────────────────────────────────────────────────────────────
-  // Step 3: Create SAS attestation for investor
+  // Step 3: Create attestation for investor
   // ─────────────────────────────────────────────────────────────────────
-  console.log("Step 3: Creating SAS attestation for investor...");
+  console.log("Step 3: Creating attestation for investor...");
 
-  const [attestation] = getAttestationPDA(sasCredential.publicKey, sasSchema.publicKey, investor.publicKey);
+  const expiresAt = new BN(Math.floor(Date.now() / 1000) + 365 * 24 * 3600);
+  const [attestation] = getAttestationPDA(investor.publicKey, attester.publicKey, attestationType);
 
-  const sasSig = await sasProgram.methods
-    .createAttestation(sasCredential.publicKey, sasSchema.publicKey, new BN(0))
+  const attSig = await attestationProgram.methods
+    .createAttestation(attester.publicKey, attestationType, countryCode, expiresAt)
     .accountsPartial({
       authority: payer.publicKey,
       attestation,
-      investor: investor.publicKey,
+      subject: investor.publicKey,
       systemProgram: SystemProgram.programId,
     })
     .rpc();
 
-  results.push({ step: "Create SAS attestation", sig: sasSig });
+  results.push({ step: "Create attestation", sig: attSig });
   console.log(`  Attestation: ${attestation.toBase58()}`);
-  console.log(`  OK: ${explorerLink(sasSig)}`);
+  console.log(`  OK: ${explorerLink(attSig)}`);
   console.log();
 
   // ─────────────────────────────────────────────────────────────────────
@@ -233,8 +235,8 @@ async function main() {
       assetMint,
       navOracle,
       oracleProgram: MOCK_ORACLE_ID,
-      sasCredential: sasCredential.publicKey,
-      sasSchema: sasSchema.publicKey,
+      attester: attester.publicKey,
+      attestationProgram: ATTESTATION_PROGRAM_ID,
       vault,
       sharesMint,
       depositVault,
@@ -660,28 +662,28 @@ async function main() {
   console.log();
 
   // ─────────────────────────────────────────────────────────────────────
-  // Step 15: Update SAS config
+  // Step 15: Update attester config
   // ─────────────────────────────────────────────────────────────────────
-  console.log("Step 15: Update SAS config...");
+  console.log("Step 15: Update attester config...");
 
-  const newCredential = Keypair.generate();
-  const newSchema = Keypair.generate();
+  const newAttester = Keypair.generate();
+  const newAttestationProgram = Keypair.generate();
 
-  const updateSasSig = await program.methods
-    .updateSasConfig(newCredential.publicKey, newSchema.publicKey)
+  const updateAttesterSig = await program.methods
+    .updateAttester(newAttester.publicKey, newAttestationProgram.publicKey)
     .accountsPartial({ authority: payer.publicKey, vault })
     .rpc();
 
-  results.push({ step: "Update SAS config", sig: updateSasSig });
+  results.push({ step: "Update attester config", sig: updateAttesterSig });
 
-  // Restore original SAS config
-  const restoreSasSig = await program.methods
-    .updateSasConfig(sasCredential.publicKey, sasSchema.publicKey)
+  // Restore original attester config
+  const restoreAttesterSig = await program.methods
+    .updateAttester(attester.publicKey, ATTESTATION_PROGRAM_ID)
     .accountsPartial({ authority: payer.publicKey, vault })
     .rpc();
 
-  results.push({ step: "Restore SAS config", sig: restoreSasSig });
-  console.log(`  OK: ${explorerLink(restoreSasSig)}`);
+  results.push({ step: "Restore attester config", sig: restoreAttesterSig });
+  console.log(`  OK: ${explorerLink(restoreAttesterSig)}`);
   console.log();
 
   // ─────────────────────────────────────────────────────────────────────

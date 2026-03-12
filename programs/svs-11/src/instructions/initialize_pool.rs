@@ -69,11 +69,11 @@ pub struct InitializePool<'info> {
     /// CHECK: Oracle program account stored for runtime validation
     pub oracle_program: UncheckedAccount<'info>,
 
-    /// CHECK: SAS credential account stored for attestation checks
-    pub sas_credential: UncheckedAccount<'info>,
+    /// CHECK: Attester (issuer) pubkey stored for attestation validation
+    pub attester: UncheckedAccount<'info>,
 
-    /// CHECK: SAS schema account stored for attestation checks
-    pub sas_schema: UncheckedAccount<'info>,
+    /// CHECK: Attestation program owner stored for attestation validation
+    pub attestation_program: UncheckedAccount<'info>,
 
     pub asset_token_program: Interface<'info, TokenInterface>,
     pub token_2022_program: Program<'info, Token2022>,
@@ -221,8 +221,8 @@ pub fn handler(
     svs_oracle::validate_staleness_config(max_staleness)
         .map_err(|_| VaultError::InvalidStalenessConfig)?;
     vault.max_staleness = max_staleness;
-    vault.sas_credential = ctx.accounts.sas_credential.key();
-    vault.sas_schema = ctx.accounts.sas_schema.key();
+    vault.attester = ctx.accounts.attester.key();
+    vault.attestation_program = ctx.accounts.attestation_program.key();
     vault.vault_id = vault_id;
     vault.total_assets = 0;
     vault.total_shares = 0;

@@ -2,7 +2,7 @@
 
 ## Overview
 
-SVS-11 is a manager-approved tokenized vault for credit markets and illiquid assets. Unlike SVS-1 through SVS-4 which use permissionless deposit/withdraw, SVS-11 implements a request-approval-claim flow where every deposit and redemption requires manager approval with oracle-based NAV pricing. Mandatory KYC via Solana Attestation Service (SAS) and compliance features (account freezing, investment windows) make it suitable for regulated credit products, private debt, and institutional fund structures.
+SVS-11 is a manager-approved tokenized vault for credit markets and illiquid assets. Unlike SVS-1 through SVS-4 which use permissionless deposit/withdraw, SVS-11 implements a request-approval-claim flow where every deposit and redemption requires manager approval with oracle-based NAV pricing. Mandatory KYC attestation and compliance features (account freezing, investment windows) make it suitable for regulated credit products, private debt, and institutional fund structures. The attestation model is provider-agnostic — compatible with SAS, Civic Pass, or any program that writes accounts in the spec's `Attestation` format.
 
 ## Balance Model
 
@@ -46,8 +46,8 @@ pub struct CreditVault {
     pub nav_oracle: Pubkey,             // 32 bytes
     pub oracle_program: Pubkey,         // 32 bytes
     pub max_staleness: i64,             // 8 bytes
-    pub sas_credential: Pubkey,         // 32 bytes
-    pub sas_schema: Pubkey,             // 32 bytes
+    pub attester: Pubkey,               // 32 bytes
+    pub attestation_program: Pubkey,    // 32 bytes
     pub vault_id: u64,                  // 8 bytes
     pub total_assets: u64,              // 8 bytes
     pub total_shares: u64,              // 8 bytes
@@ -124,7 +124,7 @@ pub enum AccessMode {
 
 | Instruction | Signer | Description |
 |-------------|--------|-------------|
-| `request_deposit` | `investor` | Lock assets, create `InvestmentRequest` (requires SAS attestation, open window) |
+| `request_deposit` | `investor` | Lock assets, create `InvestmentRequest` (requires KYC attestation, open window) |
 | `approve_deposit` | `manager` | Convert assets to shares via oracle price, mark request approved |
 | `claim_deposit` | `investor` | Mint approved shares to investor's token account |
 | `reject_deposit` | `manager` | Return locked assets, close request (emits `reason_code`) |
@@ -134,7 +134,7 @@ pub enum AccessMode {
 
 | Instruction | Signer | Description |
 |-------------|--------|-------------|
-| `request_redeem` | `investor` | Lock shares in redemption escrow (requires SAS attestation, open window) |
+| `request_redeem` | `investor` | Lock shares in redemption escrow (requires KYC attestation, open window) |
 | `approve_redeem` | `manager` | Burn shares, transfer assets to claimable account via oracle price |
 | `claim_redeem` | `investor` | Withdraw claimable assets to own token account |
 | `cancel_redeem` | `investor` | Cancel own pending request, reclaim locked shares |
@@ -168,7 +168,7 @@ pub enum AccessMode {
 | `unpause` | `authority` | Unpause vault |
 | `transfer_authority` | `authority` | Transfer vault authority to new pubkey |
 | `set_manager` | `authority` | Set new manager |
-| `update_sas_config` | `authority` | Update SAS credential and schema |
+| `update_attester` | `authority` | Update attester and attestation program |
 
 ### Initialize Parameters
 
@@ -213,18 +213,33 @@ assets = shares * price_per_share / PRICE_SCALE
 
 Where `PRICE_SCALE = 1_000_000_000` (1e9).
 
-## SAS Attestation (KYC)
+## KYC Attestation
 
-Every `request_deposit` and `request_redeem` validates the investor's SAS attestation.
+Every `request_deposit`, `request_redeem`, `approve_deposit`, and `approve_redeem` validates the investor's attestation account. The model is provider-agnostic — any program that writes accounts matching the spec's `Attestation` layout is supported.
+
+**Attestation Account Layout** (125 bytes):
+```rust
+pub struct Attestation {
+    pub subject: Pubkey,          // 32 — investor being attested
+    pub issuer: Pubkey,           // 32 — attester identity
+    pub attestation_type: u8,     //  1 — KYC(0), Accredited(1), etc.
+    pub country_code: [u8; 2],    //  2 — ISO 3166-1 alpha-2
+    pub issued_at: i64,           //  8 — unix timestamp
+    pub expires_at: i64,          //  8 — 0 = no expiry
+    pub revoked: bool,            //  1
+    pub bump: u8,                 //  1
+    pub _reserved: [u8; 32],      // 32
+}
+```
 
 **Validation**:
-1. `attestation.owner == SAS_PROGRAM_ID`
-2. PDA matches: `find_program_address([credential, schema, investor], SAS_PROGRAM_ID)`
-3. `attestation.credential == vault.sas_credential`
-4. `attestation.schema == vault.sas_schema`
-5. `attestation.expiry == 0` (no expiry) OR `attestation.expiry > clock.unix_timestamp`
+1. `attestation.owner == vault.attestation_program`
+2. `attestation.subject == investor`
+3. `attestation.issuer == vault.attester`
+4. `attestation.revoked == false`
+5. `attestation.expires_at == 0` (no expiry) OR `attestation.expires_at > clock.unix_timestamp`
 
-**Revocation**: SAS revokes attestations by closing the account. The PDA check (step 2) implicitly rejects revoked attestations since the account no longer exists.
+**Configuration**: The vault stores `attester` (issuer pubkey) and `attestation_program` (program that owns attestation accounts). These can be updated via `update_attester`.
 
 ## Security
 
@@ -232,7 +247,7 @@ Every `request_deposit` and `request_redeem` validates the investor's SAS attest
 
 | Role | Permissions |
 |------|-------------|
-| **Authority** | pause, unpause, transfer_authority, set_manager, update_sas_config, module admin |
+| **Authority** | pause, unpause, transfer_authority, set_manager, update_attester, module admin |
 | **Manager** | approve/reject deposits, approve redemptions, draw_down, repay, freeze/unfreeze, open/close window |
 | **Investor** | request/cancel deposits, request/cancel redemptions, claim |
 
@@ -288,7 +303,7 @@ This ensures pending deposit assets are not used to fund redemptions.
 | `ManagerChanged` | vault, old_manager, new_manager | `set_manager` |
 | `WindowOpened` | vault | `open_investment_window` |
 | `WindowClosed` | vault | `close_investment_window` |
-| `SasConfigUpdated` | vault, old/new credential, old/new schema | `update_sas_config` |
+| `AttesterUpdated` | vault, old/new attester, old/new attestation_program | `update_attester` |
 
 See [EVENTS.md](EVENTS.md) for parsing examples.
 
@@ -310,10 +325,10 @@ See [EVENTS.md](EVENTS.md) for parsing examples.
 | 6011 | `InvestmentWindowClosed` | Investment window is closed |
 | 6012 | `InvalidAddress` | Invalid address: cannot be the zero address |
 | 6013 | `AccountFrozen` | Account is frozen |
-| 6014 | `InvalidAttestationProgram` | Attestation account not owned by SAS program |
-| 6015 | `InvalidAttestation` | Attestation PDA address mismatch |
-| 6016 | `InvalidCredential` | Attestation credential does not match vault |
-| 6017 | `InvalidSchema` | Attestation schema does not match vault |
+| 6014 | `InvalidAttestationProgram` | Attestation account not owned by attestation program |
+| 6015 | `InvalidAttestation` | Invalid attestation account |
+| 6016 | `InvalidAttester` | Attestation issuer does not match vault attester |
+| 6017 | `AttestationRevoked` | Attestation has been revoked |
 | 6018 | `AttestationExpired` | Attestation has expired |
 | 6019 | `OracleStale` | Oracle price data is stale |
 | 6020 | `OracleInvalidPrice` | Oracle price is invalid |
@@ -339,7 +354,7 @@ pub const MAX_DECIMALS: u8 = 9;
 pub const SHARES_DECIMALS: u8 = 9;
 pub const DEFAULT_MAX_STALENESS: i64 = 3600;  // 1 hour
 
-pub const SAS_PROGRAM_ID: Pubkey = pubkey!("22zoJMtdu4tQc2PzL74ZUT7FrwgB1Udec8DdW4yw4BdG");
+// No hardcoded attestation program ID — configured per-vault via `attester` and `attestation_program`
 ```
 
 See [CONSTANTS.md](CONSTANTS.md) for complete reference.
@@ -383,7 +398,7 @@ const vaultPubkey = new PublicKey('YOUR_VAULT_ADDRESS');
 
 const vault = new CreditVault(provider, vaultPubkey);
 
-// Investor: request deposit (requires SAS attestation)
+// Investor: request deposit (requires KYC attestation)
 const attestation = vault.getAttestationPda(investor);
 const tx = await vault.requestDeposit(
   1_000_000_000,   // 1000 USDC
@@ -410,7 +425,7 @@ const repayTx = await vault.repay(500_000_000);
 | **Balance Source** | `asset_vault.amount` | `vault.total_assets` | `vault.total_assets` | `vault.total_assets` |
 | **Deposit Flow** | Permissionless | Permissionless | Request-Fulfill-Claim | Request-Approve-Claim |
 | **Pricing** | On-chain math | On-chain math | On-chain math | Oracle NAV |
-| **KYC** | None | None | None | SAS Attestation |
+| **KYC** | None | None | None | Generic Attestation |
 | **Manager Role** | None | None | Operator (delegated) | Manager (fixed) |
 | **Account Freezing** | No | No | No | Yes |
 | **Investment Windows** | Always open | Always open | Always open | Manager-controlled |
@@ -422,12 +437,12 @@ const repayTx = await vault.repay(500_000_000);
 |------|---------|
 | `programs/svs-11/src/lib.rs` | Program entry point, instruction dispatch |
 | `programs/svs-11/src/state.rs` | Account structs (CreditVault, requests, frozen) |
-| `programs/svs-11/src/constants.rs` | PDA seeds, limits, SAS program ID |
+| `programs/svs-11/src/constants.rs` | PDA seeds, limits |
 | `programs/svs-11/src/error.rs` | Error codes |
 | `programs/svs-11/src/events.rs` | Event definitions |
 | `programs/svs-11/src/math.rs` | Share/asset conversion via oracle |
 | `programs/svs-11/src/oracle.rs` | Oracle reading and validation |
-| `programs/svs-11/src/attestation.rs` | SAS KYC attestation validation |
+| `programs/svs-11/src/attestation.rs` | Generic KYC attestation validation |
 | `programs/svs-11/src/instructions/` | Instruction handlers |
 | `programs/svs-11/src/instructions/module_admin.rs` | Module admin (with `modules` feature) |
 | `sdk/core/src/credit-vault.ts` | TypeScript SDK |
@@ -437,5 +452,5 @@ const repayTx = await vault.repay(500_000_000);
 ---
 
 **Specification**: [specs-SVS11.md](specs-SVS11.md)
-**Last Updated**: 2026-03-11
+**Last Updated**: 2026-03-12
 **Program Version**: 0.1.0

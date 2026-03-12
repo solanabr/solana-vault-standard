@@ -12,7 +12,7 @@ export function registerRequestDepositCommand(program: Command): void {
     .description("Request a deposit into an SVS-11 credit vault")
     .argument("<vault>", "Vault address or alias")
     .requiredOption("-a, --amount <number>", "Amount of assets to deposit")
-    .requiredOption("--attestation <pubkey>", "SAS attestation account")
+    .requiredOption("--attestation <pubkey>", "Attestation account")
     .option("--frozen-check <pubkey>", "Frozen account check (optional)")
     .option("--program-id <pubkey>", "Program ID")
     .option("--asset-mint <pubkey>", "Asset mint")

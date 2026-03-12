@@ -122,13 +122,13 @@ pub mod svs_11 {
         instructions::admin::set_manager_handler(ctx, new_manager)
     }
 
-    /// Update the SAS attestation configuration.
-    pub fn update_sas_config(
+    /// Update the attestation configuration (attester and attestation program).
+    pub fn update_attester(
         ctx: Context<Admin>,
-        new_credential: Pubkey,
-        new_schema: Pubkey,
+        new_attester: Pubkey,
+        new_attestation_program: Pubkey,
     ) -> Result<()> {
-        instructions::admin::update_sas_config_handler(ctx, new_credential, new_schema)
+        instructions::admin::update_attester_handler(ctx, new_attester, new_attestation_program)
     }
 
     /// Update the NAV oracle configuration.

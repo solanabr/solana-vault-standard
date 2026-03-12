@@ -20,7 +20,7 @@ import {
 import { expect } from "chai";
 import { Svs11 } from "../target/types/svs_11";
 import { MockOracle } from "../target/types/mock_oracle";
-import { MockSas } from "../target/types/mock_sas";
+import { MockSas as MockAttestation } from "../target/types/mock_sas";
 import {
   getCreditVaultAddress,
   getCreditSharesMintAddress,
@@ -31,7 +31,7 @@ import {
   getCreditFrozenAccountAddress,
 } from "../sdk/core/src/credit-vault-pda";
 
-const SAS_PROGRAM_ID = new PublicKey(
+const ATTESTATION_PROGRAM_ID = new PublicKey(
   "4azCqYgLHDRmsiR6kmYu6v5qvzamaYGqZcmx8MrnrKMc"
 );
 const PRICE_SCALE = new BN(1_000_000_000);
@@ -42,7 +42,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
 
   const program = anchor.workspace.Svs11 as Program<Svs11>;
   const oracleProgram = anchor.workspace.MockOracle as Program<MockOracle>;
-  const sasProgram = anchor.workspace.MockSas as Program<MockSas>;
+  const attestationMockProgram = anchor.workspace.MockSas as Program<MockAttestation>;
   const connection = provider.connection;
   const payer = (provider.wallet as anchor.Wallet).payer;
 
@@ -66,8 +66,8 @@ describe("svs-11 (Credit Markets Vault)", () => {
   let claimableTokens: PublicKey;
   let frozenAccount: PublicKey;
   let attestation: PublicKey;
-  let sasCredential: Keypair;
-  let sasSchema: Keypair;
+  let attester: Keypair;
+  let attestationProgramId: PublicKey;
   let manager: Keypair;
   let investor: Keypair;
   let managerTokenAccount: PublicKey;
@@ -105,21 +105,26 @@ describe("svs-11 (Credit Markets Vault)", () => {
   };
 
   const getAttestationPDA = (
-    credential: PublicKey,
-    schema: PublicKey,
-    investorKey: PublicKey
+    subject: PublicKey,
+    issuer: PublicKey,
+    attestationType: number = 0
   ): [PublicKey, number] => {
     return PublicKey.findProgramAddressSync(
-      [credential.toBuffer(), schema.toBuffer(), investorKey.toBuffer()],
-      SAS_PROGRAM_ID
+      [
+        Buffer.from("attestation"),
+        subject.toBuffer(),
+        issuer.toBuffer(),
+        Buffer.from([attestationType]),
+      ],
+      ATTESTATION_PROGRAM_ID
     );
   };
 
   before(async () => {
     manager = Keypair.generate();
     investor = Keypair.generate();
-    sasCredential = Keypair.generate();
-    sasSchema = Keypair.generate();
+    attester = Keypair.generate();
+    attestationProgramId = ATTESTATION_PROGRAM_ID;
 
     // Fund manager and investor
     const airdropManager = await connection.requestAirdrop(
@@ -156,9 +161,8 @@ describe("svs-11 (Credit Markets Vault)", () => {
     [claimableTokens] = getClaimableTokensPDA(investor.publicKey);
     [frozenAccount] = getFrozenAccountPDA(investor.publicKey);
     [attestation] = getAttestationPDA(
-      sasCredential.publicKey,
-      sasSchema.publicKey,
-      investor.publicKey
+      investor.publicKey,
+      attester.publicKey
     );
 
     depositVault = getAssociatedTokenAddressSync(
@@ -228,17 +232,18 @@ describe("svs-11 (Credit Markets Vault)", () => {
       })
       .rpc();
 
-    // Create SAS attestation for investor
-    await sasProgram.methods
+    // Create attestation for investor
+    await attestationMockProgram.methods
       .createAttestation(
-        sasCredential.publicKey,
-        sasSchema.publicKey,
-        new BN(0) // expiry=0 means no expiry
+        attester.publicKey,
+        0,
+        [66, 82],
+        new BN(0) // expiresAt=0 means no expiry
       )
       .accountsPartial({
         authority: payer.publicKey,
         attestation,
-        investor: investor.publicKey,
+        subject: investor.publicKey,
         systemProgram: SystemProgram.programId,
       })
       .rpc();
@@ -262,8 +267,8 @@ describe("svs-11 (Credit Markets Vault)", () => {
           redemptionEscrow,
           navOracle,
           oracleProgram: oracleProgram.programId,
-          sasCredential: sasCredential.publicKey,
-          sasSchema: sasSchema.publicKey,
+          attester: attester.publicKey,
+          attestationProgram: attestationProgramId,
           assetTokenProgram: TOKEN_PROGRAM_ID,
           token2022Program: TOKEN_2022_PROGRAM_ID,
           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -291,11 +296,11 @@ describe("svs-11 (Credit Markets Vault)", () => {
       expect(vaultAccount.oracleProgram.toBase58()).to.equal(
         oracleProgram.programId.toBase58()
       );
-      expect(vaultAccount.sasCredential.toBase58()).to.equal(
-        sasCredential.publicKey.toBase58()
+      expect(vaultAccount.attester.toBase58()).to.equal(
+        attester.publicKey.toBase58()
       );
-      expect(vaultAccount.sasSchema.toBase58()).to.equal(
-        sasSchema.publicKey.toBase58()
+      expect(vaultAccount.attestationProgram.toBase58()).to.equal(
+        attestationProgramId.toBase58()
       );
       expect(vaultAccount.vaultId.toNumber()).to.equal(1);
       expect(vaultAccount.totalAssets.toNumber()).to.equal(0);
@@ -546,21 +551,21 @@ describe("svs-11 (Credit Markets Vault)", () => {
         rejectInvestor.publicKey
       );
       [rejectAttestation] = getAttestationPDA(
-        sasCredential.publicKey,
-        sasSchema.publicKey,
-        rejectInvestor.publicKey
+        rejectInvestor.publicKey,
+        attester.publicKey
       );
 
-      await sasProgram.methods
+      await attestationMockProgram.methods
         .createAttestation(
-          sasCredential.publicKey,
-          sasSchema.publicKey,
+          attester.publicKey,
+          0,
+          [66, 82],
           new BN(0)
         )
         .accountsPartial({
           authority: payer.publicKey,
           attestation: rejectAttestation,
-          investor: rejectInvestor.publicKey,
+          subject: rejectInvestor.publicKey,
           systemProgram: SystemProgram.programId,
         })
         .rpc();
@@ -661,21 +666,21 @@ describe("svs-11 (Credit Markets Vault)", () => {
         cancelInvestor.publicKey
       );
       [cancelAttestation] = getAttestationPDA(
-        sasCredential.publicKey,
-        sasSchema.publicKey,
-        cancelInvestor.publicKey
+        cancelInvestor.publicKey,
+        attester.publicKey
       );
 
-      await sasProgram.methods
+      await attestationMockProgram.methods
         .createAttestation(
-          sasCredential.publicKey,
-          sasSchema.publicKey,
+          attester.publicKey,
+          0,
+          [66, 82],
           new BN(0)
         )
         .accountsPartial({
           authority: payer.publicKey,
           attestation: cancelAttestation,
-          investor: cancelInvestor.publicKey,
+          subject: cancelInvestor.publicKey,
           systemProgram: SystemProgram.programId,
         })
         .rpc();
@@ -1209,12 +1214,12 @@ describe("svs-11 (Credit Markets Vault)", () => {
         .rpc();
     });
 
-    it("updates SAS config", async () => {
-      const newCredential = Keypair.generate();
-      const newSchema = Keypair.generate();
+    it("updates attester config", async () => {
+      const newAttester = Keypair.generate();
+      const newAttestationProgram = Keypair.generate();
 
       await program.methods
-        .updateSasConfig(newCredential.publicKey, newSchema.publicKey)
+        .updateAttester(newAttester.publicKey, newAttestationProgram.publicKey)
         .accountsPartial({
           authority: payer.publicKey,
           vault,
@@ -1222,16 +1227,16 @@ describe("svs-11 (Credit Markets Vault)", () => {
         .rpc();
 
       const vaultAccount = await program.account.creditVault.fetch(vault);
-      expect(vaultAccount.sasCredential.toBase58()).to.equal(
-        newCredential.publicKey.toBase58()
+      expect(vaultAccount.attester.toBase58()).to.equal(
+        newAttester.publicKey.toBase58()
       );
-      expect(vaultAccount.sasSchema.toBase58()).to.equal(
-        newSchema.publicKey.toBase58()
+      expect(vaultAccount.attestationProgram.toBase58()).to.equal(
+        newAttestationProgram.publicKey.toBase58()
       );
 
-      // Restore original SAS config
+      // Restore original attester config
       await program.methods
-        .updateSasConfig(sasCredential.publicKey, sasSchema.publicKey)
+        .updateAttester(attester.publicKey, attestationProgramId)
         .accountsPartial({
           authority: payer.publicKey,
           vault,
@@ -1274,21 +1279,21 @@ describe("svs-11 (Credit Markets Vault)", () => {
 
       const [zeroRequest] = getInvestmentRequestPDA(zeroInvestor.publicKey);
       const [zeroAttestation] = getAttestationPDA(
-        sasCredential.publicKey,
-        sasSchema.publicKey,
-        zeroInvestor.publicKey
+        zeroInvestor.publicKey,
+        attester.publicKey
       );
 
-      await sasProgram.methods
+      await attestationMockProgram.methods
         .createAttestation(
-          sasCredential.publicKey,
-          sasSchema.publicKey,
+          attester.publicKey,
+          0,
+          [66, 82],
           new BN(0)
         )
         .accountsPartial({
           authority: payer.publicKey,
           attestation: zeroAttestation,
-          investor: zeroInvestor.publicKey,
+          subject: zeroInvestor.publicKey,
           systemProgram: SystemProgram.programId,
         })
         .rpc();
@@ -1350,21 +1355,21 @@ describe("svs-11 (Credit Markets Vault)", () => {
 
       const [smallRequest] = getInvestmentRequestPDA(smallInvestor.publicKey);
       const [smallAttestation] = getAttestationPDA(
-        sasCredential.publicKey,
-        sasSchema.publicKey,
-        smallInvestor.publicKey
+        smallInvestor.publicKey,
+        attester.publicKey
       );
 
-      await sasProgram.methods
+      await attestationMockProgram.methods
         .createAttestation(
-          sasCredential.publicKey,
-          sasSchema.publicKey,
+          attester.publicKey,
+          0,
+          [66, 82],
           new BN(0)
         )
         .accountsPartial({
           authority: payer.publicKey,
           attestation: smallAttestation,
-          investor: smallInvestor.publicKey,
+          subject: smallInvestor.publicKey,
           systemProgram: SystemProgram.programId,
         })
         .rpc();
@@ -1403,21 +1408,21 @@ describe("svs-11 (Credit Markets Vault)", () => {
 
       const [zeroRedemption] = getRedemptionRequestPDA(zeroRedeemer.publicKey);
       const [zeroAttestation] = getAttestationPDA(
-        sasCredential.publicKey,
-        sasSchema.publicKey,
-        zeroRedeemer.publicKey
+        zeroRedeemer.publicKey,
+        attester.publicKey
       );
 
-      await sasProgram.methods
+      await attestationMockProgram.methods
         .createAttestation(
-          sasCredential.publicKey,
-          sasSchema.publicKey,
+          attester.publicKey,
+          0,
+          [66, 82],
           new BN(0)
         )
         .accountsPartial({
           authority: payer.publicKey,
           attestation: zeroAttestation,
-          investor: zeroRedeemer.publicKey,
+          subject: zeroRedeemer.publicKey,
           systemProgram: SystemProgram.programId,
         })
         .rpc();
@@ -1542,21 +1547,21 @@ describe("svs-11 (Credit Markets Vault)", () => {
         statusInvestor.publicKey
       );
       [statusAttestation] = getAttestationPDA(
-        sasCredential.publicKey,
-        sasSchema.publicKey,
-        statusInvestor.publicKey
+        statusInvestor.publicKey,
+        attester.publicKey
       );
 
-      await sasProgram.methods
+      await attestationMockProgram.methods
         .createAttestation(
-          sasCredential.publicKey,
-          sasSchema.publicKey,
+          attester.publicKey,
+          0,
+          [66, 82],
           new BN(0)
         )
         .accountsPartial({
           authority: payer.publicKey,
           attestation: statusAttestation,
-          investor: statusInvestor.publicKey,
+          subject: statusInvestor.publicKey,
           systemProgram: SystemProgram.programId,
         })
         .rpc();
@@ -1783,21 +1788,21 @@ describe("svs-11 (Credit Markets Vault)", () => {
       [liqRedemptionRequest] = getRedemptionRequestPDA(liqInvestor.publicKey);
       [liqClaimableTokens] = getClaimableTokensPDA(liqInvestor.publicKey);
       [liqAttestation] = getAttestationPDA(
-        sasCredential.publicKey,
-        sasSchema.publicKey,
-        liqInvestor.publicKey
+        liqInvestor.publicKey,
+        attester.publicKey
       );
 
-      await sasProgram.methods
+      await attestationMockProgram.methods
         .createAttestation(
-          sasCredential.publicKey,
-          sasSchema.publicKey,
+          attester.publicKey,
+          0,
+          [66, 82],
           new BN(0)
         )
         .accountsPartial({
           authority: payer.publicKey,
           attestation: liqAttestation,
-          investor: liqInvestor.publicKey,
+          subject: liqInvestor.publicKey,
           systemProgram: SystemProgram.programId,
         })
         .rpc();
@@ -1986,25 +1991,25 @@ describe("svs-11 (Credit Markets Vault)", () => {
       [frozenInvRequest] = getInvestmentRequestPDA(frozenInvestor.publicKey);
       [frozenRedRequest] = getRedemptionRequestPDA(frozenInvestor.publicKey);
       [frozenInvAttestation] = getAttestationPDA(
-        sasCredential.publicKey,
-        sasSchema.publicKey,
-        frozenInvestor.publicKey
+        frozenInvestor.publicKey,
+        attester.publicKey
       );
       [frozenInvFrozenAccount] = getFrozenAccountPDA(frozenInvestor.publicKey);
       [frozenInvClaimableTokens] = getClaimableTokensPDA(
         frozenInvestor.publicKey
       );
 
-      await sasProgram.methods
+      await attestationMockProgram.methods
         .createAttestation(
-          sasCredential.publicKey,
-          sasSchema.publicKey,
+          attester.publicKey,
+          0,
+          [66, 82],
           new BN(0)
         )
         .accountsPartial({
           authority: payer.publicKey,
           attestation: frozenInvAttestation,
-          investor: frozenInvestor.publicKey,
+          subject: frozenInvestor.publicKey,
           systemProgram: SystemProgram.programId,
         })
         .rpc();
@@ -2347,21 +2352,21 @@ describe("svs-11 (Credit Markets Vault)", () => {
 
       const [tempRequest] = getInvestmentRequestPDA(tempInvestor.publicKey);
       const [tempAttestation] = getAttestationPDA(
-        sasCredential.publicKey,
-        sasSchema.publicKey,
-        tempInvestor.publicKey
+        tempInvestor.publicKey,
+        attester.publicKey
       );
 
-      await sasProgram.methods
+      await attestationMockProgram.methods
         .createAttestation(
-          sasCredential.publicKey,
-          sasSchema.publicKey,
+          attester.publicKey,
+          0,
+          [66, 82],
           new BN(0)
         )
         .accountsPartial({
           authority: payer.publicKey,
           attestation: tempAttestation,
-          investor: tempInvestor.publicKey,
+          subject: tempInvestor.publicKey,
           systemProgram: SystemProgram.programId,
         })
         .rpc();
@@ -2471,21 +2476,21 @@ describe("svs-11 (Credit Markets Vault)", () => {
 
       const [tempRequest2] = getInvestmentRequestPDA(tempInvestor2.publicKey);
       const [tempAttestation2] = getAttestationPDA(
-        sasCredential.publicKey,
-        sasSchema.publicKey,
-        tempInvestor2.publicKey
+        tempInvestor2.publicKey,
+        attester.publicKey
       );
 
-      await sasProgram.methods
+      await attestationMockProgram.methods
         .createAttestation(
-          sasCredential.publicKey,
-          sasSchema.publicKey,
+          attester.publicKey,
+          0,
+          [66, 82],
           new BN(0)
         )
         .accountsPartial({
           authority: payer.publicKey,
           attestation: tempAttestation2,
-          investor: tempInvestor2.publicKey,
+          subject: tempInvestor2.publicKey,
           systemProgram: SystemProgram.programId,
         })
         .rpc();

@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 
-use crate::attestation::validate_sas_attestation;
+use crate::attestation::validate_attestation;
 use crate::constants::{FROZEN_ACCOUNT_SEED, INVESTMENT_REQUEST_SEED, VAULT_SEED};
 use crate::error::VaultError;
 use crate::events::InvestmentApproved;
@@ -35,7 +35,7 @@ pub struct ApproveDeposit<'info> {
     /// CHECK: Oracle account validated via read_and_validate_oracle
     pub nav_oracle: UncheckedAccount<'info>,
 
-    /// CHECK: SAS attestation validated in handler
+    /// CHECK: Attestation validated in handler via validate_attestation
     pub attestation: UncheckedAccount<'info>,
 
     #[account(
@@ -54,7 +54,7 @@ pub fn handler(ctx: Context<ApproveDeposit>) -> Result<()> {
         VaultError::AccountFrozen
     );
 
-    validate_sas_attestation(
+    validate_attestation(
         &ctx.accounts.attestation.to_account_info(),
         &ctx.accounts.vault,
         &ctx.accounts.investor.key(),

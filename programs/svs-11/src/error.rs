@@ -44,17 +44,17 @@ pub enum VaultError {
     #[msg("Account is frozen")]
     AccountFrozen,
 
-    #[msg("Attestation account not owned by SAS program")]
+    #[msg("Attestation account not owned by attestation program")]
     InvalidAttestationProgram,
 
-    #[msg("Attestation PDA address mismatch")]
+    #[msg("Invalid attestation account")]
     InvalidAttestation,
 
-    #[msg("Attestation credential does not match vault")]
-    InvalidCredential,
+    #[msg("Attestation issuer does not match vault attester")]
+    InvalidAttester,
 
-    #[msg("Attestation schema does not match vault")]
-    InvalidSchema,
+    #[msg("Attestation has been revoked")]
+    AttestationRevoked,
 
     #[msg("Attestation has expired")]
     AttestationExpired,

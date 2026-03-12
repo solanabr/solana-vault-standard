@@ -8,71 +8,81 @@ pub mod mock_sas {
 
     pub fn create_attestation(
         ctx: Context<CreateAttestation>,
-        credential: Pubkey,
-        schema: Pubkey,
-        expiry: i64,
+        issuer: Pubkey,
+        attestation_type: u8,
+        country_code: [u8; 2],
+        expires_at: i64,
     ) -> Result<()> {
         let account_info = ctx.accounts.attestation.to_account_info();
-        let mut account_data = account_info.try_borrow_mut_data()?;
+        let mut data = account_info.try_borrow_mut_data()?;
+        let clock = Clock::get()?;
 
-        // Borsh-serialized SAS Attestation layout:
-        // discriminator(u8) + nonce(32) + credential(32) + schema(32) +
-        // data(4 + 0) + signer(32) + expiry(i64) + token_account(32)
         let mut offset = 0;
 
-        // discriminator = 0
-        account_data[offset] = 0;
-        offset += 1;
-
-        // nonce = default pubkey
-        account_data[offset..offset + 32].copy_from_slice(&Pubkey::default().to_bytes());
-        offset += 32;
-
-        // credential
-        account_data[offset..offset + 32].copy_from_slice(&credential.to_bytes());
-        offset += 32;
-
-        // schema
-        account_data[offset..offset + 32].copy_from_slice(&schema.to_bytes());
-        offset += 32;
-
-        // data = empty vec (length prefix = 0u32)
-        account_data[offset..offset + 4].copy_from_slice(&0u32.to_le_bytes());
-        offset += 4;
-
-        // signer
-        account_data[offset..offset + 32].copy_from_slice(&ctx.accounts.authority.key().to_bytes());
-        offset += 32;
-
-        // expiry
-        account_data[offset..offset + 8].copy_from_slice(&expiry.to_le_bytes());
+        // 8-byte Anchor discriminator (zeroed for mock)
+        data[offset..offset + 8].copy_from_slice(&[0u8; 8]);
         offset += 8;
 
-        // token_account = default pubkey
-        account_data[offset..offset + 32].copy_from_slice(&Pubkey::default().to_bytes());
+        // subject (32)
+        data[offset..offset + 32].copy_from_slice(&ctx.accounts.subject.key().to_bytes());
+        offset += 32;
+
+        // issuer (32)
+        data[offset..offset + 32].copy_from_slice(&issuer.to_bytes());
+        offset += 32;
+
+        // attestation_type (1)
+        data[offset] = attestation_type;
+        offset += 1;
+
+        // country_code (2)
+        data[offset..offset + 2].copy_from_slice(&country_code);
+        offset += 2;
+
+        // issued_at (8)
+        data[offset..offset + 8].copy_from_slice(&clock.unix_timestamp.to_le_bytes());
+        offset += 8;
+
+        // expires_at (8)
+        data[offset..offset + 8].copy_from_slice(&expires_at.to_le_bytes());
+        offset += 8;
+
+        // revoked (1)
+        data[offset] = 0; // false
+        offset += 1;
+
+        // bump (1)
+        data[offset] = ctx.bumps.attestation;
+        offset += 1;
+
+        // _reserved (32)
+        data[offset..offset + 32].copy_from_slice(&[0u8; 32]);
 
         Ok(())
     }
 }
 
+// Account size: 8 (disc) + 32 + 32 + 1 + 2 + 8 + 8 + 1 + 1 + 32 = 125
+const ATTESTATION_ACCOUNT_SIZE: usize = 125;
+
 #[derive(Accounts)]
-#[instruction(credential: Pubkey, schema: Pubkey)]
+#[instruction(issuer: Pubkey, attestation_type: u8)]
 pub struct CreateAttestation<'info> {
     #[account(mut)]
     pub authority: Signer<'info>,
 
-    /// CHECK: Raw account written with SAS Attestation layout
+    /// CHECK: Raw account written with spec Attestation layout
     #[account(
         init,
         payer = authority,
-        space = 1 + 32 + 32 + 32 + 4 + 32 + 8 + 32,
-        seeds = [credential.as_ref(), schema.as_ref(), investor.key().as_ref()],
+        space = ATTESTATION_ACCOUNT_SIZE,
+        seeds = [b"attestation", subject.key().as_ref(), issuer.as_ref(), &[attestation_type]],
         bump,
     )]
     pub attestation: UncheckedAccount<'info>,
 
-    /// CHECK: Investor identity for PDA derivation
-    pub investor: UncheckedAccount<'info>,
+    /// CHECK: Subject identity for PDA derivation
+    pub subject: UncheckedAccount<'info>,
 
     pub system_program: Program<'info, System>,
 }

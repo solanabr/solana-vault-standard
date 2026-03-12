@@ -3,7 +3,7 @@ use anchor_spl::token_interface::{
     transfer_checked, Mint, TokenAccount, TokenInterface, TransferChecked,
 };
 
-use crate::attestation::validate_sas_attestation;
+use crate::attestation::validate_attestation;
 use crate::constants::{FROZEN_ACCOUNT_SEED, INVESTMENT_REQUEST_SEED, VAULT_SEED};
 use crate::error::VaultError;
 use crate::events::InvestmentRequested;
@@ -46,7 +46,7 @@ pub struct RequestDeposit<'info> {
     #[account(constraint = asset_mint.key() == vault.asset_mint)]
     pub asset_mint: InterfaceAccount<'info, Mint>,
 
-    /// CHECK: Validated in handler via validate_sas_attestation
+    /// CHECK: Validated in handler via validate_attestation
     pub attestation: UncheckedAccount<'info>,
 
     #[account(
@@ -73,7 +73,7 @@ pub fn handler(ctx: Context<RequestDeposit>, amount: u64) -> Result<()> {
         VaultError::DepositTooSmall
     );
 
-    validate_sas_attestation(
+    validate_attestation(
         &ctx.accounts.attestation.to_account_info(),
         vault,
         &ctx.accounts.investor.key(),

@@ -30,8 +30,8 @@ export interface CreditVaultState {
   navOracle: PublicKey;
   oracleProgram: PublicKey;
   maxStaleness: BN;
-  sasCredential: PublicKey;
-  sasSchema: PublicKey;
+  attester: PublicKey;
+  attestationProgram: PublicKey;
   vaultId: BN;
   totalAssets: BN;
   totalShares: BN;
@@ -50,8 +50,8 @@ export interface CreateCreditVaultParams {
   vaultId: BN | number;
   navOracle: PublicKey;
   oracleProgram: PublicKey;
-  sasCredential: PublicKey;
-  sasSchema: PublicKey;
+  attester: PublicKey;
+  attestationProgram: PublicKey;
   minimumInvestment: BN;
   maxStaleness: BN;
 }
@@ -203,8 +203,8 @@ export class CreditVault {
         redemptionEscrow: addresses.redemptionEscrow,
         navOracle: params.navOracle,
         oracleProgram: params.oracleProgram,
-        sasCredential: params.sasCredential,
-        sasSchema: params.sasSchema,
+        attester: params.attester,
+        attestationProgram: params.attestationProgram,
         assetTokenProgram,
         token2022Program: TOKEN_2022_PROGRAM_ID,
         associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -665,13 +665,13 @@ export class CreditVault {
       .rpc();
   }
 
-  async updateSasConfig(
+  async updateAttester(
     authority: PublicKey,
-    newCredential: PublicKey,
-    newSchema: PublicKey,
+    newAttester: PublicKey,
+    newAttestationProgram: PublicKey,
   ): Promise<string> {
     return this.program.methods
-      .updateSasConfig(newCredential, newSchema)
+      .updateAttester(newAttester, newAttestationProgram)
       .accountsPartial({
         authority,
         vault: this.vault,

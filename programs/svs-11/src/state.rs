@@ -23,8 +23,8 @@ pub struct CreditVault {
     pub nav_oracle: Pubkey,
     pub oracle_program: Pubkey,
     pub max_staleness: i64,
-    pub sas_credential: Pubkey,
-    pub sas_schema: Pubkey,
+    pub attester: Pubkey,
+    pub attestation_program: Pubkey,
     pub vault_id: u64,
     pub total_assets: u64,
     pub total_shares: u64,
@@ -52,8 +52,8 @@ impl CreditVault {
         32 +  // nav_oracle
         32 +  // oracle_program
         8 +   // max_staleness
-        32 +  // sas_credential
-        32 +  // sas_schema
+        32 +  // attester
+        32 +  // attestation_program
         8 +   // vault_id
         8 +   // total_assets
         8 +   // total_shares

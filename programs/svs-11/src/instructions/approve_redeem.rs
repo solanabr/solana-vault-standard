@@ -4,7 +4,7 @@ use anchor_spl::token_interface::{
     transfer_checked, Mint, TokenAccount, TokenInterface, TransferChecked,
 };
 
-use crate::attestation::validate_sas_attestation;
+use crate::attestation::validate_attestation;
 use crate::constants::{
     CLAIMABLE_TOKENS_SEED, FROZEN_ACCOUNT_SEED, REDEMPTION_ESCROW_SEED, REDEMPTION_REQUEST_SEED,
     VAULT_SEED,
@@ -76,7 +76,7 @@ pub struct ApproveRedeem<'info> {
     /// CHECK: Oracle account validated via read_and_validate_oracle
     pub nav_oracle: UncheckedAccount<'info>,
 
-    /// CHECK: SAS attestation validated in handler
+    /// CHECK: Attestation validated in handler via validate_attestation
     pub attestation: UncheckedAccount<'info>,
 
     #[account(
@@ -98,7 +98,7 @@ pub fn handler(ctx: Context<ApproveRedeem>) -> Result<()> {
         VaultError::AccountFrozen
     );
 
-    validate_sas_attestation(
+    validate_attestation(
         &ctx.accounts.attestation.to_account_info(),
         &ctx.accounts.vault,
         &ctx.accounts.investor.key(),

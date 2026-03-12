@@ -2,7 +2,7 @@ use anchor_lang::prelude::*;
 use anchor_spl::token_2022::Token2022;
 use anchor_spl::token_interface::{transfer_checked, Mint, TokenAccount, TransferChecked};
 
-use crate::attestation::validate_sas_attestation;
+use crate::attestation::validate_attestation;
 use crate::constants::{
     FROZEN_ACCOUNT_SEED, REDEMPTION_ESCROW_SEED, REDEMPTION_REQUEST_SEED, SHARES_DECIMALS,
     VAULT_SEED,
@@ -48,7 +48,7 @@ pub struct RequestRedeem<'info> {
     )]
     pub redemption_escrow: InterfaceAccount<'info, TokenAccount>,
 
-    /// CHECK: SAS attestation validated in handler
+    /// CHECK: Attestation validated in handler via validate_attestation
     pub attestation: UncheckedAccount<'info>,
 
     #[account(
@@ -65,7 +65,7 @@ pub struct RequestRedeem<'info> {
 pub fn handler(ctx: Context<RequestRedeem>, shares: u64) -> Result<()> {
     require!(shares > 0, VaultError::ZeroAmount);
 
-    validate_sas_attestation(
+    validate_attestation(
         &ctx.accounts.attestation.to_account_info(),
         &ctx.accounts.vault,
         &ctx.accounts.investor.key(),

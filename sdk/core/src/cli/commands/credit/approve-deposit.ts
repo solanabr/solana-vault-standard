@@ -13,7 +13,7 @@ export function registerApproveDepositCommand(program: Command): void {
     .argument("<vault>", "Vault address or alias")
     .requiredOption("--investor <pubkey>", "Investor who requested the deposit")
     .requiredOption("--nav-oracle <pubkey>", "NAV oracle account")
-    .requiredOption("--attestation <pubkey>", "SAS attestation account")
+    .requiredOption("--attestation <pubkey>", "Attestation account")
     .option("--frozen-check <pubkey>", "Frozen account check (optional)")
     .option("--program-id <pubkey>", "Program ID")
     .option("--asset-mint <pubkey>", "Asset mint")

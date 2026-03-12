@@ -12,7 +12,7 @@ export function registerRequestRedeemCommand(program: Command): void {
     .description("Request a redemption from an SVS-11 credit vault")
     .argument("<vault>", "Vault address or alias")
     .requiredOption("-s, --shares <number>", "Amount of shares to redeem")
-    .requiredOption("--attestation <pubkey>", "SAS attestation account")
+    .requiredOption("--attestation <pubkey>", "Attestation account")
     .option("--program-id <pubkey>", "Program ID")
     .option("--asset-mint <pubkey>", "Asset mint")
     .option("--vault-id <number>", "Vault ID", "1")

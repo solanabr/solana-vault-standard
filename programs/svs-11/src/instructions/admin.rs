@@ -3,7 +3,7 @@ use anchor_lang::prelude::*;
 use crate::constants::VAULT_SEED;
 use crate::error::VaultError;
 use crate::events::{
-    AuthorityTransferred, ManagerChanged, OracleConfigUpdated, SasConfigUpdated, VaultStatusChanged,
+    AttesterUpdated, AuthorityTransferred, ManagerChanged, OracleConfigUpdated, VaultStatusChanged,
 };
 use crate::state::CreditVault;
 
@@ -79,28 +79,31 @@ pub fn set_manager_handler(ctx: Context<Admin>, new_manager: Pubkey) -> Result<(
     Ok(())
 }
 
-pub fn update_sas_config_handler(
+pub fn update_attester_handler(
     ctx: Context<Admin>,
-    new_credential: Pubkey,
-    new_schema: Pubkey,
+    new_attester: Pubkey,
+    new_attestation_program: Pubkey,
 ) -> Result<()> {
     require!(
-        new_credential != Pubkey::default(),
+        new_attester != Pubkey::default(),
         VaultError::InvalidAddress
     );
-    require!(new_schema != Pubkey::default(), VaultError::InvalidAddress);
+    require!(
+        new_attestation_program != Pubkey::default(),
+        VaultError::InvalidAddress
+    );
 
-    let old_credential = ctx.accounts.vault.sas_credential;
-    let old_schema = ctx.accounts.vault.sas_schema;
-    ctx.accounts.vault.sas_credential = new_credential;
-    ctx.accounts.vault.sas_schema = new_schema;
+    let old_attester = ctx.accounts.vault.attester;
+    let old_attestation_program = ctx.accounts.vault.attestation_program;
+    ctx.accounts.vault.attester = new_attester;
+    ctx.accounts.vault.attestation_program = new_attestation_program;
 
-    emit!(SasConfigUpdated {
+    emit!(AttesterUpdated {
         vault: ctx.accounts.vault.key(),
-        old_credential,
-        new_credential,
-        old_schema,
-        new_schema,
+        old_attester,
+        new_attester,
+        old_attestation_program,
+        new_attestation_program,
     });
 
     Ok(())

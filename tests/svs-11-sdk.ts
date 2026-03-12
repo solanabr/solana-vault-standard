@@ -62,8 +62,8 @@ describe("svs-11-sdk (CreditVault SDK)", () => {
         vaultId,
         navOracle,
         oracleProgram: oracleProgram.programId,
-        sasCredential: Keypair.generate().publicKey,
-        sasSchema: Keypair.generate().publicKey,
+        attester: Keypair.generate().publicKey,
+        attestationProgram: Keypair.generate().publicKey,
         minimumInvestment,
         maxStaleness,
       });
