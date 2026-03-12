@@ -12,7 +12,10 @@ export function registerRepayCommand(program: Command): void {
     .description("Repay assets to the credit vault (manager only)")
     .argument("<vault>", "Vault address or alias")
     .requiredOption("-a, --amount <number>", "Amount of assets to repay")
-    .option("--manager-token-account <pubkey>", "Manager token account (defaults to ATA)")
+    .option(
+      "--manager-token-account <pubkey>",
+      "Manager token account (defaults to ATA)",
+    )
     .option("--program-id <pubkey>", "Program ID")
     .option("--asset-mint <pubkey>", "Asset mint")
     .option("--vault-id <number>", "Vault ID", "1")

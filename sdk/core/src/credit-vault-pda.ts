@@ -7,7 +7,7 @@ export const REDEMPTION_ESCROW_SEED = Buffer.from("redemption_escrow");
 export const INVESTMENT_REQUEST_SEED = Buffer.from("investment_request");
 export const REDEMPTION_REQUEST_SEED = Buffer.from("redemption_request");
 export const CLAIMABLE_TOKENS_SEED = Buffer.from("claimable_tokens");
-export const FROZEN_ACCOUNT_SEED = Buffer.from("frozen_account");
+export const CREDIT_FROZEN_ACCOUNT_SEED = Buffer.from("frozen_account");
 
 export function getCreditVaultAddress(
   programId: PublicKey,
@@ -74,13 +74,13 @@ export function getClaimableTokensAddress(
   );
 }
 
-export function getFrozenAccountAddress(
+export function getCreditFrozenAccountAddress(
   programId: PublicKey,
   vault: PublicKey,
   investor: PublicKey,
 ): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
-    [FROZEN_ACCOUNT_SEED, vault.toBuffer(), investor.toBuffer()],
+    [CREDIT_FROZEN_ACCOUNT_SEED, vault.toBuffer(), investor.toBuffer()],
     programId,
   );
 }

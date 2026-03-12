@@ -1,5 +1,6 @@
 import { Command } from "commander";
 import { Program, BN } from "@coral-xyz/anchor";
+import { PublicKey } from "@solana/web3.js";
 import { createContext } from "../../middleware";
 import { getGlobalOptions } from "../../index";
 import { CreditVault } from "../../../credit-vault";
@@ -11,6 +12,7 @@ export function registerRequestRedeemCommand(program: Command): void {
     .description("Request a redemption from an SVS-11 credit vault")
     .argument("<vault>", "Vault address or alias")
     .requiredOption("-s, --shares <number>", "Amount of shares to redeem")
+    .requiredOption("--attestation <pubkey>", "SAS attestation account")
     .option("--program-id <pubkey>", "Program ID")
     .option("--asset-mint <pubkey>", "Asset mint")
     .option("--vault-id <number>", "Vault ID", "1")
@@ -29,6 +31,7 @@ export function registerRequestRedeemCommand(program: Command): void {
       }
 
       const shares = new BN(opts.shares);
+      const attestation = new PublicKey(opts.attestation);
 
       try {
         const idl = loadIdl(idlPath);
@@ -58,7 +61,11 @@ export function registerRequestRedeemCommand(program: Command): void {
         const spinner = output.spinner("Sending transaction...");
         spinner.start();
 
-        const sig = await vault.requestRedeem(wallet.publicKey, shares);
+        const sig = await vault.requestRedeem(
+          wallet.publicKey,
+          shares,
+          attestation,
+        );
 
         spinner.succeed("Transaction confirmed");
         output.success(`Redeem requested: ${shares.toString()} shares`);

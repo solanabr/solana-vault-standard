@@ -16,7 +16,7 @@ import {
   getInvestmentRequestAddress,
   getRedemptionRequestAddress,
   getClaimableTokensAddress,
-  getFrozenAccountAddress,
+  getCreditFrozenAccountAddress,
 } from "./credit-vault-pda";
 import { getTokenProgramForMint } from "./vault";
 
@@ -78,7 +78,7 @@ export interface RedemptionRequestState {
   bump: number;
 }
 
-export interface FrozenAccountState {
+export interface CreditFrozenAccountState {
   investor: PublicKey;
   vault: PublicKey;
   frozenBy: PublicKey;
@@ -192,11 +192,7 @@ export class CreditVault {
     );
 
     await program.methods
-      .initializePool(
-        id,
-        params.minimumInvestment,
-        params.maxStaleness,
-      )
+      .initializePool(id, params.minimumInvestment, params.maxStaleness)
       .accountsPartial({
         authority: provider.wallet.publicKey,
         manager: params.manager,
@@ -582,7 +578,7 @@ export class CreditVault {
     manager: PublicKey,
     investor: PublicKey,
   ): Promise<string> {
-    const [frozenAccount] = getFrozenAccountAddress(
+    const [frozenAccount] = getCreditFrozenAccountAddress(
       this.program.programId,
       this.vault,
       investor,
@@ -605,7 +601,7 @@ export class CreditVault {
     manager: PublicKey,
     investor: PublicKey,
   ): Promise<string> {
-    const [frozenAccount] = getFrozenAccountAddress(
+    const [frozenAccount] = getCreditFrozenAccountAddress(
       this.program.programId,
       this.vault,
       investor,
@@ -695,12 +691,22 @@ export class CreditVault {
     return state.totalShares;
   }
 
-  convertToShares(assets: bigint, totalAssets: bigint, totalShares: bigint, decimalsOffset: number): bigint {
+  convertToShares(
+    assets: bigint,
+    totalAssets: bigint,
+    totalShares: bigint,
+    decimalsOffset: number,
+  ): bigint {
     const offset = BigInt(10 ** decimalsOffset);
     return (assets * (totalShares + offset)) / (totalAssets + 1n);
   }
 
-  convertToAssets(shares: bigint, totalAssets: bigint, totalShares: bigint, decimalsOffset: number): bigint {
+  convertToAssets(
+    shares: bigint,
+    totalAssets: bigint,
+    totalShares: bigint,
+    decimalsOffset: number,
+  ): bigint {
     const offset = BigInt(10 ** decimalsOffset);
     return (shares * (totalAssets + 1n)) / (totalShares + offset);
   }
@@ -761,15 +767,17 @@ export class CreditVault {
     return accountNs["redemptionRequest"].fetch(redemptionRequest);
   }
 
-  async fetchFrozenAccount(investor: PublicKey): Promise<FrozenAccountState> {
-    const [frozenAccount] = getFrozenAccountAddress(
+  async fetchFrozenAccount(
+    investor: PublicKey,
+  ): Promise<CreditFrozenAccountState> {
+    const [frozenAccount] = getCreditFrozenAccountAddress(
       this.program.programId,
       this.vault,
       investor,
     );
     const accountNs = this.program.account as Record<
       string,
-      { fetch: (addr: PublicKey) => Promise<FrozenAccountState> }
+      { fetch: (addr: PublicKey) => Promise<CreditFrozenAccountState> }
     >;
     return accountNs["frozenAccount"].fetch(frozenAccount);
   }

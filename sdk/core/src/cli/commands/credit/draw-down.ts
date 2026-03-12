@@ -62,11 +62,7 @@ export function registerDrawDownCommand(program: Command): void {
         const spinner = output.spinner("Sending transaction...");
         spinner.start();
 
-        const sig = await vault.drawDown(
-          wallet.publicKey,
-          amount,
-          destination,
-        );
+        const sig = await vault.drawDown(wallet.publicKey, amount, destination);
 
         spinner.succeed("Transaction confirmed");
         output.success(`Drew down: ${amount.toString()} assets`);

@@ -28,7 +28,7 @@ import {
   getInvestmentRequestAddress,
   getRedemptionRequestAddress,
   getClaimableTokensAddress,
-  getFrozenAccountAddress,
+  getCreditFrozenAccountAddress,
 } from "../sdk/core/src/credit-vault-pda";
 
 const SAS_PROGRAM_ID = new PublicKey(
@@ -95,7 +95,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
     getClaimableTokensAddress(program.programId, vault, investorKey);
 
   const getFrozenAccountPDA = (investorKey: PublicKey): [PublicKey, number] =>
-    getFrozenAccountAddress(program.programId, vault, investorKey);
+    getCreditFrozenAccountAddress(program.programId, vault, investorKey);
 
   const getOracleDataPDA = (): [PublicKey, number] => {
     return PublicKey.findProgramAddressSync(

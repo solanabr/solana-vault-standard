@@ -59,7 +59,7 @@ import {
   getInvestmentRequestAddress,
   getRedemptionRequestAddress,
   getClaimableTokensAddress,
-  getFrozenAccountAddress,
+  getCreditFrozenAccountAddress,
 } from "../sdk/core/src/credit-vault-pda";
 
 const PROGRAM_ID = new PublicKey("Bf17gDR2JdKTWdoTWK3Va9YQtkpePRAAVxMCaokj8ZFW");
@@ -554,7 +554,7 @@ async function main() {
   // ─────────────────────────────────────────────────────────────────────
   console.log("Step 12: Compliance (freeze + unfreeze)...");
 
-  const [frozenAccountPda] = getFrozenAccountAddress(PROGRAM_ID, vault, investor.publicKey);
+  const [frozenAccountPda] = getCreditFrozenAccountAddress(PROGRAM_ID, vault, investor.publicKey);
 
   // Anchor 0.31+ omits `investor` from the accountsPartial type since it
   // appears in frozenAccount PDA seeds, but the runtime still requires it.
