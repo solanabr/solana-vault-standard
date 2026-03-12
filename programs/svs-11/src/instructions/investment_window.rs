@@ -22,6 +22,7 @@ pub struct InvestmentWindow<'info> {
 
 pub fn open_investment_window(ctx: Context<InvestmentWindow>) -> Result<()> {
     let vault = &mut ctx.accounts.vault;
+    require!(!vault.investment_window_open, VaultError::WindowAlreadyOpen);
     vault.investment_window_open = true;
 
     emit!(WindowOpened { vault: vault.key() });
@@ -31,6 +32,10 @@ pub fn open_investment_window(ctx: Context<InvestmentWindow>) -> Result<()> {
 
 pub fn close_investment_window(ctx: Context<InvestmentWindow>) -> Result<()> {
     let vault = &mut ctx.accounts.vault;
+    require!(
+        vault.investment_window_open,
+        VaultError::WindowAlreadyClosed
+    );
     vault.investment_window_open = false;
 
     emit!(WindowClosed { vault: vault.key() });

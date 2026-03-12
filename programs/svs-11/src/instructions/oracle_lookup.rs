@@ -13,6 +13,7 @@ pub fn find_oracle_price<'info>(
     remaining_accounts: &[AccountInfo<'info>],
     oracle_program: &Pubkey,
     nav_oracle: &Pubkey,
+    vault_key: &Pubkey,
 ) -> Result<Option<(u64, i64)>> {
     for account in remaining_accounts {
         if account.key() == *nav_oracle {
@@ -37,6 +38,14 @@ pub fn find_oracle_price<'info>(
                 data[..8] == expected_disc[..],
                 VaultError::InvalidOraclePrice
             );
+
+            // Validate oracle vault field matches current vault (defense-in-depth)
+            let oracle_vault = Pubkey::new_from_array(
+                data[8..40]
+                    .try_into()
+                    .map_err(|_| VaultError::InvalidOraclePrice)?,
+            );
+            require!(oracle_vault == *vault_key, VaultError::OracleVaultMismatch);
 
             // Deserialize price and updated_at from known offsets
             // Layout: disc(8) + vault(32) + price(8) + updated_at(8)
@@ -93,7 +102,10 @@ pub fn validate_attestation<'info>(
             continue;
         }
 
-        require!(attestation.issuer == *attester, VaultError::InvalidAttester);
+        if attestation.issuer != *attester {
+            continue;
+        }
+
         require!(!attestation.revoked, VaultError::AttestationRevoked);
         if attestation.expires_at > 0 {
             require!(

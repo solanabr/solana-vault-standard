@@ -11,7 +11,7 @@ use crate::{
     constants::*,
     error::VaultError,
     events::RedemptionApproved,
-    instructions::oracle_lookup::find_oracle_price,
+    instructions::oracle_lookup::{check_not_frozen, find_oracle_price, validate_attestation},
     state::{ClaimableEscrow, CreditVault, RedemptionRequest, RedemptionStatus},
 };
 
@@ -78,6 +78,13 @@ pub struct ApproveRedeem<'info> {
     )]
     pub claimable_escrow: Account<'info, ClaimableEscrow>,
 
+    /// CHECK: FrozenAccount PDA — validated in handler
+    #[account(
+        seeds = [FROZEN_ACCOUNT_SEED, vault.key().as_ref(), redemption_request.investor.as_ref()],
+        bump
+    )]
+    pub frozen_account: UncheckedAccount<'info>,
+
     pub asset_token_program: Interface<'info, TokenInterface>,
     pub token_2022_program: Program<'info, Token2022>,
     pub system_program: Program<'info, System>,
@@ -96,12 +103,25 @@ pub fn handler(ctx: Context<ApproveRedeem>) -> Result<()> {
     let vault_key = vault.key();
     let shares_locked = request.shares_locked;
 
-    // Oracle is REQUIRED for SVS-11
+    // Re-validate attestation at approval time (spec §8.3)
     let clock = Clock::get()?;
+    validate_attestation(
+        ctx.remaining_accounts,
+        &vault.attestation_program,
+        &request.investor,
+        &vault.attester,
+        &clock,
+    )?;
+
+    // Check not frozen
+    check_not_frozen(&ctx.accounts.frozen_account.to_account_info())?;
+
+    // Oracle is REQUIRED for SVS-11
     let (price, updated_at) = find_oracle_price(
         ctx.remaining_accounts,
         &vault.oracle_program,
         &vault.nav_oracle,
+        &vault_key,
     )?
     .ok_or(VaultError::OracleRequired)?;
 
@@ -248,6 +268,9 @@ pub fn handler(ctx: Context<ApproveRedeem>) -> Result<()> {
     )?;
 
     // Transfer assets from deposit_vault to claimable_tokens
+    // Record balance before transfer for delta-based T22 fee accounting
+    let deposit_vault_before = ctx.accounts.deposit_vault.amount;
+
     transfer_checked(
         CpiContext::new_with_signer(
             ctx.accounts.asset_token_program.to_account_info(),
@@ -263,22 +286,30 @@ pub fn handler(ctx: Context<ApproveRedeem>) -> Result<()> {
         ctx.accounts.asset_mint.decimals,
     )?;
 
-    // Update vault totals
+    // Delta-based accounting: actual amount sent may differ from `assets` due to T22 transfer fees
+    ctx.accounts.deposit_vault.reload()?;
+    let actual_sent = deposit_vault_before
+        .checked_sub(ctx.accounts.deposit_vault.amount)
+        .ok_or(VaultError::MathOverflow)?;
+
+    // Update vault totals using actual amount debited
     let vault = &mut ctx.accounts.vault;
     vault.total_assets = vault
         .total_assets
-        .checked_sub(assets)
+        .checked_sub(actual_sent)
         .ok_or(VaultError::MathOverflow)?;
     vault.total_shares = vault
         .total_shares
         .checked_sub(shares_locked)
         .ok_or(VaultError::MathOverflow)?;
 
-    // Set claimable escrow state
+    // Set claimable escrow state — use actual_sent (what left the vault)
+    // The claimable_tokens account received actual_sent minus any receiver-side fee,
+    // but claim_redemption transfers whatever is in the account, so this is safe.
     let claimable_escrow = &mut ctx.accounts.claimable_escrow;
     claimable_escrow.investor = investor_key;
     claimable_escrow.vault = vault.key();
-    claimable_escrow.amount_claimable = assets;
+    claimable_escrow.amount_claimable = actual_sent;
     claimable_escrow.bump = ctx.bumps.claimable_escrow;
 
     // Update request

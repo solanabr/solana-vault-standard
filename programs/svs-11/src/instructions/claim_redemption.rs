@@ -66,10 +66,11 @@ pub fn handler(ctx: Context<ClaimRedemption>) -> Result<()> {
 
     require!(
         request.status == RedemptionStatus::Approved,
-        VaultError::RequestNotPending
+        VaultError::RequestNotApproved
     );
 
-    let assets = ctx.accounts.claimable_escrow.amount_claimable;
+    // Use actual token account balance (handles T22 transfer fee edge cases)
+    let assets = ctx.accounts.claimable_tokens.amount;
 
     let vault = &ctx.accounts.vault;
     let asset_mint_key = vault.asset_mint;

@@ -96,6 +96,10 @@ pub mod svs_11 {
         instructions::admin::update_attester(ctx, new_attester)
     }
 
+    pub fn update_oracle(ctx: Context<UpdateOracle>) -> Result<()> {
+        instructions::admin::update_oracle(ctx)
+    }
+
     // ============ Module Admin Instructions (requires "modules" feature) ============
 
     #[cfg(feature = "modules")]

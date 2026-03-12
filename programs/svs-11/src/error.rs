@@ -89,12 +89,15 @@ pub enum VaultError {
     #[msg("Insufficient liquidity for redemption")]
     InsufficientLiquidity,
 
-    #[msg("Duplicate request already exists")]
-    DuplicateRequest,
-
     #[msg("Invalid manager address")]
     InvalidManager,
 
-    #[msg("Oracle not found in remaining accounts")]
-    OracleNotFound,
+    #[msg("Redemption request has not been approved yet")]
+    RequestNotApproved,
+
+    #[msg("Investment window is already open")]
+    WindowAlreadyOpen,
+
+    #[msg("Investment window is already closed")]
+    WindowAlreadyClosed,
 }

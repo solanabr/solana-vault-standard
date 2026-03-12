@@ -33,16 +33,18 @@ pub struct Initialize<'info> {
 
     pub asset_mint: InterfaceAccount<'info, Mint>,
 
-    /// CHECK: NAV oracle PDA address from external oracle program
+    /// CHECK: NAV oracle PDA address from external oracle program — validated in handler
     pub nav_oracle: UncheckedAccount<'info>,
 
-    /// CHECK: Oracle program ID
+    /// CHECK: Oracle program — must be executable
+    #[account(constraint = oracle_program.executable @ VaultError::InvalidOraclePrice)]
     pub oracle_program: UncheckedAccount<'info>,
 
     /// CHECK: Trusted KYC attester address
     pub attester: UncheckedAccount<'info>,
 
-    /// CHECK: Attestation program ID
+    /// CHECK: Attestation program — must be executable
+    #[account(constraint = attestation_program.executable @ VaultError::InvalidAttester)]
     pub attestation_program: UncheckedAccount<'info>,
 
     /// CHECK: Shares mint initialized via CPI

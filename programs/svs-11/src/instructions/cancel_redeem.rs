@@ -5,6 +5,8 @@ use anchor_spl::token_interface::{transfer_checked, Mint, TokenAccount, Transfer
 use crate::{
     constants::*,
     error::VaultError,
+    events::RedemptionCancelled,
+    instructions::oracle_lookup::check_not_frozen,
     state::{CreditVault, RedemptionRequest, RedemptionStatus},
 };
 
@@ -44,10 +46,19 @@ pub struct CancelRedeem<'info> {
     )]
     pub investor_shares_account: InterfaceAccount<'info, TokenAccount>,
 
+    /// CHECK: FrozenAccount PDA — validated in handler
+    #[account(
+        seeds = [FROZEN_ACCOUNT_SEED, vault.key().as_ref(), investor.key().as_ref()],
+        bump
+    )]
+    pub frozen_account: UncheckedAccount<'info>,
+
     pub token_2022_program: Program<'info, Token2022>,
 }
 
 pub fn handler(ctx: Context<CancelRedeem>) -> Result<()> {
+    check_not_frozen(&ctx.accounts.frozen_account.to_account_info())?;
+
     let request = &ctx.accounts.redemption_request;
 
     require!(
@@ -83,6 +94,12 @@ pub fn handler(ctx: Context<CancelRedeem>) -> Result<()> {
         shares_to_return,
         SHARES_DECIMALS,
     )?;
+
+    emit!(RedemptionCancelled {
+        vault: vault.key(),
+        investor: ctx.accounts.investor.key(),
+        shares: shares_to_return,
+    });
 
     Ok(())
 }

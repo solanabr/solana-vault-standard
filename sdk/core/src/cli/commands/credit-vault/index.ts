@@ -22,6 +22,15 @@ import {
   formatNumber,
 } from "../../utils";
 import { CreditVault } from "../../../credit-vault";
+
+function parsePublicKey(value: string, label: string): PublicKey {
+  if (!isValidPublicKey(value)) {
+    throw new Error(
+      `Invalid ${label}: "${value}" is not a valid Solana public key`,
+    );
+  }
+  return new PublicKey(value);
+}
 import {
   getInvestmentRequestAddress,
   getRedemptionRequestAddress,
@@ -102,7 +111,7 @@ export function registerCreditVaultCommands(program: Command): void {
     const { output, wallet } = ctx;
     const globalOpts = getGlobalOptions(program);
     const investor = opts.investor
-      ? new PublicKey(opts.investor as string)
+      ? parsePublicKey(opts.investor as string, "investor")
       : wallet.publicKey;
 
     try {
@@ -180,7 +189,10 @@ export function registerCreditVaultCommands(program: Command): void {
     const globalOpts = getGlobalOptions(program);
 
     const amount = new BN(opts.amount as string);
-    const attestation = new PublicKey(opts.attestation as string);
+    const attestation = parsePublicKey(
+      opts.attestation as string,
+      "attestation",
+    );
 
     output.info(`Requesting deposit: ${formatNumber(amount)} assets`);
 
@@ -269,7 +281,10 @@ export function registerCreditVaultCommands(program: Command): void {
     const globalOpts = getGlobalOptions(program);
 
     const shares = new BN(opts.shares as string);
-    const attestation = new PublicKey(opts.attestation as string);
+    const attestation = parsePublicKey(
+      opts.attestation as string,
+      "attestation",
+    );
 
     output.info(`Requesting redeem: ${formatNumber(shares)} shares`);
 
@@ -383,9 +398,12 @@ export function registerCreditVaultCommands(program: Command): void {
     const { output, wallet, options } = ctx;
     const globalOpts = getGlobalOptions(program);
 
-    const investor = new PublicKey(opts.investor as string);
-    const oracle = new PublicKey(opts.oracle as string);
-    const attestation = new PublicKey(opts.attestation as string);
+    const investor = parsePublicKey(opts.investor as string, "investor");
+    const oracle = parsePublicKey(opts.oracle as string, "oracle");
+    const attestation = parsePublicKey(
+      opts.attestation as string,
+      "attestation",
+    );
 
     output.info(`Approving deposit for: ${investor.toBase58()}`);
 
@@ -433,7 +451,7 @@ export function registerCreditVaultCommands(program: Command): void {
     const { output, wallet, options } = ctx;
     const globalOpts = getGlobalOptions(program);
 
-    const investor = new PublicKey(opts.investor as string);
+    const investor = parsePublicKey(opts.investor as string, "investor");
     const reasonCode = parseInt(opts.reason as string, 10);
 
     output.info(`Rejecting deposit for: ${investor.toBase58()}`);
@@ -472,14 +490,19 @@ export function registerCreditVaultCommands(program: Command): void {
       .description("Approve a pending redeem request (manager only)")
       .argument("<vault>", "Vault address or alias")
       .requiredOption("--investor <pubkey>", "Investor address")
-      .requiredOption("--oracle <pubkey>", "Oracle price account"),
+      .requiredOption("--oracle <pubkey>", "Oracle price account")
+      .requiredOption("--attestation <pubkey>", "Investor attestation account"),
   ).action(async (vaultArg: string, opts: Record<string, unknown>) => {
     const { vault, ctx } = await loadCreditVault(program, vaultArg, opts);
     const { output, wallet, options } = ctx;
     const globalOpts = getGlobalOptions(program);
 
-    const investor = new PublicKey(opts.investor as string);
-    const oracle = new PublicKey(opts.oracle as string);
+    const investor = parsePublicKey(opts.investor as string, "investor");
+    const oracle = parsePublicKey(opts.oracle as string, "oracle");
+    const attestation = parsePublicKey(
+      opts.attestation as string,
+      "attestation",
+    );
 
     output.info(`Approving redeem for: ${investor.toBase58()}`);
 
@@ -491,7 +514,12 @@ export function registerCreditVaultCommands(program: Command): void {
     const spinner = output.spinner("Sending transaction...");
     try {
       spinner.start();
-      const sig = await vault.approveRedeem(wallet, investor, oracle);
+      const sig = await vault.approveRedeem(
+        wallet,
+        investor,
+        oracle,
+        attestation,
+      );
       spinner.succeed("Redeem approved — assets ready for claim");
       output.success(`Signature: ${sig}`);
       if (globalOpts.output === "json") {
@@ -631,7 +659,7 @@ export function registerCreditVaultCommands(program: Command): void {
     const { output, wallet, options } = ctx;
     const globalOpts = getGlobalOptions(program);
 
-    const investor = new PublicKey(opts.investor as string);
+    const investor = parsePublicKey(opts.investor as string, "investor");
 
     if (!options.yes) {
       const confirmed = await output.confirm(
@@ -676,7 +704,7 @@ export function registerCreditVaultCommands(program: Command): void {
     const { output, wallet } = ctx;
     const globalOpts = getGlobalOptions(program);
 
-    const investor = new PublicKey(opts.investor as string);
+    const investor = parsePublicKey(opts.investor as string, "investor");
 
     const spinner = output.spinner("Sending transaction...");
     try {
@@ -775,7 +803,10 @@ export function registerCreditVaultCommands(program: Command): void {
     const { output, wallet, options } = ctx;
     const globalOpts = getGlobalOptions(program);
 
-    const newAuthority = new PublicKey(opts.newAuthority as string);
+    const newAuthority = parsePublicKey(
+      opts.newAuthority as string,
+      "new-authority",
+    );
 
     if (!options.yes) {
       const confirmed = await output.confirm(
@@ -820,7 +851,7 @@ export function registerCreditVaultCommands(program: Command): void {
     const { output, wallet } = ctx;
     const globalOpts = getGlobalOptions(program);
 
-    const newManager = new PublicKey(opts.newManager as string);
+    const newManager = parsePublicKey(opts.newManager as string, "new-manager");
 
     const spinner = output.spinner("Sending transaction...");
     try {
@@ -855,7 +886,10 @@ export function registerCreditVaultCommands(program: Command): void {
     const { output, wallet } = ctx;
     const globalOpts = getGlobalOptions(program);
 
-    const newAttester = new PublicKey(opts.newAttester as string);
+    const newAttester = parsePublicKey(
+      opts.newAttester as string,
+      "new-attester",
+    );
 
     const spinner = output.spinner("Sending transaction...");
     try {

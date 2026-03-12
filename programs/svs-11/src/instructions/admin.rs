@@ -2,7 +2,9 @@ use anchor_lang::prelude::*;
 
 use crate::{
     error::VaultError,
-    events::{AttesterChanged, AuthorityTransferred, ManagerChanged, VaultStatusChanged},
+    events::{
+        AttesterChanged, AuthorityTransferred, ManagerChanged, OracleChanged, VaultStatusChanged,
+    },
     state::CreditVault,
 };
 
@@ -76,7 +78,47 @@ pub fn set_manager(ctx: Context<Admin>, new_manager: Pubkey) -> Result<()> {
     Ok(())
 }
 
+#[derive(Accounts)]
+pub struct UpdateOracle<'info> {
+    #[account(
+        constraint = authority.key() == vault.authority @ VaultError::Unauthorized,
+    )]
+    pub authority: Signer<'info>,
+
+    #[account(mut)]
+    pub vault: Account<'info, CreditVault>,
+
+    /// CHECK: New oracle program — must be executable
+    #[account(constraint = new_oracle_program.executable @ VaultError::InvalidOraclePrice)]
+    pub new_oracle_program: UncheckedAccount<'info>,
+
+    /// CHECK: New NAV oracle address
+    pub new_nav_oracle: UncheckedAccount<'info>,
+}
+
+pub fn update_oracle(ctx: Context<UpdateOracle>) -> Result<()> {
+    let vault = &mut ctx.accounts.vault;
+    let previous_oracle = vault.nav_oracle;
+    let previous_oracle_program = vault.oracle_program;
+    vault.nav_oracle = ctx.accounts.new_nav_oracle.key();
+    vault.oracle_program = ctx.accounts.new_oracle_program.key();
+
+    emit!(OracleChanged {
+        vault: vault.key(),
+        previous_oracle,
+        new_oracle: vault.nav_oracle,
+        previous_oracle_program,
+        new_oracle_program: vault.oracle_program,
+    });
+
+    Ok(())
+}
+
 pub fn update_attester(ctx: Context<Admin>, new_attester: Pubkey) -> Result<()> {
+    require!(
+        new_attester != Pubkey::default(),
+        VaultError::InvalidAttester
+    );
     let vault = &mut ctx.accounts.vault;
     let previous_attester = vault.attester;
     vault.attester = new_attester;

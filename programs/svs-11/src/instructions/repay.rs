@@ -13,7 +13,6 @@ pub struct Repay<'info> {
     #[account(
         mut,
         constraint = vault.manager == manager.key() @ VaultError::Unauthorized,
-        constraint = !vault.paused @ VaultError::VaultPaused,
     )]
     pub vault: Account<'info, CreditVault>,
 

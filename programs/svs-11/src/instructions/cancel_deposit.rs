@@ -7,6 +7,7 @@ use crate::{
     constants::*,
     error::VaultError,
     events::InvestmentCancelled,
+    instructions::oracle_lookup::check_not_frozen,
     state::{CreditVault, InvestmentRequest, RequestStatus},
 };
 
@@ -45,10 +46,19 @@ pub struct CancelDeposit<'info> {
     )]
     pub investor_asset_account: InterfaceAccount<'info, TokenAccount>,
 
+    /// CHECK: FrozenAccount PDA — validated in handler
+    #[account(
+        seeds = [FROZEN_ACCOUNT_SEED, vault.key().as_ref(), investor.key().as_ref()],
+        bump
+    )]
+    pub frozen_account: UncheckedAccount<'info>,
+
     pub asset_token_program: Interface<'info, TokenInterface>,
 }
 
 pub fn handler(ctx: Context<CancelDeposit>) -> Result<()> {
+    check_not_frozen(&ctx.accounts.frozen_account.to_account_info())?;
+
     let request = &ctx.accounts.investment_request;
 
     require!(
@@ -58,6 +68,11 @@ pub fn handler(ctx: Context<CancelDeposit>) -> Result<()> {
 
     // SVS-11: No cancel delay — instant cancel while Pending
     let assets_to_return = request.amount_locked;
+
+    require!(
+        ctx.accounts.deposit_vault.amount >= assets_to_return,
+        VaultError::InsufficientAssets
+    );
 
     let vault = &ctx.accounts.vault;
     let asset_mint_key = vault.asset_mint;

@@ -1182,6 +1182,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
           depositVault,
           investorAssetAccount: tmpAta.address,
           assetTokenProgram: TOKEN_PROGRAM_ID,
+          frozenAccount,
         })
         .signers([tmpInvestor])
         .rpc();
@@ -1368,6 +1369,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
           depositVault,
           investorAssetAccount: tmpAta.address,
           assetTokenProgram: TOKEN_PROGRAM_ID,
+          frozenAccount,
         })
         .signers([tmpInvestor])
         .rpc();
@@ -1439,6 +1441,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
         .rpc();
 
       // Another investor tries to cancel
+      const [wrongFrozenAccount] = getFrozenAccountPDA(vault, investor.publicKey);
       try {
         await program.methods
           .cancelDeposit()
@@ -1450,13 +1453,14 @@ describe("svs-11 (Credit Markets Vault)", () => {
             depositVault,
             investorAssetAccount: tmpAta.address,
             assetTokenProgram: TOKEN_PROGRAM_ID,
+            frozenAccount: wrongFrozenAccount,
           })
           .signers([investor])
           .rpc();
         expect.fail("should have thrown");
       } catch (err: any) {
         // PDA seeds mismatch or constraint failure
-        expect(err.toString()).to.not.be.empty;
+        expect(err.toString()).to.include("seeds constraint was violated");
       }
 
       // Clean up
@@ -1470,6 +1474,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
           depositVault,
           investorAssetAccount: tmpAta.address,
           assetTokenProgram: TOKEN_PROGRAM_ID,
+          frozenAccount,
         })
         .signers([tmpInvestor])
         .rpc();
@@ -1630,6 +1635,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
         vault,
         investor.publicKey
       );
+      const [frozenAccount] = getFrozenAccountPDA(vault, investor.publicKey);
 
       const vaultBefore = await program.account.creditVault.fetch(vault);
 
@@ -1645,6 +1651,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
           depositVault,
           claimableTokens,
           claimableEscrow,
+          frozenAccount,
           assetTokenProgram: TOKEN_PROGRAM_ID,
           token2022Program: TOKEN_2022_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
@@ -1652,6 +1659,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
         })
         .remainingAccounts([
           { pubkey: oracleAccount, isSigner: false, isWritable: false },
+          { pubkey: investorAttestationAccount, isSigner: false, isWritable: false },
         ])
         .signers([manager])
         .rpc();
@@ -1798,6 +1806,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
           redemptionEscrow,
           investorSharesAccount,
           token2022Program: TOKEN_2022_PROGRAM_ID,
+          frozenAccount,
         })
         .signers([investor])
         .rpc();
@@ -1916,7 +1925,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
       }
     });
 
-    it("cannot repay when paused", async () => {
+    it("repay succeeds even when paused (liquidity injection)", async () => {
       await program.methods
         .pause()
         .accountsStrict({ authority: payer.publicKey, vault })
@@ -1930,23 +1939,19 @@ describe("svs-11 (Credit Markets Vault)", () => {
         ASSOCIATED_TOKEN_PROGRAM_ID
       );
 
-      try {
-        await program.methods
-          .repay(new BN(1_000_000))
-          .accountsStrict({
-            manager: manager.publicKey,
-            vault,
-            assetMint,
-            managerAssetAccount,
-            depositVault,
-            assetTokenProgram: TOKEN_PROGRAM_ID,
-          })
-          .signers([manager])
-          .rpc();
-        expect.fail("should have thrown");
-      } catch (err: any) {
-        expect(err.toString()).to.include("VaultPaused");
-      }
+      // Repay should succeed while paused — manager needs to inject liquidity
+      await program.methods
+        .repay(new BN(1_000_000))
+        .accountsStrict({
+          manager: manager.publicKey,
+          vault,
+          assetMint,
+          managerAssetAccount,
+          depositVault,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .signers([manager])
+        .rpc();
 
       await program.methods
         .unpause()
@@ -2158,6 +2163,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
           depositVault,
           investorAssetAccount,
           assetTokenProgram: TOKEN_PROGRAM_ID,
+          frozenAccount,
         })
         .signers([investor])
         .rpc();
@@ -2588,6 +2594,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
           depositVault,
           investorAssetAccount: tmpAta.address,
           assetTokenProgram: TOKEN_PROGRAM_ID,
+          frozenAccount,
         })
         .signers([tmpInvestor])
         .rpc();
@@ -2816,7 +2823,8 @@ describe("svs-11 (Credit Markets Vault)", () => {
           .rpc();
         expect.fail("should have thrown");
       } catch (err: any) {
-        expect(err.toString()).to.include("InvalidAttester");
+        // Wrong issuer is skipped (continue), no valid attestation found
+        expect(err.toString()).to.include("AttestationNotFound");
       }
     });
 
@@ -2896,6 +2904,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
           depositVault,
           investorAssetAccount: tmpAta.address,
           assetTokenProgram: TOKEN_PROGRAM_ID,
+          frozenAccount,
         })
         .signers([tmpInvestor])
         .rpc();
@@ -3119,6 +3128,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
           depositVault,
           claimableTokens,
           claimableEscrow,
+          frozenAccount,
           assetTokenProgram: TOKEN_PROGRAM_ID,
           token2022Program: TOKEN_2022_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
@@ -3126,6 +3136,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
         })
         .remainingAccounts([
           { pubkey: oracleAccount, isSigner: false, isWritable: false },
+          { pubkey: lcAtt2, isSigner: false, isWritable: false },
         ])
         .signers([manager])
         .rpc();
@@ -3178,6 +3189,1665 @@ describe("svs-11 (Credit Markets Vault)", () => {
 
       // Reset oracle
       await updateOraclePrice(oracleKeypair, PRICE_SCALE);
+    });
+  });
+
+  // =========================================================================
+  // Security Review Tests
+  // =========================================================================
+  describe("Security Review Tests", () => {
+    it("claim_redemption succeeds when vault is paused", async () => {
+      const secInvestor = Keypair.generate();
+      const sig = await connection.requestAirdrop(
+        secInvestor.publicKey,
+        2 * anchor.web3.LAMPORTS_PER_SOL
+      );
+      await connection.confirmTransaction(sig, "confirmed");
+
+      const secAta = await getOrCreateAssociatedTokenAccount(
+        connection,
+        payer,
+        assetMint,
+        secInvestor.publicKey,
+        false,
+        undefined,
+        undefined,
+        TOKEN_PROGRAM_ID
+      );
+      await mintTo(
+        connection,
+        payer,
+        assetMint,
+        secAta.address,
+        payer.publicKey,
+        10_000_000,
+        [],
+        undefined,
+        TOKEN_PROGRAM_ID
+      );
+      const [, secAtt] = await createAttestationAccount(
+        secInvestor.publicKey,
+        payer.publicKey,
+        0
+      );
+
+      const secSharesAccount = getAssociatedTokenAddressSync(
+        sharesMint,
+        secInvestor.publicKey,
+        false,
+        TOKEN_2022_PROGRAM_ID,
+        ASSOCIATED_TOKEN_PROGRAM_ID
+      );
+      const ataIx =
+        require("@solana/spl-token").createAssociatedTokenAccountInstruction(
+          payer.publicKey,
+          secSharesAccount,
+          secInvestor.publicKey,
+          sharesMint,
+          TOKEN_2022_PROGRAM_ID,
+          ASSOCIATED_TOKEN_PROGRAM_ID
+        );
+      await sendAndConfirmTransaction(
+        connection,
+        new Transaction().add(ataIx),
+        [payer]
+      );
+
+      // Ensure window is open
+      const vaultState = await program.account.creditVault.fetch(vault);
+      if (!vaultState.investmentWindowOpen) {
+        await program.methods
+          .openInvestmentWindow()
+          .accountsStrict({ manager: manager.publicKey, vault })
+          .signers([manager])
+          .rpc();
+      }
+
+      const [investmentRequest] = getInvestmentRequestPDA(
+        vault,
+        secInvestor.publicKey
+      );
+      const [frozenAccount] = getFrozenAccountPDA(
+        vault,
+        secInvestor.publicKey
+      );
+
+      // Request deposit
+      await program.methods
+        .requestDeposit(new BN(5_000_000))
+        .accountsStrict({
+          investor: secInvestor.publicKey,
+          vault,
+          investmentRequest,
+          assetMint,
+          investorAssetAccount: secAta.address,
+          depositVault,
+          frozenAccount,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .remainingAccounts([
+          { pubkey: secAtt, isSigner: false, isWritable: false },
+        ])
+        .signers([secInvestor])
+        .rpc();
+
+      // Approve deposit
+      await program.methods
+        .approveDeposit()
+        .accountsStrict({
+          manager: manager.publicKey,
+          vault,
+          investmentRequest,
+          investor: secInvestor.publicKey,
+          sharesMint,
+          investorSharesAccount: secSharesAccount,
+          frozenAccount,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+        })
+        .remainingAccounts([
+          { pubkey: secAtt, isSigner: false, isWritable: false },
+          { pubkey: oracleAccount, isSigner: false, isWritable: false },
+        ])
+        .signers([manager])
+        .rpc();
+
+      // Request redeem all shares
+      const sharesBalance = await getAccount(
+        connection,
+        secSharesAccount,
+        undefined,
+        TOKEN_2022_PROGRAM_ID
+      );
+      const [, secAttRedeem] = await createAttestationAccount(
+        secInvestor.publicKey,
+        payer.publicKey,
+        0
+      );
+      const [redemptionRequest] = getRedemptionRequestPDA(
+        vault,
+        secInvestor.publicKey
+      );
+
+      await program.methods
+        .requestRedeem(new BN(Number(sharesBalance.amount)))
+        .accountsStrict({
+          investor: secInvestor.publicKey,
+          vault,
+          redemptionRequest,
+          sharesMint,
+          investorSharesAccount: secSharesAccount,
+          redemptionEscrow,
+          frozenAccount,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .remainingAccounts([
+          { pubkey: secAttRedeem, isSigner: false, isWritable: false },
+        ])
+        .signers([secInvestor])
+        .rpc();
+
+      // Approve redeem
+      const [claimableEscrow] = getClaimableEscrowPDA(
+        vault,
+        secInvestor.publicKey
+      );
+      const [claimableTokens] = getClaimableTokensPDA(
+        vault,
+        secInvestor.publicKey
+      );
+
+      await program.methods
+        .approveRedeem()
+        .accountsStrict({
+          manager: manager.publicKey,
+          vault,
+          redemptionRequest,
+          sharesMint,
+          redemptionEscrow,
+          assetMint,
+          depositVault,
+          claimableTokens,
+          claimableEscrow,
+          frozenAccount,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          rent: SYSVAR_RENT_PUBKEY,
+        })
+        .remainingAccounts([
+          { pubkey: oracleAccount, isSigner: false, isWritable: false },
+          { pubkey: secAttRedeem, isSigner: false, isWritable: false },
+        ])
+        .signers([manager])
+        .rpc();
+
+      // Pause vault
+      await program.methods
+        .pause()
+        .accountsStrict({ authority: payer.publicKey, vault })
+        .rpc();
+
+      // Claim redemption should succeed even when paused
+      await program.methods
+        .claimRedemption()
+        .accountsStrict({
+          investor: secInvestor.publicKey,
+          vault,
+          redemptionRequest,
+          claimableEscrow,
+          assetMint,
+          claimableTokens,
+          investorAssetAccount: secAta.address,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .signers([secInvestor])
+        .rpc();
+
+      // Unpause
+      await program.methods
+        .unpause()
+        .accountsStrict({ authority: payer.publicKey, vault })
+        .rpc();
+    });
+
+    it("claim_redemption succeeds when investor is frozen", async () => {
+      const secInvestor = Keypair.generate();
+      const sig = await connection.requestAirdrop(
+        secInvestor.publicKey,
+        2 * anchor.web3.LAMPORTS_PER_SOL
+      );
+      await connection.confirmTransaction(sig, "confirmed");
+
+      const secAta = await getOrCreateAssociatedTokenAccount(
+        connection,
+        payer,
+        assetMint,
+        secInvestor.publicKey,
+        false,
+        undefined,
+        undefined,
+        TOKEN_PROGRAM_ID
+      );
+      await mintTo(
+        connection,
+        payer,
+        assetMint,
+        secAta.address,
+        payer.publicKey,
+        10_000_000,
+        [],
+        undefined,
+        TOKEN_PROGRAM_ID
+      );
+      const [, secAtt] = await createAttestationAccount(
+        secInvestor.publicKey,
+        payer.publicKey,
+        0
+      );
+
+      const secSharesAccount = getAssociatedTokenAddressSync(
+        sharesMint,
+        secInvestor.publicKey,
+        false,
+        TOKEN_2022_PROGRAM_ID,
+        ASSOCIATED_TOKEN_PROGRAM_ID
+      );
+      const ataIx =
+        require("@solana/spl-token").createAssociatedTokenAccountInstruction(
+          payer.publicKey,
+          secSharesAccount,
+          secInvestor.publicKey,
+          sharesMint,
+          TOKEN_2022_PROGRAM_ID,
+          ASSOCIATED_TOKEN_PROGRAM_ID
+        );
+      await sendAndConfirmTransaction(
+        connection,
+        new Transaction().add(ataIx),
+        [payer]
+      );
+
+      const vaultState = await program.account.creditVault.fetch(vault);
+      if (!vaultState.investmentWindowOpen) {
+        await program.methods
+          .openInvestmentWindow()
+          .accountsStrict({ manager: manager.publicKey, vault })
+          .signers([manager])
+          .rpc();
+      }
+
+      const [investmentRequest] = getInvestmentRequestPDA(
+        vault,
+        secInvestor.publicKey
+      );
+      const [frozenAccount] = getFrozenAccountPDA(
+        vault,
+        secInvestor.publicKey
+      );
+
+      await program.methods
+        .requestDeposit(new BN(5_000_000))
+        .accountsStrict({
+          investor: secInvestor.publicKey,
+          vault,
+          investmentRequest,
+          assetMint,
+          investorAssetAccount: secAta.address,
+          depositVault,
+          frozenAccount,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .remainingAccounts([
+          { pubkey: secAtt, isSigner: false, isWritable: false },
+        ])
+        .signers([secInvestor])
+        .rpc();
+
+      await program.methods
+        .approveDeposit()
+        .accountsStrict({
+          manager: manager.publicKey,
+          vault,
+          investmentRequest,
+          investor: secInvestor.publicKey,
+          sharesMint,
+          investorSharesAccount: secSharesAccount,
+          frozenAccount,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+        })
+        .remainingAccounts([
+          { pubkey: secAtt, isSigner: false, isWritable: false },
+          { pubkey: oracleAccount, isSigner: false, isWritable: false },
+        ])
+        .signers([manager])
+        .rpc();
+
+      const sharesBalance = await getAccount(
+        connection,
+        secSharesAccount,
+        undefined,
+        TOKEN_2022_PROGRAM_ID
+      );
+      const [, secAttRedeem] = await createAttestationAccount(
+        secInvestor.publicKey,
+        payer.publicKey,
+        0
+      );
+      const [redemptionRequest] = getRedemptionRequestPDA(
+        vault,
+        secInvestor.publicKey
+      );
+
+      await program.methods
+        .requestRedeem(new BN(Number(sharesBalance.amount)))
+        .accountsStrict({
+          investor: secInvestor.publicKey,
+          vault,
+          redemptionRequest,
+          sharesMint,
+          investorSharesAccount: secSharesAccount,
+          redemptionEscrow,
+          frozenAccount,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .remainingAccounts([
+          { pubkey: secAttRedeem, isSigner: false, isWritable: false },
+        ])
+        .signers([secInvestor])
+        .rpc();
+
+      const [claimableEscrow] = getClaimableEscrowPDA(
+        vault,
+        secInvestor.publicKey
+      );
+      const [claimableTokens] = getClaimableTokensPDA(
+        vault,
+        secInvestor.publicKey
+      );
+
+      await program.methods
+        .approveRedeem()
+        .accountsStrict({
+          manager: manager.publicKey,
+          vault,
+          redemptionRequest,
+          sharesMint,
+          redemptionEscrow,
+          assetMint,
+          depositVault,
+          claimableTokens,
+          claimableEscrow,
+          frozenAccount,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          rent: SYSVAR_RENT_PUBKEY,
+        })
+        .remainingAccounts([
+          { pubkey: oracleAccount, isSigner: false, isWritable: false },
+          { pubkey: secAttRedeem, isSigner: false, isWritable: false },
+        ])
+        .signers([manager])
+        .rpc();
+
+      // Freeze investor
+      await program.methods
+        .freezeAccount()
+        .accountsStrict({
+          manager: manager.publicKey,
+          vault,
+          investor: secInvestor.publicKey,
+          frozenAccount,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([manager])
+        .rpc();
+
+      // Claim redemption should succeed even when frozen
+      await program.methods
+        .claimRedemption()
+        .accountsStrict({
+          investor: secInvestor.publicKey,
+          vault,
+          redemptionRequest,
+          claimableEscrow,
+          assetMint,
+          claimableTokens,
+          investorAssetAccount: secAta.address,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .signers([secInvestor])
+        .rpc();
+
+      // Unfreeze
+      await program.methods
+        .unfreezeAccount()
+        .accountsStrict({
+          manager: manager.publicKey,
+          vault,
+          investor: secInvestor.publicKey,
+          frozenAccount,
+        })
+        .signers([manager])
+        .rpc();
+    });
+
+    it("approve_deposit fails for frozen investor", async () => {
+      const secInvestor = Keypair.generate();
+      const sig = await connection.requestAirdrop(
+        secInvestor.publicKey,
+        2 * anchor.web3.LAMPORTS_PER_SOL
+      );
+      await connection.confirmTransaction(sig, "confirmed");
+
+      const secAta = await getOrCreateAssociatedTokenAccount(
+        connection,
+        payer,
+        assetMint,
+        secInvestor.publicKey,
+        false,
+        undefined,
+        undefined,
+        TOKEN_PROGRAM_ID
+      );
+      await mintTo(
+        connection,
+        payer,
+        assetMint,
+        secAta.address,
+        payer.publicKey,
+        10_000_000,
+        [],
+        undefined,
+        TOKEN_PROGRAM_ID
+      );
+      const [, secAtt] = await createAttestationAccount(
+        secInvestor.publicKey,
+        payer.publicKey,
+        0
+      );
+
+      const secSharesAccount = getAssociatedTokenAddressSync(
+        sharesMint,
+        secInvestor.publicKey,
+        false,
+        TOKEN_2022_PROGRAM_ID,
+        ASSOCIATED_TOKEN_PROGRAM_ID
+      );
+      const ataIx =
+        require("@solana/spl-token").createAssociatedTokenAccountInstruction(
+          payer.publicKey,
+          secSharesAccount,
+          secInvestor.publicKey,
+          sharesMint,
+          TOKEN_2022_PROGRAM_ID,
+          ASSOCIATED_TOKEN_PROGRAM_ID
+        );
+      await sendAndConfirmTransaction(
+        connection,
+        new Transaction().add(ataIx),
+        [payer]
+      );
+
+      const vaultState = await program.account.creditVault.fetch(vault);
+      if (!vaultState.investmentWindowOpen) {
+        await program.methods
+          .openInvestmentWindow()
+          .accountsStrict({ manager: manager.publicKey, vault })
+          .signers([manager])
+          .rpc();
+      }
+
+      const [investmentRequest] = getInvestmentRequestPDA(
+        vault,
+        secInvestor.publicKey
+      );
+      const [frozenAccount] = getFrozenAccountPDA(
+        vault,
+        secInvestor.publicKey
+      );
+
+      // Request deposit while unfrozen
+      await program.methods
+        .requestDeposit(new BN(5_000_000))
+        .accountsStrict({
+          investor: secInvestor.publicKey,
+          vault,
+          investmentRequest,
+          assetMint,
+          investorAssetAccount: secAta.address,
+          depositVault,
+          frozenAccount,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .remainingAccounts([
+          { pubkey: secAtt, isSigner: false, isWritable: false },
+        ])
+        .signers([secInvestor])
+        .rpc();
+
+      // Freeze investor
+      await program.methods
+        .freezeAccount()
+        .accountsStrict({
+          manager: manager.publicKey,
+          vault,
+          investor: secInvestor.publicKey,
+          frozenAccount,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([manager])
+        .rpc();
+
+      // Approve should fail
+      try {
+        await program.methods
+          .approveDeposit()
+          .accountsStrict({
+            manager: manager.publicKey,
+            vault,
+            investmentRequest,
+            investor: secInvestor.publicKey,
+            sharesMint,
+            investorSharesAccount: secSharesAccount,
+            frozenAccount,
+            token2022Program: TOKEN_2022_PROGRAM_ID,
+          })
+          .remainingAccounts([
+            { pubkey: secAtt, isSigner: false, isWritable: false },
+            { pubkey: oracleAccount, isSigner: false, isWritable: false },
+          ])
+          .signers([manager])
+          .rpc();
+        expect.fail("should have thrown");
+      } catch (err: any) {
+        expect(err.toString()).to.include("AccountFrozen");
+      }
+
+      // Unfreeze and cancel deposit
+      await program.methods
+        .unfreezeAccount()
+        .accountsStrict({
+          manager: manager.publicKey,
+          vault,
+          investor: secInvestor.publicKey,
+          frozenAccount,
+        })
+        .signers([manager])
+        .rpc();
+
+      await program.methods
+        .cancelDeposit()
+        .accountsStrict({
+          investor: secInvestor.publicKey,
+          vault,
+          investmentRequest,
+          assetMint,
+          depositVault,
+          investorAssetAccount: secAta.address,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          frozenAccount,
+        })
+        .signers([secInvestor])
+        .rpc();
+    });
+
+    it("approve_redeem fails when deposit vault has insufficient liquidity", async () => {
+      // This test uses a fresh investor with a small deposit, then tries to
+      // redeem more than the deposit vault holds by manipulating the oracle
+      // to inflate the redemption value beyond available liquidity.
+      const secInvestor = Keypair.generate();
+      const sig = await connection.requestAirdrop(
+        secInvestor.publicKey,
+        2 * anchor.web3.LAMPORTS_PER_SOL
+      );
+      await connection.confirmTransaction(sig, "confirmed");
+
+      const secAta = await getOrCreateAssociatedTokenAccount(
+        connection,
+        payer,
+        assetMint,
+        secInvestor.publicKey,
+        false,
+        undefined,
+        undefined,
+        TOKEN_PROGRAM_ID
+      );
+      await mintTo(
+        connection,
+        payer,
+        assetMint,
+        secAta.address,
+        payer.publicKey,
+        10_000_000,
+        [],
+        undefined,
+        TOKEN_PROGRAM_ID
+      );
+      const [, secAtt] = await createAttestationAccount(
+        secInvestor.publicKey,
+        payer.publicKey,
+        0
+      );
+
+      const secSharesAccount = getAssociatedTokenAddressSync(
+        sharesMint,
+        secInvestor.publicKey,
+        false,
+        TOKEN_2022_PROGRAM_ID,
+        ASSOCIATED_TOKEN_PROGRAM_ID
+      );
+      const ataIx =
+        require("@solana/spl-token").createAssociatedTokenAccountInstruction(
+          payer.publicKey,
+          secSharesAccount,
+          secInvestor.publicKey,
+          sharesMint,
+          TOKEN_2022_PROGRAM_ID,
+          ASSOCIATED_TOKEN_PROGRAM_ID
+        );
+      await sendAndConfirmTransaction(
+        connection,
+        new Transaction().add(ataIx),
+        [payer]
+      );
+
+      const vaultState = await program.account.creditVault.fetch(vault);
+      if (!vaultState.investmentWindowOpen) {
+        await program.methods
+          .openInvestmentWindow()
+          .accountsStrict({ manager: manager.publicKey, vault })
+          .signers([manager])
+          .rpc();
+      }
+
+      const [investmentRequest] = getInvestmentRequestPDA(
+        vault,
+        secInvestor.publicKey
+      );
+      const [frozenAccount] = getFrozenAccountPDA(
+        vault,
+        secInvestor.publicKey
+      );
+
+      // Deposit
+      await program.methods
+        .requestDeposit(new BN(5_000_000))
+        .accountsStrict({
+          investor: secInvestor.publicKey,
+          vault,
+          investmentRequest,
+          assetMint,
+          investorAssetAccount: secAta.address,
+          depositVault,
+          frozenAccount,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .remainingAccounts([
+          { pubkey: secAtt, isSigner: false, isWritable: false },
+        ])
+        .signers([secInvestor])
+        .rpc();
+
+      await program.methods
+        .approveDeposit()
+        .accountsStrict({
+          manager: manager.publicKey,
+          vault,
+          investmentRequest,
+          investor: secInvestor.publicKey,
+          sharesMint,
+          investorSharesAccount: secSharesAccount,
+          frozenAccount,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+        })
+        .remainingAccounts([
+          { pubkey: secAtt, isSigner: false, isWritable: false },
+          { pubkey: oracleAccount, isSigner: false, isWritable: false },
+        ])
+        .signers([manager])
+        .rpc();
+
+      // Request redeem all shares
+      const sharesBalance = await getAccount(
+        connection,
+        secSharesAccount,
+        undefined,
+        TOKEN_2022_PROGRAM_ID
+      );
+      const [, secAttRedeem] = await createAttestationAccount(
+        secInvestor.publicKey,
+        payer.publicKey,
+        0
+      );
+      const [redemptionRequest] = getRedemptionRequestPDA(
+        vault,
+        secInvestor.publicKey
+      );
+
+      await program.methods
+        .requestRedeem(new BN(Number(sharesBalance.amount)))
+        .accountsStrict({
+          investor: secInvestor.publicKey,
+          vault,
+          redemptionRequest,
+          sharesMint,
+          investorSharesAccount: secSharesAccount,
+          redemptionEscrow,
+          frozenAccount,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .remainingAccounts([
+          { pubkey: secAttRedeem, isSigner: false, isWritable: false },
+        ])
+        .signers([secInvestor])
+        .rpc();
+
+      // Inflate oracle price massively so redemption value exceeds deposit vault balance
+      // At 1_000_000x, shares_to_assets uses u128 intermediate but the result exceeds vault balance
+      await updateOraclePrice(oracleKeypair, PRICE_SCALE * 1_000_000);
+
+      const [claimableEscrow] = getClaimableEscrowPDA(
+        vault,
+        secInvestor.publicKey
+      );
+      const [claimableTokens] = getClaimableTokensPDA(
+        vault,
+        secInvestor.publicKey
+      );
+
+      try {
+        await program.methods
+          .approveRedeem()
+          .accountsStrict({
+            manager: manager.publicKey,
+            vault,
+            redemptionRequest,
+            sharesMint,
+            redemptionEscrow,
+            assetMint,
+            depositVault,
+            claimableTokens,
+            claimableEscrow,
+            frozenAccount,
+            assetTokenProgram: TOKEN_PROGRAM_ID,
+            token2022Program: TOKEN_2022_PROGRAM_ID,
+            systemProgram: SystemProgram.programId,
+            rent: SYSVAR_RENT_PUBKEY,
+          })
+          .remainingAccounts([
+            { pubkey: oracleAccount, isSigner: false, isWritable: false },
+            { pubkey: secAttRedeem, isSigner: false, isWritable: false },
+          ])
+          .signers([manager])
+          .rpc();
+        expect.fail("should have thrown");
+      } catch (err: any) {
+        // Either InsufficientLiquidity (value > vault balance) or MathOverflow (u64 overflow on result)
+        const errStr = err.toString();
+        expect(
+          errStr.includes("InsufficientLiquidity") || errStr.includes("MathOverflow")
+        ).to.be.true;
+      }
+
+      // Reset oracle
+      await updateOraclePrice(oracleKeypair, PRICE_SCALE);
+
+      // Cancel redeem
+      await program.methods
+        .cancelRedeem()
+        .accountsStrict({
+          investor: secInvestor.publicKey,
+          vault,
+          redemptionRequest,
+          sharesMint,
+          redemptionEscrow,
+          investorSharesAccount: secSharesAccount,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+          frozenAccount,
+        })
+        .signers([secInvestor])
+        .rpc();
+    });
+
+    it("non-manager cannot reject deposit", async () => {
+      const secInvestor = Keypair.generate();
+      const sig = await connection.requestAirdrop(
+        secInvestor.publicKey,
+        2 * anchor.web3.LAMPORTS_PER_SOL
+      );
+      await connection.confirmTransaction(sig, "confirmed");
+
+      const secAta = await getOrCreateAssociatedTokenAccount(
+        connection,
+        payer,
+        assetMint,
+        secInvestor.publicKey,
+        false,
+        undefined,
+        undefined,
+        TOKEN_PROGRAM_ID
+      );
+      await mintTo(
+        connection,
+        payer,
+        assetMint,
+        secAta.address,
+        payer.publicKey,
+        5_000_000,
+        [],
+        undefined,
+        TOKEN_PROGRAM_ID
+      );
+      const [, secAtt] = await createAttestationAccount(
+        secInvestor.publicKey,
+        payer.publicKey,
+        0
+      );
+
+      const vaultState = await program.account.creditVault.fetch(vault);
+      if (!vaultState.investmentWindowOpen) {
+        await program.methods
+          .openInvestmentWindow()
+          .accountsStrict({ manager: manager.publicKey, vault })
+          .signers([manager])
+          .rpc();
+      }
+
+      const [investmentRequest] = getInvestmentRequestPDA(
+        vault,
+        secInvestor.publicKey
+      );
+      const [frozenAccount] = getFrozenAccountPDA(
+        vault,
+        secInvestor.publicKey
+      );
+
+      await program.methods
+        .requestDeposit(new BN(5_000_000))
+        .accountsStrict({
+          investor: secInvestor.publicKey,
+          vault,
+          investmentRequest,
+          assetMint,
+          investorAssetAccount: secAta.address,
+          depositVault,
+          frozenAccount,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .remainingAccounts([
+          { pubkey: secAtt, isSigner: false, isWritable: false },
+        ])
+        .signers([secInvestor])
+        .rpc();
+
+      // Random signer tries to reject
+      try {
+        await program.methods
+          .rejectDeposit(1)
+          .accountsStrict({
+            manager: investor.publicKey,
+            vault,
+            investmentRequest,
+            investor: secInvestor.publicKey,
+            assetMint,
+            depositVault,
+            investorAssetAccount: secAta.address,
+            assetTokenProgram: TOKEN_PROGRAM_ID,
+          })
+          .signers([investor])
+          .rpc();
+        expect.fail("should have thrown");
+      } catch (err: any) {
+        expect(err.toString()).to.include("Unauthorized");
+      }
+
+      // Cancel deposit
+      await program.methods
+        .cancelDeposit()
+        .accountsStrict({
+          investor: secInvestor.publicKey,
+          vault,
+          investmentRequest,
+          assetMint,
+          depositVault,
+          investorAssetAccount: secAta.address,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          frozenAccount,
+        })
+        .signers([secInvestor])
+        .rpc();
+    });
+
+    it("non-manager cannot approve redeem", async () => {
+      const secInvestor = Keypair.generate();
+      const sig = await connection.requestAirdrop(
+        secInvestor.publicKey,
+        2 * anchor.web3.LAMPORTS_PER_SOL
+      );
+      await connection.confirmTransaction(sig, "confirmed");
+
+      const secAta = await getOrCreateAssociatedTokenAccount(
+        connection,
+        payer,
+        assetMint,
+        secInvestor.publicKey,
+        false,
+        undefined,
+        undefined,
+        TOKEN_PROGRAM_ID
+      );
+      await mintTo(
+        connection,
+        payer,
+        assetMint,
+        secAta.address,
+        payer.publicKey,
+        10_000_000,
+        [],
+        undefined,
+        TOKEN_PROGRAM_ID
+      );
+      const [, secAtt] = await createAttestationAccount(
+        secInvestor.publicKey,
+        payer.publicKey,
+        0
+      );
+
+      const secSharesAccount = getAssociatedTokenAddressSync(
+        sharesMint,
+        secInvestor.publicKey,
+        false,
+        TOKEN_2022_PROGRAM_ID,
+        ASSOCIATED_TOKEN_PROGRAM_ID
+      );
+      const ataIx =
+        require("@solana/spl-token").createAssociatedTokenAccountInstruction(
+          payer.publicKey,
+          secSharesAccount,
+          secInvestor.publicKey,
+          sharesMint,
+          TOKEN_2022_PROGRAM_ID,
+          ASSOCIATED_TOKEN_PROGRAM_ID
+        );
+      await sendAndConfirmTransaction(
+        connection,
+        new Transaction().add(ataIx),
+        [payer]
+      );
+
+      const vaultState = await program.account.creditVault.fetch(vault);
+      if (!vaultState.investmentWindowOpen) {
+        await program.methods
+          .openInvestmentWindow()
+          .accountsStrict({ manager: manager.publicKey, vault })
+          .signers([manager])
+          .rpc();
+      }
+
+      const [investmentRequest] = getInvestmentRequestPDA(
+        vault,
+        secInvestor.publicKey
+      );
+      const [frozenAccount] = getFrozenAccountPDA(
+        vault,
+        secInvestor.publicKey
+      );
+
+      // Deposit + approve
+      await program.methods
+        .requestDeposit(new BN(5_000_000))
+        .accountsStrict({
+          investor: secInvestor.publicKey,
+          vault,
+          investmentRequest,
+          assetMint,
+          investorAssetAccount: secAta.address,
+          depositVault,
+          frozenAccount,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .remainingAccounts([
+          { pubkey: secAtt, isSigner: false, isWritable: false },
+        ])
+        .signers([secInvestor])
+        .rpc();
+
+      await program.methods
+        .approveDeposit()
+        .accountsStrict({
+          manager: manager.publicKey,
+          vault,
+          investmentRequest,
+          investor: secInvestor.publicKey,
+          sharesMint,
+          investorSharesAccount: secSharesAccount,
+          frozenAccount,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+        })
+        .remainingAccounts([
+          { pubkey: secAtt, isSigner: false, isWritable: false },
+          { pubkey: oracleAccount, isSigner: false, isWritable: false },
+        ])
+        .signers([manager])
+        .rpc();
+
+      // Request redeem
+      const sharesBalance = await getAccount(
+        connection,
+        secSharesAccount,
+        undefined,
+        TOKEN_2022_PROGRAM_ID
+      );
+      const [, secAttRedeem] = await createAttestationAccount(
+        secInvestor.publicKey,
+        payer.publicKey,
+        0
+      );
+      const [redemptionRequest] = getRedemptionRequestPDA(
+        vault,
+        secInvestor.publicKey
+      );
+
+      await program.methods
+        .requestRedeem(new BN(Number(sharesBalance.amount)))
+        .accountsStrict({
+          investor: secInvestor.publicKey,
+          vault,
+          redemptionRequest,
+          sharesMint,
+          investorSharesAccount: secSharesAccount,
+          redemptionEscrow,
+          frozenAccount,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .remainingAccounts([
+          { pubkey: secAttRedeem, isSigner: false, isWritable: false },
+        ])
+        .signers([secInvestor])
+        .rpc();
+
+      // Non-manager tries to approve redeem
+      const [claimableEscrow] = getClaimableEscrowPDA(
+        vault,
+        secInvestor.publicKey
+      );
+      const [claimableTokens] = getClaimableTokensPDA(
+        vault,
+        secInvestor.publicKey
+      );
+
+      try {
+        await program.methods
+          .approveRedeem()
+          .accountsStrict({
+            manager: investor.publicKey,
+            vault,
+            redemptionRequest,
+            sharesMint,
+            redemptionEscrow,
+            assetMint,
+            depositVault,
+            claimableTokens,
+            claimableEscrow,
+            frozenAccount,
+            assetTokenProgram: TOKEN_PROGRAM_ID,
+            token2022Program: TOKEN_2022_PROGRAM_ID,
+            systemProgram: SystemProgram.programId,
+            rent: SYSVAR_RENT_PUBKEY,
+          })
+          .remainingAccounts([
+            { pubkey: oracleAccount, isSigner: false, isWritable: false },
+            { pubkey: secAttRedeem, isSigner: false, isWritable: false },
+          ])
+          .signers([investor])
+          .rpc();
+        expect.fail("should have thrown");
+      } catch (err: any) {
+        expect(err.toString()).to.include("Unauthorized");
+      }
+
+      // Cancel redeem
+      await program.methods
+        .cancelRedeem()
+        .accountsStrict({
+          investor: secInvestor.publicKey,
+          vault,
+          redemptionRequest,
+          sharesMint,
+          redemptionEscrow,
+          investorSharesAccount: secSharesAccount,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+          frozenAccount,
+        })
+        .signers([secInvestor])
+        .rpc();
+    });
+
+    it("approve_deposit fails when vault is paused", async () => {
+      const secInvestor = Keypair.generate();
+      const sig = await connection.requestAirdrop(
+        secInvestor.publicKey,
+        2 * anchor.web3.LAMPORTS_PER_SOL
+      );
+      await connection.confirmTransaction(sig, "confirmed");
+
+      const secAta = await getOrCreateAssociatedTokenAccount(
+        connection,
+        payer,
+        assetMint,
+        secInvestor.publicKey,
+        false,
+        undefined,
+        undefined,
+        TOKEN_PROGRAM_ID
+      );
+      await mintTo(
+        connection,
+        payer,
+        assetMint,
+        secAta.address,
+        payer.publicKey,
+        5_000_000,
+        [],
+        undefined,
+        TOKEN_PROGRAM_ID
+      );
+      const [, secAtt] = await createAttestationAccount(
+        secInvestor.publicKey,
+        payer.publicKey,
+        0
+      );
+
+      const secSharesAccount = getAssociatedTokenAddressSync(
+        sharesMint,
+        secInvestor.publicKey,
+        false,
+        TOKEN_2022_PROGRAM_ID,
+        ASSOCIATED_TOKEN_PROGRAM_ID
+      );
+      const ataIx =
+        require("@solana/spl-token").createAssociatedTokenAccountInstruction(
+          payer.publicKey,
+          secSharesAccount,
+          secInvestor.publicKey,
+          sharesMint,
+          TOKEN_2022_PROGRAM_ID,
+          ASSOCIATED_TOKEN_PROGRAM_ID
+        );
+      await sendAndConfirmTransaction(
+        connection,
+        new Transaction().add(ataIx),
+        [payer]
+      );
+
+      const vaultState = await program.account.creditVault.fetch(vault);
+      if (!vaultState.investmentWindowOpen) {
+        await program.methods
+          .openInvestmentWindow()
+          .accountsStrict({ manager: manager.publicKey, vault })
+          .signers([manager])
+          .rpc();
+      }
+
+      const [investmentRequest] = getInvestmentRequestPDA(
+        vault,
+        secInvestor.publicKey
+      );
+      const [frozenAccount] = getFrozenAccountPDA(
+        vault,
+        secInvestor.publicKey
+      );
+
+      await program.methods
+        .requestDeposit(new BN(5_000_000))
+        .accountsStrict({
+          investor: secInvestor.publicKey,
+          vault,
+          investmentRequest,
+          assetMint,
+          investorAssetAccount: secAta.address,
+          depositVault,
+          frozenAccount,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .remainingAccounts([
+          { pubkey: secAtt, isSigner: false, isWritable: false },
+        ])
+        .signers([secInvestor])
+        .rpc();
+
+      // Pause vault
+      await program.methods
+        .pause()
+        .accountsStrict({ authority: payer.publicKey, vault })
+        .rpc();
+
+      try {
+        await program.methods
+          .approveDeposit()
+          .accountsStrict({
+            manager: manager.publicKey,
+            vault,
+            investmentRequest,
+            investor: secInvestor.publicKey,
+            sharesMint,
+            investorSharesAccount: secSharesAccount,
+            frozenAccount,
+            token2022Program: TOKEN_2022_PROGRAM_ID,
+          })
+          .remainingAccounts([
+            { pubkey: secAtt, isSigner: false, isWritable: false },
+            { pubkey: oracleAccount, isSigner: false, isWritable: false },
+          ])
+          .signers([manager])
+          .rpc();
+        expect.fail("should have thrown");
+      } catch (err: any) {
+        expect(err.toString()).to.include("VaultPaused");
+      }
+
+      // Unpause
+      await program.methods
+        .unpause()
+        .accountsStrict({ authority: payer.publicKey, vault })
+        .rpc();
+
+      // Cancel deposit
+      await program.methods
+        .cancelDeposit()
+        .accountsStrict({
+          investor: secInvestor.publicKey,
+          vault,
+          investmentRequest,
+          assetMint,
+          depositVault,
+          investorAssetAccount: secAta.address,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          frozenAccount,
+        })
+        .signers([secInvestor])
+        .rpc();
+    });
+
+    it("window open when already open fails", async () => {
+      // Ensure window is open
+      const vaultState = await program.account.creditVault.fetch(vault);
+      if (!vaultState.investmentWindowOpen) {
+        await program.methods
+          .openInvestmentWindow()
+          .accountsStrict({ manager: manager.publicKey, vault })
+          .signers([manager])
+          .rpc();
+      }
+
+      try {
+        await program.methods
+          .openInvestmentWindow()
+          .accountsStrict({ manager: manager.publicKey, vault })
+          .signers([manager])
+          .rpc();
+        expect.fail("should have thrown");
+      } catch (err: any) {
+        expect(err.toString()).to.include("WindowAlreadyOpen");
+      }
+    });
+
+    it("frozen investor cannot cancel deposit", async () => {
+      const secInvestor = Keypair.generate();
+      const sig = await connection.requestAirdrop(
+        secInvestor.publicKey,
+        2 * anchor.web3.LAMPORTS_PER_SOL
+      );
+      await connection.confirmTransaction(sig, "confirmed");
+
+      const secAta = await getOrCreateAssociatedTokenAccount(
+        connection,
+        payer,
+        assetMint,
+        secInvestor.publicKey,
+        false,
+        undefined,
+        undefined,
+        TOKEN_PROGRAM_ID
+      );
+      await mintTo(
+        connection,
+        payer,
+        assetMint,
+        secAta.address,
+        payer.publicKey,
+        5_000_000,
+        [],
+        undefined,
+        TOKEN_PROGRAM_ID
+      );
+      const [, secAtt] = await createAttestationAccount(
+        secInvestor.publicKey,
+        payer.publicKey,
+        0
+      );
+
+      const vaultState = await program.account.creditVault.fetch(vault);
+      if (!vaultState.investmentWindowOpen) {
+        await program.methods
+          .openInvestmentWindow()
+          .accountsStrict({ manager: manager.publicKey, vault })
+          .signers([manager])
+          .rpc();
+      }
+
+      const [investmentRequest] = getInvestmentRequestPDA(
+        vault,
+        secInvestor.publicKey
+      );
+      const [frozenAccount] = getFrozenAccountPDA(
+        vault,
+        secInvestor.publicKey
+      );
+
+      await program.methods
+        .requestDeposit(new BN(5_000_000))
+        .accountsStrict({
+          investor: secInvestor.publicKey,
+          vault,
+          investmentRequest,
+          assetMint,
+          investorAssetAccount: secAta.address,
+          depositVault,
+          frozenAccount,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .remainingAccounts([
+          { pubkey: secAtt, isSigner: false, isWritable: false },
+        ])
+        .signers([secInvestor])
+        .rpc();
+
+      // Freeze investor
+      await program.methods
+        .freezeAccount()
+        .accountsStrict({
+          manager: manager.publicKey,
+          vault,
+          investor: secInvestor.publicKey,
+          frozenAccount,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([manager])
+        .rpc();
+
+      // Cancel should fail
+      try {
+        await program.methods
+          .cancelDeposit()
+          .accountsStrict({
+            investor: secInvestor.publicKey,
+            vault,
+            investmentRequest,
+            assetMint,
+            depositVault,
+            investorAssetAccount: secAta.address,
+            assetTokenProgram: TOKEN_PROGRAM_ID,
+            frozenAccount,
+          })
+          .signers([secInvestor])
+          .rpc();
+        expect.fail("should have thrown");
+      } catch (err: any) {
+        expect(err.toString()).to.include("AccountFrozen");
+      }
+
+      // Unfreeze and cancel
+      await program.methods
+        .unfreezeAccount()
+        .accountsStrict({
+          manager: manager.publicKey,
+          vault,
+          investor: secInvestor.publicKey,
+          frozenAccount,
+        })
+        .signers([manager])
+        .rpc();
+
+      await program.methods
+        .cancelDeposit()
+        .accountsStrict({
+          investor: secInvestor.publicKey,
+          vault,
+          investmentRequest,
+          assetMint,
+          depositVault,
+          investorAssetAccount: secAta.address,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          frozenAccount,
+        })
+        .signers([secInvestor])
+        .rpc();
+    });
+
+    it("frozen investor cannot cancel redeem", async () => {
+      const secInvestor = Keypair.generate();
+      const sig = await connection.requestAirdrop(
+        secInvestor.publicKey,
+        2 * anchor.web3.LAMPORTS_PER_SOL
+      );
+      await connection.confirmTransaction(sig, "confirmed");
+
+      const secAta = await getOrCreateAssociatedTokenAccount(
+        connection,
+        payer,
+        assetMint,
+        secInvestor.publicKey,
+        false,
+        undefined,
+        undefined,
+        TOKEN_PROGRAM_ID
+      );
+      await mintTo(
+        connection,
+        payer,
+        assetMint,
+        secAta.address,
+        payer.publicKey,
+        10_000_000,
+        [],
+        undefined,
+        TOKEN_PROGRAM_ID
+      );
+      const [, secAtt] = await createAttestationAccount(
+        secInvestor.publicKey,
+        payer.publicKey,
+        0
+      );
+
+      const secSharesAccount = getAssociatedTokenAddressSync(
+        sharesMint,
+        secInvestor.publicKey,
+        false,
+        TOKEN_2022_PROGRAM_ID,
+        ASSOCIATED_TOKEN_PROGRAM_ID
+      );
+      const ataIx =
+        require("@solana/spl-token").createAssociatedTokenAccountInstruction(
+          payer.publicKey,
+          secSharesAccount,
+          secInvestor.publicKey,
+          sharesMint,
+          TOKEN_2022_PROGRAM_ID,
+          ASSOCIATED_TOKEN_PROGRAM_ID
+        );
+      await sendAndConfirmTransaction(
+        connection,
+        new Transaction().add(ataIx),
+        [payer]
+      );
+
+      const vaultState = await program.account.creditVault.fetch(vault);
+      if (!vaultState.investmentWindowOpen) {
+        await program.methods
+          .openInvestmentWindow()
+          .accountsStrict({ manager: manager.publicKey, vault })
+          .signers([manager])
+          .rpc();
+      }
+
+      const [investmentRequest] = getInvestmentRequestPDA(
+        vault,
+        secInvestor.publicKey
+      );
+      const [frozenAccount] = getFrozenAccountPDA(
+        vault,
+        secInvestor.publicKey
+      );
+
+      // Deposit + approve to get shares
+      await program.methods
+        .requestDeposit(new BN(5_000_000))
+        .accountsStrict({
+          investor: secInvestor.publicKey,
+          vault,
+          investmentRequest,
+          assetMint,
+          investorAssetAccount: secAta.address,
+          depositVault,
+          frozenAccount,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .remainingAccounts([
+          { pubkey: secAtt, isSigner: false, isWritable: false },
+        ])
+        .signers([secInvestor])
+        .rpc();
+
+      await program.methods
+        .approveDeposit()
+        .accountsStrict({
+          manager: manager.publicKey,
+          vault,
+          investmentRequest,
+          investor: secInvestor.publicKey,
+          sharesMint,
+          investorSharesAccount: secSharesAccount,
+          frozenAccount,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+        })
+        .remainingAccounts([
+          { pubkey: secAtt, isSigner: false, isWritable: false },
+          { pubkey: oracleAccount, isSigner: false, isWritable: false },
+        ])
+        .signers([manager])
+        .rpc();
+
+      // Request redeem
+      const sharesBalance = await getAccount(
+        connection,
+        secSharesAccount,
+        undefined,
+        TOKEN_2022_PROGRAM_ID
+      );
+      const [, secAttRedeem] = await createAttestationAccount(
+        secInvestor.publicKey,
+        payer.publicKey,
+        0
+      );
+      const [redemptionRequest] = getRedemptionRequestPDA(
+        vault,
+        secInvestor.publicKey
+      );
+
+      await program.methods
+        .requestRedeem(new BN(Number(sharesBalance.amount)))
+        .accountsStrict({
+          investor: secInvestor.publicKey,
+          vault,
+          redemptionRequest,
+          sharesMint,
+          investorSharesAccount: secSharesAccount,
+          redemptionEscrow,
+          frozenAccount,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .remainingAccounts([
+          { pubkey: secAttRedeem, isSigner: false, isWritable: false },
+        ])
+        .signers([secInvestor])
+        .rpc();
+
+      // Freeze investor
+      await program.methods
+        .freezeAccount()
+        .accountsStrict({
+          manager: manager.publicKey,
+          vault,
+          investor: secInvestor.publicKey,
+          frozenAccount,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([manager])
+        .rpc();
+
+      // Cancel redeem should fail
+      try {
+        await program.methods
+          .cancelRedeem()
+          .accountsStrict({
+            investor: secInvestor.publicKey,
+            vault,
+            redemptionRequest,
+            sharesMint,
+            redemptionEscrow,
+            investorSharesAccount: secSharesAccount,
+            token2022Program: TOKEN_2022_PROGRAM_ID,
+            frozenAccount,
+          })
+          .signers([secInvestor])
+          .rpc();
+        expect.fail("should have thrown");
+      } catch (err: any) {
+        expect(err.toString()).to.include("AccountFrozen");
+      }
+
+      // Unfreeze and cancel
+      await program.methods
+        .unfreezeAccount()
+        .accountsStrict({
+          manager: manager.publicKey,
+          vault,
+          investor: secInvestor.publicKey,
+          frozenAccount,
+        })
+        .signers([manager])
+        .rpc();
+
+      await program.methods
+        .cancelRedeem()
+        .accountsStrict({
+          investor: secInvestor.publicKey,
+          vault,
+          redemptionRequest,
+          sharesMint,
+          redemptionEscrow,
+          investorSharesAccount: secSharesAccount,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+          frozenAccount,
+        })
+        .signers([secInvestor])
+        .rpc();
     });
   });
 
@@ -3324,6 +4994,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
           depositVault,
           investorAssetAccount: ataA.address,
           assetTokenProgram: TOKEN_PROGRAM_ID,
+          frozenAccount: frozenA,
         })
         .signers([investorA])
         .rpc();
@@ -3338,6 +5009,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
           depositVault,
           investorAssetAccount: ataB.address,
           assetTokenProgram: TOKEN_PROGRAM_ID,
+          frozenAccount: frozenB,
         })
         .signers([investorB])
         .rpc();
@@ -3449,6 +5121,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
           depositVault,
           investorAssetAccount: tmpAta.address,
           assetTokenProgram: TOKEN_PROGRAM_ID,
+          frozenAccount,
         })
         .signers([tmpInvestor])
         .rpc();

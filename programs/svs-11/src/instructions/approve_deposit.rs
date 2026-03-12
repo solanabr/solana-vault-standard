@@ -86,10 +86,12 @@ pub fn handler(ctx: Context<ApproveDeposit>) -> Result<()> {
     check_not_frozen(&ctx.accounts.frozen_account.to_account_info())?;
 
     // Oracle is REQUIRED for SVS-11 (no fallback to vault-priced)
+    let vault_key_for_oracle = vault.key();
     let (price, updated_at) = find_oracle_price(
         ctx.remaining_accounts,
         &vault.oracle_program,
         &vault.nav_oracle,
+        &vault_key_for_oracle,
     )?
     .ok_or(VaultError::OracleRequired)?;
 
@@ -171,14 +173,10 @@ pub fn handler(ctx: Context<ApproveDeposit>) -> Result<()> {
         .checked_add(shares)
         .ok_or(VaultError::MathOverflow)?;
 
-    // Update request and close (via close = investor constraint)
-    let request = &mut ctx.accounts.investment_request;
-    request.shares_to_receive = shares;
-    request.status = RequestStatus::Approved;
-
+    // Request PDA closed via `close = investor` constraint
     emit!(InvestmentApproved {
         vault: vault.key(),
-        investor: request.investor,
+        investor: ctx.accounts.investment_request.investor,
         amount: amount_locked,
         shares,
         nav: price,

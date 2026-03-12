@@ -120,3 +120,19 @@ pub struct AttesterChanged {
     pub previous_attester: Pubkey,
     pub new_attester: Pubkey,
 }
+
+#[event]
+pub struct OracleChanged {
+    pub vault: Pubkey,
+    pub previous_oracle: Pubkey,
+    pub new_oracle: Pubkey,
+    pub previous_oracle_program: Pubkey,
+    pub new_oracle_program: Pubkey,
+}
+
+#[event]
+pub struct RedemptionCancelled {
+    pub vault: Pubkey,
+    pub investor: Pubkey,
+    pub shares: u64,
+}

@@ -67,6 +67,11 @@ pub fn handler(ctx: Context<RejectDeposit>, reason_code: u8) -> Result<()> {
     let assets_to_return = request.amount_locked;
     let investor_key = request.investor;
 
+    require!(
+        ctx.accounts.deposit_vault.amount >= assets_to_return,
+        VaultError::InsufficientAssets
+    );
+
     let vault = &ctx.accounts.vault;
     let asset_mint_key = vault.asset_mint;
     let vault_id_bytes = vault.vault_id.to_le_bytes();
@@ -93,10 +98,7 @@ pub fn handler(ctx: Context<RejectDeposit>, reason_code: u8) -> Result<()> {
         ctx.accounts.asset_mint.decimals,
     )?;
 
-    // Mark as rejected (PDA closed via close = investor constraint)
-    let request = &mut ctx.accounts.investment_request;
-    request.status = RequestStatus::Rejected;
-
+    // PDA closed via `close = investor` constraint
     emit!(InvestmentRejected {
         vault: vault.key(),
         investor: investor_key,

@@ -225,6 +225,12 @@ export class CreditVault {
       assetTokenProgram,
     );
 
+    const [frozenAccount] = getFrozenAccountAddress(
+      this.programId,
+      this.address,
+      investor.publicKey,
+    );
+
     return this.program.methods
       .cancelDeposit()
       .accountsStrict({
@@ -234,6 +240,7 @@ export class CreditVault {
         assetMint: this.assetMint,
         depositVault: this.depositVault,
         investorAssetAccount,
+        frozenAccount,
         assetTokenProgram,
       })
       .signers([investor])
@@ -295,6 +302,12 @@ export class CreditVault {
       TOKEN_2022_PROGRAM_ID,
     );
 
+    const [frozenAccount] = getFrozenAccountAddress(
+      this.programId,
+      this.address,
+      investor.publicKey,
+    );
+
     return this.program.methods
       .cancelRedeem()
       .accountsStrict({
@@ -304,6 +317,7 @@ export class CreditVault {
         sharesMint: this.sharesMint,
         redemptionEscrow: this.redemptionEscrow,
         investorSharesAccount,
+        frozenAccount,
         token2022Program: TOKEN_2022_PROGRAM_ID,
       })
       .signers([investor])
@@ -449,6 +463,7 @@ export class CreditVault {
     manager: Keypair,
     investor: PublicKey,
     oracleAccount: PublicKey,
+    attestationAccount: PublicKey,
   ): Promise<string> {
     const [redemptionRequest] = getRedemptionRequestAddress(
       this.programId,
@@ -461,6 +476,11 @@ export class CreditVault {
       investor,
     );
     const [claimableEscrow] = getClaimableEscrowAddress(
+      this.programId,
+      this.address,
+      investor,
+    );
+    const [frozenAccount] = getFrozenAccountAddress(
       this.programId,
       this.address,
       investor,
@@ -482,6 +502,7 @@ export class CreditVault {
         depositVault: this.depositVault,
         claimableTokens,
         claimableEscrow,
+        frozenAccount,
         assetTokenProgram,
         token2022Program: TOKEN_2022_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
@@ -489,6 +510,7 @@ export class CreditVault {
       })
       .remainingAccounts([
         { pubkey: oracleAccount, isWritable: false, isSigner: false },
+        { pubkey: attestationAccount, isWritable: false, isSigner: false },
       ])
       .signers([manager])
       .rpc();
@@ -647,6 +669,23 @@ export class CreditVault {
       .rpc();
   }
 
+  async updateOracle(
+    authority: Keypair,
+    newNavOracle: PublicKey,
+    newOracleProgram: PublicKey,
+  ): Promise<string> {
+    return this.program.methods
+      .updateOracle()
+      .accountsStrict({
+        authority: authority.publicKey,
+        vault: this.address,
+        newOracleProgram,
+        newNavOracle,
+      })
+      .signers([authority])
+      .rpc();
+  }
+
   // === View Functions ===
 
   async getInvestmentRequest(investor: PublicKey): Promise<unknown | null> {
@@ -701,14 +740,16 @@ export class CreditVault {
     );
   }
 
-  getUserAssetAccount(investor: PublicKey): PublicKey {
+  async getUserAssetAccount(investor: PublicKey): Promise<PublicKey> {
+    const tokenProgram = await getTokenProgramForMint(
+      this.program.provider.connection,
+      this.assetMint,
+    );
     return getAssociatedTokenAddressSync(
       this.assetMint,
       investor,
       false,
-      // Will need to be resolved at runtime, but for sync derivation
-      // we default to TOKEN_2022_PROGRAM_ID; callers should verify
-      TOKEN_2022_PROGRAM_ID,
+      tokenProgram,
     );
   }
 }
