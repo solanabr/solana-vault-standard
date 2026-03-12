@@ -31,6 +31,9 @@
 
 import * as anchor from "@coral-xyz/anchor";
 import { Program, BN } from "@coral-xyz/anchor";
+import { Svs11 } from "../target/types/svs_11";
+import { MockOracle } from "../target/types/mock_oracle";
+import { MockSas } from "../target/types/mock_sas";
 import {
   createMint,
   getOrCreateAssociatedTokenAccount,
@@ -49,10 +52,19 @@ import {
 } from "@solana/web3.js";
 import * as fs from "fs";
 import * as path from "path";
+import {
+  getCreditVaultAddress,
+  getCreditSharesMintAddress,
+  getRedemptionEscrowAddress,
+  getInvestmentRequestAddress,
+  getRedemptionRequestAddress,
+  getClaimableTokensAddress,
+  getFrozenAccountAddress,
+} from "../sdk/core/src/credit-vault-pda";
 
 const PROGRAM_ID = new PublicKey("Bf17gDR2JdKTWdoTWK3Va9YQtkpePRAAVxMCaokj8ZFW");
 const MOCK_ORACLE_ID = new PublicKey("EbFcZZApkGcX6LqRmzSWVLasnDM457wY4WvhJRnVjdZF");
-const SAS_PROGRAM_ID = new PublicKey("22zoJMtdu4tQc2PzL74ZUT7FrwgB1Udec8DdW4yw4BdG");
+const SAS_PROGRAM_ID = new PublicKey("4azCqYgLHDRmsiR6kmYu6v5qvzamaYGqZcmx8MrnrKMc");
 const PRICE_SCALE = new BN(1_000_000_000);
 
 function explorerLink(sig: string): string {
@@ -63,54 +75,10 @@ function accountLink(addr: string): string {
   return `https://explorer.solana.com/address/${addr}?cluster=devnet`;
 }
 
-// PDA helpers — SVS-11
-function getVaultPDA(assetMint: PublicKey, vaultId: BN): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [Buffer.from("credit_vault"), assetMint.toBuffer(), vaultId.toArrayLike(Buffer, "le", 8)],
-    PROGRAM_ID,
-  );
-}
-
-function getSharesMintPDA(vault: PublicKey): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync([Buffer.from("shares"), vault.toBuffer()], PROGRAM_ID);
-}
-
-function getRedemptionEscrowPDA(vault: PublicKey): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync([Buffer.from("redemption_escrow"), vault.toBuffer()], PROGRAM_ID);
-}
-
-function getInvestmentRequestPDA(vault: PublicKey, investor: PublicKey): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [Buffer.from("investment_request"), vault.toBuffer(), investor.toBuffer()],
-    PROGRAM_ID,
-  );
-}
-
-function getRedemptionRequestPDA(vault: PublicKey, investor: PublicKey): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [Buffer.from("redemption_request"), vault.toBuffer(), investor.toBuffer()],
-    PROGRAM_ID,
-  );
-}
-
-function getClaimableTokensPDA(vault: PublicKey, investor: PublicKey): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [Buffer.from("claimable_tokens"), vault.toBuffer(), investor.toBuffer()],
-    PROGRAM_ID,
-  );
-}
-
-function getFrozenAccountPDA(vault: PublicKey, investor: PublicKey): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [Buffer.from("frozen_account"), vault.toBuffer(), investor.toBuffer()],
-    PROGRAM_ID,
-  );
-}
-
 // PDA helpers — Mock Oracle
-function getOracleDataPDA(authority: PublicKey): [PublicKey, number] {
+function getOracleDataPDA(): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
-    [Buffer.from("oracle"), authority.toBuffer()],
+    [Buffer.from("oracle")],
     MOCK_ORACLE_ID,
   );
 }
@@ -136,9 +104,9 @@ async function main() {
   const oracleIdl = JSON.parse(fs.readFileSync(path.resolve(__dirname, "../target/idl/mock_oracle.json"), "utf-8"));
   const sasIdl = JSON.parse(fs.readFileSync(path.resolve(__dirname, "../target/idl/mock_sas.json"), "utf-8"));
 
-  const program = new Program(svs11Idl, provider);
-  const oracleProgram = new Program(oracleIdl, provider);
-  const sasProgram = new Program(sasIdl, provider);
+  const program = new Program<Svs11>(svs11Idl, provider);
+  const oracleProgram = new Program<MockOracle>(oracleIdl, provider);
+  const sasProgram = new Program<MockSas>(sasIdl, provider);
 
   const connection = provider.connection;
   const payer = (provider.wallet as anchor.Wallet).payer;
@@ -194,15 +162,15 @@ async function main() {
   console.log(`  Minted: ${mintAmount / 1_000_000} tokens to investor + manager`);
 
   // Derive PDAs
-  const [vault] = getVaultPDA(assetMint, vaultId);
-  const [sharesMint] = getSharesMintPDA(vault);
-  const [redemptionEscrow] = getRedemptionEscrowPDA(vault);
+  const [vault] = getCreditVaultAddress(PROGRAM_ID, assetMint, vaultId);
+  const [sharesMint] = getCreditSharesMintAddress(PROGRAM_ID, vault);
+  const [redemptionEscrow] = getRedemptionEscrowAddress(PROGRAM_ID, vault);
   const depositVault = getAssociatedTokenAddressSync(assetMint, vault, true, TOKEN_PROGRAM_ID);
-  const [investmentRequest] = getInvestmentRequestPDA(vault, investor.publicKey);
-  const [redemptionRequest] = getRedemptionRequestPDA(vault, investor.publicKey);
-  const [claimableTokens] = getClaimableTokensPDA(vault, investor.publicKey);
-  const [frozenAccount] = getFrozenAccountPDA(vault, investor.publicKey);
-  const [navOracle] = getOracleDataPDA(payer.publicKey);
+  const [investmentRequest] = getInvestmentRequestAddress(PROGRAM_ID, vault, investor.publicKey);
+  const [redemptionRequest] = getRedemptionRequestAddress(PROGRAM_ID, vault, investor.publicKey);
+  const [claimableTokens] = getClaimableTokensAddress(PROGRAM_ID, vault, investor.publicKey);
+
+  const [navOracle] = getOracleDataPDA();
 
   console.log(`  Vault PDA:  ${vault.toBase58()}`);
   console.log();
@@ -256,9 +224,6 @@ async function main() {
   const initSig = await program.methods
     .initializePool(
       vaultId,
-      "Credit Vault E2E",
-      "CRED",
-      "",
       new BN(1_000_000), // 1 token minimum
       new BN(3600),
     )
@@ -275,7 +240,7 @@ async function main() {
       depositVault,
       redemptionEscrow,
       assetTokenProgram: TOKEN_PROGRAM_ID,
-      shareTokenProgram: TOKEN_2022_PROGRAM_ID,
+      token2022Program: TOKEN_2022_PROGRAM_ID,
       associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
       systemProgram: SystemProgram.programId,
       rent: SYSVAR_RENT_PUBKEY,
@@ -317,7 +282,7 @@ async function main() {
       depositVault,
       investmentRequest,
       attestation,
-      frozenAccount,
+      frozenCheck: null,
       assetTokenProgram: TOKEN_PROGRAM_ID,
       systemProgram: SystemProgram.programId,
     })
@@ -333,8 +298,11 @@ async function main() {
       manager: payer.publicKey,
       vault,
       investmentRequest,
+      investor: investor.publicKey,
       navOracle,
-      oracleProgram: MOCK_ORACLE_ID,
+      attestation,
+      frozenCheck: null,
+      clock: anchor.web3.SYSVAR_CLOCK_PUBKEY,
     })
     .rpc();
 
@@ -345,6 +313,12 @@ async function main() {
     sharesMint, investor.publicKey, false, TOKEN_2022_PROGRAM_ID,
   );
 
+  // Create Token-2022 ATA for investor shares before claiming
+  await getOrCreateAssociatedTokenAccount(
+    connection, payer, sharesMint, investor.publicKey, false,
+    undefined, undefined, TOKEN_2022_PROGRAM_ID,
+  );
+
   const claimDepSig = await program.methods
     .claimDeposit()
     .accountsPartial({
@@ -353,9 +327,7 @@ async function main() {
       investmentRequest,
       sharesMint,
       investorSharesAccount: investorSharesAta,
-      shareTokenProgram: TOKEN_2022_PROGRAM_ID,
-      associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-      systemProgram: SystemProgram.programId,
+      token2022Program: TOKEN_2022_PROGRAM_ID,
     })
     .signers([investor])
     .rpc();
@@ -397,8 +369,8 @@ async function main() {
       redemptionEscrow,
       redemptionRequest,
       attestation,
-      frozenAccount,
-      shareTokenProgram: TOKEN_2022_PROGRAM_ID,
+      frozenCheck: null,
+      token2022Program: TOKEN_2022_PROGRAM_ID,
       systemProgram: SystemProgram.programId,
     })
     .signers([investor])
@@ -413,15 +385,17 @@ async function main() {
       manager: payer.publicKey,
       vault,
       redemptionRequest,
+      investor: investor.publicKey,
       assetMint,
       depositVault,
       sharesMint,
       redemptionEscrow,
       claimableTokens,
       navOracle,
-      oracleProgram: MOCK_ORACLE_ID,
+      attestation,
+      frozenCheck: null,
       assetTokenProgram: TOKEN_PROGRAM_ID,
-      shareTokenProgram: TOKEN_2022_PROGRAM_ID,
+      token2022Program: TOKEN_2022_PROGRAM_ID,
       systemProgram: SystemProgram.programId,
     })
     .rpc();
@@ -466,7 +440,7 @@ async function main() {
       depositVault,
       investmentRequest,
       attestation,
-      frozenAccount,
+      frozenCheck: null,
       assetTokenProgram: TOKEN_PROGRAM_ID,
       systemProgram: SystemProgram.programId,
     })
@@ -498,7 +472,7 @@ async function main() {
   // ─────────────────────────────────────────────────────────────────────
   console.log("Step 10: Cancel redeem flow...");
 
-  const cancelRedeemShares = new BN(100_000_000_000); // small amount
+  const cancelRedeemShares = new BN(100_000_000); // small amount
   const reqRed2Sig = await program.methods
     .requestRedeem(cancelRedeemShares)
     .accountsPartial({
@@ -509,8 +483,8 @@ async function main() {
       redemptionEscrow,
       redemptionRequest,
       attestation,
-      frozenAccount,
-      shareTokenProgram: TOKEN_2022_PROGRAM_ID,
+      frozenCheck: null,
+      token2022Program: TOKEN_2022_PROGRAM_ID,
       systemProgram: SystemProgram.programId,
     })
     .signers([investor])
@@ -527,7 +501,7 @@ async function main() {
       investorSharesAccount: investorSharesAta,
       redemptionEscrow,
       redemptionRequest,
-      shareTokenProgram: TOKEN_2022_PROGRAM_ID,
+      token2022Program: TOKEN_2022_PROGRAM_ID,
     })
     .signers([investor])
     .rpc();
@@ -551,7 +525,7 @@ async function main() {
       vault,
       assetMint,
       depositVault,
-      managerTokenAccount: managerAta.address,
+      destination: managerAta.address,
       assetTokenProgram: TOKEN_PROGRAM_ID,
     })
     .rpc();
@@ -580,28 +554,33 @@ async function main() {
   // ─────────────────────────────────────────────────────────────────────
   console.log("Step 12: Compliance (freeze + unfreeze)...");
 
+  const [frozenAccountPda] = getFrozenAccountAddress(PROGRAM_ID, vault, investor.publicKey);
+
+  // Anchor 0.31+ omits `investor` from the accountsPartial type since it
+  // appears in frozenAccount PDA seeds, but the runtime still requires it.
+  // Using a variable avoids TS excess-property checking on object literals.
+  const freezeAccounts = {
+    manager: payer.publicKey,
+    vault,
+    investor: investor.publicKey,
+    frozenAccount: frozenAccountPda,
+  };
   const freezeSig = await program.methods
     .freezeAccount()
-    .accountsPartial({
-      authority: payer.publicKey,
-      vault,
-      investor: investor.publicKey,
-      frozenAccount,
-      systemProgram: SystemProgram.programId,
-    })
+    .accountsPartial(freezeAccounts)
     .rpc();
 
   results.push({ step: "Freeze account", sig: freezeSig });
   console.log(`  Freeze: ${explorerLink(freezeSig)}`);
 
+  const unfreezeAccounts = {
+    manager: payer.publicKey,
+    vault,
+    frozenAccount: frozenAccountPda,
+  };
   const unfreezeSig = await program.methods
     .unfreezeAccount()
-    .accountsPartial({
-      authority: payer.publicKey,
-      vault,
-      investor: investor.publicKey,
-      frozenAccount,
-    })
+    .accountsPartial(unfreezeAccounts)
     .rpc();
 
   results.push({ step: "Unfreeze account", sig: unfreezeSig });
@@ -721,7 +700,7 @@ async function main() {
       depositVault,
       investmentRequest,
       attestation,
-      frozenAccount,
+      frozenCheck: null,
       assetTokenProgram: TOKEN_PROGRAM_ID,
       systemProgram: SystemProgram.programId,
     })

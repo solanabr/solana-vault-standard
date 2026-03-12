@@ -17,102 +17,112 @@ declare_id!("Bf17gDR2JdKTWdoTWK3Va9YQtkpePRAAVxMCaokj8ZFW");
 pub mod svs_11 {
     use super::*;
 
+    /// Initialize a new credit vault pool.
     pub fn initialize_pool(
         ctx: Context<InitializePool>,
         vault_id: u64,
-        name: String,
-        symbol: String,
-        uri: String,
         minimum_investment: u64,
         max_staleness: i64,
     ) -> Result<()> {
-        instructions::initialize_pool::handler(
-            ctx,
-            vault_id,
-            name,
-            symbol,
-            uri,
-            minimum_investment,
-            max_staleness,
-        )
+        instructions::initialize_pool::handler(ctx, vault_id, minimum_investment, max_staleness)
     }
 
+    /// Open the investment window for deposit and redeem requests.
     pub fn open_investment_window(ctx: Context<InvestmentWindow>) -> Result<()> {
         instructions::investment_window::open_handler(ctx)
     }
 
+    /// Close the investment window, blocking new requests.
     pub fn close_investment_window(ctx: Context<InvestmentWindow>) -> Result<()> {
         instructions::investment_window::close_handler(ctx)
     }
 
+    /// Request a deposit into the vault.
     pub fn request_deposit(ctx: Context<RequestDeposit>, amount: u64) -> Result<()> {
         instructions::request_deposit::handler(ctx, amount)
     }
 
+    /// Manager approves a pending deposit request.
     pub fn approve_deposit(ctx: Context<ApproveDeposit>) -> Result<()> {
         instructions::approve_deposit::handler(ctx)
     }
 
+    /// Claim approved deposit shares.
     pub fn claim_deposit(ctx: Context<ClaimDeposit>) -> Result<()> {
         instructions::claim_deposit::handler(ctx)
     }
 
+    /// Manager rejects a pending deposit request.
     pub fn reject_deposit(ctx: Context<RejectDeposit>, reason_code: u8) -> Result<()> {
         instructions::reject_deposit::handler(ctx, reason_code)
     }
 
+    /// Investor cancels their pending deposit request.
     pub fn cancel_deposit(ctx: Context<CancelDeposit>) -> Result<()> {
         instructions::cancel_deposit::handler(ctx)
     }
 
+    /// Request a redemption of vault shares.
     pub fn request_redeem(ctx: Context<RequestRedeem>, shares: u64) -> Result<()> {
         instructions::request_redeem::handler(ctx, shares)
     }
 
+    /// Manager approves a pending redemption request.
     pub fn approve_redeem(ctx: Context<ApproveRedeem>) -> Result<()> {
         instructions::approve_redeem::handler(ctx)
     }
 
+    /// Claim approved redemption assets.
     pub fn claim_redeem(ctx: Context<ClaimRedeem>) -> Result<()> {
         instructions::claim_redeem::handler(ctx)
     }
 
+    /// Investor cancels their pending redemption request.
     pub fn cancel_redeem(ctx: Context<CancelRedeem>) -> Result<()> {
         instructions::cancel_redeem::handler(ctx)
     }
 
+    /// Manager repays borrowed capital to the vault.
     pub fn repay(ctx: Context<Repay>, amount: u64) -> Result<()> {
         instructions::repay::handler(ctx, amount)
     }
 
+    /// Manager draws down capital from the vault.
     pub fn draw_down(ctx: Context<DrawDown>, amount: u64) -> Result<()> {
         instructions::draw_down::handler(ctx, amount)
     }
 
+    /// Freeze an investor account for compliance.
     pub fn freeze_account(ctx: Context<FreezeAccount>) -> Result<()> {
         instructions::compliance::freeze_handler(ctx)
     }
 
+    /// Unfreeze a previously frozen investor account.
     pub fn unfreeze_account(ctx: Context<UnfreezeAccount>) -> Result<()> {
         instructions::compliance::unfreeze_handler(ctx)
     }
 
+    /// Pause the vault, halting approvals and capital movements.
     pub fn pause(ctx: Context<Admin>) -> Result<()> {
         instructions::admin::pause_handler(ctx)
     }
 
+    /// Unpause the vault.
     pub fn unpause(ctx: Context<Admin>) -> Result<()> {
         instructions::admin::unpause_handler(ctx)
     }
 
+    /// Transfer vault authority to a new address.
     pub fn transfer_authority(ctx: Context<Admin>, new_authority: Pubkey) -> Result<()> {
         instructions::admin::transfer_authority_handler(ctx, new_authority)
     }
 
+    /// Set a new vault manager.
     pub fn set_manager(ctx: Context<Admin>, new_manager: Pubkey) -> Result<()> {
         instructions::admin::set_manager_handler(ctx, new_manager)
     }
 
+    /// Update the SAS attestation configuration.
     pub fn update_sas_config(
         ctx: Context<Admin>,
         new_credential: Pubkey,
@@ -121,6 +131,7 @@ pub mod svs_11 {
         instructions::admin::update_sas_config_handler(ctx, new_credential, new_schema)
     }
 
+    /// Update the NAV oracle configuration.
     pub fn update_oracle_config(
         ctx: Context<Admin>,
         new_nav_oracle: Pubkey,

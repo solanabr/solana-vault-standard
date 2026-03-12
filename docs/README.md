@@ -49,7 +49,7 @@ Four program variants cover public/private and live/stored balance models:
 | [SVS-8](specs-SVS08.md) | Multi-Asset Basket | Draft |
 | [SVS-9](specs-SVS09.md) | Allocator (Vault-of-Vaults) | Draft |
 | [SVS-10](specs-SVS10.md) | Async (ERC-7540) | Draft |
-| [SVS-11](specs-SVS11.md) | Credit Markets | Draft |
+| [SVS-11](specs-SVS11.md) | Credit Markets | ✅ Devnet |
 | [SVS-12](specs-SVS12.md) | Tranched (Structured) | Draft |
 
 ---
@@ -119,6 +119,7 @@ Optional on-chain modules for additional functionality:
 | SVS-2 | `3UrYrxh1HmVgq7WPygZ5x1gNEaWFwqTMs7geNqMnsrtD` |
 | SVS-3 | `EcpnYtaCBrZ4p4uq7dDr55D3fL9nsxbCNqpyUREGpPkh` |
 | SVS-4 | `2WP7LXWqrp1W4CwEJuVt2SxWPNY2n6AYmijh6Z4EeidY` |
+| SVS-11 | `Bf17gDR2JdKTWdoTWK3Va9YQtkpePRAAVxMCaokj8ZFW` |
 
 ### Mainnet
 

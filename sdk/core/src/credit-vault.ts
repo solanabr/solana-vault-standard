@@ -48,9 +48,6 @@ export interface CreateCreditVaultParams {
   assetMint: PublicKey;
   manager: PublicKey;
   vaultId: BN | number;
-  name: string;
-  symbol: string;
-  uri: string;
   navOracle: PublicKey;
   oracleProgram: PublicKey;
   sasCredential: PublicKey;
@@ -197,9 +194,6 @@ export class CreditVault {
     await program.methods
       .initializePool(
         id,
-        params.name,
-        params.symbol,
-        params.uri,
         params.minimumInvestment,
         params.maxStaleness,
       )
@@ -289,7 +283,7 @@ export class CreditVault {
         depositVault: this.depositVault,
         assetMint: this.assetMint,
         attestation,
-        frozenCheck: frozenCheck ?? null,
+        frozenCheck: frozenCheck ?? this.program.programId,
         assetTokenProgram: this.assetTokenProgram,
         systemProgram: SystemProgram.programId,
         clock: SYSVAR_CLOCK_PUBKEY,
@@ -319,7 +313,7 @@ export class CreditVault {
         investor,
         navOracle,
         attestation,
-        frozenCheck: frozenCheck ?? null,
+        frozenCheck: frozenCheck ?? this.program.programId,
         clock: SYSVAR_CLOCK_PUBKEY,
       })
       .rpc();
@@ -424,7 +418,7 @@ export class CreditVault {
         investorSharesAccount,
         redemptionEscrow: this.redemptionEscrow,
         attestation,
-        frozenCheck: frozenCheck ?? null,
+        frozenCheck: frozenCheck ?? this.program.programId,
         token2022Program: TOKEN_2022_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
         clock: SYSVAR_CLOCK_PUBKEY,
@@ -464,7 +458,7 @@ export class CreditVault {
         claimableTokens,
         navOracle,
         attestation,
-        frozenCheck: frozenCheck ?? null,
+        frozenCheck: frozenCheck ?? this.program.programId,
         assetTokenProgram: this.assetTokenProgram,
         token2022Program: TOKEN_2022_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
@@ -690,6 +684,48 @@ export class CreditVault {
   }
 
   // ============ View Helpers ============
+
+  async totalAssets(): Promise<BN> {
+    const state = await this.getState();
+    return state.totalAssets;
+  }
+
+  async totalShares(): Promise<BN> {
+    const state = await this.getState();
+    return state.totalShares;
+  }
+
+  convertToShares(assets: bigint, totalAssets: bigint, totalShares: bigint, decimalsOffset: number): bigint {
+    const offset = BigInt(10 ** decimalsOffset);
+    return (assets * (totalShares + offset)) / (totalAssets + 1n);
+  }
+
+  convertToAssets(shares: bigint, totalAssets: bigint, totalShares: bigint, decimalsOffset: number): bigint {
+    const offset = BigInt(10 ** decimalsOffset);
+    return (shares * (totalAssets + 1n)) / (totalShares + offset);
+  }
+
+  async previewInvestment(assets: BN): Promise<BN> {
+    const state = await this.refresh();
+    const shares = this.convertToShares(
+      BigInt(assets.toString()),
+      BigInt(state.totalAssets.toString()),
+      BigInt(state.totalShares.toString()),
+      state.decimalsOffset,
+    );
+    return new BN(shares.toString());
+  }
+
+  async previewRedemption(shares: BN): Promise<BN> {
+    const state = await this.refresh();
+    const assets = this.convertToAssets(
+      BigInt(shares.toString()),
+      BigInt(state.totalAssets.toString()),
+      BigInt(state.totalShares.toString()),
+      state.decimalsOffset,
+    );
+    return new BN(assets.toString());
+  }
 
   async fetchVault(): Promise<CreditVaultState> {
     return this.refresh();

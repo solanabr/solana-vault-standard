@@ -21,9 +21,18 @@ import { expect } from "chai";
 import { Svs11 } from "../target/types/svs_11";
 import { MockOracle } from "../target/types/mock_oracle";
 import { MockSas } from "../target/types/mock_sas";
+import {
+  getCreditVaultAddress,
+  getCreditSharesMintAddress,
+  getRedemptionEscrowAddress,
+  getInvestmentRequestAddress,
+  getRedemptionRequestAddress,
+  getClaimableTokensAddress,
+  getFrozenAccountAddress,
+} from "../sdk/core/src/credit-vault-pda";
 
 const SAS_PROGRAM_ID = new PublicKey(
-  "22zoJMtdu4tQc2PzL74ZUT7FrwgB1Udec8DdW4yw4BdG"
+  "4azCqYgLHDRmsiR6kmYu6v5qvzamaYGqZcmx8MrnrKMc"
 );
 const PRICE_SCALE = new BN(1_000_000_000);
 
@@ -67,82 +76,26 @@ describe("svs-11 (Credit Markets Vault)", () => {
   // shares = assets * PRICE_SCALE / price = 100_000_000_000 * 1e9 / 1e9 = 100_000_000_000
   const expectedShares = new BN(100_000_000_000);
 
-  const getVaultPDA = (): [PublicKey, number] => {
-    return PublicKey.findProgramAddressSync(
-      [
-        Buffer.from("credit_vault"),
-        assetMint.toBuffer(),
-        vaultId.toArrayLike(Buffer, "le", 8),
-      ],
-      program.programId
-    );
-  };
+  const getVaultPDA = (): [PublicKey, number] =>
+    getCreditVaultAddress(program.programId, assetMint, vaultId);
 
-  const getSharesMintPDA = (): [PublicKey, number] => {
-    return PublicKey.findProgramAddressSync(
-      [Buffer.from("shares"), vault.toBuffer()],
-      program.programId
-    );
-  };
+  const getSharesMintPDA = (): [PublicKey, number] =>
+    getCreditSharesMintAddress(program.programId, vault);
 
-  const getRedemptionEscrowPDA = (): [PublicKey, number] => {
-    return PublicKey.findProgramAddressSync(
-      [Buffer.from("redemption_escrow"), vault.toBuffer()],
-      program.programId
-    );
-  };
+  const getRedemptionEscrowPDA = (): [PublicKey, number] =>
+    getRedemptionEscrowAddress(program.programId, vault);
 
-  const getInvestmentRequestPDA = (
-    investorKey: PublicKey
-  ): [PublicKey, number] => {
-    return PublicKey.findProgramAddressSync(
-      [
-        Buffer.from("investment_request"),
-        vault.toBuffer(),
-        investorKey.toBuffer(),
-      ],
-      program.programId
-    );
-  };
+  const getInvestmentRequestPDA = (investorKey: PublicKey): [PublicKey, number] =>
+    getInvestmentRequestAddress(program.programId, vault, investorKey);
 
-  const getRedemptionRequestPDA = (
-    investorKey: PublicKey
-  ): [PublicKey, number] => {
-    return PublicKey.findProgramAddressSync(
-      [
-        Buffer.from("redemption_request"),
-        vault.toBuffer(),
-        investorKey.toBuffer(),
-      ],
-      program.programId
-    );
-  };
+  const getRedemptionRequestPDA = (investorKey: PublicKey): [PublicKey, number] =>
+    getRedemptionRequestAddress(program.programId, vault, investorKey);
 
-  const getClaimableTokensPDA = (
-    investorKey: PublicKey
-  ): [PublicKey, number] => {
-    return PublicKey.findProgramAddressSync(
-      [
-        Buffer.from("claimable_tokens"),
-        vault.toBuffer(),
-        investorKey.toBuffer(),
-      ],
-      program.programId
-    );
-  };
+  const getClaimableTokensPDA = (investorKey: PublicKey): [PublicKey, number] =>
+    getClaimableTokensAddress(program.programId, vault, investorKey);
 
-  const getFrozenAccountPDA = (
-    investorKey: PublicKey
-  ): [PublicKey, number] => {
-    return PublicKey.findProgramAddressSync(
-      [
-        Buffer.from("frozen_account"),
-        vault.toBuffer(),
-        investorKey.toBuffer(),
-      ],
-      program.programId
-    );
-  };
+  const getFrozenAccountPDA = (investorKey: PublicKey): [PublicKey, number] =>
+    getFrozenAccountAddress(program.programId, vault, investorKey);
 
   const getOracleDataPDA = (): [PublicKey, number] => {
     return PublicKey.findProgramAddressSync(
@@ -296,9 +249,6 @@ describe("svs-11 (Credit Markets Vault)", () => {
       await program.methods
         .initializePool(
           vaultId,
-          "Credit Vault",
-          "cVLT",
-          "https://example.com/metadata",
           minimumInvestment,
           maxStaleness
         )
@@ -986,13 +936,6 @@ describe("svs-11 (Credit Markets Vault)", () => {
     });
 
     it("investor cancels pending redemption", async () => {
-      const sharesBefore = await getAccount(
-        connection,
-        investorSharesAccount,
-        undefined,
-        TOKEN_2022_PROGRAM_ID
-      );
-
       await program.methods
         .cancelRedeem()
         .accountsPartial({
@@ -1014,9 +957,9 @@ describe("svs-11 (Credit Markets Vault)", () => {
         undefined,
         TOKEN_2022_PROGRAM_ID
       );
-      expect(
-        BigInt(sharesAfter.amount.toString()) > BigInt(sharesBefore.amount.toString())
-      ).to.be.true;
+      expect(sharesAfter.amount.toString()).to.equal(
+        expectedShares.toString()
+      );
 
       const info = await connection.getAccountInfo(redemptionRequest);
       expect(info).to.be.null;
@@ -1042,9 +985,11 @@ describe("svs-11 (Credit Markets Vault)", () => {
         .rpc();
 
       const depositVaultAccount = await getAccount(connection, depositVault);
-      expect(
-        BigInt(depositVaultAccount.amount.toString()) < BigInt(vaultBefore.totalAssets.toString())
-      ).to.be.true;
+      const expectedBalance =
+        BigInt(vaultBefore.totalAssets.toString()) - BigInt(drawAmount.toString());
+      expect(depositVaultAccount.amount.toString()).to.equal(
+        expectedBalance.toString()
+      );
     });
 
     it("manager repays assets", async () => {
@@ -1172,26 +1117,19 @@ describe("svs-11 (Credit Markets Vault)", () => {
       expect(vaultAccount.paused).to.equal(true);
     });
 
-    it("rejects requests when paused", async () => {
-      [investmentRequest] = getInvestmentRequestPDA(investor.publicKey);
-
+    it("rejects repay when paused", async () => {
       try {
         await program.methods
-          .requestDeposit(depositAmount)
+          .repay(new BN(1_000_000))
           .accountsPartial({
-            investor: investor.publicKey,
+            manager: manager.publicKey,
             vault,
-            investmentRequest,
-            investorTokenAccount,
             depositVault,
+            managerTokenAccount,
             assetMint,
-            attestation,
-            frozenCheck: null,
             assetTokenProgram: TOKEN_PROGRAM_ID,
-            systemProgram: SystemProgram.programId,
-            clock: SYSVAR_CLOCK_PUBKEY,
           })
-          .signers([investor])
+          .signers([manager])
           .rpc();
         expect.fail("should have thrown");
       } catch (err: any) {

@@ -52,12 +52,12 @@ pub fn transfer_authority_handler(ctx: Context<Admin>, new_authority: Pubkey) ->
         VaultError::InvalidAddress
     );
 
-    let old_authority = ctx.accounts.vault.authority;
+    let previous_authority = ctx.accounts.vault.authority;
     ctx.accounts.vault.authority = new_authority;
 
     emit!(AuthorityTransferred {
         vault: ctx.accounts.vault.key(),
-        old_authority,
+        previous_authority,
         new_authority,
     });
 
@@ -122,7 +122,7 @@ pub fn update_oracle_config_handler(
     );
     require!(
         new_max_staleness >= 60 && new_max_staleness <= 86400,
-        VaultError::OracleStale
+        VaultError::InvalidStalenessConfig
     );
 
     let vault = &mut ctx.accounts.vault;

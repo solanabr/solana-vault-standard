@@ -11,6 +11,4 @@ pub const FROZEN_ACCOUNT_SEED: &[u8] = b"frozen_account";
 
 pub const MAX_DECIMALS: u8 = 9;
 pub const SHARES_DECIMALS: u8 = 9;
-pub const DEFAULT_MAX_STALENESS: i64 = 3600;
-
-pub const SAS_PROGRAM_ID: Pubkey = pubkey!("22zoJMtdu4tQc2PzL74ZUT7FrwgB1Udec8DdW4yw4BdG");
+pub const SAS_PROGRAM_ID: Pubkey = pubkey!("4azCqYgLHDRmsiR6kmYu6v5qvzamaYGqZcmx8MrnrKMc");

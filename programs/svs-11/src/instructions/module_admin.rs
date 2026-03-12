@@ -7,10 +7,6 @@ use crate::state::{
     CAP_CONFIG_SEED, FEE_CONFIG_SEED, LOCK_CONFIG_SEED,
 };
 
-// =============================================================================
-// Fee Config Instructions
-// =============================================================================
-
 #[derive(Accounts)]
 pub struct InitializeFeeConfig<'info> {
     #[account(mut)]
@@ -112,10 +108,6 @@ pub fn update_fee_config(
     Ok(())
 }
 
-// =============================================================================
-// Cap Config Instructions
-// =============================================================================
-
 #[derive(Accounts)]
 pub struct InitializeCapConfig<'info> {
     #[account(mut)]
@@ -196,10 +188,6 @@ pub fn update_cap_config(
     Ok(())
 }
 
-// =============================================================================
-// Lock Config Instructions
-// =============================================================================
-
 #[derive(Accounts)]
 pub struct InitializeLockConfig<'info> {
     #[account(mut)]
@@ -265,10 +253,6 @@ pub fn update_lock_config(ctx: Context<UpdateLockConfig>, lock_duration: i64) ->
 
     Ok(())
 }
-
-// =============================================================================
-// Access Config Instructions
-// =============================================================================
 
 #[derive(Accounts)]
 pub struct InitializeAccessConfig<'info> {

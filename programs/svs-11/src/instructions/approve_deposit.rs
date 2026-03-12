@@ -50,10 +50,6 @@ pub struct ApproveDeposit<'info> {
 pub fn handler(ctx: Context<ApproveDeposit>) -> Result<()> {
     require!(!ctx.accounts.vault.paused, VaultError::VaultPaused);
     require!(
-        ctx.accounts.vault.investment_window_open,
-        VaultError::InvestmentWindowClosed
-    );
-    require!(
         ctx.accounts.frozen_check.is_none(),
         VaultError::AccountFrozen
     );

@@ -17,6 +17,7 @@ pub fn validate_sas_attestation(
     );
 
     let (expected_pda, _bump) = Pubkey::find_program_address(
+        // External PDA -- bump belongs to SAS program
         &[
             vault.sas_credential.as_ref(),
             vault.sas_schema.as_ref(),

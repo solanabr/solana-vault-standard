@@ -85,9 +85,6 @@ pub struct InitializePool<'info> {
 pub fn handler(
     ctx: Context<InitializePool>,
     vault_id: u64,
-    _name: String,
-    _symbol: String,
-    _uri: String,
     minimum_investment: u64,
     max_staleness: i64,
 ) -> Result<()> {
@@ -221,7 +218,8 @@ pub fn handler(
     vault.redemption_escrow = ctx.accounts.redemption_escrow.key();
     vault.nav_oracle = ctx.accounts.nav_oracle.key();
     vault.oracle_program = ctx.accounts.oracle_program.key();
-    svs_oracle::validate_staleness_config(max_staleness).map_err(|_| VaultError::OracleStale)?;
+    svs_oracle::validate_staleness_config(max_staleness)
+        .map_err(|_| VaultError::InvalidStalenessConfig)?;
     vault.max_staleness = max_staleness;
     vault.sas_credential = ctx.accounts.sas_credential.key();
     vault.sas_schema = ctx.accounts.sas_schema.key();

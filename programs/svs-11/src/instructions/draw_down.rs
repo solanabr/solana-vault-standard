@@ -26,6 +26,7 @@ pub struct DrawDown<'info> {
     )]
     pub deposit_vault: InterfaceAccount<'info, TokenAccount>,
 
+    /// Any asset-mint account -- credit vault capital is deployed off-chain.
     #[account(
         mut,
         constraint = destination.mint == vault.asset_mint,

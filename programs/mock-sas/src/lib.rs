@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 
-declare_id!("22zoJMtdu4tQc2PzL74ZUT7FrwgB1Udec8DdW4yw4BdG");
+declare_id!("4azCqYgLHDRmsiR6kmYu6v5qvzamaYGqZcmx8MrnrKMc");
 
 #[program]
 pub mod mock_sas {

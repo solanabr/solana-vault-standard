@@ -97,4 +97,7 @@ pub enum VaultError {
 
     #[msg("Invalid lock configuration")]
     InvalidLockConfig,
+
+    #[msg("Invalid staleness configuration")]
+    InvalidStalenessConfig,
 }

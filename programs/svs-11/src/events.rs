@@ -114,7 +114,7 @@ pub struct VaultStatusChanged {
 #[event]
 pub struct AuthorityTransferred {
     pub vault: Pubkey,
-    pub old_authority: Pubkey,
+    pub previous_authority: Pubkey,
     pub new_authority: Pubkey,
 }
 

@@ -63,7 +63,6 @@ pub struct RequestDeposit<'info> {
 pub fn handler(ctx: Context<RequestDeposit>, amount: u64) -> Result<()> {
     let vault = &ctx.accounts.vault;
 
-    require!(!vault.paused, VaultError::VaultPaused);
     require!(
         vault.investment_window_open,
         VaultError::InvestmentWindowClosed
