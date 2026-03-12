@@ -69,6 +69,9 @@ import { registerTimelockCommands } from "./commands/timelock";
 import { registerStrategyCommands } from "./commands/strategy";
 import { registerPortfolioCommands } from "./commands/portfolio";
 
+// Tranched vault commands (SVS-12)
+import { registerTranchedCommands } from "./commands/tranched";
+
 /**
  * Create and configure the CLI program.
  *
@@ -102,6 +105,9 @@ export function createCli(): Command {
   registerTimelockCommands(program);
   registerStrategyCommands(program);
   registerPortfolioCommands(program);
+
+  // SVS-12 Tranched Vault
+  registerTranchedCommands(program);
 
   return program;
 }
