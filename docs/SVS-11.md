@@ -81,7 +81,7 @@ pub struct CreditVault {
 
 ### Redemption Flow
 - `request_redeem(shares)` — Investor locks shares in escrow (requires attestation, not frozen)
-- `approve_redeem` — Manager approves, burns shares, creates claimable tokens (requires oracle)
+- `approve_redeem` — Manager approves, burns shares, creates claimable tokens (requires oracle, re-validates attestation, checks freeze)
 - `cancel_redeem` — Investor cancels, shares returned
 - `claim_redemption` — Investor claims assets (no attestation/freeze check — spec requirement)
 
@@ -97,6 +97,7 @@ pub struct CreditVault {
 - `transfer_authority(new_authority)` — Authority transfers control
 - `set_manager(new_manager)` — Authority assigns new manager
 - `update_attester(new_attester)` — Authority changes KYC attester
+- `update_oracle` — Authority changes NAV oracle address and oracle program
 
 ## Security Model
 
@@ -159,7 +160,7 @@ solana-vault credit claim <vault>
 # Manager operations
 solana-vault credit approve-deposit <vault> --investor <PK> --oracle <PDA> --attestation <PDA>
 solana-vault credit reject-deposit <vault> --investor <PK> --reason 1
-solana-vault credit approve-redeem <vault> --investor <PK> --oracle <PDA>
+solana-vault credit approve-redeem <vault> --investor <PK> --oracle <PDA> --attestation <PDA>
 solana-vault credit repay <vault> -a 500000
 solana-vault credit window open <vault>
 solana-vault credit window close <vault>
