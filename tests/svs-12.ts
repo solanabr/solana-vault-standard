@@ -478,7 +478,6 @@ describe("svs-12 (Tranched Vault)", () => {
 
   it("rejects unauthorized manager", async () => {
     const fakeManager = Keypair.generate();
-    // Airdrop some SOL to fake manager
     const sig = await connection.requestAirdrop(fakeManager.publicKey, 1_000_000_000);
     await connection.confirmTransaction(sig);
 
@@ -489,7 +488,7 @@ describe("svs-12 (Tranched Vault)", () => {
           manager: fakeManager.publicKey,
           vault,
           assetMint,
-          managerAssetAccount: userAssetAta, // wrong but will fail auth first
+          managerAssetAccount: userAssetAta,
           assetVault,
           tranche0: seniorTranche,
           tranche1: juniorTranche,
@@ -503,5 +502,326 @@ describe("svs-12 (Tranched Vault)", () => {
     } catch (e: any) {
       expect(e.error?.errorCode?.code || e.message).to.contain("Unauthorized");
     }
+  });
+
+  // ======================== Extended Error Cases ========================
+
+  it("rejects zero amount redeem", async () => {
+    const userSharesAta = getAssociatedTokenAddressSync(
+      juniorSharesMint, payer.publicKey, false, TOKEN_2022_PROGRAM_ID
+    );
+    try {
+      await program.methods
+        .redeem(new BN(0), new BN(0))
+        .accounts({
+          user: payer.publicKey, vault,
+          targetTranche: juniorTranche, tranche1: seniorTranche, tranche2: null, tranche3: null,
+          assetMint, userAssetAccount: userAssetAta, assetVault,
+          sharesMint: juniorSharesMint, userSharesAccount: userSharesAta,
+          assetTokenProgram: TOKEN_PROGRAM_ID, token2022Program: TOKEN_2022_PROGRAM_ID,
+        })
+        .rpc();
+      expect.fail("should have thrown");
+    } catch (e: any) {
+      expect(e.error?.errorCode?.code || e.message).to.contain("ZeroAmount");
+    }
+  });
+
+  it("rejects zero amount yield distribution", async () => {
+    try {
+      await program.methods
+        .distributeYield(new BN(0))
+        .accounts({
+          manager: payer.publicKey, vault, assetMint,
+          managerAssetAccount: userAssetAta, assetVault,
+          tranche0: seniorTranche, tranche1: juniorTranche, tranche2: null, tranche3: null,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .rpc();
+      expect.fail("should have thrown");
+    } catch (e: any) {
+      expect(e.error?.errorCode?.code || e.message).to.contain("ZeroAmount");
+    }
+  });
+
+  it("rejects zero amount loss", async () => {
+    try {
+      await program.methods
+        .recordLoss(new BN(0))
+        .accounts({
+          manager: payer.publicKey, vault,
+          tranche0: seniorTranche, tranche1: juniorTranche, tranche2: null, tranche3: null,
+        })
+        .rpc();
+      expect.fail("should have thrown");
+    } catch (e: any) {
+      expect(e.error?.errorCode?.code || e.message).to.contain("ZeroAmount");
+    }
+  });
+
+  it("rejects zero amount rebalance", async () => {
+    try {
+      await program.methods
+        .rebalanceTranches(new BN(0))
+        .accounts({
+          manager: payer.publicKey, vault,
+          fromTranche: seniorTranche, toTranche: juniorTranche,
+          otherTranche0: null, otherTranche1: null,
+        })
+        .rpc();
+      expect.fail("should have thrown");
+    } catch (e: any) {
+      expect(e.error?.errorCode?.code || e.message).to.contain("ZeroAmount");
+    }
+  });
+
+  it("rejects redeem when paused", async () => {
+    await program.methods.pause().accounts({ authority: payer.publicKey, vault }).rpc();
+    const userSharesAta = getAssociatedTokenAddressSync(
+      juniorSharesMint, payer.publicKey, false, TOKEN_2022_PROGRAM_ID
+    );
+    try {
+      await program.methods
+        .redeem(new BN(1000), new BN(0))
+        .accounts({
+          user: payer.publicKey, vault,
+          targetTranche: juniorTranche, tranche1: seniorTranche, tranche2: null, tranche3: null,
+          assetMint, userAssetAccount: userAssetAta, assetVault,
+          sharesMint: juniorSharesMint, userSharesAccount: userSharesAta,
+          assetTokenProgram: TOKEN_PROGRAM_ID, token2022Program: TOKEN_2022_PROGRAM_ID,
+        })
+        .rpc();
+      expect.fail("should have thrown");
+    } catch (e: any) {
+      expect(e.error?.errorCode?.code || e.message).to.contain("VaultPaused");
+    }
+    await program.methods.unpause().accounts({ authority: payer.publicKey, vault }).rpc();
+  });
+
+  it("rejects yield distribution when paused", async () => {
+    await program.methods.pause().accounts({ authority: payer.publicKey, vault }).rpc();
+    try {
+      await program.methods
+        .distributeYield(new BN(1000))
+        .accounts({
+          manager: payer.publicKey, vault, assetMint,
+          managerAssetAccount: userAssetAta, assetVault,
+          tranche0: seniorTranche, tranche1: juniorTranche, tranche2: null, tranche3: null,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .rpc();
+      expect.fail("should have thrown");
+    } catch (e: any) {
+      expect(e.error?.errorCode?.code || e.message).to.contain("VaultPaused");
+    }
+    await program.methods.unpause().accounts({ authority: payer.publicKey, vault }).rpc();
+  });
+
+  it("rejects record loss when paused", async () => {
+    await program.methods.pause().accounts({ authority: payer.publicKey, vault }).rpc();
+    try {
+      await program.methods
+        .recordLoss(new BN(1000))
+        .accounts({
+          manager: payer.publicKey, vault,
+          tranche0: seniorTranche, tranche1: juniorTranche, tranche2: null, tranche3: null,
+        })
+        .rpc();
+      expect.fail("should have thrown");
+    } catch (e: any) {
+      expect(e.error?.errorCode?.code || e.message).to.contain("VaultPaused");
+    }
+    await program.methods.unpause().accounts({ authority: payer.publicKey, vault }).rpc();
+  });
+
+  it("rejects double pause", async () => {
+    await program.methods.pause().accounts({ authority: payer.publicKey, vault }).rpc();
+    try {
+      await program.methods.pause().accounts({ authority: payer.publicKey, vault }).rpc();
+      expect.fail("should have thrown");
+    } catch (e: any) {
+      expect(e.error?.errorCode?.code || e.message).to.contain("VaultPaused");
+    }
+    await program.methods.unpause().accounts({ authority: payer.publicKey, vault }).rpc();
+  });
+
+  it("rejects unpause when not paused", async () => {
+    try {
+      await program.methods.unpause().accounts({ authority: payer.publicKey, vault }).rpc();
+      expect.fail("should have thrown");
+    } catch (e: any) {
+      expect(e.error?.errorCode?.code || e.message).to.contain("VaultNotPaused");
+    }
+  });
+
+  // ======================== Authority & Manager ========================
+
+  it("transfers authority", async () => {
+    const newAuth = Keypair.generate();
+    await program.methods
+      .transferAuthority(newAuth.publicKey)
+      .accounts({ authority: payer.publicKey, vault })
+      .rpc();
+
+    let vaultAccount = await program.account.tranchedVault.fetch(vault);
+    expect(vaultAccount.authority.toString()).to.equal(newAuth.publicKey.toString());
+
+    const airdropSig = await connection.requestAirdrop(newAuth.publicKey, 1_000_000_000);
+    await connection.confirmTransaction(airdropSig);
+
+    await program.methods
+      .transferAuthority(payer.publicKey)
+      .accounts({ authority: newAuth.publicKey, vault })
+      .signers([newAuth])
+      .rpc();
+
+    vaultAccount = await program.account.tranchedVault.fetch(vault);
+    expect(vaultAccount.authority.toString()).to.equal(payer.publicKey.toString());
+  });
+
+  it("rejects unauthorized authority transfer", async () => {
+    const fakeAuth = Keypair.generate();
+    const airdropSig = await connection.requestAirdrop(fakeAuth.publicKey, 1_000_000_000);
+    await connection.confirmTransaction(airdropSig);
+
+    try {
+      await program.methods
+        .transferAuthority(fakeAuth.publicKey)
+        .accounts({ authority: fakeAuth.publicKey, vault })
+        .signers([fakeAuth])
+        .rpc();
+      expect.fail("should have thrown");
+    } catch (e: any) {
+      expect(e.error?.errorCode?.code || e.message).to.contain("Unauthorized");
+    }
+  });
+
+  it("sets new manager", async () => {
+    const newManager = Keypair.generate();
+    await program.methods
+      .setManager(newManager.publicKey)
+      .accounts({ authority: payer.publicKey, vault })
+      .rpc();
+
+    const vaultAccount = await program.account.tranchedVault.fetch(vault);
+    expect(vaultAccount.manager.toString()).to.equal(newManager.publicKey.toString());
+
+    await program.methods
+      .setManager(payer.publicKey)
+      .accounts({ authority: payer.publicKey, vault })
+      .rpc();
+  });
+
+  // ======================== Config Validation ========================
+
+  it("rejects invalid subordination bps (> 10000)", async () => {
+    const [fakeTranche] = getTranchePDA(vault, 2);
+    const [fakeSharesMint] = getSharesMintPDA(vault, 2);
+    try {
+      await program.methods
+        .addTranche(2, 10001, 0, 10000)
+        .accounts({
+          authority: payer.publicKey, vault,
+          tranche: fakeTranche, sharesMint: fakeSharesMint,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+          systemProgram: SystemProgram.programId, rent: SYSVAR_RENT_PUBKEY,
+        })
+        .rpc();
+      expect.fail("should have thrown");
+    } catch (e: any) {
+      expect(e.error?.errorCode?.code || e.message).to.contain("InvalidSubordinationConfig");
+    }
+  });
+
+  it("rejects invalid cap bps (0)", async () => {
+    const [fakeTranche] = getTranchePDA(vault, 2);
+    const [fakeSharesMint] = getSharesMintPDA(vault, 2);
+    try {
+      await program.methods
+        .addTranche(2, 0, 0, 0)
+        .accounts({
+          authority: payer.publicKey, vault,
+          tranche: fakeTranche, sharesMint: fakeSharesMint,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+          systemProgram: SystemProgram.programId, rent: SYSVAR_RENT_PUBKEY,
+        })
+        .rpc();
+      expect.fail("should have thrown");
+    } catch (e: any) {
+      expect(e.error?.errorCode?.code || e.message).to.contain("InvalidCapConfig");
+    }
+  });
+
+  it("rejects invalid yield bps (> 10000)", async () => {
+    const [fakeTranche] = getTranchePDA(vault, 2);
+    const [fakeSharesMint] = getSharesMintPDA(vault, 2);
+    try {
+      await program.methods
+        .addTranche(2, 0, 10001, 10000)
+        .accounts({
+          authority: payer.publicKey, vault,
+          tranche: fakeTranche, sharesMint: fakeSharesMint,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+          systemProgram: SystemProgram.programId, rent: SYSVAR_RENT_PUBKEY,
+        })
+        .rpc();
+      expect.fail("should have thrown");
+    } catch (e: any) {
+      expect(e.error?.errorCode?.code || e.message).to.contain("InvalidYieldConfig");
+    }
+  });
+
+  it("rejects priority >= 8", async () => {
+    const [fakeTranche] = getTranchePDA(vault, 2);
+    const [fakeSharesMint] = getSharesMintPDA(vault, 2);
+    try {
+      await program.methods
+        .addTranche(8, 0, 0, 10000)
+        .accounts({
+          authority: payer.publicKey, vault,
+          tranche: fakeTranche, sharesMint: fakeSharesMint,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+          systemProgram: SystemProgram.programId, rent: SYSVAR_RENT_PUBKEY,
+        })
+        .rpc();
+      expect.fail("should have thrown");
+    } catch (e: any) {
+      expect(e.error?.errorCode?.code || e.message).to.contain("DuplicatePriority");
+    }
+  });
+
+  // ======================== Invariant Checks ========================
+
+  it("vault.total_assets equals sum of tranche allocations", async () => {
+    const vaultAccount = await program.account.tranchedVault.fetch(vault);
+    const senior = await program.account.tranche.fetch(seniorTranche);
+    const junior = await program.account.tranche.fetch(juniorTranche);
+    const sum = senior.totalAssetsAllocated.toNumber() + junior.totalAssetsAllocated.toNumber();
+    expect(vaultAccount.totalAssets.toNumber()).to.equal(sum);
+  });
+
+  it("tranche state has correct vault reference", async () => {
+    const senior = await program.account.tranche.fetch(seniorTranche);
+    const junior = await program.account.tranche.fetch(juniorTranche);
+    expect(senior.vault.toString()).to.equal(vault.toString());
+    expect(junior.vault.toString()).to.equal(vault.toString());
+  });
+
+  it("tranche indices match creation order", async () => {
+    const senior = await program.account.tranche.fetch(seniorTranche);
+    const junior = await program.account.tranche.fetch(juniorTranche);
+    expect(senior.index).to.equal(0);
+    expect(junior.index).to.equal(1);
+  });
+
+  it("bumps are stored correctly", async () => {
+    const vaultAccount = await program.account.tranchedVault.fetch(vault);
+    const senior = await program.account.tranche.fetch(seniorTranche);
+    const junior = await program.account.tranche.fetch(juniorTranche);
+    expect(vaultAccount.bump).to.be.greaterThan(0);
+    expect(senior.bump).to.be.greaterThan(0);
+    expect(junior.bump).to.be.greaterThan(0);
+    expect(senior.sharesMintBump).to.be.greaterThan(0);
+    expect(junior.sharesMintBump).to.be.greaterThan(0);
   });
 });
