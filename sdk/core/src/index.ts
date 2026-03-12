@@ -51,3 +51,5 @@ export * from "./strategy";
 // Re-export common types
 export { BN } from "@coral-xyz/anchor";
 export { PublicKey } from "@solana/web3.js";
+
+export * from "./svs-8";

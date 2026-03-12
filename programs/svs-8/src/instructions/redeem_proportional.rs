@@ -5,14 +5,15 @@ use crate::{
     state::MultiAssetVault,
 };
 
-pub fn handler(
-    ctx: Context<RedeemProportional>,
+pub fn handler<'info>(
+    ctx: Context<'_, '_, '_, 'info, RedeemProportional<'info>>,
     _shares: u64,
     _min_assets_out: u64,
 ) -> Result<()> {
     require!(!ctx.accounts.vault.paused, VaultError::VaultPaused);
-    // Full implementation in Phase 3 — scaffold for compilation
+
     msg!("redeem_proportional: scaffold");
+
     Ok(())
 }
 
