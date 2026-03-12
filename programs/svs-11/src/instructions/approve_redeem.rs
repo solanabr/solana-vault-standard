@@ -30,6 +30,7 @@ pub struct ApproveRedeem<'info> {
 
     #[account(
         mut,
+        has_one = vault,
         seeds = [REDEMPTION_REQUEST_SEED, vault.key().as_ref(), redemption_request.investor.as_ref()],
         bump = redemption_request.bump,
         constraint = redemption_request.status == RequestStatus::Pending @ VaultError::RequestNotPending,

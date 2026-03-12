@@ -23,6 +23,7 @@ pub struct CancelRedeem<'info> {
     #[account(
         mut,
         close = investor,
+        has_one = vault,
         seeds = [REDEMPTION_REQUEST_SEED, vault.key().as_ref(), investor.key().as_ref()],
         bump = redemption_request.bump,
         constraint = redemption_request.status == RequestStatus::Pending @ VaultError::RequestNotPending,

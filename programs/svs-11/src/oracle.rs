@@ -15,15 +15,10 @@ pub struct NavOracleData {
 impl NavOracleData {
     pub const LEN: usize = 8 + 8;
 
-    /// Read from raw account data. Skips first 8 bytes (Anchor discriminator).
-    ///
-    /// ASSUMPTION: The oracle program uses Anchor and writes an 8-byte discriminator
-    /// prefix. If it uses raw Borsh, zero-copy, or a custom header, these byte offsets
-    /// are wrong and will silently read garbage price data. Verify the oracle program's
-    /// serialization format before deployment.
+    /// Deserialize from raw account data, skipping the 8-byte Anchor discriminator.
     pub fn try_from_account(account: &AccountInfo) -> Result<Self> {
         let data = account.try_borrow_data()?;
-        require!(data.len() >= 8 + Self::LEN, VaultError::OracleInvalidPrice);
+        require!(data.len() == 8 + Self::LEN, VaultError::OracleInvalidPrice);
         let price_per_share = u64::from_le_bytes(
             data[8..16]
                 .try_into()

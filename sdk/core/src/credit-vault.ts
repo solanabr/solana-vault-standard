@@ -241,7 +241,7 @@ export class CreditVault {
     if (!this._state) {
       await this.refresh();
     }
-    return this._state!;
+    return { ...this._state! };
   }
 
   getInvestorSharesAccount(investor: PublicKey): PublicKey {

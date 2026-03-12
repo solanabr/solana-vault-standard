@@ -1,6 +1,7 @@
 use anchor_lang::prelude::*;
 
 use crate::constants::VAULT_SEED;
+use crate::error::VaultError;
 use crate::events::{WindowClosed, WindowOpened};
 use crate::state::CreditVault;
 
@@ -17,6 +18,7 @@ pub struct InvestmentWindow<'info> {
 }
 
 pub fn open_handler(ctx: Context<InvestmentWindow>) -> Result<()> {
+    require!(!ctx.accounts.vault.paused, VaultError::VaultPaused);
     ctx.accounts.vault.investment_window_open = true;
     emit!(WindowOpened {
         vault: ctx.accounts.vault.key()
@@ -25,6 +27,7 @@ pub fn open_handler(ctx: Context<InvestmentWindow>) -> Result<()> {
 }
 
 pub fn close_handler(ctx: Context<InvestmentWindow>) -> Result<()> {
+    require!(!ctx.accounts.vault.paused, VaultError::VaultPaused);
     ctx.accounts.vault.investment_window_open = false;
     emit!(WindowClosed {
         vault: ctx.accounts.vault.key()

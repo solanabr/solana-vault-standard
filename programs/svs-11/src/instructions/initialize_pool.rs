@@ -13,8 +13,7 @@ use anchor_spl::{
 };
 
 use crate::constants::{
-    DEFAULT_MAX_STALENESS, MAX_DECIMALS, REDEMPTION_ESCROW_SEED, SHARES_DECIMALS, SHARES_MINT_SEED,
-    VAULT_SEED,
+    MAX_DECIMALS, REDEMPTION_ESCROW_SEED, SHARES_DECIMALS, SHARES_MINT_SEED, VAULT_SEED,
 };
 use crate::error::VaultError;
 use crate::events::VaultInitialized;
@@ -92,6 +91,19 @@ pub fn handler(
     minimum_investment: u64,
     max_staleness: i64,
 ) -> Result<()> {
+    require!(
+        ctx.accounts.oracle_program.key() != Pubkey::default(),
+        VaultError::InvalidAddress
+    );
+    require!(
+        ctx.accounts.nav_oracle.key() != Pubkey::default(),
+        VaultError::InvalidAddress
+    );
+    require!(
+        ctx.accounts.oracle_program.executable,
+        VaultError::OracleInvalidProgram
+    );
+
     let asset_decimals = ctx.accounts.asset_mint.decimals;
     require!(
         asset_decimals <= MAX_DECIMALS,
@@ -209,11 +221,8 @@ pub fn handler(
     vault.redemption_escrow = ctx.accounts.redemption_escrow.key();
     vault.nav_oracle = ctx.accounts.nav_oracle.key();
     vault.oracle_program = ctx.accounts.oracle_program.key();
-    vault.max_staleness = if max_staleness > 0 {
-        max_staleness
-    } else {
-        DEFAULT_MAX_STALENESS
-    };
+    svs_oracle::validate_staleness_config(max_staleness).map_err(|_| VaultError::OracleStale)?;
+    vault.max_staleness = max_staleness;
     vault.sas_credential = ctx.accounts.sas_credential.key();
     vault.sas_schema = ctx.accounts.sas_schema.key();
     vault.vault_id = vault_id;

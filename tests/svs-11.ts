@@ -512,12 +512,17 @@ describe("svs-11 (Credit Markets Vault)", () => {
     });
 
     it("investor claims deposit", async () => {
-      investorSharesAccount = getAssociatedTokenAddressSync(
+      const ata = await getOrCreateAssociatedTokenAccount(
+        connection,
+        payer,
         sharesMint,
         investor.publicKey,
         false,
+        undefined,
+        undefined,
         TOKEN_2022_PROGRAM_ID
       );
+      investorSharesAccount = ata.address;
 
       await program.methods
         .claimDeposit()
@@ -528,8 +533,6 @@ describe("svs-11 (Credit Markets Vault)", () => {
           sharesMint,
           investorSharesAccount,
           token2022Program: TOKEN_2022_PROGRAM_ID,
-          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-          systemProgram: SystemProgram.programId,
         })
         .signers([investor])
         .rpc();
@@ -949,8 +952,6 @@ describe("svs-11 (Credit Markets Vault)", () => {
           sharesMint,
           investorSharesAccount,
           token2022Program: TOKEN_2022_PROGRAM_ID,
-          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-          systemProgram: SystemProgram.programId,
         })
         .signers([investor])
         .rpc();
@@ -1301,6 +1302,1078 @@ describe("svs-11 (Credit Markets Vault)", () => {
     });
   });
 
+  describe("Error Cases - Invalid Amounts", () => {
+    it("rejects zero amount deposit request", async () => {
+      const zeroInvestor = Keypair.generate();
+      const airdrop = await connection.requestAirdrop(
+        zeroInvestor.publicKey,
+        5 * anchor.web3.LAMPORTS_PER_SOL
+      );
+      await connection.confirmTransaction(airdrop);
+
+      const ata = await getOrCreateAssociatedTokenAccount(
+        connection,
+        payer,
+        assetMint,
+        zeroInvestor.publicKey,
+        false,
+        undefined,
+        undefined,
+        TOKEN_PROGRAM_ID
+      );
+
+      await mintTo(
+        connection,
+        payer,
+        assetMint,
+        ata.address,
+        payer.publicKey,
+        BigInt(depositAmount.toString()),
+        [],
+        undefined,
+        TOKEN_PROGRAM_ID
+      );
+
+      const [zeroRequest] = getInvestmentRequestPDA(zeroInvestor.publicKey);
+      const [zeroAttestation] = getAttestationPDA(
+        sasCredential.publicKey,
+        sasSchema.publicKey,
+        zeroInvestor.publicKey
+      );
+
+      await sasProgram.methods
+        .createAttestation(
+          sasCredential.publicKey,
+          sasSchema.publicKey,
+          new BN(0)
+        )
+        .accountsPartial({
+          authority: payer.publicKey,
+          attestation: zeroAttestation,
+          investor: zeroInvestor.publicKey,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
+
+      try {
+        await program.methods
+          .requestDeposit(new BN(0))
+          .accountsPartial({
+            investor: zeroInvestor.publicKey,
+            vault,
+            investmentRequest: zeroRequest,
+            investorTokenAccount: ata.address,
+            depositVault,
+            assetMint,
+            attestation: zeroAttestation,
+            frozenCheck: null,
+            assetTokenProgram: TOKEN_PROGRAM_ID,
+            systemProgram: SystemProgram.programId,
+            clock: SYSVAR_CLOCK_PUBKEY,
+          })
+          .signers([zeroInvestor])
+          .rpc();
+        expect.fail("should have thrown");
+      } catch (err: any) {
+        expect(err.error.errorCode.code).to.equal("ZeroAmount");
+      }
+    });
+
+    it("rejects deposit below minimum investment", async () => {
+      const smallInvestor = Keypair.generate();
+      const airdrop = await connection.requestAirdrop(
+        smallInvestor.publicKey,
+        5 * anchor.web3.LAMPORTS_PER_SOL
+      );
+      await connection.confirmTransaction(airdrop);
+
+      const ata = await getOrCreateAssociatedTokenAccount(
+        connection,
+        payer,
+        assetMint,
+        smallInvestor.publicKey,
+        false,
+        undefined,
+        undefined,
+        TOKEN_PROGRAM_ID
+      );
+
+      await mintTo(
+        connection,
+        payer,
+        assetMint,
+        ata.address,
+        payer.publicKey,
+        BigInt(depositAmount.toString()),
+        [],
+        undefined,
+        TOKEN_PROGRAM_ID
+      );
+
+      const [smallRequest] = getInvestmentRequestPDA(smallInvestor.publicKey);
+      const [smallAttestation] = getAttestationPDA(
+        sasCredential.publicKey,
+        sasSchema.publicKey,
+        smallInvestor.publicKey
+      );
+
+      await sasProgram.methods
+        .createAttestation(
+          sasCredential.publicKey,
+          sasSchema.publicKey,
+          new BN(0)
+        )
+        .accountsPartial({
+          authority: payer.publicKey,
+          attestation: smallAttestation,
+          investor: smallInvestor.publicKey,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
+
+      try {
+        await program.methods
+          .requestDeposit(new BN(1))
+          .accountsPartial({
+            investor: smallInvestor.publicKey,
+            vault,
+            investmentRequest: smallRequest,
+            investorTokenAccount: ata.address,
+            depositVault,
+            assetMint,
+            attestation: smallAttestation,
+            frozenCheck: null,
+            assetTokenProgram: TOKEN_PROGRAM_ID,
+            systemProgram: SystemProgram.programId,
+            clock: SYSVAR_CLOCK_PUBKEY,
+          })
+          .signers([smallInvestor])
+          .rpc();
+        expect.fail("should have thrown");
+      } catch (err: any) {
+        expect(err.error.errorCode.code).to.equal("DepositTooSmall");
+      }
+    });
+
+    it("rejects zero amount redeem request", async () => {
+      const zeroRedeemer = Keypair.generate();
+      const airdrop = await connection.requestAirdrop(
+        zeroRedeemer.publicKey,
+        5 * anchor.web3.LAMPORTS_PER_SOL
+      );
+      await connection.confirmTransaction(airdrop);
+
+      const [zeroRedemption] = getRedemptionRequestPDA(zeroRedeemer.publicKey);
+      const [zeroAttestation] = getAttestationPDA(
+        sasCredential.publicKey,
+        sasSchema.publicKey,
+        zeroRedeemer.publicKey
+      );
+
+      await sasProgram.methods
+        .createAttestation(
+          sasCredential.publicKey,
+          sasSchema.publicKey,
+          new BN(0)
+        )
+        .accountsPartial({
+          authority: payer.publicKey,
+          attestation: zeroAttestation,
+          investor: zeroRedeemer.publicKey,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
+
+      const zeroSharesAta = await getOrCreateAssociatedTokenAccount(
+        connection,
+        payer,
+        sharesMint,
+        zeroRedeemer.publicKey,
+        false,
+        undefined,
+        undefined,
+        TOKEN_2022_PROGRAM_ID
+      );
+      const zeroSharesAccount = zeroSharesAta.address;
+
+      try {
+        await program.methods
+          .requestRedeem(new BN(0))
+          .accountsPartial({
+            investor: zeroRedeemer.publicKey,
+            vault,
+            redemptionRequest: zeroRedemption,
+            sharesMint,
+            investorSharesAccount: zeroSharesAccount,
+            redemptionEscrow,
+            attestation: zeroAttestation,
+            frozenCheck: null,
+            token2022Program: TOKEN_2022_PROGRAM_ID,
+            systemProgram: SystemProgram.programId,
+            clock: SYSVAR_CLOCK_PUBKEY,
+          })
+          .signers([zeroRedeemer])
+          .rpc();
+        expect.fail("should have thrown");
+      } catch (err: any) {
+        expect(err.error.errorCode.code).to.equal("ZeroAmount");
+      }
+    });
+
+    it("rejects zero amount draw_down", async () => {
+      try {
+        await program.methods
+          .drawDown(new BN(0))
+          .accountsPartial({
+            manager: manager.publicKey,
+            vault,
+            depositVault,
+            destination: managerTokenAccount,
+            assetMint,
+            assetTokenProgram: TOKEN_PROGRAM_ID,
+          })
+          .signers([manager])
+          .rpc();
+        expect.fail("should have thrown");
+      } catch (err: any) {
+        expect(err.error.errorCode.code).to.equal("ZeroAmount");
+      }
+    });
+
+    it("rejects zero amount repay", async () => {
+      try {
+        await program.methods
+          .repay(new BN(0))
+          .accountsPartial({
+            manager: manager.publicKey,
+            vault,
+            managerTokenAccount,
+            depositVault,
+            assetMint,
+            assetTokenProgram: TOKEN_PROGRAM_ID,
+          })
+          .signers([manager])
+          .rpc();
+        expect.fail("should have thrown");
+      } catch (err: any) {
+        expect(err.error.errorCode.code).to.equal("ZeroAmount");
+      }
+    });
+  });
+
+  describe("Error Cases - Invalid Status Transitions", () => {
+    let statusInvestor: Keypair;
+    let statusInvestorTokenAccount: PublicKey;
+    let statusInvestorSharesAccount: PublicKey;
+    let statusInvestmentRequest: PublicKey;
+    let statusAttestation: PublicKey;
+
+    before(async () => {
+      statusInvestor = Keypair.generate();
+      const airdrop = await connection.requestAirdrop(
+        statusInvestor.publicKey,
+        5 * anchor.web3.LAMPORTS_PER_SOL
+      );
+      await connection.confirmTransaction(airdrop);
+
+      const ata = await getOrCreateAssociatedTokenAccount(
+        connection,
+        payer,
+        assetMint,
+        statusInvestor.publicKey,
+        false,
+        undefined,
+        undefined,
+        TOKEN_PROGRAM_ID
+      );
+      statusInvestorTokenAccount = ata.address;
+
+      await mintTo(
+        connection,
+        payer,
+        assetMint,
+        statusInvestorTokenAccount,
+        payer.publicKey,
+        BigInt(depositAmount.toString()) * 3n,
+        [],
+        undefined,
+        TOKEN_PROGRAM_ID
+      );
+
+      [statusInvestmentRequest] = getInvestmentRequestPDA(
+        statusInvestor.publicKey
+      );
+      [statusAttestation] = getAttestationPDA(
+        sasCredential.publicKey,
+        sasSchema.publicKey,
+        statusInvestor.publicKey
+      );
+
+      await sasProgram.methods
+        .createAttestation(
+          sasCredential.publicKey,
+          sasSchema.publicKey,
+          new BN(0)
+        )
+        .accountsPartial({
+          authority: payer.publicKey,
+          attestation: statusAttestation,
+          investor: statusInvestor.publicKey,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
+
+      const sharesAta = await getOrCreateAssociatedTokenAccount(
+        connection,
+        payer,
+        sharesMint,
+        statusInvestor.publicKey,
+        false,
+        undefined,
+        undefined,
+        TOKEN_2022_PROGRAM_ID
+      );
+      statusInvestorSharesAccount = sharesAta.address;
+    });
+
+    it("rejects approve on already-approved deposit", async () => {
+      await program.methods
+        .requestDeposit(depositAmount)
+        .accountsPartial({
+          investor: statusInvestor.publicKey,
+          vault,
+          investmentRequest: statusInvestmentRequest,
+          investorTokenAccount: statusInvestorTokenAccount,
+          depositVault,
+          assetMint,
+          attestation: statusAttestation,
+          frozenCheck: null,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          clock: SYSVAR_CLOCK_PUBKEY,
+        })
+        .signers([statusInvestor])
+        .rpc();
+
+      await program.methods
+        .approveDeposit()
+        .accountsPartial({
+          manager: manager.publicKey,
+          vault,
+          investmentRequest: statusInvestmentRequest,
+          investor: statusInvestor.publicKey,
+          navOracle,
+          attestation: statusAttestation,
+          frozenCheck: null,
+          clock: SYSVAR_CLOCK_PUBKEY,
+        })
+        .signers([manager])
+        .rpc();
+
+      try {
+        await program.methods
+          .approveDeposit()
+          .accountsPartial({
+            manager: manager.publicKey,
+            vault,
+            investmentRequest: statusInvestmentRequest,
+            investor: statusInvestor.publicKey,
+            navOracle,
+            attestation: statusAttestation,
+            frozenCheck: null,
+            clock: SYSVAR_CLOCK_PUBKEY,
+          })
+          .signers([manager])
+          .rpc();
+        expect.fail("should have thrown");
+      } catch (err: any) {
+        expect(err.error.errorCode.code).to.equal("RequestNotPending");
+      }
+    });
+
+    it("rejects claim on pending deposit", async () => {
+      // Clean up previous: claim the approved deposit first
+      await program.methods
+        .claimDeposit()
+        .accountsPartial({
+          investor: statusInvestor.publicKey,
+          vault,
+          investmentRequest: statusInvestmentRequest,
+          sharesMint,
+          investorSharesAccount: statusInvestorSharesAccount,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+        })
+        .signers([statusInvestor])
+        .rpc();
+
+      // Create a new pending request
+      [statusInvestmentRequest] = getInvestmentRequestPDA(
+        statusInvestor.publicKey
+      );
+
+      await program.methods
+        .requestDeposit(depositAmount)
+        .accountsPartial({
+          investor: statusInvestor.publicKey,
+          vault,
+          investmentRequest: statusInvestmentRequest,
+          investorTokenAccount: statusInvestorTokenAccount,
+          depositVault,
+          assetMint,
+          attestation: statusAttestation,
+          frozenCheck: null,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          clock: SYSVAR_CLOCK_PUBKEY,
+        })
+        .signers([statusInvestor])
+        .rpc();
+
+      try {
+        await program.methods
+          .claimDeposit()
+          .accountsPartial({
+            investor: statusInvestor.publicKey,
+            vault,
+            investmentRequest: statusInvestmentRequest,
+            sharesMint,
+            investorSharesAccount: statusInvestorSharesAccount,
+            token2022Program: TOKEN_2022_PROGRAM_ID,
+          })
+          .signers([statusInvestor])
+          .rpc();
+        expect.fail("should have thrown");
+      } catch (err: any) {
+        expect(err.error.errorCode.code).to.equal("RequestNotApproved");
+      }
+    });
+
+    it("rejects cancel on approved deposit", async () => {
+      // Approve the pending request from previous test
+      await program.methods
+        .approveDeposit()
+        .accountsPartial({
+          manager: manager.publicKey,
+          vault,
+          investmentRequest: statusInvestmentRequest,
+          investor: statusInvestor.publicKey,
+          navOracle,
+          attestation: statusAttestation,
+          frozenCheck: null,
+          clock: SYSVAR_CLOCK_PUBKEY,
+        })
+        .signers([manager])
+        .rpc();
+
+      try {
+        await program.methods
+          .cancelDeposit()
+          .accountsPartial({
+            investor: statusInvestor.publicKey,
+            vault,
+            investmentRequest: statusInvestmentRequest,
+            depositVault,
+            investorTokenAccount: statusInvestorTokenAccount,
+            assetMint,
+            assetTokenProgram: TOKEN_PROGRAM_ID,
+          })
+          .signers([statusInvestor])
+          .rpc();
+        expect.fail("should have thrown");
+      } catch (err: any) {
+        expect(err.error.errorCode.code).to.equal("RequestNotPending");
+      }
+
+      // Clean up: claim so the request PDA is freed
+      await program.methods
+        .claimDeposit()
+        .accountsPartial({
+          investor: statusInvestor.publicKey,
+          vault,
+          investmentRequest: statusInvestmentRequest,
+          sharesMint,
+          investorSharesAccount: statusInvestorSharesAccount,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+        })
+        .signers([statusInvestor])
+        .rpc();
+    });
+  });
+
+  describe("Error Cases - Insufficient Liquidity on Redeem", () => {
+    let liqInvestor: Keypair;
+    let liqInvestorTokenAccount: PublicKey;
+    let liqInvestorSharesAccount: PublicKey;
+    let liqInvestmentRequest: PublicKey;
+    let liqRedemptionRequest: PublicKey;
+    let liqAttestation: PublicKey;
+    let liqClaimableTokens: PublicKey;
+
+    before(async () => {
+      liqInvestor = Keypair.generate();
+      const airdrop = await connection.requestAirdrop(
+        liqInvestor.publicKey,
+        5 * anchor.web3.LAMPORTS_PER_SOL
+      );
+      await connection.confirmTransaction(airdrop);
+
+      const ata = await getOrCreateAssociatedTokenAccount(
+        connection,
+        payer,
+        assetMint,
+        liqInvestor.publicKey,
+        false,
+        undefined,
+        undefined,
+        TOKEN_PROGRAM_ID
+      );
+      liqInvestorTokenAccount = ata.address;
+
+      await mintTo(
+        connection,
+        payer,
+        assetMint,
+        liqInvestorTokenAccount,
+        payer.publicKey,
+        BigInt(depositAmount.toString()),
+        [],
+        undefined,
+        TOKEN_PROGRAM_ID
+      );
+
+      [liqInvestmentRequest] = getInvestmentRequestPDA(liqInvestor.publicKey);
+      [liqRedemptionRequest] = getRedemptionRequestPDA(liqInvestor.publicKey);
+      [liqClaimableTokens] = getClaimableTokensPDA(liqInvestor.publicKey);
+      [liqAttestation] = getAttestationPDA(
+        sasCredential.publicKey,
+        sasSchema.publicKey,
+        liqInvestor.publicKey
+      );
+
+      await sasProgram.methods
+        .createAttestation(
+          sasCredential.publicKey,
+          sasSchema.publicKey,
+          new BN(0)
+        )
+        .accountsPartial({
+          authority: payer.publicKey,
+          attestation: liqAttestation,
+          investor: liqInvestor.publicKey,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
+
+      const liqSharesAta = await getOrCreateAssociatedTokenAccount(
+        connection,
+        payer,
+        sharesMint,
+        liqInvestor.publicKey,
+        false,
+        undefined,
+        undefined,
+        TOKEN_2022_PROGRAM_ID
+      );
+      liqInvestorSharesAccount = liqSharesAta.address;
+
+      // Deposit + approve + claim
+      await program.methods
+        .requestDeposit(depositAmount)
+        .accountsPartial({
+          investor: liqInvestor.publicKey,
+          vault,
+          investmentRequest: liqInvestmentRequest,
+          investorTokenAccount: liqInvestorTokenAccount,
+          depositVault,
+          assetMint,
+          attestation: liqAttestation,
+          frozenCheck: null,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          clock: SYSVAR_CLOCK_PUBKEY,
+        })
+        .signers([liqInvestor])
+        .rpc();
+
+      await program.methods
+        .approveDeposit()
+        .accountsPartial({
+          manager: manager.publicKey,
+          vault,
+          investmentRequest: liqInvestmentRequest,
+          investor: liqInvestor.publicKey,
+          navOracle,
+          attestation: liqAttestation,
+          frozenCheck: null,
+          clock: SYSVAR_CLOCK_PUBKEY,
+        })
+        .signers([manager])
+        .rpc();
+
+      await program.methods
+        .claimDeposit()
+        .accountsPartial({
+          investor: liqInvestor.publicKey,
+          vault,
+          investmentRequest: liqInvestmentRequest,
+          sharesMint,
+          investorSharesAccount: liqInvestorSharesAccount,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+        })
+        .signers([liqInvestor])
+        .rpc();
+
+      // Draw down most of the vault balance
+      const vaultAccount = await program.account.creditVault.fetch(vault);
+      const depositVaultInfo = await getAccount(connection, depositVault);
+      const availableLiquidity =
+        BigInt(depositVaultInfo.amount.toString()) -
+        BigInt(vaultAccount.totalPendingDeposits.toString());
+      const drawAmount = availableLiquidity - 1n; // leave only 1 lamport
+
+      if (drawAmount > 0n) {
+        await program.methods
+          .drawDown(new BN(drawAmount.toString()))
+          .accountsPartial({
+            manager: manager.publicKey,
+            vault,
+            depositVault,
+            destination: managerTokenAccount,
+            assetMint,
+            assetTokenProgram: TOKEN_PROGRAM_ID,
+          })
+          .signers([manager])
+          .rpc();
+      }
+    });
+
+    it("rejects approve_redeem with insufficient liquidity", async () => {
+      const shares = await getAccount(
+        connection,
+        liqInvestorSharesAccount,
+        undefined,
+        TOKEN_2022_PROGRAM_ID
+      );
+
+      await program.methods
+        .requestRedeem(new BN(shares.amount.toString()))
+        .accountsPartial({
+          investor: liqInvestor.publicKey,
+          vault,
+          redemptionRequest: liqRedemptionRequest,
+          sharesMint,
+          investorSharesAccount: liqInvestorSharesAccount,
+          redemptionEscrow,
+          attestation: liqAttestation,
+          frozenCheck: null,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          clock: SYSVAR_CLOCK_PUBKEY,
+        })
+        .signers([liqInvestor])
+        .rpc();
+
+      try {
+        await program.methods
+          .approveRedeem()
+          .accountsPartial({
+            manager: manager.publicKey,
+            vault,
+            redemptionRequest: liqRedemptionRequest,
+            investor: liqInvestor.publicKey,
+            sharesMint,
+            redemptionEscrow,
+            depositVault,
+            assetMint,
+            claimableTokens: liqClaimableTokens,
+            navOracle,
+            attestation: liqAttestation,
+            frozenCheck: null,
+            assetTokenProgram: TOKEN_PROGRAM_ID,
+            token2022Program: TOKEN_2022_PROGRAM_ID,
+            systemProgram: SystemProgram.programId,
+            clock: SYSVAR_CLOCK_PUBKEY,
+          })
+          .signers([manager])
+          .rpc();
+        expect.fail("should have thrown");
+      } catch (err: any) {
+        expect(err.error.errorCode.code).to.equal("InsufficientLiquidity");
+      }
+    });
+  });
+
+  describe("Error Cases - Frozen Account on Approve", () => {
+    let frozenInvestor: Keypair;
+    let frozenInvestorTokenAccount: PublicKey;
+    let frozenInvestorSharesAccount: PublicKey;
+    let frozenInvRequest: PublicKey;
+    let frozenRedRequest: PublicKey;
+    let frozenInvAttestation: PublicKey;
+    let frozenInvFrozenAccount: PublicKey;
+    let frozenInvClaimableTokens: PublicKey;
+
+    before(async () => {
+      frozenInvestor = Keypair.generate();
+      const airdrop = await connection.requestAirdrop(
+        frozenInvestor.publicKey,
+        5 * anchor.web3.LAMPORTS_PER_SOL
+      );
+      await connection.confirmTransaction(airdrop);
+
+      const ata = await getOrCreateAssociatedTokenAccount(
+        connection,
+        payer,
+        assetMint,
+        frozenInvestor.publicKey,
+        false,
+        undefined,
+        undefined,
+        TOKEN_PROGRAM_ID
+      );
+      frozenInvestorTokenAccount = ata.address;
+
+      await mintTo(
+        connection,
+        payer,
+        assetMint,
+        frozenInvestorTokenAccount,
+        payer.publicKey,
+        BigInt(depositAmount.toString()) * 2n,
+        [],
+        undefined,
+        TOKEN_PROGRAM_ID
+      );
+
+      [frozenInvRequest] = getInvestmentRequestPDA(frozenInvestor.publicKey);
+      [frozenRedRequest] = getRedemptionRequestPDA(frozenInvestor.publicKey);
+      [frozenInvAttestation] = getAttestationPDA(
+        sasCredential.publicKey,
+        sasSchema.publicKey,
+        frozenInvestor.publicKey
+      );
+      [frozenInvFrozenAccount] = getFrozenAccountPDA(frozenInvestor.publicKey);
+      [frozenInvClaimableTokens] = getClaimableTokensPDA(
+        frozenInvestor.publicKey
+      );
+
+      await sasProgram.methods
+        .createAttestation(
+          sasCredential.publicKey,
+          sasSchema.publicKey,
+          new BN(0)
+        )
+        .accountsPartial({
+          authority: payer.publicKey,
+          attestation: frozenInvAttestation,
+          investor: frozenInvestor.publicKey,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
+
+      const frozenSharesAta = await getOrCreateAssociatedTokenAccount(
+        connection,
+        payer,
+        sharesMint,
+        frozenInvestor.publicKey,
+        false,
+        undefined,
+        undefined,
+        TOKEN_2022_PROGRAM_ID
+      );
+      frozenInvestorSharesAccount = frozenSharesAta.address;
+
+      // Repay so the vault has liquidity for the redeem test
+      await program.methods
+        .repay(depositAmount)
+        .accountsPartial({
+          manager: manager.publicKey,
+          vault,
+          managerTokenAccount,
+          depositVault,
+          assetMint,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .signers([manager])
+        .rpc();
+    });
+
+    it("rejects approve_deposit for frozen investor", async () => {
+      // Request deposit while unfrozen
+      await program.methods
+        .requestDeposit(depositAmount)
+        .accountsPartial({
+          investor: frozenInvestor.publicKey,
+          vault,
+          investmentRequest: frozenInvRequest,
+          investorTokenAccount: frozenInvestorTokenAccount,
+          depositVault,
+          assetMint,
+          attestation: frozenInvAttestation,
+          frozenCheck: null,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          clock: SYSVAR_CLOCK_PUBKEY,
+        })
+        .signers([frozenInvestor])
+        .rpc();
+
+      // Freeze investor
+      await program.methods
+        .freezeAccount()
+        .accountsPartial({
+          manager: manager.publicKey,
+          vault,
+          investor: frozenInvestor.publicKey,
+          frozenAccount: frozenInvFrozenAccount,
+          systemProgram: SystemProgram.programId,
+          clock: SYSVAR_CLOCK_PUBKEY,
+        })
+        .signers([manager])
+        .rpc();
+
+      // Try approve with frozen check
+      try {
+        await program.methods
+          .approveDeposit()
+          .accountsPartial({
+            manager: manager.publicKey,
+            vault,
+            investmentRequest: frozenInvRequest,
+            investor: frozenInvestor.publicKey,
+            navOracle,
+            attestation: frozenInvAttestation,
+            frozenCheck: frozenInvFrozenAccount,
+            clock: SYSVAR_CLOCK_PUBKEY,
+          })
+          .signers([manager])
+          .rpc();
+        expect.fail("should have thrown");
+      } catch (err: any) {
+        expect(err.error.errorCode.code).to.equal("AccountFrozen");
+      }
+
+      // Clean up: unfreeze and reject deposit
+      await program.methods
+        .unfreezeAccount()
+        .accountsPartial({
+          manager: manager.publicKey,
+          vault,
+          frozenAccount: frozenInvFrozenAccount,
+        })
+        .signers([manager])
+        .rpc();
+
+      await program.methods
+        .rejectDeposit(0)
+        .accountsPartial({
+          manager: manager.publicKey,
+          vault,
+          investmentRequest: frozenInvRequest,
+          investor: frozenInvestor.publicKey,
+          depositVault,
+          investorTokenAccount: frozenInvestorTokenAccount,
+          assetMint,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .signers([manager])
+        .rpc();
+    });
+
+    it("rejects approve_redeem for frozen investor", async () => {
+      // Deposit + approve + claim first to get shares
+      [frozenInvRequest] = getInvestmentRequestPDA(frozenInvestor.publicKey);
+
+      await program.methods
+        .requestDeposit(depositAmount)
+        .accountsPartial({
+          investor: frozenInvestor.publicKey,
+          vault,
+          investmentRequest: frozenInvRequest,
+          investorTokenAccount: frozenInvestorTokenAccount,
+          depositVault,
+          assetMint,
+          attestation: frozenInvAttestation,
+          frozenCheck: null,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          clock: SYSVAR_CLOCK_PUBKEY,
+        })
+        .signers([frozenInvestor])
+        .rpc();
+
+      await program.methods
+        .approveDeposit()
+        .accountsPartial({
+          manager: manager.publicKey,
+          vault,
+          investmentRequest: frozenInvRequest,
+          investor: frozenInvestor.publicKey,
+          navOracle,
+          attestation: frozenInvAttestation,
+          frozenCheck: null,
+          clock: SYSVAR_CLOCK_PUBKEY,
+        })
+        .signers([manager])
+        .rpc();
+
+      await program.methods
+        .claimDeposit()
+        .accountsPartial({
+          investor: frozenInvestor.publicKey,
+          vault,
+          investmentRequest: frozenInvRequest,
+          sharesMint,
+          investorSharesAccount: frozenInvestorSharesAccount,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+        })
+        .signers([frozenInvestor])
+        .rpc();
+
+      // Request redeem while unfrozen
+      const shares = await getAccount(
+        connection,
+        frozenInvestorSharesAccount,
+        undefined,
+        TOKEN_2022_PROGRAM_ID
+      );
+
+      await program.methods
+        .requestRedeem(new BN(shares.amount.toString()))
+        .accountsPartial({
+          investor: frozenInvestor.publicKey,
+          vault,
+          redemptionRequest: frozenRedRequest,
+          sharesMint,
+          investorSharesAccount: frozenInvestorSharesAccount,
+          redemptionEscrow,
+          attestation: frozenInvAttestation,
+          frozenCheck: null,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          clock: SYSVAR_CLOCK_PUBKEY,
+        })
+        .signers([frozenInvestor])
+        .rpc();
+
+      // Freeze investor
+      await program.methods
+        .freezeAccount()
+        .accountsPartial({
+          manager: manager.publicKey,
+          vault,
+          investor: frozenInvestor.publicKey,
+          frozenAccount: frozenInvFrozenAccount,
+          systemProgram: SystemProgram.programId,
+          clock: SYSVAR_CLOCK_PUBKEY,
+        })
+        .signers([manager])
+        .rpc();
+
+      // Try approve redeem with frozen check
+      try {
+        await program.methods
+          .approveRedeem()
+          .accountsPartial({
+            manager: manager.publicKey,
+            vault,
+            redemptionRequest: frozenRedRequest,
+            investor: frozenInvestor.publicKey,
+            sharesMint,
+            redemptionEscrow,
+            depositVault,
+            assetMint,
+            claimableTokens: frozenInvClaimableTokens,
+            navOracle,
+            attestation: frozenInvAttestation,
+            frozenCheck: frozenInvFrozenAccount,
+            assetTokenProgram: TOKEN_PROGRAM_ID,
+            token2022Program: TOKEN_2022_PROGRAM_ID,
+            systemProgram: SystemProgram.programId,
+            clock: SYSVAR_CLOCK_PUBKEY,
+          })
+          .signers([manager])
+          .rpc();
+        expect.fail("should have thrown");
+      } catch (err: any) {
+        expect(err.error.errorCode.code).to.equal("AccountFrozen");
+      }
+
+      // Clean up: unfreeze
+      await program.methods
+        .unfreezeAccount()
+        .accountsPartial({
+          manager: manager.publicKey,
+          vault,
+          frozenAccount: frozenInvFrozenAccount,
+        })
+        .signers([manager])
+        .rpc();
+    });
+  });
+
+  describe("Error Cases - Pause Blocks Operations", () => {
+    before(async () => {
+      await program.methods
+        .pause()
+        .accountsPartial({
+          authority: payer.publicKey,
+          vault,
+        })
+        .rpc();
+    });
+
+    after(async () => {
+      await program.methods
+        .unpause()
+        .accountsPartial({
+          authority: payer.publicKey,
+          vault,
+        })
+        .rpc();
+    });
+
+    it("rejects draw_down when paused", async () => {
+      try {
+        await program.methods
+          .drawDown(new BN(1_000_000))
+          .accountsPartial({
+            manager: manager.publicKey,
+            vault,
+            depositVault,
+            destination: managerTokenAccount,
+            assetMint,
+            assetTokenProgram: TOKEN_PROGRAM_ID,
+          })
+          .signers([manager])
+          .rpc();
+        expect.fail("should have thrown");
+      } catch (err: any) {
+        expect(err.error.errorCode.code).to.equal("VaultPaused");
+      }
+    });
+
+    it("rejects repay when paused", async () => {
+      try {
+        await program.methods
+          .repay(new BN(1_000_000))
+          .accountsPartial({
+            manager: manager.publicKey,
+            vault,
+            managerTokenAccount,
+            depositVault,
+            assetMint,
+            assetTokenProgram: TOKEN_PROGRAM_ID,
+          })
+          .signers([manager])
+          .rpc();
+        expect.fail("should have thrown");
+      } catch (err: any) {
+        expect(err.error.errorCode.code).to.equal("VaultPaused");
+      }
+    });
+  });
+
   describe("Permission Checks", () => {
     it("non-manager cannot approve deposit", async () => {
       // Set up a fresh deposit to approve
@@ -1424,6 +2497,273 @@ describe("svs-11 (Credit Markets Vault)", () => {
         expect.fail("should have thrown");
       } catch (err: any) {
         expect(err.error.errorCode.code).to.equal("Unauthorized");
+      }
+    });
+
+    it("non-manager cannot reject deposit", async () => {
+      const tempInvestor2 = Keypair.generate();
+      const airdrop = await connection.requestAirdrop(
+        tempInvestor2.publicKey,
+        5 * anchor.web3.LAMPORTS_PER_SOL
+      );
+      await connection.confirmTransaction(airdrop);
+
+      const tempAta2 = await getOrCreateAssociatedTokenAccount(
+        connection,
+        payer,
+        assetMint,
+        tempInvestor2.publicKey,
+        false,
+        undefined,
+        undefined,
+        TOKEN_PROGRAM_ID
+      );
+
+      await mintTo(
+        connection,
+        payer,
+        assetMint,
+        tempAta2.address,
+        payer.publicKey,
+        BigInt(depositAmount.toString()),
+        [],
+        undefined,
+        TOKEN_PROGRAM_ID
+      );
+
+      const [tempRequest2] = getInvestmentRequestPDA(tempInvestor2.publicKey);
+      const [tempAttestation2] = getAttestationPDA(
+        sasCredential.publicKey,
+        sasSchema.publicKey,
+        tempInvestor2.publicKey
+      );
+
+      await sasProgram.methods
+        .createAttestation(
+          sasCredential.publicKey,
+          sasSchema.publicKey,
+          new BN(0)
+        )
+        .accountsPartial({
+          authority: payer.publicKey,
+          attestation: tempAttestation2,
+          investor: tempInvestor2.publicKey,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
+
+      await program.methods
+        .requestDeposit(depositAmount)
+        .accountsPartial({
+          investor: tempInvestor2.publicKey,
+          vault,
+          investmentRequest: tempRequest2,
+          investorTokenAccount: tempAta2.address,
+          depositVault,
+          assetMint,
+          attestation: tempAttestation2,
+          frozenCheck: null,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          clock: SYSVAR_CLOCK_PUBKEY,
+        })
+        .signers([tempInvestor2])
+        .rpc();
+
+      try {
+        await program.methods
+          .rejectDeposit(0)
+          .accountsPartial({
+            manager: investor.publicKey,
+            vault,
+            investmentRequest: tempRequest2,
+            investor: tempInvestor2.publicKey,
+            depositVault,
+            investorTokenAccount: tempAta2.address,
+            assetMint,
+            assetTokenProgram: TOKEN_PROGRAM_ID,
+          })
+          .signers([investor])
+          .rpc();
+        expect.fail("should have thrown");
+      } catch (err: any) {
+        expect(err.error).to.exist;
+      }
+
+      // Clean up
+      await program.methods
+        .rejectDeposit(0)
+        .accountsPartial({
+          manager: manager.publicKey,
+          vault,
+          investmentRequest: tempRequest2,
+          investor: tempInvestor2.publicKey,
+          depositVault,
+          investorTokenAccount: tempAta2.address,
+          assetMint,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .signers([manager])
+        .rpc();
+    });
+
+    it("non-manager cannot draw_down", async () => {
+      try {
+        await program.methods
+          .drawDown(new BN(1_000_000))
+          .accountsPartial({
+            manager: investor.publicKey,
+            vault,
+            depositVault,
+            destination: investorTokenAccount,
+            assetMint,
+            assetTokenProgram: TOKEN_PROGRAM_ID,
+          })
+          .signers([investor])
+          .rpc();
+        expect.fail("should have thrown");
+      } catch (err: any) {
+        expect(err.error).to.exist;
+      }
+    });
+
+    it("non-manager cannot freeze account", async () => {
+      const targetInvestor = Keypair.generate();
+      const [targetFrozen] = getFrozenAccountPDA(targetInvestor.publicKey);
+
+      try {
+        await program.methods
+          .freezeAccount()
+          .accountsPartial({
+            manager: investor.publicKey,
+            vault,
+            investor: targetInvestor.publicKey,
+            frozenAccount: targetFrozen,
+            systemProgram: SystemProgram.programId,
+            clock: SYSVAR_CLOCK_PUBKEY,
+          })
+          .signers([investor])
+          .rpc();
+        expect.fail("should have thrown");
+      } catch (err: any) {
+        expect(err.error).to.exist;
+      }
+    });
+
+    it("non-authority cannot transfer authority", async () => {
+      const newAuth = Keypair.generate();
+
+      try {
+        await program.methods
+          .transferAuthority(newAuth.publicKey)
+          .accountsPartial({
+            authority: manager.publicKey,
+            vault,
+          })
+          .signers([manager])
+          .rpc();
+        expect.fail("should have thrown");
+      } catch (err: any) {
+        expect(err.error.errorCode.code).to.equal("Unauthorized");
+      }
+    });
+
+    it("non-authority cannot set manager", async () => {
+      const newMgr = Keypair.generate();
+
+      try {
+        await program.methods
+          .setManager(newMgr.publicKey)
+          .accountsPartial({
+            authority: manager.publicKey,
+            vault,
+          })
+          .signers([manager])
+          .rpc();
+        expect.fail("should have thrown");
+      } catch (err: any) {
+        expect(err.error.errorCode.code).to.equal("Unauthorized");
+      }
+    });
+  });
+
+  describe("Zero Address Guards", () => {
+    it("rejects transfer_authority to zero address", async () => {
+      try {
+        await program.methods
+          .transferAuthority(PublicKey.default)
+          .accountsPartial({
+            authority: payer.publicKey,
+            vault,
+          })
+          .rpc();
+        expect.fail("should have thrown");
+      } catch (err: any) {
+        expect(err.error.errorCode.code).to.equal("InvalidAddress");
+      }
+    });
+
+    it("rejects set_manager to zero address", async () => {
+      try {
+        await program.methods
+          .setManager(PublicKey.default)
+          .accountsPartial({
+            authority: payer.publicKey,
+            vault,
+          })
+          .rpc();
+        expect.fail("should have thrown");
+      } catch (err: any) {
+        expect(err.error.errorCode.code).to.equal("InvalidAddress");
+      }
+    });
+  });
+
+  describe("Double Pause/Unpause", () => {
+    it("rejects pause when already paused", async () => {
+      await program.methods
+        .pause()
+        .accountsPartial({
+          authority: payer.publicKey,
+          vault,
+        })
+        .rpc();
+
+      try {
+        await program.methods
+          .pause()
+          .accountsPartial({
+            authority: payer.publicKey,
+            vault,
+          })
+          .rpc();
+        expect.fail("should have thrown");
+      } catch (err: any) {
+        expect(err.error.errorCode.code).to.equal("VaultPaused");
+      }
+
+      // Restore: unpause
+      await program.methods
+        .unpause()
+        .accountsPartial({
+          authority: payer.publicKey,
+          vault,
+        })
+        .rpc();
+    });
+
+    it("rejects unpause when not paused", async () => {
+      try {
+        await program.methods
+          .unpause()
+          .accountsPartial({
+            authority: payer.publicKey,
+            vault,
+          })
+          .rpc();
+        expect.fail("should have thrown");
+      } catch (err: any) {
+        expect(err.error.errorCode.code).to.equal("VaultNotPaused");
       }
     });
   });

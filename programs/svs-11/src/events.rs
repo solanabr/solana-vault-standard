@@ -143,3 +143,13 @@ pub struct SasConfigUpdated {
     pub old_schema: Pubkey,
     pub new_schema: Pubkey,
 }
+
+#[event]
+pub struct OracleConfigUpdated {
+    pub vault: Pubkey,
+    pub old_oracle: Pubkey,
+    pub new_oracle: Pubkey,
+    pub old_program: Pubkey,
+    pub new_program: Pubkey,
+    pub new_max_staleness: i64,
+}

@@ -22,6 +22,7 @@ pub struct ApproveDeposit<'info> {
 
     #[account(
         mut,
+        has_one = vault,
         seeds = [INVESTMENT_REQUEST_SEED, vault.key().as_ref(), investment_request.investor.as_ref()],
         bump = investment_request.bump,
         constraint = investment_request.status == RequestStatus::Pending @ VaultError::RequestNotPending,
@@ -49,6 +50,10 @@ pub struct ApproveDeposit<'info> {
 pub fn handler(ctx: Context<ApproveDeposit>) -> Result<()> {
     require!(!ctx.accounts.vault.paused, VaultError::VaultPaused);
     require!(
+        ctx.accounts.vault.investment_window_open,
+        VaultError::InvestmentWindowClosed
+    );
+    require!(
         ctx.accounts.frozen_check.is_none(),
         VaultError::AccountFrozen
     );
@@ -68,6 +73,7 @@ pub fn handler(ctx: Context<ApproveDeposit>) -> Result<()> {
 
     let amount_locked = ctx.accounts.investment_request.amount_locked;
     let shares = math::assets_to_shares(amount_locked, price)?;
+    require!(shares > 0, VaultError::ZeroAmount);
 
     let request = &mut ctx.accounts.investment_request;
     request.status = RequestStatus::Approved;

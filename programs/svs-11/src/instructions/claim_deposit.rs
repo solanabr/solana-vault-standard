@@ -1,6 +1,5 @@
 use anchor_lang::prelude::*;
 use anchor_spl::{
-    associated_token::AssociatedToken,
     token_2022::Token2022,
     token_interface::{mint_to, Mint, MintTo, TokenAccount},
 };
@@ -24,6 +23,7 @@ pub struct ClaimDeposit<'info> {
     #[account(
         mut,
         close = investor,
+        has_one = vault,
         seeds = [INVESTMENT_REQUEST_SEED, vault.key().as_ref(), investor.key().as_ref()],
         bump = investment_request.bump,
         constraint = investment_request.status == RequestStatus::Approved @ VaultError::RequestNotApproved,
@@ -40,8 +40,7 @@ pub struct ClaimDeposit<'info> {
     pub shares_mint: InterfaceAccount<'info, Mint>,
 
     #[account(
-        init_if_needed,
-        payer = investor,
+        mut,
         associated_token::mint = shares_mint,
         associated_token::authority = investor,
         associated_token::token_program = token_2022_program,
@@ -49,8 +48,6 @@ pub struct ClaimDeposit<'info> {
     pub investor_shares_account: InterfaceAccount<'info, TokenAccount>,
 
     pub token_2022_program: Program<'info, Token2022>,
-    pub associated_token_program: Program<'info, AssociatedToken>,
-    pub system_program: Program<'info, System>,
 }
 
 pub fn handler(ctx: Context<ClaimDeposit>) -> Result<()> {

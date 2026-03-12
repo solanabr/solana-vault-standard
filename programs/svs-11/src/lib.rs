@@ -121,6 +121,20 @@ pub mod svs_11 {
         instructions::admin::update_sas_config_handler(ctx, new_credential, new_schema)
     }
 
+    pub fn update_oracle_config(
+        ctx: Context<Admin>,
+        new_nav_oracle: Pubkey,
+        new_oracle_program: Pubkey,
+        new_max_staleness: i64,
+    ) -> Result<()> {
+        instructions::admin::update_oracle_config_handler(
+            ctx,
+            new_nav_oracle,
+            new_oracle_program,
+            new_max_staleness,
+        )
+    }
+
     // =========================================================================
     // Module Admin Instructions (feature-gated)
     // =========================================================================

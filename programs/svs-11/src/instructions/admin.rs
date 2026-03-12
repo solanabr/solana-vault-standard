@@ -2,7 +2,9 @@ use anchor_lang::prelude::*;
 
 use crate::constants::VAULT_SEED;
 use crate::error::VaultError;
-use crate::events::{AuthorityTransferred, ManagerChanged, SasConfigUpdated, VaultStatusChanged};
+use crate::events::{
+    AuthorityTransferred, ManagerChanged, OracleConfigUpdated, SasConfigUpdated, VaultStatusChanged,
+};
 use crate::state::CreditVault;
 
 #[derive(Accounts)]
@@ -99,6 +101,45 @@ pub fn update_sas_config_handler(
         new_credential,
         old_schema,
         new_schema,
+    });
+
+    Ok(())
+}
+
+pub fn update_oracle_config_handler(
+    ctx: Context<Admin>,
+    new_nav_oracle: Pubkey,
+    new_oracle_program: Pubkey,
+    new_max_staleness: i64,
+) -> Result<()> {
+    require!(
+        new_nav_oracle != Pubkey::default(),
+        VaultError::InvalidAddress
+    );
+    require!(
+        new_oracle_program != Pubkey::default(),
+        VaultError::InvalidAddress
+    );
+    require!(
+        new_max_staleness >= 60 && new_max_staleness <= 86400,
+        VaultError::OracleStale
+    );
+
+    let vault = &mut ctx.accounts.vault;
+    let old_oracle = vault.nav_oracle;
+    let old_program = vault.oracle_program;
+
+    vault.nav_oracle = new_nav_oracle;
+    vault.oracle_program = new_oracle_program;
+    vault.max_staleness = new_max_staleness;
+
+    emit!(OracleConfigUpdated {
+        vault: vault.key(),
+        old_oracle,
+        new_oracle: new_nav_oracle,
+        old_program,
+        new_program: new_oracle_program,
+        new_max_staleness,
     });
 
     Ok(())

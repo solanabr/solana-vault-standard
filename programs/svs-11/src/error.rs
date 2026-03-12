@@ -76,4 +76,25 @@ pub enum VaultError {
 
     #[msg("Lock duration exceeds maximum")]
     LockDurationExceedsMax,
+
+    #[msg("Exit fee exceeds maximum")]
+    ExitFeeExceedsMax,
+
+    #[msg("Management fee exceeds maximum")]
+    ManagementFeeExceedsMax,
+
+    #[msg("Performance fee exceeds maximum")]
+    PerformanceFeeExceedsMax,
+
+    #[msg("Deposit would exceed per-user cap")]
+    PerUserCapExceeded,
+
+    #[msg("Invalid fee configuration")]
+    InvalidFeeConfig,
+
+    #[msg("Invalid cap configuration")]
+    InvalidCapConfig,
+
+    #[msg("Invalid lock configuration")]
+    InvalidLockConfig,
 }

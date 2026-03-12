@@ -23,6 +23,7 @@ pub struct CancelDeposit<'info> {
     #[account(
         mut,
         close = investor,
+        has_one = vault,
         seeds = [INVESTMENT_REQUEST_SEED, vault.key().as_ref(), investor.key().as_ref()],
         bump = investment_request.bump,
         constraint = investment_request.status == RequestStatus::Pending @ VaultError::RequestNotPending,

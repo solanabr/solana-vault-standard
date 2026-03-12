@@ -51,7 +51,7 @@ pub fn initialize_fee_config(
         management_fee_bps,
         performance_fee_bps,
     )
-    .map_err(|_| VaultError::EntryFeeExceedsMax)?;
+    .map_err(|_| VaultError::InvalidFeeConfig)?;
 
     let fee_config = &mut ctx.accounts.fee_config;
     fee_config.vault = ctx.accounts.vault.key();
@@ -102,7 +102,7 @@ pub fn update_fee_config(
     let new_perf = performance_fee_bps.unwrap_or(fee_config.performance_fee_bps);
 
     svs_fees::validate_fee_config(new_entry, new_exit, new_mgmt, new_perf)
-        .map_err(|_| VaultError::EntryFeeExceedsMax)?;
+        .map_err(|_| VaultError::InvalidFeeConfig)?;
 
     fee_config.entry_fee_bps = new_entry;
     fee_config.exit_fee_bps = new_exit;
@@ -146,7 +146,7 @@ pub fn initialize_cap_config(
     per_user_cap: u64,
 ) -> Result<()> {
     svs_caps::validate_cap_config(global_cap, per_user_cap)
-        .map_err(|_| VaultError::GlobalCapExceeded)?;
+        .map_err(|_| VaultError::InvalidCapConfig)?;
 
     let cap_config = &mut ctx.accounts.cap_config;
     cap_config.vault = ctx.accounts.vault.key();
@@ -188,7 +188,7 @@ pub fn update_cap_config(
     let new_per_user = per_user_cap.unwrap_or(cap_config.per_user_cap);
 
     svs_caps::validate_cap_config(new_global, new_per_user)
-        .map_err(|_| VaultError::GlobalCapExceeded)?;
+        .map_err(|_| VaultError::InvalidCapConfig)?;
 
     cap_config.global_cap = new_global;
     cap_config.per_user_cap = new_per_user;
@@ -228,8 +228,7 @@ pub fn initialize_lock_config(
     ctx: Context<InitializeLockConfig>,
     lock_duration: i64,
 ) -> Result<()> {
-    svs_locks::validate_lock_duration(lock_duration)
-        .map_err(|_| VaultError::LockDurationExceedsMax)?;
+    svs_locks::validate_lock_duration(lock_duration).map_err(|_| VaultError::InvalidLockConfig)?;
 
     let lock_config = &mut ctx.accounts.lock_config;
     lock_config.vault = ctx.accounts.vault.key();
@@ -260,8 +259,7 @@ pub struct UpdateLockConfig<'info> {
 }
 
 pub fn update_lock_config(ctx: Context<UpdateLockConfig>, lock_duration: i64) -> Result<()> {
-    svs_locks::validate_lock_duration(lock_duration)
-        .map_err(|_| VaultError::LockDurationExceedsMax)?;
+    svs_locks::validate_lock_duration(lock_duration).map_err(|_| VaultError::InvalidLockConfig)?;
 
     ctx.accounts.lock_config.lock_duration = lock_duration;
 
