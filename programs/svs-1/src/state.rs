@@ -14,8 +14,6 @@ pub struct Vault {
     pub shares_mint: Pubkey,
     /// Token account holding assets
     pub asset_vault: Pubkey,
-    /// Unused in SVS-1 (live balance reads asset_vault.amount directly). Retained for struct compatibility.
-    pub total_assets: u64,
     /// Virtual offset exponent (9 - asset_decimals) for inflation attack protection
     pub decimals_offset: u8,
     /// PDA bump seed
@@ -34,7 +32,6 @@ impl Vault {
         32 +  // asset_mint
         32 +  // shares_mint
         32 +  // asset_vault
-        8 +   // total_assets
         1 +   // decimals_offset
         1 +   // bump
         1 +   // paused
