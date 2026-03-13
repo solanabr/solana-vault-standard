@@ -406,4 +406,40 @@ describe("svs-8 (Multi Asset Basket)", () => {
     expect(vaultFinal.authority.toBase58()).to.equal(user.publicKey.toBase58());
     console.log("authority transferred and returned");
   });
+
+  it("deposits proportional across all assets atomically", async () => {
+    // deposit_proportional: pass base_amount, splits across assets by weight
+    const vaultBefore = await program.account.multiAssetVault.fetch(vaultPda);
+    const sharesBefore = vaultBefore.totalShares;
+
+    await program.methods
+      .depositProportional(new BN(2_000_000), new BN(0))
+      .accounts({
+        user: user.publicKey,
+        vault: vaultPda,
+        sharesMint: sharesMint,
+        userSharesAccount: userSharesAta,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        sharesTokenProgram: TOKEN_2022_PROGRAM_ID,
+        associatedTokenProgram: anchor.utils.token.ASSOCIATED_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+      })
+      .remainingAccounts([
+        { pubkey: oraclePriceA, isWritable: false, isSigner: false },
+        { pubkey: assetVaultA, isWritable: true, isSigner: false },
+        { pubkey: userAtaA, isWritable: true, isSigner: false },
+        { pubkey: mintA, isWritable: false, isSigner: false },
+        { pubkey: oraclePriceB, isWritable: false, isSigner: false },
+        { pubkey: assetVaultB, isWritable: true, isSigner: false },
+        { pubkey: userAtaB, isWritable: true, isSigner: false },
+        { pubkey: mintB, isWritable: false, isSigner: false },
+        { pubkey: user.publicKey, isWritable: false, isSigner: false },
+        { pubkey: TOKEN_PROGRAM_ID, isWritable: false, isSigner: false },
+      ])
+      .rpc();
+
+    const vaultAfter = await program.account.multiAssetVault.fetch(vaultPda);
+    expect(vaultAfter.totalShares.toNumber()).to.be.greaterThan(sharesBefore.toNumber());
+    console.log("shares after proportional deposit:", vaultAfter.totalShares.toString());
+  });
 });
