@@ -76,6 +76,13 @@ pub mod svs_8 {
         instructions::admin::unpause(ctx)
     }
 
+    pub fn update_oracle(
+        ctx: Context<UpdateOracle>,
+        price: u64,
+    ) -> Result<()> {
+        instructions::update_oracle::handler(ctx, price)
+    }
+
     pub fn transfer_authority(ctx: Context<Admin>, new_authority: Pubkey) -> Result<()> {
         instructions::admin::transfer_authority(ctx, new_authority)
     }

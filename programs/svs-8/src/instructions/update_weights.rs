@@ -13,7 +13,7 @@ pub fn handler(ctx: Context<UpdateWeights>, new_weight_bps: u16) -> Result<()> {
     // Sum weights of all OTHER assets from remaining_accounts
     let mut other_weights: u16 = 0;
     for i in 0..ctx.remaining_accounts.len() {
-        let info = ctx.remaining_accounts.get(i).unwrap();
+        let info = ctx.remaining_accounts.get(i).ok_or(VaultError::AssetNotFound)?;
         let data = info.try_borrow_data()?;
         if data.len() >= 8 + 32 + 32 + 32 + 32 + 2 {
             let entry_vault_bytes: [u8; 32] = data[8..8+32].try_into()

@@ -78,3 +78,34 @@ impl AssetEntry {
 
     pub const SEED_PREFIX: &'static [u8] = ASSET_ENTRY_SEED;
 }
+
+/// Oracle price account for each asset
+/// Seeds: ["oracle_price", vault_pubkey, asset_mint_pubkey]
+#[account]
+pub struct OraclePrice {
+    /// Parent vault
+    pub vault: Pubkey,
+    /// Asset mint this price applies to
+    pub asset_mint: Pubkey,
+    /// Price scaled by PRICE_SCALE (1e9)
+    /// e.g. USDC = 1_000_000_000, SOL = 150_000_000_000
+    pub price: u64,
+    /// When this price was last updated (Unix timestamp)
+    pub updated_at: i64,
+    /// Authority that can update this price
+    pub authority: Pubkey,
+    /// PDA bump
+    pub bump: u8,
+}
+
+impl OraclePrice {
+    pub const LEN: usize = 8 +  // discriminator
+        32 + // vault
+        32 + // asset_mint
+        8 +  // price
+        8 +  // updated_at
+        32 + // authority
+        1;   // bump
+
+    pub const SEED_PREFIX: &'static [u8] = b"oracle_price";
+}

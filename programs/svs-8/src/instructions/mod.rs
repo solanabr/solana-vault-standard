@@ -6,6 +6,7 @@ pub mod initialize;
 pub mod redeem_proportional;
 pub mod remove_asset;
 pub mod update_weights;
+pub mod update_oracle;
 
 pub use admin::*;
 pub use add_asset::*;
@@ -15,3 +16,4 @@ pub use initialize::*;
 pub use redeem_proportional::*;
 pub use remove_asset::*;
 pub use update_weights::*;
+pub use update_oracle::*;

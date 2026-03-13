@@ -21,3 +21,7 @@ pub const BPS_DENOMINATOR: u16 = 10_000;
 
 /// Minimum deposit in base units
 pub const MIN_DEPOSIT: u64 = 1_000;
+/// PDA seed for oracle price accounts
+pub const ORACLE_PRICE_SEED: &[u8] = b"oracle_price";
+/// Price scale factor (1e9)
+pub const PRICE_SCALE: u64 = 1_000_000_000;

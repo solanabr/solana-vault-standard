@@ -16,7 +16,7 @@ pub fn handler(ctx: Context<AddAsset>, target_weight_bps: u16) -> Result<()> {
     // Sum weights from remaining_accounts (existing AssetEntry accounts)
     let mut current_total_weight: u16 = 0;
     for i in 0..ctx.remaining_accounts.len() {
-        let info = ctx.remaining_accounts.get(i).unwrap();
+        let info = ctx.remaining_accounts.get(i).ok_or(VaultError::AssetNotFound)?;
         let data = info.try_borrow_data()?;
         // Skip discriminator (8 bytes), read vault pubkey (32), skip asset_mint (32),
         // skip asset_vault (32), skip oracle (32), then read target_weight_bps (2)

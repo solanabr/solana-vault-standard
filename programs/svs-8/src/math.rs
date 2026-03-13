@@ -121,3 +121,32 @@ pub fn normalize_price_for_amount(
 
     u64::try_from(value).map_err(|_| error!(VaultError::MathOverflow))
 }
+
+/// Read and validate oracle price, returning price scaled to base_decimals
+/// price is stored as PRICE_SCALE (1e9) units per token
+/// Returns value in base_decimals units for given amount
+pub fn oracle_value_for_amount(
+    price: u64,
+    amount: u64,
+    asset_decimals: u8,
+    base_decimals: u8,
+) -> Result<u64> {
+    const PRICE_SCALE: u64 = 1_000_000_000;
+
+    // value = amount * price * 10^base_decimals / (PRICE_SCALE * 10^asset_decimals)
+    let numerator = (amount as u128)
+        .checked_mul(price as u128)
+        .ok_or(VaultError::MathOverflow)?
+        .checked_mul(10u128.pow(base_decimals as u32))
+        .ok_or(VaultError::MathOverflow)?;
+
+    let denominator = (PRICE_SCALE as u128)
+        .checked_mul(10u128.pow(asset_decimals as u32))
+        .ok_or(VaultError::MathOverflow)?;
+
+    let value = numerator
+        .checked_div(denominator)
+        .ok_or(VaultError::DivisionByZero)?;
+
+    u64::try_from(value).map_err(|_| error!(VaultError::MathOverflow))
+}
