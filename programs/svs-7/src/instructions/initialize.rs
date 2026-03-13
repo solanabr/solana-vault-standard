@@ -64,6 +64,7 @@ pub struct Initialize<'info> {
     pub wsol_vault: InterfaceAccount<'info, TokenAccount>,
 
     /// SPL Token program (wSOL uses the original SPL Token program)
+    #[account(address = anchor_spl::token::ID @ VaultError::Unauthorized)]
     pub token_program: Interface<'info, TokenInterface>,
     /// Token-2022 program (used for shares mint)
     pub token_2022_program: Program<'info, Token2022>,

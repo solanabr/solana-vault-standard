@@ -18,7 +18,7 @@ use anchor_spl::{
 };
 
 use crate::{
-    constants::SOL_VAULT_SEED,
+    constants::{MIN_DEPOSIT_AMOUNT, SOL_VAULT_SEED},
     error::VaultError,
     events::Deposit as DepositEvent,
     math::{convert_to_assets, Rounding},
@@ -123,7 +123,10 @@ pub fn handler(ctx: Context<MintSol>, shares: u64, max_lamports_in: u64) -> Resu
         )?;
     }
 
-    // 4. SLIPPAGE CHECK — user wants at most max_lamports_in spent
+    // 4. MINIMUM DEPOSIT CHECK
+    require!(required_lamports >= MIN_DEPOSIT_AMOUNT, VaultError::DepositTooSmall);
+
+    // 5. SLIPPAGE CHECK — user wants at most max_lamports_in spent
     require!(required_lamports <= max_lamports_in, VaultError::SlippageExceeded);
 
     // 5a. Transfer native SOL from user to vault's wSOL account
