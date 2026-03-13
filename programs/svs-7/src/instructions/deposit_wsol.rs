@@ -9,8 +9,7 @@
 //! 3. Slippage check
 //! 4. transfer_checked (wSOL from user → wsol_vault)
 //! 5. Mint shares to user
-//! 6. Update stored total_assets if Stored model
-//! 7. Emit Deposit event
+//! 6. Emit Deposit event
 
 use anchor_lang::prelude::*;
 use anchor_spl::{
@@ -24,7 +23,7 @@ use crate::{
     error::VaultError,
     events::Deposit as DepositEvent,
     math::{convert_to_shares, Rounding},
-    state::{BalanceModel, SolVault},
+    state::SolVault,
 };
 
 #[cfg(feature = "modules")]
@@ -96,10 +95,7 @@ pub fn handler(ctx: Context<DepositWsol>, amount: u64, min_shares_out: u64) -> R
     let total_shares = ctx.accounts.shares_mint.supply;
     let vault = &ctx.accounts.vault;
 
-    let total_assets = match vault.balance_model {
-        BalanceModel::Live => ctx.accounts.wsol_vault.amount,
-        BalanceModel::Stored => vault.total_assets,
-    };
+    let total_assets = ctx.accounts.wsol_vault.amount;
 
     // ===== Module Hooks (if enabled) =====
     #[cfg(feature = "modules")]
@@ -180,16 +176,7 @@ pub fn handler(ctx: Context<DepositWsol>, amount: u64, min_shares_out: u64) -> R
         net_shares,
     )?;
 
-    // 6. UPDATE STATE — only for Stored balance model
-    if ctx.accounts.vault.balance_model == BalanceModel::Stored {
-        let vault = &mut ctx.accounts.vault;
-        vault.total_assets = vault
-            .total_assets
-            .checked_add(amount)
-            .ok_or(VaultError::MathOverflow)?;
-    }
-
-    // 7. EMIT EVENT
+    // 6. EMIT EVENT
     emit!(DepositEvent {
         vault: ctx.accounts.vault.key(),
         caller: ctx.accounts.user.key(),

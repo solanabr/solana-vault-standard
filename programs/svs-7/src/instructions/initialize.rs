@@ -19,7 +19,7 @@ use crate::{
     constants::{MAX_DECIMALS, SHARES_DECIMALS, SHARES_MINT_SEED, SOL_VAULT_SEED},
     error::VaultError,
     events::VaultInitialized,
-    state::{BalanceModel, SolVault},
+    state::SolVault,
 };
 
 #[derive(Accounts)]
@@ -75,7 +75,6 @@ pub struct Initialize<'info> {
 pub fn handler(
     ctx: Context<Initialize>,
     vault_id: u64,
-    balance_model: BalanceModel,
     name: String,
     symbol: String,
     _uri: String,
@@ -141,12 +140,10 @@ pub fn handler(
     vault.authority = ctx.accounts.authority.key();
     vault.shares_mint = ctx.accounts.shares_mint.key();
     vault.wsol_vault = ctx.accounts.wsol_vault.key();
-    vault.total_assets = 0;
     vault.decimals_offset = decimals_offset;
     vault.bump = vault_bump;
     vault.paused = false;
     vault.vault_id = vault_id;
-    vault.balance_model = balance_model;
     vault._reserved = [0u8; 64];
 
     emit!(VaultInitialized {

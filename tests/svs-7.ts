@@ -1,7 +1,7 @@
 /**
  * SVS-7 Native SOL Vault — TypeScript test suite.
  *
- * Tests all instructions across both BalanceModel variants (Live and Stored).
+ * Tests all instructions for the Live-only vault.
  * Covers: initialize, deposit_sol, deposit_wsol, withdraw_sol, withdraw_wsol,
  * redeem_sol, redeem_wsol, mint_sol, admin ops, view functions, and edge cases.
  *
@@ -28,7 +28,6 @@ import {
   getAssociatedTokenAddressSync,
   createAssociatedTokenAccountInstruction,
   NATIVE_MINT,
-  syncNative,
   createSyncNativeInstruction,
   createCloseAccountInstruction,
 } from "@solana/spl-token";
@@ -232,10 +231,10 @@ interface VaultCtx {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SUITE 1 — Live Balance Model
+// Test Suite — Live-only Native SOL Vault
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe("svs-7: Live Balance Model", () => {
+describe("svs-7: Native SOL Vault", () => {
   const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
 
@@ -249,7 +248,7 @@ describe("svs-7: Live Balance Model", () => {
   // ── Initialize ──────────────────────────────────────────────────────────────
 
   describe("Initialize", () => {
-    it("creates a Live-model vault", async () => {
+    it("creates a native SOL vault", async () => {
       const [vault] = getVaultPDA(program.programId, vaultId);
       const [sharesMint] = getSharesMintPDA(program.programId, vault);
       const wsolVault = getWsolVaultATA(vault);
@@ -259,7 +258,6 @@ describe("svs-7: Live Balance Model", () => {
       const tx = await program.methods
         .initialize(
           vaultId,
-          { live: {} },
           "SVS-7 Live Vault",
           "svSOL-L",
           "https://example.com/svs7-live.json"
@@ -286,10 +284,7 @@ describe("svs-7: Live Balance Model", () => {
       expect(vaultAccount.wsolVault.toBase58()).to.equal(wsolVault.toBase58());
       expect(vaultAccount.paused).to.equal(false);
       expect(vaultAccount.vaultId.toNumber()).to.equal(vaultId.toNumber());
-      expect(vaultAccount.totalAssets.toNumber()).to.equal(0);
       expect(vaultAccount.decimalsOffset).to.equal(0);
-      // balance_model discriminant — Live is the default (index 0)
-      expect(vaultAccount.balanceModel).to.deep.equal({ live: {} });
 
       // wSOL vault exists and is empty
       const wsolAccount = await getAccount(connection, wsolVault, undefined, TOKEN_PROGRAM_ID);
@@ -922,22 +917,6 @@ describe("svs-7: Live Balance Model", () => {
       expect(vaultAccount.authority.toBase58()).to.equal(payer.publicKey.toBase58());
     });
 
-    it("rejects sync on Live model (SyncNotAllowed)", async () => {
-      try {
-        await program.methods
-          .sync()
-          .accountsStrict({
-            authority: payer.publicKey,
-            vault: ctx.vault,
-            wsolVault: ctx.wsolVault,
-          })
-          .rpc();
-        expect.fail("expected SyncNotAllowed error");
-      } catch (err: any) {
-        expect(err.toString()).to.include("SyncNotAllowed");
-      }
-    });
-
     it("rejects non-authority attempting pause", async () => {
       const impostor = Keypair.generate();
       const sig = await connection.requestAirdrop(impostor.publicKey, LAMPORTS_PER_SOL);
@@ -968,7 +947,7 @@ describe("svs-7: Live Balance Model", () => {
       wsolVault: ctx.wsolVault,
     });
 
-    it("total_assets returns wSOL vault balance (Live model)", async () => {
+    it("total_assets returns wSOL vault balance", async () => {
       const wsolAccount = await getAccount(connection, ctx.wsolVault, undefined, TOKEN_PROGRAM_ID);
       const expectedLamports = Number(wsolAccount.amount);
 
@@ -980,7 +959,7 @@ describe("svs-7: Live Balance Model", () => {
       const result = parseReturnU64(sim.raw, sim.returnData as any);
       expect(result).to.not.be.null;
       expect(result!.toNumber()).to.equal(expectedLamports);
-      console.log("  total_assets (Live):", result!.toNumber());
+      console.log("  total_assets:", result!.toNumber());
     });
 
     it("convert_to_shares returns positive value for non-zero input", async () => {
@@ -1165,378 +1144,6 @@ describe("svs-7: Live Balance Model", () => {
         expect.fail("expected InsufficientAssets error");
       } catch (err: any) {
         expect(err.toString()).to.include("InsufficientAssets");
-      }
-    });
-  });
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
-// SUITE 2 — Stored Balance Model
-// ─────────────────────────────────────────────────────────────────────────────
-
-describe("svs-7: Stored Balance Model", () => {
-  const provider = anchor.AnchorProvider.env();
-  anchor.setProvider(provider);
-
-  const program = anchor.workspace.Svs7 as Program<Svs7>;
-  const connection = provider.connection;
-  const payer = (provider.wallet as anchor.Wallet).payer;
-
-  const vaultId = new BN(701); // distinct from Live suite
-  let ctx: VaultCtx;
-
-  // ── Initialize ──────────────────────────────────────────────────────────────
-
-  describe("Initialize", () => {
-    it("creates a Stored-model vault", async () => {
-      const [vault] = getVaultPDA(program.programId, vaultId);
-      const [sharesMint] = getSharesMintPDA(program.programId, vault);
-      const wsolVault = getWsolVaultATA(vault);
-
-      ctx = { vaultId, vault, sharesMint, wsolVault };
-
-      const tx = await program.methods
-        .initialize(
-          vaultId,
-          { stored: {} },
-          "SVS-7 Stored Vault",
-          "svSOL-S",
-          "https://example.com/svs7-stored.json"
-        )
-        .accountsStrict({
-          authority: payer.publicKey,
-          vault,
-          nativeMint: NATIVE_MINT,
-          sharesMint,
-          wsolVault,
-          tokenProgram: TOKEN_PROGRAM_ID,
-          token2022Program: TOKEN_2022_PROGRAM_ID,
-          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-          systemProgram: SystemProgram.programId,
-          rent: SYSVAR_RENT_PUBKEY,
-        })
-        .rpc();
-
-      console.log("  [Stored] initialize tx:", tx);
-
-      const vaultAccount = await program.account.solVault.fetch(vault);
-      expect(vaultAccount.balanceModel).to.deep.equal({ stored: {} });
-      expect(vaultAccount.totalAssets.toNumber()).to.equal(0);
-      expect(vaultAccount.paused).to.equal(false);
-    });
-  });
-
-  // ── Deposit SOL ───────────────────────────────────────────────────────────
-
-  describe("Deposit SOL (Stored model)", () => {
-    it("deposits native SOL — totalAssets increments in stored field", async () => {
-      const depositLamports = new BN(3 * LAMPORTS_PER_SOL);
-      const userSharesAccount = getUserSharesATA(ctx.sharesMint, payer.publicKey);
-
-      const vaultBefore = await program.account.solVault.fetch(ctx.vault);
-
-      await program.methods
-        .depositSol(depositLamports, new BN(0))
-        .accountsStrict({
-          user: payer.publicKey,
-          vault: ctx.vault,
-          wsolVault: ctx.wsolVault,
-          sharesMint: ctx.sharesMint,
-          userSharesAccount,
-          tokenProgram: TOKEN_PROGRAM_ID,
-          token2022Program: TOKEN_2022_PROGRAM_ID,
-          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-          systemProgram: SystemProgram.programId,
-        })
-        .rpc();
-
-      const vaultAfter = await program.account.solVault.fetch(ctx.vault);
-      const sharesAccount = await getAccount(
-        connection,
-        userSharesAccount,
-        undefined,
-        TOKEN_2022_PROGRAM_ID
-      );
-
-      // Stored model: total_assets field is incremented
-      expect(vaultAfter.totalAssets.toNumber()).to.equal(
-        vaultBefore.totalAssets.toNumber() + depositLamports.toNumber()
-      );
-      expect(Number(sharesAccount.amount)).to.be.greaterThan(0);
-
-      console.log(
-        "  [Stored] total_assets after deposit:",
-        vaultAfter.totalAssets.toNumber()
-      );
-    });
-  });
-
-  // ── Sync ──────────────────────────────────────────────────────────────────
-
-  describe("Sync (Stored model only)", () => {
-    it("syncs total_assets from wSOL vault balance", async () => {
-      // Simulate external yield: transfer SOL directly to the wSOL vault account
-      // and sync_native it (mimicking staking rewards flowing in).
-      const yieldAmount = 0.1 * LAMPORTS_PER_SOL;
-
-      const syncNativeTx = new Transaction();
-      syncNativeTx.add(
-        SystemProgram.transfer({
-          fromPubkey: payer.publicKey,
-          toPubkey: ctx.wsolVault,
-          lamports: yieldAmount,
-        })
-      );
-      syncNativeTx.add(createSyncNativeInstruction(ctx.wsolVault, TOKEN_PROGRAM_ID));
-      await sendAndConfirmTransaction(connection, syncNativeTx, [payer]);
-
-      const wsolAccount = await getAccount(
-        connection,
-        ctx.wsolVault,
-        undefined,
-        TOKEN_PROGRAM_ID
-      );
-      const vaultBefore = await program.account.solVault.fetch(ctx.vault);
-
-      // total_assets (stored) lags behind actual wSOL balance
-      expect(Number(wsolAccount.amount)).to.be.greaterThan(
-        vaultBefore.totalAssets.toNumber()
-      );
-
-      // Call sync
-      const tx = await program.methods
-        .sync()
-        .accountsStrict({
-          authority: payer.publicKey,
-          vault: ctx.vault,
-          wsolVault: ctx.wsolVault,
-        })
-        .rpc();
-
-      console.log("  [Stored] sync tx:", tx);
-
-      const vaultAfter = await program.account.solVault.fetch(ctx.vault);
-      expect(vaultAfter.totalAssets.toNumber()).to.equal(Number(wsolAccount.amount));
-    });
-  });
-
-  // ── Withdraw SOL (Stored model) ───────────────────────────────────────────
-
-  describe("Withdraw SOL (Stored model)", () => {
-    it("withdraws native SOL and decrements totalAssets", async () => {
-      const withdrawLamports = new BN(0.5 * LAMPORTS_PER_SOL);
-
-      const userSharesAccount = getUserSharesATA(ctx.sharesMint, payer.publicKey);
-      const sharesBefore = await getAccount(
-        connection,
-        userSharesAccount,
-        undefined,
-        TOKEN_2022_PROGRAM_ID
-      );
-      const vaultBefore = await program.account.solVault.fetch(ctx.vault);
-
-      // Prepare fresh empty wSOL ATA
-      const wsolATA = getUserWsolATA(payer.publicKey);
-      const existingInfo = await connection.getAccountInfo(wsolATA);
-      if (existingInfo !== null) {
-        const closeTx = new Transaction().add(
-          createCloseAccountInstruction(wsolATA, payer.publicKey, payer.publicKey, [], TOKEN_PROGRAM_ID)
-        );
-        await sendAndConfirmTransaction(connection, closeTx, [payer]);
-        // Wait for close to propagate so ensureEmptyWsolAccount sees null
-        for (let i = 0; i < 10; i++) {
-          const check = await connection.getAccountInfo(wsolATA, "confirmed");
-          if (check === null) break;
-          await new Promise((r) => setTimeout(r, 400));
-        }
-      }
-      const userWsolAccount = await ensureEmptyWsolAccount(connection, payer, payer.publicKey);
-
-      await program.methods
-        .withdrawSol(withdrawLamports, new BN(Number(sharesBefore.amount)))
-        .accountsStrict({
-          user: payer.publicKey,
-          vault: ctx.vault,
-          nativeMint: NATIVE_MINT,
-          wsolVault: ctx.wsolVault,
-          userWsolAccount,
-          sharesMint: ctx.sharesMint,
-          userSharesAccount,
-          tokenProgram: TOKEN_PROGRAM_ID,
-          token2022Program: TOKEN_2022_PROGRAM_ID,
-        })
-        .rpc();
-
-      const vaultAfter = await program.account.solVault.fetch(ctx.vault);
-      const sharesAfter = await getAccount(
-        connection,
-        userSharesAccount,
-        undefined,
-        TOKEN_2022_PROGRAM_ID
-      );
-
-      // Stored model: totalAssets decrements by exactly withdrawLamports
-      expect(vaultAfter.totalAssets.toNumber()).to.equal(
-        vaultBefore.totalAssets.toNumber() - withdrawLamports.toNumber()
-      );
-      expect(Number(sharesAfter.amount)).to.be.lessThan(Number(sharesBefore.amount));
-    });
-  });
-
-  // ── Redeem SOL (Stored model) ─────────────────────────────────────────────
-
-  describe("Redeem SOL (Stored model)", () => {
-    it("redeems shares for native SOL and decrements totalAssets", async () => {
-      const userSharesAccount = getUserSharesATA(ctx.sharesMint, payer.publicKey);
-      const sharesBefore = await getAccount(
-        connection,
-        userSharesAccount,
-        undefined,
-        TOKEN_2022_PROGRAM_ID
-      );
-
-      const redeemShares = new BN(Math.floor(Number(sharesBefore.amount) / 4));
-      if (redeemShares.isZero()) {
-        console.log("  [Stored] redeem_sol: skipped (insufficient shares)");
-        return;
-      }
-
-      const vaultBefore = await program.account.solVault.fetch(ctx.vault);
-
-      // Fresh wSOL ATA
-      const wsolATA = getUserWsolATA(payer.publicKey);
-      const existingInfo = await connection.getAccountInfo(wsolATA);
-      if (existingInfo !== null) {
-        const closeTx = new Transaction().add(
-          createCloseAccountInstruction(wsolATA, payer.publicKey, payer.publicKey, [], TOKEN_PROGRAM_ID)
-        );
-        await sendAndConfirmTransaction(connection, closeTx, [payer]);
-      }
-      const userWsolAccount = await ensureEmptyWsolAccount(connection, payer, payer.publicKey);
-
-      const solBefore = await connection.getBalance(payer.publicKey);
-
-      await program.methods
-        .redeemSol(redeemShares, new BN(0))
-        .accountsStrict({
-          user: payer.publicKey,
-          vault: ctx.vault,
-          nativeMint: NATIVE_MINT,
-          wsolVault: ctx.wsolVault,
-          userWsolAccount,
-          sharesMint: ctx.sharesMint,
-          userSharesAccount,
-          tokenProgram: TOKEN_PROGRAM_ID,
-          token2022Program: TOKEN_2022_PROGRAM_ID,
-        })
-        .rpc();
-
-      const vaultAfter = await program.account.solVault.fetch(ctx.vault);
-      const sharesAfter = await getAccount(
-        connection,
-        userSharesAccount,
-        undefined,
-        TOKEN_2022_PROGRAM_ID
-      );
-      const solAfter = await connection.getBalance(payer.publicKey);
-
-      expect(Number(sharesAfter.amount)).to.equal(
-        Number(sharesBefore.amount) - redeemShares.toNumber()
-      );
-      expect(solAfter).to.be.greaterThan(solBefore);
-      // totalAssets should decrease
-      expect(vaultAfter.totalAssets.toNumber()).to.be.lessThan(vaultBefore.totalAssets.toNumber());
-    });
-  });
-
-  // ── total_assets view (Stored model) ─────────────────────────────────────
-
-  describe("View: total_assets (Stored model)", () => {
-    it("returns stored field value, not live wSOL balance", async () => {
-      const vaultAccount = await program.account.solVault.fetch(ctx.vault);
-
-      const sim = await program.methods
-        .totalAssets()
-        .accountsStrict({
-          vault: ctx.vault,
-          sharesMint: ctx.sharesMint,
-          wsolVault: ctx.wsolVault,
-        })
-        .simulate();
-
-      const result = parseReturnU64(sim.raw, sim.returnData as any);
-      expect(result).to.not.be.null;
-      expect(result!.toNumber()).to.equal(vaultAccount.totalAssets.toNumber());
-    });
-  });
-
-  // ── Operations blocked when paused ────────────────────────────────────────
-
-  describe("Pause guard (Stored model)", () => {
-    before(async () => {
-      await program.methods
-        .pause()
-        .accountsStrict({ authority: payer.publicKey, vault: ctx.vault })
-        .rpc();
-    });
-
-    after(async () => {
-      await program.methods
-        .unpause()
-        .accountsStrict({ authority: payer.publicKey, vault: ctx.vault })
-        .rpc();
-    });
-
-    it("deposit_wsol fails when paused", async () => {
-      // Ensure the wSOL ATA exists so Anchor can deserialize it before
-      // evaluating the vault.paused constraint
-      const userWsolAccount = await ensureEmptyWsolAccount(connection, payer, payer.publicKey);
-      const userSharesAccount = getUserSharesATA(ctx.sharesMint, payer.publicKey);
-
-      // We only need to verify the paused constraint fires before any transfer occurs
-      try {
-        await program.methods
-          .depositWsol(new BN(MIN_DEPOSIT_LAMPORTS), new BN(0))
-          .accountsStrict({
-            user: payer.publicKey,
-            vault: ctx.vault,
-            nativeMint: NATIVE_MINT,
-            userWsolAccount,
-            wsolVault: ctx.wsolVault,
-            sharesMint: ctx.sharesMint,
-            userSharesAccount,
-            tokenProgram: TOKEN_PROGRAM_ID,
-            token2022Program: TOKEN_2022_PROGRAM_ID,
-            associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-            systemProgram: SystemProgram.programId,
-          })
-          .rpc();
-        expect.fail("expected VaultPaused error");
-      } catch (err: any) {
-        expect(err.toString()).to.include("VaultPaused");
-      }
-    });
-
-    it("mint_sol fails when paused", async () => {
-      const userSharesAccount = getUserSharesATA(ctx.sharesMint, payer.publicKey);
-      try {
-        await program.methods
-          .mintSol(new BN(1000), new BN(LAMPORTS_PER_SOL))
-          .accountsStrict({
-            user: payer.publicKey,
-            vault: ctx.vault,
-            wsolVault: ctx.wsolVault,
-            sharesMint: ctx.sharesMint,
-            userSharesAccount,
-            tokenProgram: TOKEN_PROGRAM_ID,
-            token2022Program: TOKEN_2022_PROGRAM_ID,
-            associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-            systemProgram: SystemProgram.programId,
-          })
-          .rpc();
-        expect.fail("expected VaultPaused error");
-      } catch (err: any) {
-        expect(err.toString()).to.include("VaultPaused");
       }
     });
   });

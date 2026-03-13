@@ -41,10 +41,3 @@ pub struct AuthorityTransferred {
     pub previous_authority: Pubkey,
     pub new_authority: Pubkey,
 }
-
-#[event]
-pub struct VaultSynced {
-    pub vault: Pubkey,
-    pub previous_total: u64,
-    pub new_total: u64,
-}

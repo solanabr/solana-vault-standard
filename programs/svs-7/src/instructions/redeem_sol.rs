@@ -2,14 +2,13 @@
 //!
 //! Flow:
 //! 1. Validate shares > 0, user has enough
-//! 2. Read total_assets
+//! 2. Read total_assets from wsol_vault.amount
 //! 3. Compute assets (floor rounding — protects vault)
 //! 4. Slippage check (assets >= min_lamports_out)
 //! 5. Burn shares
 //! 6. transfer_checked (wSOL → user's wSOL account, vault PDA signs)
 //! 7. close_account (user's wSOL → native SOL to user, user signs)
-//! 8. Update stored total_assets
-//! 9. Emit Withdraw event
+//! 8. Emit Withdraw event
 
 use anchor_lang::prelude::*;
 use anchor_spl::{
@@ -22,7 +21,7 @@ use crate::{
     error::VaultError,
     events::Withdraw as WithdrawEvent,
     math::{convert_to_assets, Rounding},
-    state::{BalanceModel, SolVault},
+    state::SolVault,
 };
 
 #[cfg(feature = "modules")]
@@ -90,10 +89,7 @@ pub fn handler(ctx: Context<RedeemSol>, shares: u64, min_lamports_out: u64) -> R
     let vault = &ctx.accounts.vault;
     let total_shares = ctx.accounts.shares_mint.supply;
 
-    let total_assets = match vault.balance_model {
-        BalanceModel::Live => ctx.accounts.wsol_vault.amount,
-        BalanceModel::Stored => vault.total_assets,
-    };
+    let total_assets = ctx.accounts.wsol_vault.amount;
 
     // 3. COMPUTE assets to receive (floor rounding — user gets less, protects vault)
     let assets = convert_to_assets(
@@ -177,18 +173,7 @@ pub fn handler(ctx: Context<RedeemSol>, shares: u64, min_lamports_out: u64) -> R
         },
     ))?;
 
-    // 8. UPDATE STATE — only for Stored balance model
-    // Subtract net_assets (post-fee), not assets (pre-fee).
-    // The fee stays in wsol_vault and remains part of total_assets.
-    if ctx.accounts.vault.balance_model == BalanceModel::Stored {
-        let vault = &mut ctx.accounts.vault;
-        vault.total_assets = vault
-            .total_assets
-            .checked_sub(net_assets)
-            .ok_or(VaultError::InsufficientAssets)?;
-    }
-
-    // 9. EMIT EVENT
+    // 8. EMIT EVENT
     emit!(WithdrawEvent {
         vault: ctx.accounts.vault.key(),
         caller: ctx.accounts.user.key(),

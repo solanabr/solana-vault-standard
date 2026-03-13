@@ -1,8 +1,6 @@
 //! View instructions: read-only queries for vault state and conversions.
 //!
-//! All view functions dispatch on vault.balance_model to determine total_assets:
-//! - Live: reads wsol_vault.amount directly
-//! - Stored: reads vault.total_assets field
+//! All view functions read total_assets directly from wsol_vault.amount (Live-only).
 
 use anchor_lang::prelude::*;
 use anchor_lang::solana_program::program::set_return_data;
@@ -10,7 +8,7 @@ use anchor_spl::token_interface::{Mint, TokenAccount};
 
 use crate::{
     math::{convert_to_assets, convert_to_shares, Rounding},
-    state::{BalanceModel, SolVault},
+    state::SolVault,
 };
 
 #[derive(Accounts)]
@@ -38,19 +36,11 @@ pub struct VaultViewWithOwner<'info> {
     pub owner_shares_account: InterfaceAccount<'info, TokenAccount>,
 }
 
-/// Resolve total_assets based on the vault's balance model.
-fn resolve_total_assets(vault: &SolVault, wsol_vault_amount: u64) -> u64 {
-    match vault.balance_model {
-        BalanceModel::Live => wsol_vault_amount,
-        BalanceModel::Stored => vault.total_assets,
-    }
-}
-
 /// Preview how many shares would be minted for given lamports (floor rounding)
 pub fn preview_deposit(ctx: Context<VaultView>, assets: u64) -> Result<()> {
     let vault = &ctx.accounts.vault;
     let total_shares = ctx.accounts.shares_mint.supply;
-    let total_assets = resolve_total_assets(vault, ctx.accounts.wsol_vault.amount);
+    let total_assets = ctx.accounts.wsol_vault.amount;
 
     let shares = convert_to_shares(
         assets,
@@ -68,7 +58,7 @@ pub fn preview_deposit(ctx: Context<VaultView>, assets: u64) -> Result<()> {
 pub fn preview_mint(ctx: Context<VaultView>, shares: u64) -> Result<()> {
     let vault = &ctx.accounts.vault;
     let total_shares = ctx.accounts.shares_mint.supply;
-    let total_assets = resolve_total_assets(vault, ctx.accounts.wsol_vault.amount);
+    let total_assets = ctx.accounts.wsol_vault.amount;
 
     let assets = convert_to_assets(
         shares,
@@ -86,7 +76,7 @@ pub fn preview_mint(ctx: Context<VaultView>, shares: u64) -> Result<()> {
 pub fn preview_withdraw(ctx: Context<VaultView>, assets: u64) -> Result<()> {
     let vault = &ctx.accounts.vault;
     let total_shares = ctx.accounts.shares_mint.supply;
-    let total_assets = resolve_total_assets(vault, ctx.accounts.wsol_vault.amount);
+    let total_assets = ctx.accounts.wsol_vault.amount;
 
     let shares = convert_to_shares(
         assets,
@@ -104,7 +94,7 @@ pub fn preview_withdraw(ctx: Context<VaultView>, assets: u64) -> Result<()> {
 pub fn preview_redeem(ctx: Context<VaultView>, shares: u64) -> Result<()> {
     let vault = &ctx.accounts.vault;
     let total_shares = ctx.accounts.shares_mint.supply;
-    let total_assets = resolve_total_assets(vault, ctx.accounts.wsol_vault.amount);
+    let total_assets = ctx.accounts.wsol_vault.amount;
 
     let assets = convert_to_assets(
         shares,
@@ -122,7 +112,7 @@ pub fn preview_redeem(ctx: Context<VaultView>, shares: u64) -> Result<()> {
 pub fn convert_to_shares_view(ctx: Context<VaultView>, assets: u64) -> Result<()> {
     let vault = &ctx.accounts.vault;
     let total_shares = ctx.accounts.shares_mint.supply;
-    let total_assets = resolve_total_assets(vault, ctx.accounts.wsol_vault.amount);
+    let total_assets = ctx.accounts.wsol_vault.amount;
 
     let shares = convert_to_shares(
         assets,
@@ -140,7 +130,7 @@ pub fn convert_to_shares_view(ctx: Context<VaultView>, assets: u64) -> Result<()
 pub fn convert_to_assets_view(ctx: Context<VaultView>, shares: u64) -> Result<()> {
     let vault = &ctx.accounts.vault;
     let total_shares = ctx.accounts.shares_mint.supply;
-    let total_assets = resolve_total_assets(vault, ctx.accounts.wsol_vault.amount);
+    let total_assets = ctx.accounts.wsol_vault.amount;
 
     let assets = convert_to_assets(
         shares,
@@ -154,9 +144,9 @@ pub fn convert_to_assets_view(ctx: Context<VaultView>, shares: u64) -> Result<()
     Ok(())
 }
 
-/// Get total lamports managed by the vault (model-aware)
+/// Get total lamports managed by the vault (reads wsol_vault.amount directly)
 pub fn get_total_assets(ctx: Context<VaultView>) -> Result<()> {
-    let total_assets = resolve_total_assets(&ctx.accounts.vault, ctx.accounts.wsol_vault.amount);
+    let total_assets = ctx.accounts.wsol_vault.amount;
     set_return_data(&total_assets.to_le_bytes());
     Ok(())
 }
@@ -185,7 +175,7 @@ pub fn max_withdraw(ctx: Context<VaultViewWithOwner>) -> Result<()> {
     let vault = &ctx.accounts.vault;
     let total_shares = ctx.accounts.shares_mint.supply;
     let owner_shares = ctx.accounts.owner_shares_account.amount;
-    let total_assets = resolve_total_assets(vault, ctx.accounts.wsol_vault.amount);
+    let total_assets = ctx.accounts.wsol_vault.amount;
 
     let max_assets = convert_to_assets(
         owner_shares,

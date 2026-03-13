@@ -7,8 +7,7 @@
 //! 4. system_program::transfer (user → wsol_vault)
 //! 5. sync_native + reload
 //! 6. Mint shares to user
-//! 7. Update stored total_assets if Stored model
-//! 8. Emit Deposit event
+//! 7. Emit Deposit event
 
 use anchor_lang::prelude::*;
 use anchor_lang::solana_program::program::invoke;
@@ -23,7 +22,7 @@ use crate::{
     error::VaultError,
     events::Deposit as DepositEvent,
     math::{convert_to_assets, Rounding},
-    state::{BalanceModel, SolVault},
+    state::SolVault,
 };
 
 #[cfg(feature = "modules")]
@@ -81,10 +80,7 @@ pub fn handler(ctx: Context<MintSol>, shares: u64, max_lamports_in: u64) -> Resu
     let total_shares = ctx.accounts.shares_mint.supply;
     let vault = &ctx.accounts.vault;
 
-    let total_assets = match vault.balance_model {
-        BalanceModel::Live => ctx.accounts.wsol_vault.amount,
-        BalanceModel::Stored => vault.total_assets,
-    };
+    let total_assets = ctx.accounts.wsol_vault.amount;
 
     // ===== Module Hooks (if enabled) =====
     #[cfg(feature = "modules")]
@@ -171,16 +167,7 @@ pub fn handler(ctx: Context<MintSol>, shares: u64, max_lamports_in: u64) -> Resu
         net_shares,
     )?;
 
-    // 6. UPDATE STATE — only for Stored balance model
-    if ctx.accounts.vault.balance_model == BalanceModel::Stored {
-        let vault = &mut ctx.accounts.vault;
-        vault.total_assets = vault
-            .total_assets
-            .checked_add(required_lamports)
-            .ok_or(VaultError::MathOverflow)?;
-    }
-
-    // 7. EMIT EVENT
+    // 6. EMIT EVENT
     emit!(DepositEvent {
         vault: ctx.accounts.vault.key(),
         caller: ctx.accounts.user.key(),

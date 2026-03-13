@@ -34,11 +34,8 @@ pub enum VaultError {
     #[msg("Vault is not paused")]
     VaultNotPaused,
 
-    #[msg("Invalid balance model for this operation")]
-    InvalidBalanceModel,
-
-    #[msg("Sync only allowed for Stored balance model")]
-    SyncNotAllowed,
+    #[msg("New authority cannot be the zero address")]
+    InvalidAuthority,
 
     // Module errors (always defined for IDL compatibility)
     #[msg("Deposit would exceed global vault cap")]

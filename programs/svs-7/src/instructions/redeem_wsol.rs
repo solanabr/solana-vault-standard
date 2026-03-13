@@ -13,7 +13,7 @@ use crate::{
     error::VaultError,
     events::Withdraw as WithdrawEvent,
     math::{convert_to_assets, Rounding},
-    state::{BalanceModel, SolVault},
+    state::SolVault,
 };
 
 #[cfg(feature = "modules")]
@@ -81,10 +81,7 @@ pub fn handler(ctx: Context<RedeemWsol>, shares: u64, min_assets_out: u64) -> Re
     let vault = &ctx.accounts.vault;
     let total_shares = ctx.accounts.shares_mint.supply;
 
-    let total_assets = match vault.balance_model {
-        BalanceModel::Live => ctx.accounts.wsol_vault.amount,
-        BalanceModel::Stored => vault.total_assets,
-    };
+    let total_assets = ctx.accounts.wsol_vault.amount;
 
     // 3. COMPUTE assets (floor rounding — user gets less, protects vault)
     let assets = convert_to_assets(
@@ -158,17 +155,7 @@ pub fn handler(ctx: Context<RedeemWsol>, shares: u64, min_assets_out: u64) -> Re
         ctx.accounts.native_mint.decimals,
     )?;
 
-    // 7. UPDATE STATE — only for Stored balance model
-    // Subtract net_assets (post-fee), not assets (pre-fee).
-    if ctx.accounts.vault.balance_model == BalanceModel::Stored {
-        let vault = &mut ctx.accounts.vault;
-        vault.total_assets = vault
-            .total_assets
-            .checked_sub(net_assets)
-            .ok_or(VaultError::InsufficientAssets)?;
-    }
-
-    // 8. EMIT EVENT
+    // 7. EMIT EVENT
     emit!(WithdrawEvent {
         vault: ctx.accounts.vault.key(),
         caller: ctx.accounts.user.key(),

@@ -8,7 +8,7 @@
 //! Key differences from SVS-1:
 //! - Asset is always native SOL (no configurable asset_mint)
 //! - Dual interface: `_sol` variants (native SOL) and `_wsol` variants (pre-wrapped)
-//! - BalanceModel enum: Live (reads wsol_vault.amount) or Stored (uses stored total_assets)
+//! - Live-only: total assets always read from wsol_vault.amount (no sync needed)
 //! - PDA seeds: ["sol_vault", vault_id.to_le_bytes()] — no asset_mint in seeds
 //! - decimals_offset = 0 (SOL has 9 decimals, 9-9=0)
 
@@ -36,12 +36,11 @@ pub mod svs_7 {
     pub fn initialize(
         ctx: Context<Initialize>,
         vault_id: u64,
-        balance_model: state::BalanceModel,
         name: String,
         symbol: String,
         uri: String,
     ) -> Result<()> {
-        instructions::initialize::handler(ctx, vault_id, balance_model, name, symbol, uri)
+        instructions::initialize::handler(ctx, vault_id, name, symbol, uri)
     }
 
     // ============ Native SOL Interface ============
@@ -128,12 +127,6 @@ pub mod svs_7 {
     /// Transfer vault authority to a new address
     pub fn transfer_authority(ctx: Context<Admin>, new_authority: Pubkey) -> Result<()> {
         instructions::admin::transfer_authority(ctx, new_authority)
-    }
-
-    /// Sync total_assets with actual wSOL vault balance (Stored model only).
-    /// Pushes external yield (staking rewards, donations) into the vault accounting.
-    pub fn sync(ctx: Context<Sync>) -> Result<()> {
-        instructions::admin::sync(ctx)
     }
 
     // ============ View Functions (CPI composable) ============

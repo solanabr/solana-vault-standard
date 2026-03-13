@@ -14,7 +14,7 @@ use crate::{
     error::VaultError,
     events::Withdraw as WithdrawEvent,
     math::{convert_to_shares, Rounding},
-    state::{BalanceModel, SolVault},
+    state::SolVault,
 };
 
 #[cfg(feature = "modules")]
@@ -78,10 +78,7 @@ pub fn handler(ctx: Context<WithdrawWsol>, lamports: u64, max_shares_in: u64) ->
     let vault = &ctx.accounts.vault;
     let total_shares = ctx.accounts.shares_mint.supply;
 
-    let total_assets = match vault.balance_model {
-        BalanceModel::Live => ctx.accounts.wsol_vault.amount,
-        BalanceModel::Stored => vault.total_assets,
-    };
+    let total_assets = ctx.accounts.wsol_vault.amount;
 
     require!(lamports <= total_assets, VaultError::InsufficientAssets);
 
@@ -160,17 +157,7 @@ pub fn handler(ctx: Context<WithdrawWsol>, lamports: u64, max_shares_in: u64) ->
         ctx.accounts.native_mint.decimals,
     )?;
 
-    // 6. UPDATE STATE — only for Stored balance model
-    // Subtract net_lamports (post-fee), not lamports (pre-fee).
-    if ctx.accounts.vault.balance_model == BalanceModel::Stored {
-        let vault = &mut ctx.accounts.vault;
-        vault.total_assets = vault
-            .total_assets
-            .checked_sub(net_lamports)
-            .ok_or(VaultError::InsufficientAssets)?;
-    }
-
-    // 7. EMIT EVENT
+    // 6. EMIT EVENT
     emit!(WithdrawEvent {
         vault: ctx.accounts.vault.key(),
         caller: ctx.accounts.user.key(),

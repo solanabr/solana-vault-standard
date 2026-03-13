@@ -4,38 +4,24 @@ use anchor_lang::prelude::*;
 
 use crate::constants::SOL_VAULT_SEED;
 
-/// Balance model determines how total_assets is read.
-///
-/// - Live: reads wsol_vault.amount directly (always up to date, no sync needed)
-/// - Stored: uses vault.total_assets field (requires authority to call sync)
-#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, Default)]
-pub enum BalanceModel {
-    /// Read wSOL vault token account balance directly on every instruction.
-    /// Yield is reflected immediately. No sync() required.
-    #[default]
-    Live,
-    /// Use stored total_assets field. Yield must be pushed via sync().
-    /// Useful for controlled yield distribution (liquid staking, etc.).
-    Stored,
-}
-
-/// SVS-7 Native SOL Vault state account.
+/// SVS-7 Native SOL Vault state account (Live-only).
 ///
 /// Seeds: ["sol_vault", vault_id.to_le_bytes()]
 ///
 /// Accepts and returns native SOL. Internally uses a wSOL token account for
 /// compatibility with DeFi protocols. The asset is always the native mint
 /// (So11111111111111111111111111111111).
+///
+/// Total assets are always read directly from wsol_vault.amount — no stored
+/// balance field, no sync instruction required.
 #[account]
 pub struct SolVault {
-    /// Vault admin who can pause/unpause, transfer authority, and sync (Stored model)
+    /// Vault admin who can pause/unpause and transfer authority
     pub authority: Pubkey,
     /// Token-2022 LP/share token mint (PDA-owned, vault is mint authority)
     pub shares_mint: Pubkey,
     /// wSOL token account owned by the vault PDA
     pub wsol_vault: Pubkey,
-    /// Tracked total assets in lamports. Used by Stored model; Live model ignores this.
-    pub total_assets: u64,
     /// Virtual offset exponent. For SOL: 9 - 9 = 0, so offset = 10^0 = 1.
     pub decimals_offset: u8,
     /// PDA bump seed (stored for gas-efficient signer seeds)
@@ -44,8 +30,6 @@ pub struct SolVault {
     pub paused: bool,
     /// Unique vault identifier (allows multiple vaults per authority)
     pub vault_id: u64,
-    /// Whether to read balance live from wSOL account or from stored total_assets
-    pub balance_model: BalanceModel,
     /// Reserved for future upgrades (64 bytes)
     pub _reserved: [u8; 64],
 }
@@ -55,12 +39,10 @@ impl SolVault {
         + 32  // authority
         + 32  // shares_mint
         + 32  // wsol_vault
-        + 8   // total_assets
         + 1   // decimals_offset
         + 1   // bump
         + 1   // paused
         + 8   // vault_id
-        + 1   // balance_model (enum)
         + 64; // _reserved
 
     pub const SEED_PREFIX: &'static [u8] = SOL_VAULT_SEED;

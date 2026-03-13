@@ -7,8 +7,7 @@
 //! 4. compute shares using pre-deposit total_assets
 //! 5. slippage check
 //! 6. mint shares to user
-//! 7. update stored total_assets if Stored model
-//! 8. emit Deposit event
+//! 7. emit Deposit event
 
 use anchor_lang::prelude::*;
 use anchor_lang::solana_program::program::invoke;
@@ -23,7 +22,7 @@ use crate::{
     error::VaultError,
     events::Deposit as DepositEvent,
     math::{convert_to_shares, Rounding},
-    state::{BalanceModel, SolVault},
+    state::SolVault,
 };
 
 #[cfg(feature = "modules")]
@@ -84,12 +83,8 @@ pub fn handler(ctx: Context<DepositSol>, lamports: u64, min_shares_out: u64) -> 
     let total_shares = ctx.accounts.shares_mint.supply;
     let vault = &ctx.accounts.vault;
 
-    // For Live model we need the balance BEFORE the deposit.
-    // We'll read it now, before any CPIs alter the wSOL amount.
-    let pre_deposit_total_assets = match vault.balance_model {
-        BalanceModel::Live => ctx.accounts.wsol_vault.amount,
-        BalanceModel::Stored => vault.total_assets,
-    };
+    // Read balance BEFORE the deposit so CPIs do not alter the amount used for share math.
+    let pre_deposit_total_assets = ctx.accounts.wsol_vault.amount;
 
     // ===== Module Hooks (if enabled) =====
     #[cfg(feature = "modules")]
@@ -185,16 +180,7 @@ pub fn handler(ctx: Context<DepositSol>, lamports: u64, min_shares_out: u64) -> 
         net_shares,
     )?;
 
-    // 6. UPDATE STATE — only for Stored balance model
-    if ctx.accounts.vault.balance_model == BalanceModel::Stored {
-        let vault = &mut ctx.accounts.vault;
-        vault.total_assets = vault
-            .total_assets
-            .checked_add(lamports)
-            .ok_or(VaultError::MathOverflow)?;
-    }
-
-    // 7. EMIT EVENT
+    // 6. EMIT EVENT
     emit!(DepositEvent {
         vault: ctx.accounts.vault.key(),
         caller: ctx.accounts.user.key(),
