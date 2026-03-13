@@ -21,7 +21,7 @@ export function registerTranchedAddTrancheCommand(parent: Command): void {
       const ctx = await createContext(globalOpts, opts, true, true);
       const { output, provider, wallet, options } = ctx;
 
-      const idlPath = findIdlPath("svs-1");
+      const idlPath = findIdlPath("svs-12");
       if (!idlPath) {
         output.error("IDL not found. Run `anchor build` first.");
         process.exit(1);

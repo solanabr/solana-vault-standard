@@ -191,6 +191,9 @@ pub fn handler(ctx: Context<Redeem>, shares: u64, min_assets_out: u64) -> Result
         ctx.accounts.asset_mint.decimals,
     )?;
 
+    ctx.accounts.asset_vault.reload()?;
+    ctx.accounts.shares_mint.reload()?;
+
     // 5. Emit event
     emit!(TrancheRedeem {
         vault: ctx.accounts.vault.key(),

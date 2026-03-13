@@ -141,10 +141,40 @@ Authority updates tranche parameters (target_yield_bps, cap_bps, subordination_b
 
 1. **`vault.total_assets == sum(tranche[i].total_assets_allocated)`** — maintained by every instruction
 2. **Priority uniqueness** — enforced via `priority_bitmap` in `add_tranche`
-3. **Subordination** — `junior_allocation >= (total_assets * subordination_bps) / 10000` checked after deposit, redeem, rebalance, and config update (not after loss)
+3. **Subordination** — `junior_allocation >= (total_assets * subordination_bps) / 10000` checked after deposit, redeem, rebalance, and config update (not after loss — see below)
 4. **Cap enforcement** — `tranche_allocation <= (total_assets * cap_bps) / 10000` checked after deposit
 5. **Vault-favoring rounding** — floor for both deposit (fewer shares) and redeem (fewer assets)
 6. **Tranche count validation** — every multi-tranche instruction requires `count(provided tranches) == vault.num_tranches`
+
+## Subordination Enforcement
+
+Subordination is checked after deposit, redeem, rebalance, and config update. It is **not** checked after loss absorption.
+
+### Worked Example
+
+2-tranche vault:
+- **Senior** (priority=0): `subordination_bps = 2000` (requires 20% junior capital)
+- **Junior** (priority=1): `subordination_bps = 0`
+
+Current state: senior has 8,000 allocated, junior has 2,000 allocated, total = 10,000.
+
+A junior holder tries to redeem shares worth 500 assets. Post-state would be:
+- `total_assets = 9,500`
+- `junior_allocation = 1,500`
+- Required junior: `(9,500 * 2,000) / 10,000 = 1,900`
+- `1,500 < 1,900` → **SubordinationBreach**, redeem rejected.
+
+The maximum the junior holder can redeem is the surplus above the requirement:
+- Current required: `(10,000 * 2,000) / 10,000 = 2,000`
+- Surplus: `2,000 - 2,000 = 0` → no junior redemption is possible at all in this state.
+
+If total_assets were 12,000 (senior 8,000, junior 4,000):
+- Required junior: `(12,000 * 2,000) / 10,000 = 2,400`
+- Max redeemable from junior: `4,000 - 2,400 = 1,600`
+
+### Loss Absorption and Subordination
+
+`record_loss` intentionally skips the subordination check. Losses absorbed by junior tranches may cause the junior allocation to fall below the subordination requirement. This is standard structured product behavior — subordination is a *gate on voluntary actions* (deposits, redeems, rebalances), not a constraint on realized losses. The ratio self-heals as new deposits flow in or the manager rebalances.
 
 ## Events
 

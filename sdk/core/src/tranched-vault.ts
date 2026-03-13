@@ -510,6 +510,46 @@ export class TranchedVault {
       .rpc();
   }
 
+  // ============ State Access ============
+
+  async fetchTrancheState(trancheIndex: number): Promise<TrancheState> {
+    const [tranchePda] = getTrancheAddress(
+      this.program.programId,
+      this.vault,
+      trancheIndex,
+    );
+    const accountNs = this.program.account as Record<
+      string,
+      { fetch: (addr: PublicKey) => Promise<unknown> }
+    >;
+    return (await accountNs["tranche"].fetch(tranchePda)) as TrancheState;
+  }
+
+  async fetchAllTranches(): Promise<TrancheState[]> {
+    const state = await this.getState();
+    const tranches: TrancheState[] = [];
+    for (let i = 0; i < state.numTranches; i++) {
+      tranches.push(await this.fetchTrancheState(i));
+    }
+    return tranches;
+  }
+
+  async fetchUserShareBalance(
+    user: PublicKey,
+    trancheIndex: number,
+  ): Promise<BN> {
+    const sharesMint = this.getTrancheSharesMint(trancheIndex);
+    const ata = getAssociatedTokenAddressSync(
+      sharesMint,
+      user,
+      false,
+      TOKEN_2022_PROGRAM_ID,
+      ASSOCIATED_TOKEN_PROGRAM_ID,
+    );
+    const info = await this.provider.connection.getTokenAccountBalance(ata);
+    return new BN(info.value.amount);
+  }
+
   // ============ View Helpers ============
 
   getTrancheAddress(index: number): PublicKey {

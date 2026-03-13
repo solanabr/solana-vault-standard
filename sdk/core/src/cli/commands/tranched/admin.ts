@@ -22,7 +22,7 @@ export function registerTranchedAdminCommand(parent: Command): void {
       const { output, provider, wallet } = ctx;
 
       try {
-        const idl = loadIdl(findIdlPath("svs-1")!);
+        const idl = loadIdl(findIdlPath("svs-12")!);
         const prog = new Program(idl as any, provider);
         const vault = await TranchedVault.load(prog, new PublicKey(opts.assetMint), new BN(opts.vaultId));
         const sig = await vault.pause(wallet.publicKey);
@@ -44,7 +44,7 @@ export function registerTranchedAdminCommand(parent: Command): void {
       const { output, provider, wallet } = ctx;
 
       try {
-        const idl = loadIdl(findIdlPath("svs-1")!);
+        const idl = loadIdl(findIdlPath("svs-12")!);
         const prog = new Program(idl as any, provider);
         const vault = await TranchedVault.load(prog, new PublicKey(opts.assetMint), new BN(opts.vaultId));
         const sig = await vault.unpause(wallet.publicKey);
@@ -72,7 +72,7 @@ export function registerTranchedAdminCommand(parent: Command): void {
       }
 
       try {
-        const idl = loadIdl(findIdlPath("svs-1")!);
+        const idl = loadIdl(findIdlPath("svs-12")!);
         const prog = new Program(idl as any, provider);
         const vault = await TranchedVault.load(prog, new PublicKey(opts.assetMint), new BN(opts.vaultId));
         const sig = await vault.transferAuthority(wallet.publicKey, new PublicKey(opts.newAuthority));
@@ -95,7 +95,7 @@ export function registerTranchedAdminCommand(parent: Command): void {
       const { output, provider, wallet } = ctx;
 
       try {
-        const idl = loadIdl(findIdlPath("svs-1")!);
+        const idl = loadIdl(findIdlPath("svs-12")!);
         const prog = new Program(idl as any, provider);
         const vault = await TranchedVault.load(prog, new PublicKey(opts.assetMint), new BN(opts.vaultId));
         const sig = await vault.setManager(wallet.publicKey, new PublicKey(opts.newManager));
@@ -121,7 +121,7 @@ export function registerTranchedAdminCommand(parent: Command): void {
       const { output, provider, wallet } = ctx;
 
       try {
-        const idl = loadIdl(findIdlPath("svs-1")!);
+        const idl = loadIdl(findIdlPath("svs-12")!);
         const prog = new Program(idl as any, provider);
         const vault = await TranchedVault.load(prog, new PublicKey(opts.assetMint), new BN(opts.vaultId));
         const sig = await vault.updateTrancheConfig(

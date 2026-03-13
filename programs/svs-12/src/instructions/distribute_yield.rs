@@ -116,6 +116,8 @@ pub fn handler(ctx: Context<DistributeYield>, total_yield: u64) -> Result<()> {
         ctx.accounts.asset_mint.decimals,
     )?;
 
+    ctx.accounts.asset_vault.reload()?;
+
     // Phase 4: Write back (mutable borrows, no overlap with Phase 1)
     let mut per_slot_dist = [0u64; 4];
     let mut per_tranche = [0u64; 4];

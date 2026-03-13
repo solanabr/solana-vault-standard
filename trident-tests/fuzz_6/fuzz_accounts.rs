@@ -15,4 +15,7 @@ pub struct AccountAddresses {
     pub token_2022_program: AddressStorage,
     pub asset_token_program: AddressStorage,
     pub rent: AddressStorage,
+    pub user_share_accounts_0: [AddressStorage; 5],
+    pub user_share_accounts_1: [AddressStorage; 5],
+    pub user_asset_accounts: [AddressStorage; 5],
 }

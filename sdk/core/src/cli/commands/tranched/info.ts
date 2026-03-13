@@ -17,7 +17,7 @@ export function registerTranchedInfoCommand(parent: Command): void {
       const ctx = await createContext(globalOpts, opts, true, false);
       const { output, provider } = ctx;
 
-      const idlPath = findIdlPath("svs-1");
+      const idlPath = findIdlPath("svs-12");
       if (!idlPath) {
         output.error("IDL not found. Run `anchor build` first.");
         process.exit(1);

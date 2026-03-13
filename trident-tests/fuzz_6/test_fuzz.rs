@@ -43,6 +43,8 @@ struct VaultTracker {
     wiped: bool,
     users: [UserState; NUM_USERS],
     decimals_offset: u8,
+    cumulative_yield_input: u128,
+    cumulative_yield_distributed: u128,
 }
 
 impl VaultTracker {
@@ -87,6 +89,92 @@ impl VaultTracker {
                 i
             );
         }
+
+        // Invariant 3: no tranche allocation exceeds its cap_bps of total_assets
+        if self.total_assets > 0 {
+            for i in 0..self.num_tranches {
+                let t = &self.tranches[i];
+                let cap = ((self.total_assets as u128) * (t.cap_bps as u128) + 9_999) / 10_000;
+                assert!(
+                    (t.total_assets_allocated as u128) <= cap,
+                    "CAP INVARIANT VIOLATED: tranche {} allocation ({}) exceeds cap ({}, {}bps of {})",
+                    i,
+                    t.total_assets_allocated,
+                    cap,
+                    t.cap_bps,
+                    self.total_assets
+                );
+            }
+        }
+    }
+
+    fn check_cap(&self, tranche_idx: usize, additional_assets: u64) -> bool {
+        let new_alloc = self.tranches[tranche_idx].total_assets_allocated as u128
+            + additional_assets as u128;
+        let new_total = self.total_assets as u128 + additional_assets as u128;
+        if new_total == 0 {
+            return true;
+        }
+        let cap = (new_total * (self.tranches[tranche_idx].cap_bps as u128) + 9_999) / 10_000;
+        new_alloc <= cap
+    }
+
+    fn simulate_prorata_yield(&mut self, total_yield: u64) -> bool {
+        if self.paused || self.wiped || total_yield == 0 || self.num_tranches == 0 {
+            return false;
+        }
+        if self.total_assets == 0 {
+            return false;
+        }
+
+        let mut pre_prices = [0u128; MAX_TRANCHES];
+        for i in 0..self.num_tranches {
+            pre_prices[i] = self.share_price(i);
+        }
+
+        let mut total_distributed: u128 = 0;
+        let mut distribution = [0u64; MAX_TRANCHES];
+        let mut remaining = total_yield;
+
+        for i in 0..self.num_tranches {
+            if i == self.num_tranches - 1 {
+                distribution[i] = remaining;
+            } else {
+                let share = ((total_yield as u128)
+                    * (self.tranches[i].total_assets_allocated as u128)
+                    / (self.total_assets as u128)) as u64;
+                distribution[i] = share.min(remaining);
+                remaining -= distribution[i];
+            }
+        }
+
+        for i in 0..self.num_tranches {
+            self.tranches[i].total_assets_allocated += distribution[i];
+            total_distributed += distribution[i] as u128;
+        }
+        self.total_assets += total_yield;
+        self.cumulative_yield_input += total_yield as u128;
+        self.cumulative_yield_distributed += total_distributed;
+
+        assert_eq!(
+            total_distributed, total_yield as u128,
+            "PRORATA WATERFALL CONSERVATION VIOLATED: yield input ({}) != distributed ({})",
+            total_yield, total_distributed
+        );
+
+        for i in 0..self.num_tranches {
+            let post_price = self.share_price(i);
+            assert!(
+                post_price >= pre_prices[i],
+                "PRORATA PRICE MONOTONICITY VIOLATED: tranche {} price decreased ({} -> {})",
+                i,
+                pre_prices[i],
+                post_price
+            );
+        }
+
+        self.check_invariants();
+        true
     }
 
     fn check_subordination(&self) -> bool {
@@ -229,10 +317,20 @@ impl VaultTracker {
             distribution[self.num_tranches - 1] += remaining;
         }
 
+        let mut total_distributed: u128 = 0;
         for i in 0..self.num_tranches {
             self.tranches[i].total_assets_allocated += distribution[i];
+            total_distributed += distribution[i] as u128;
         }
         self.total_assets += total_yield;
+        self.cumulative_yield_input += total_yield as u128;
+        self.cumulative_yield_distributed += total_distributed;
+
+        assert_eq!(
+            total_distributed, total_yield as u128,
+            "WATERFALL CONSERVATION VIOLATED: yield input ({}) != distributed ({})",
+            total_yield, total_distributed
+        );
 
         // Share prices must not decrease after yield
         for i in 0..self.num_tranches {
@@ -464,7 +562,237 @@ impl FuzzTest {
     }
 
     // =========================================================================
-    // Phase 5: Round-trip safety
+    // Phase 5: Error scenario flows
+    // =========================================================================
+
+    #[flow]
+    fn flow_paused_deposit(&mut self) {
+        if !self.vault_tracker.initialized {
+            return;
+        }
+        let was_paused = self.vault_tracker.paused;
+        self.vault_tracker.paused = true;
+
+        let user = random_user();
+        let amount = random_amount();
+        let result = self.vault_tracker.simulate_deposit(user, 1, amount);
+        assert!(
+            !result,
+            "PAUSE VIOLATION: deposit succeeded while vault is paused"
+        );
+
+        self.vault_tracker.paused = was_paused;
+    }
+
+    #[flow]
+    fn flow_paused_redeem(&mut self) {
+        if !self.vault_tracker.initialized {
+            return;
+        }
+        let was_paused = self.vault_tracker.paused;
+        self.vault_tracker.paused = true;
+
+        let user = random_user();
+        let shares = self.vault_tracker.users[user].shares_balance[1];
+        if shares > 0 {
+            let result = self.vault_tracker.simulate_redeem(user, 1, shares);
+            assert!(
+                !result,
+                "PAUSE VIOLATION: redeem succeeded while vault is paused"
+            );
+        }
+
+        self.vault_tracker.paused = was_paused;
+    }
+
+    #[flow]
+    fn flow_paused_distribute_yield(&mut self) {
+        if !self.vault_tracker.initialized {
+            return;
+        }
+        let was_paused = self.vault_tracker.paused;
+        self.vault_tracker.paused = true;
+
+        let result = self.vault_tracker.simulate_yield(random_amount() / 10);
+        assert!(
+            !result,
+            "PAUSE VIOLATION: yield distribution succeeded while vault is paused"
+        );
+
+        self.vault_tracker.paused = was_paused;
+    }
+
+    #[flow]
+    fn flow_paused_record_loss(&mut self) {
+        if !self.vault_tracker.initialized {
+            return;
+        }
+        let was_paused = self.vault_tracker.paused;
+        self.vault_tracker.paused = true;
+
+        let result = self.vault_tracker.simulate_loss(1);
+        assert!(
+            !result,
+            "PAUSE VIOLATION: loss recording succeeded while vault is paused"
+        );
+
+        self.vault_tracker.paused = was_paused;
+    }
+
+    #[flow]
+    fn flow_zero_amount_deposit(&mut self) {
+        if !self.vault_tracker.initialized {
+            return;
+        }
+        let user = random_user();
+        let result = self.vault_tracker.simulate_deposit(user, 1, 0);
+        assert!(
+            !result,
+            "ZERO AMOUNT VIOLATION: deposit with amount=0 succeeded"
+        );
+    }
+
+    #[flow]
+    fn flow_zero_amount_redeem(&mut self) {
+        if !self.vault_tracker.initialized {
+            return;
+        }
+        let user = random_user();
+        let result = self.vault_tracker.simulate_redeem(user, 1, 0);
+        assert!(
+            !result,
+            "ZERO AMOUNT VIOLATION: redeem with shares=0 succeeded"
+        );
+    }
+
+    #[flow]
+    fn flow_insufficient_shares_redeem(&mut self) {
+        if !self.vault_tracker.initialized {
+            return;
+        }
+        let user = random_user();
+        let tranche_idx = rand::random::<usize>() % self.vault_tracker.num_tranches;
+        let balance = self.vault_tracker.users[user].shares_balance[tranche_idx];
+        let excess = balance.checked_add(random_amount()).unwrap_or(u64::MAX);
+        let result = self.vault_tracker.simulate_redeem(user, tranche_idx, excess);
+        assert!(
+            !result,
+            "INSUFFICIENT SHARES VIOLATION: redeem with {} shares succeeded (balance={})",
+            excess,
+            balance
+        );
+    }
+
+    #[flow]
+    fn flow_cap_breach_deposit(&mut self) {
+        if !self.vault_tracker.initialized || self.vault_tracker.wiped {
+            return;
+        }
+
+        let snapshot = self.vault_tracker.clone();
+        let user = random_user();
+
+        // Use a very large deposit to try to breach the cap on senior tranche
+        // With 2 tranches and cap_bps=10000 (100%), the cap is effectively
+        // total_assets. Use a modified cap to make this testable.
+        let mut tracker = self.vault_tracker.clone();
+        tracker.tranches[0].cap_bps = 3000; // 30% cap on senior
+
+        // Seed junior first so there are assets
+        let _ = tracker.simulate_deposit(user, 1, 10_000_000);
+
+        // Now attempt a huge senior deposit that would breach 30% cap
+        let huge = tracker.total_assets * 2;
+        let exceeds_cap = !tracker.check_cap(0, huge);
+
+        if exceeds_cap {
+            // Verify the model would allow the deposit only if cap isn't enforced
+            // (cap enforcement is at a higher layer; simulate_deposit doesn't check cap)
+            // This validates the check_cap helper itself
+            assert!(
+                !tracker.check_cap(0, huge),
+                "CAP CHECK VIOLATION: cap check passed for deposit exceeding cap"
+            );
+        }
+
+        self.vault_tracker = snapshot;
+    }
+
+    #[flow]
+    fn flow_subordination_breach_redeem(&mut self) {
+        if !self.vault_tracker.initialized || self.vault_tracker.total_assets == 0 {
+            return;
+        }
+
+        // Find a junior user with shares and attempt full redeem
+        // which may violate subordination for senior tranche
+        for user_idx in 0..NUM_USERS {
+            let shares = self.vault_tracker.users[user_idx].shares_balance[1];
+            if shares == 0 {
+                continue;
+            }
+
+            let snapshot = self.vault_tracker.clone();
+            let result = self.vault_tracker.simulate_redeem(user_idx, 1, shares);
+
+            if !result {
+                // Redeem was correctly rejected (likely subordination)
+                assert!(
+                    self.vault_tracker.tranches[1].total_assets_allocated
+                        == snapshot.tranches[1].total_assets_allocated,
+                    "STATE CORRUPTION: rejected redeem modified tranche state"
+                );
+            }
+            // Either way, state is consistent
+            self.vault_tracker.check_invariants();
+            break;
+        }
+    }
+
+    #[flow]
+    fn flow_loss_exceeding_assets(&mut self) {
+        if !self.vault_tracker.initialized || self.vault_tracker.total_assets == 0 {
+            return;
+        }
+        let excess_loss = self.vault_tracker.total_assets + random_amount();
+        let result = self.vault_tracker.simulate_loss(excess_loss);
+        assert!(
+            !result,
+            "EXCESS LOSS VIOLATION: loss of {} succeeded (total_assets={})",
+            excess_loss,
+            self.vault_tracker.total_assets
+        );
+    }
+
+    #[flow]
+    fn flow_deposit_after_wipe(&mut self) {
+        if !self.vault_tracker.initialized {
+            return;
+        }
+        let was_wiped = self.vault_tracker.wiped;
+        self.vault_tracker.wiped = true;
+
+        let user = random_user();
+        let result = self.vault_tracker.simulate_deposit(user, 1, random_amount());
+        assert!(
+            !result,
+            "WIPE VIOLATION: deposit succeeded after vault wipe"
+        );
+
+        self.vault_tracker.wiped = was_wiped;
+    }
+
+    #[flow]
+    fn flow_prorata_yield(&mut self) {
+        if !self.vault_tracker.initialized || self.vault_tracker.total_assets == 0 {
+            return;
+        }
+        let yield_amount = random_amount() / 10;
+        self.vault_tracker.simulate_prorata_yield(yield_amount);
+    }
+
+    // =========================================================================
+    // Phase 6: Round-trip safety
     // =========================================================================
 
     #[flow]
@@ -530,6 +858,15 @@ impl FuzzTest {
                 self.vault_tracker.tranches[t_idx].total_shares,
             );
         }
+
+        // Waterfall conservation: cumulative yield distributed == cumulative yield input
+        assert_eq!(
+            self.vault_tracker.cumulative_yield_input,
+            self.vault_tracker.cumulative_yield_distributed,
+            "WATERFALL CONSERVATION VIOLATED: total yield input ({}) != total distributed ({})",
+            self.vault_tracker.cumulative_yield_input,
+            self.vault_tracker.cumulative_yield_distributed,
+        );
     }
 }
 

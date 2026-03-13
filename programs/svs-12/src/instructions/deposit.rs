@@ -197,6 +197,9 @@ pub fn handler(ctx: Context<Deposit>, assets: u64, min_shares_out: u64) -> Resul
         shares,
     )?;
 
+    ctx.accounts.asset_vault.reload()?;
+    ctx.accounts.shares_mint.reload()?;
+
     // 6. Emit event
     emit!(TrancheDeposit {
         vault: ctx.accounts.vault.key(),
