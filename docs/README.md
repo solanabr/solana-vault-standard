@@ -46,7 +46,7 @@ Four program variants cover public/private and live/stored balance models:
 | [SVS-5](specs-SVS05.md) | Streaming Yield | Draft |
 | [SVS-6](specs-SVS06.md) | Streaming + Confidential | Draft |
 | [SVS-7](specs-SVS07.md) | Native SOL | Draft |
-| [SVS-8](specs-SVS08.md) | Multi-Asset Basket | Draft |
+| [SVS-8](specs-SVS08.md) | Multi-Asset Basket | [Implemented](SVS-8.md) |
 | [SVS-9](specs-SVS09.md) | Allocator (Vault-of-Vaults) | Draft |
 | [SVS-10](specs-SVS10.md) | Async (ERC-7540) | Draft |
 | [SVS-11](specs-SVS11.md) | Credit Markets | Draft |
