@@ -19,16 +19,38 @@ import {
 import * as fs from "fs";
 import * as path from "path";
 
-// Derive error codes from the IDL so they stay in sync with the program
-const idl = JSON.parse(
-  fs.readFileSync(
-    path.join(__dirname, "../../../target/idl/svs_10.json"),
-    "utf-8",
-  ),
-);
-const AsyncVaultErrorCode = Object.fromEntries(
-  idl.errors.map((e: { code: number; name: string }) => [e.name, e.code]),
-) as Record<string, number>;
+// Derive error codes from the IDL when available (keeps codes in sync with program).
+// Falls back to hardcoded values in environments without a build (e.g. CI SDK tests).
+const IDL_PATH = path.join(__dirname, "../../../target/idl/svs_10.json");
+const AsyncVaultErrorCode: Record<string, number> = fs.existsSync(IDL_PATH)
+  ? Object.fromEntries(
+      JSON.parse(fs.readFileSync(IDL_PATH, "utf-8")).errors.map(
+        (e: { code: number; name: string }) => [e.name, e.code],
+      ),
+    )
+  : {
+      ZeroAmount: 6000,
+      VaultPaused: 6001,
+      Unauthorized: 6002,
+      InvalidMint: 6003,
+      InvalidVaultState: 6004,
+      RequestNotPending: 6005,
+      RequestNotFulfilled: 6006,
+      InsufficientShares: 6007,
+      InsufficientAssets: 6008,
+      MathOverflow: 6009,
+      InvalidReceiver: 6010,
+      OracleDeviationExceeded: 6011,
+      OracleStaleness: 6012,
+      OperatorNotApproved: 6013,
+      InvalidOperator: 6014,
+      RequestExpired: 6015,
+      RequestNotExpired: 6016,
+      CancelAfterNotSet: 6017,
+      InvalidAuthority: 6018,
+      InvalidVaultId: 6019,
+      InvalidParameter: 6020,
+    };
 
 function parseAsyncVaultError(
   errorMessage: string,
