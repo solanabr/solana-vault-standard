@@ -16,30 +16,12 @@ import {
   OperatorApprovalState,
 } from "../src/async-vault";
 
-// Error codes matching programs/svs-10/src/error.rs (Anchor offset 6000)
-const AsyncVaultErrorCode = {
-  ZeroAmount: 6000,
-  VaultPaused: 6001,
-  InvalidAssetDecimals: 6002,
-  MathOverflow: 6003,
-  DivisionByZero: 6004,
-  Unauthorized: 6005,
-  DepositTooSmall: 6006,
-  VaultNotPaused: 6007,
-  RequestNotPending: 6008,
-  RequestNotFulfilled: 6009,
-  OperatorNotApproved: 6010,
-  OracleStale: 6011,
-  InsufficientLiquidity: 6012,
-  OracleDeviationExceeded: 6013,
-  InvalidRequestOwner: 6014,
-  RequestExpired: 6015,
-  GlobalCapExceeded: 6016,
-  EntryFeeExceedsMax: 6017,
-  LockDurationExceedsMax: 6018,
-  InvalidAddress: 6019,
-  InvalidParameter: 6020,
-} as const;
+import idl from "../../../target/idl/svs_10.json";
+
+// Derive error codes from the IDL so they stay in sync with the program
+const AsyncVaultErrorCode = Object.fromEntries(
+  idl.errors.map((e: { code: number; name: string }) => [e.name, e.code]),
+) as Record<string, number>;
 
 function parseAsyncVaultError(
   errorMessage: string,

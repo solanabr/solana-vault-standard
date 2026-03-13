@@ -19,6 +19,15 @@ import {
 } from "@solana/web3.js";
 import { expect } from "chai";
 import { Svs10 } from "../target/types/svs_10";
+import {
+  getAsyncVaultAddress,
+  getAsyncSharesMintAddress,
+  getShareEscrowAddress,
+  getDepositRequestAddress,
+  getRedeemRequestAddress,
+  getClaimableTokensAddress,
+  getOperatorApprovalAddress,
+} from "../sdk/core/src/async-vault-pda";
 
 describe("svs-10 (Async Vault - ERC-7540)", () => {
   const provider = anchor.AnchorProvider.env();
@@ -43,55 +52,27 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
   let depositRequest: PublicKey;
   let redeemRequest: PublicKey;
 
-  // PDA helpers
-  const getVaultPDA = (am: PublicKey, vid: BN): [PublicKey, number] => {
-    return PublicKey.findProgramAddressSync(
-      [Buffer.from("async_vault"), am.toBuffer(), vid.toArrayLike(Buffer, "le", 8)],
-      program.programId
-    );
-  };
+  // PDA helpers — thin wrappers binding program.programId to SDK functions
+  const getVaultPDA = (am: PublicKey, vid: BN) =>
+    getAsyncVaultAddress(program.programId, am, vid);
 
-  const getSharesMintPDA = (v: PublicKey): [PublicKey, number] => {
-    return PublicKey.findProgramAddressSync(
-      [Buffer.from("shares"), v.toBuffer()],
-      program.programId
-    );
-  };
+  const getSharesMintPDA = (v: PublicKey) =>
+    getAsyncSharesMintAddress(program.programId, v);
 
-  const getShareEscrowPDA = (v: PublicKey): [PublicKey, number] => {
-    return PublicKey.findProgramAddressSync(
-      [Buffer.from("share_escrow"), v.toBuffer()],
-      program.programId
-    );
-  };
+  const getShareEscrowPDA = (v: PublicKey) =>
+    getShareEscrowAddress(program.programId, v);
 
-  const getDepositRequestPDA = (v: PublicKey, user: PublicKey): [PublicKey, number] => {
-    return PublicKey.findProgramAddressSync(
-      [Buffer.from("deposit_request"), v.toBuffer(), user.toBuffer()],
-      program.programId
-    );
-  };
+  const getDepositRequestPDA = (v: PublicKey, user: PublicKey) =>
+    getDepositRequestAddress(program.programId, v, user);
 
-  const getRedeemRequestPDA = (v: PublicKey, user: PublicKey): [PublicKey, number] => {
-    return PublicKey.findProgramAddressSync(
-      [Buffer.from("redeem_request"), v.toBuffer(), user.toBuffer()],
-      program.programId
-    );
-  };
+  const getRedeemRequestPDA = (v: PublicKey, user: PublicKey) =>
+    getRedeemRequestAddress(program.programId, v, user);
 
-  const getClaimableTokensPDA = (v: PublicKey, owner: PublicKey): [PublicKey, number] => {
-    return PublicKey.findProgramAddressSync(
-      [Buffer.from("claimable_tokens"), v.toBuffer(), owner.toBuffer()],
-      program.programId
-    );
-  };
+  const getClaimableTokensPDA = (v: PublicKey, owner: PublicKey) =>
+    getClaimableTokensAddress(program.programId, v, owner);
 
-  const getOperatorApprovalPDA = (v: PublicKey, owner: PublicKey, op: PublicKey): [PublicKey, number] => {
-    return PublicKey.findProgramAddressSync(
-      [Buffer.from("operator_approval"), v.toBuffer(), owner.toBuffer(), op.toBuffer()],
-      program.programId
-    );
-  };
+  const getOperatorApprovalPDA = (v: PublicKey, owner: PublicKey, op: PublicKey) =>
+    getOperatorApprovalAddress(program.programId, v, owner, op);
 
   /**
    * Compute the vault's internal price per share (in PRICE_SCALE units).

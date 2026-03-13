@@ -6,6 +6,23 @@ import { getGlobalOptions } from "../../index";
 import { AsyncVault } from "../../../async-vault";
 import { findIdlPath, loadIdl, resolveVaultArg } from "../../utils";
 
+const U64_MAX = "18446744073709551615";
+
+function parseOraclePrice(value: string): BN {
+  if (!/^\d+$/.test(value)) {
+    throw new Error(
+      "--oracle-price must be a positive integer (no decimals, negatives, or non-numeric characters)",
+    );
+  }
+  if (
+    value.length > U64_MAX.length ||
+    (value.length === U64_MAX.length && value > U64_MAX)
+  ) {
+    throw new Error(`--oracle-price exceeds u64 max (${U64_MAX})`);
+  }
+  return new BN(value);
+}
+
 export function registerFulfillDepositCommand(program: Command): void {
   program
     .command("fulfill-deposit")
@@ -62,7 +79,9 @@ export function registerFulfillDepositCommand(program: Command): void {
 
         const sig = await vault.fulfillDeposit(wallet.publicKey, {
           owner,
-          oraclePrice: opts.oraclePrice ? new BN(opts.oraclePrice) : undefined,
+          oraclePrice: opts.oraclePrice
+            ? parseOraclePrice(opts.oraclePrice)
+            : undefined,
         });
 
         spinner.succeed("Transaction confirmed");
