@@ -31,14 +31,20 @@ export function registerTranchedAddTrancheCommand(parent: Command): void {
         const idl = loadIdl(idlPath);
         const prog = new Program(idl as any, provider);
         const assetMint = new PublicKey(opts.assetMint);
-        const vault = await TranchedVault.load(prog, assetMint, new BN(opts.vaultId));
+        const vault = await TranchedVault.load(
+          prog,
+          assetMint,
+          new BN(opts.vaultId),
+        );
 
         const priority = parseInt(opts.priority);
         const subordinationBps = parseInt(opts.subBps);
         const targetYieldBps = parseInt(opts.yieldBps);
         const capBps = parseInt(opts.capBps);
 
-        output.info(`Priority: ${priority}, Sub: ${subordinationBps}bps, Yield: ${targetYieldBps}bps, Cap: ${capBps}bps`);
+        output.info(
+          `Priority: ${priority}, Sub: ${subordinationBps}bps, Yield: ${targetYieldBps}bps, Cap: ${capBps}bps`,
+        );
 
         if (options.dryRun) {
           output.success("Dry run complete.");
@@ -63,7 +69,9 @@ export function registerTranchedAddTrancheCommand(parent: Command): void {
         spinner.succeed("Tranche added");
         output.info(`Signature: ${sig}`);
       } catch (error) {
-        output.error(`Failed: ${error instanceof Error ? error.message : String(error)}`);
+        output.error(
+          `Failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
         process.exit(1);
       }
     });

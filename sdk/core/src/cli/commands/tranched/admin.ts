@@ -24,11 +24,17 @@ export function registerTranchedAdminCommand(parent: Command): void {
       try {
         const idl = loadIdl(findIdlPath("svs-12")!);
         const prog = new Program(idl as any, provider);
-        const vault = await TranchedVault.load(prog, new PublicKey(opts.assetMint), new BN(opts.vaultId));
+        const vault = await TranchedVault.load(
+          prog,
+          new PublicKey(opts.assetMint),
+          new BN(opts.vaultId),
+        );
         const sig = await vault.pause(wallet.publicKey);
         output.success(`Vault paused. Signature: ${sig}`);
       } catch (error) {
-        output.error(`Failed: ${error instanceof Error ? error.message : String(error)}`);
+        output.error(
+          `Failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
         process.exit(1);
       }
     });
@@ -46,11 +52,17 @@ export function registerTranchedAdminCommand(parent: Command): void {
       try {
         const idl = loadIdl(findIdlPath("svs-12")!);
         const prog = new Program(idl as any, provider);
-        const vault = await TranchedVault.load(prog, new PublicKey(opts.assetMint), new BN(opts.vaultId));
+        const vault = await TranchedVault.load(
+          prog,
+          new PublicKey(opts.assetMint),
+          new BN(opts.vaultId),
+        );
         const sig = await vault.unpause(wallet.publicKey);
         output.success(`Vault unpaused. Signature: ${sig}`);
       } catch (error) {
-        output.error(`Failed: ${error instanceof Error ? error.message : String(error)}`);
+        output.error(
+          `Failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
         process.exit(1);
       }
     });
@@ -67,18 +79,29 @@ export function registerTranchedAdminCommand(parent: Command): void {
       const { output, provider, wallet, options } = ctx;
 
       if (!options.yes) {
-        const confirmed = await output.confirm("Transfer authority? This is irreversible.");
+        const confirmed = await output.confirm(
+          "Transfer authority? This is irreversible.",
+        );
         if (!confirmed) return;
       }
 
       try {
         const idl = loadIdl(findIdlPath("svs-12")!);
         const prog = new Program(idl as any, provider);
-        const vault = await TranchedVault.load(prog, new PublicKey(opts.assetMint), new BN(opts.vaultId));
-        const sig = await vault.transferAuthority(wallet.publicKey, new PublicKey(opts.newAuthority));
+        const vault = await TranchedVault.load(
+          prog,
+          new PublicKey(opts.assetMint),
+          new BN(opts.vaultId),
+        );
+        const sig = await vault.transferAuthority(
+          wallet.publicKey,
+          new PublicKey(opts.newAuthority),
+        );
         output.success(`Authority transferred. Signature: ${sig}`);
       } catch (error) {
-        output.error(`Failed: ${error instanceof Error ? error.message : String(error)}`);
+        output.error(
+          `Failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
         process.exit(1);
       }
     });
@@ -97,11 +120,20 @@ export function registerTranchedAdminCommand(parent: Command): void {
       try {
         const idl = loadIdl(findIdlPath("svs-12")!);
         const prog = new Program(idl as any, provider);
-        const vault = await TranchedVault.load(prog, new PublicKey(opts.assetMint), new BN(opts.vaultId));
-        const sig = await vault.setManager(wallet.publicKey, new PublicKey(opts.newManager));
+        const vault = await TranchedVault.load(
+          prog,
+          new PublicKey(opts.assetMint),
+          new BN(opts.vaultId),
+        );
+        const sig = await vault.setManager(
+          wallet.publicKey,
+          new PublicKey(opts.newManager),
+        );
         output.success(`Manager updated. Signature: ${sig}`);
       } catch (error) {
-        output.error(`Failed: ${error instanceof Error ? error.message : String(error)}`);
+        output.error(
+          `Failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
         process.exit(1);
       }
     });
@@ -123,7 +155,11 @@ export function registerTranchedAdminCommand(parent: Command): void {
       try {
         const idl = loadIdl(findIdlPath("svs-12")!);
         const prog = new Program(idl as any, provider);
-        const vault = await TranchedVault.load(prog, new PublicKey(opts.assetMint), new BN(opts.vaultId));
+        const vault = await TranchedVault.load(
+          prog,
+          new PublicKey(opts.assetMint),
+          new BN(opts.vaultId),
+        );
         const sig = await vault.updateTrancheConfig(
           wallet.publicKey,
           parseInt(opts.tranche),
@@ -135,7 +171,9 @@ export function registerTranchedAdminCommand(parent: Command): void {
         );
         output.success(`Tranche config updated. Signature: ${sig}`);
       } catch (error) {
-        output.error(`Failed: ${error instanceof Error ? error.message : String(error)}`);
+        output.error(
+          `Failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
         process.exit(1);
       }
     });

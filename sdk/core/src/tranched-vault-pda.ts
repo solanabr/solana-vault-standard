@@ -12,7 +12,11 @@ export function getTranchedVaultAddress(
 ): [PublicKey, number] {
   const id = typeof vaultId === "number" ? new BN(vaultId) : vaultId;
   return PublicKey.findProgramAddressSync(
-    [TRANCHED_VAULT_SEED, assetMint.toBuffer(), id.toArrayLike(Buffer, "le", 8)],
+    [
+      TRANCHED_VAULT_SEED,
+      assetMint.toBuffer(),
+      id.toArrayLike(Buffer, "le", 8),
+    ],
     programId,
   );
 }
@@ -44,6 +48,10 @@ export function deriveTranchedVaultAddresses(
   assetMint: PublicKey,
   vaultId: BN | number,
 ) {
-  const [vault, vaultBump] = getTranchedVaultAddress(programId, assetMint, vaultId);
+  const [vault, vaultBump] = getTranchedVaultAddress(
+    programId,
+    assetMint,
+    vaultId,
+  );
   return { vault, vaultBump };
 }

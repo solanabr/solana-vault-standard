@@ -27,12 +27,17 @@ export function registerTranchedInfoCommand(parent: Command): void {
         const idl = loadIdl(idlPath);
         const prog = new Program(idl as any, provider);
         const assetMint = new PublicKey(opts.assetMint);
-        const vault = await TranchedVault.load(prog, assetMint, new BN(opts.vaultId));
+        const vault = await TranchedVault.load(
+          prog,
+          assetMint,
+          new BN(opts.vaultId),
+        );
         const state = await vault.getState();
 
-        const waterfallLabel = "sequential" in state.waterfallMode
-          ? "Sequential"
-          : "ProRata Yield / Sequential Loss";
+        const waterfallLabel =
+          "sequential" in state.waterfallMode
+            ? "Sequential"
+            : "ProRata Yield / Sequential Loss";
 
         output.info("=== Tranched Vault ===");
         output.info(`Address:    ${vault.vault.toBase58()}`);
@@ -51,7 +56,9 @@ export function registerTranchedInfoCommand(parent: Command): void {
           output.info(`--- Tranche ${i} (priority=${t.priority}) ---`);
           output.info(`  Shares Mint:   ${t.sharesMint.toBase58()}`);
           output.info(`  Total Shares:  ${formatNumber(t.totalShares)}`);
-          output.info(`  Allocated:     ${formatNumber(t.totalAssetsAllocated)}`);
+          output.info(
+            `  Allocated:     ${formatNumber(t.totalAssetsAllocated)}`,
+          );
           output.info(`  Target Yield:  ${t.targetYieldBps}bps`);
           output.info(`  Cap:           ${t.capBps}bps`);
           output.info(`  Subordination: ${t.subordinationBps}bps`);
@@ -86,7 +93,9 @@ export function registerTranchedInfoCommand(parent: Command): void {
           });
         }
       } catch (error) {
-        output.error(`Failed: ${error instanceof Error ? error.message : String(error)}`);
+        output.error(
+          `Failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
         process.exit(1);
       }
     });

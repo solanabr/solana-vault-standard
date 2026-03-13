@@ -212,7 +212,10 @@ export class TranchedVault {
 
   // ============ Tranche Management ============
 
-  async addTranche(authority: PublicKey, params: AddTrancheParams): Promise<string> {
+  async addTranche(
+    authority: PublicKey,
+    params: AddTrancheParams,
+  ): Promise<string> {
     const state = await this.refresh();
     const index = state.numTranches;
 
@@ -350,10 +353,7 @@ export class TranchedVault {
 
   // ============ Manager Operations ============
 
-  async distributeYield(
-    manager: PublicKey,
-    totalYield: BN,
-  ): Promise<string> {
+  async distributeYield(manager: PublicKey, totalYield: BN): Promise<string> {
     const state = await this.refresh();
 
     const managerAssetAccount = getAssociatedTokenAddressSync(
@@ -420,7 +420,7 @@ export class TranchedVault {
     );
 
     const excludeSet = new Set([fromIndex, toIndex]);
-    const otherTranches: (PublicKey | null)[] = [null, null];
+    const otherTranches: any[] = [null, null];
     let slot = 0;
     for (let i = 0; i < state.numTranches; i++) {
       if (!excludeSet.has(i)) {
@@ -468,7 +468,10 @@ export class TranchedVault {
       .rpc();
   }
 
-  async setManager(authority: PublicKey, newManager: PublicKey): Promise<string> {
+  async setManager(
+    authority: PublicKey,
+    newManager: PublicKey,
+  ): Promise<string> {
     return this.program.methods
       .setManager(newManager)
       .accountsStrict({ authority, vault: this.vault })
@@ -591,8 +594,8 @@ export class TranchedVault {
   private _collectOtherTranches(
     numTranches: number,
     excludeIndex: number,
-  ): (PublicKey | null)[] {
-    const result: (PublicKey | null)[] = [null, null, null];
+  ): any[] {
+    const result: any[] = [null, null, null];
     let slot = 0;
     for (let i = 0; i < numTranches; i++) {
       if (i !== excludeIndex) {
@@ -603,8 +606,8 @@ export class TranchedVault {
     return result;
   }
 
-  private _collectAllTranches(numTranches: number): (PublicKey | null)[] {
-    const result: (PublicKey | null)[] = [null, null, null, null];
+  private _collectAllTranches(numTranches: number): any[] {
+    const result: any[] = [null, null, null, null];
     for (let i = 0; i < numTranches; i++) {
       const [pda] = getTrancheAddress(this.program.programId, this.vault, i);
       result[i] = pda;

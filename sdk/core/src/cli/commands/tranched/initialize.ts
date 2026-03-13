@@ -12,7 +12,11 @@ export function registerTranchedInitializeCommand(parent: Command): void {
     .description("Initialize a new tranched vault")
     .requiredOption("--asset-mint <pubkey>", "Asset mint address")
     .option("--vault-id <number>", "Vault ID", "1")
-    .option("--waterfall <mode>", "Waterfall mode: sequential (0) or prorata (1)", "0")
+    .option(
+      "--waterfall <mode>",
+      "Waterfall mode: sequential (0) or prorata (1)",
+      "0",
+    )
     .action(async (opts) => {
       const globalOpts = getGlobalOptions(parent.parent!);
       const ctx = await createContext(globalOpts, opts, true, true);
@@ -33,7 +37,9 @@ export function registerTranchedInitializeCommand(parent: Command): void {
 
         output.info(`Asset mint: ${assetMint.toBase58()}`);
         output.info(`Vault ID: ${vaultId.toString()}`);
-        output.info(`Waterfall: ${waterfallMode === 0 ? "Sequential" : "ProRata"}`);
+        output.info(
+          `Waterfall: ${waterfallMode === 0 ? "Sequential" : "ProRata"}`,
+        );
 
         if (options.dryRun) {
           output.success("Dry run complete.");
@@ -57,7 +63,9 @@ export function registerTranchedInitializeCommand(parent: Command): void {
         spinner.succeed("Vault created");
         output.success(`Vault address: ${vault.vault.toBase58()}`);
       } catch (error) {
-        output.error(`Failed: ${error instanceof Error ? error.message : String(error)}`);
+        output.error(
+          `Failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
         process.exit(1);
       }
     });

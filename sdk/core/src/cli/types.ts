@@ -13,7 +13,12 @@ import { AnchorProvider, BN } from "@coral-xyz/anchor";
 // ============================================================================
 
 /** SVS program variant identifier */
-export type SvsVariant = "svs-1" | "svs-2" | "svs-3" | "svs-4";
+export type SvsVariant =
+  | "svs-1"
+  | "svs-2"
+  | "svs-3"
+  | "svs-4"
+  | "svs-12";
 
 /** CLI output format */
 export type OutputFormat = "table" | "json" | "csv";
@@ -379,6 +384,9 @@ export const SVS_PROGRAMS: Record<
   },
   "svs-4": {
     devnet: "2WP7LXWqrp1W4CwEJuVt2SxWPNY2n6AYmijh6Z4EeidY",
+  },
+  "svs-12": {
+    devnet: "FM3ZfmPSdQzFniZSDXc6FfXKFvXRSNQXeTdPKC8tz5C",
   },
 };
 

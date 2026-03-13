@@ -30,13 +30,19 @@ export function registerTranchedRedeemCommand(parent: Command): void {
         const idl = loadIdl(idlPath);
         const prog = new Program(idl as any, provider);
         const assetMint = new PublicKey(opts.assetMint);
-        const vault = await TranchedVault.load(prog, assetMint, new BN(opts.vaultId));
+        const vault = await TranchedVault.load(
+          prog,
+          assetMint,
+          new BN(opts.vaultId),
+        );
 
         const trancheIndex = parseInt(opts.tranche);
         const shares = new BN(opts.shares);
         const minAssetsOut = new BN(opts.minAssets);
 
-        output.info(`Redeeming ${shares.toString()} shares from tranche ${trancheIndex}`);
+        output.info(
+          `Redeeming ${shares.toString()} shares from tranche ${trancheIndex}`,
+        );
 
         if (options.dryRun) {
           output.success("Dry run complete.");
@@ -59,7 +65,9 @@ export function registerTranchedRedeemCommand(parent: Command): void {
         spinner.succeed("Redeem confirmed");
         output.info(`Signature: ${sig}`);
       } catch (error) {
-        output.error(`Failed: ${error instanceof Error ? error.message : String(error)}`);
+        output.error(
+          `Failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
         process.exit(1);
       }
     });

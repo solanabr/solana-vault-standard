@@ -30,13 +30,19 @@ export function registerTranchedDepositCommand(parent: Command): void {
         const idl = loadIdl(idlPath);
         const prog = new Program(idl as any, provider);
         const assetMint = new PublicKey(opts.assetMint);
-        const vault = await TranchedVault.load(prog, assetMint, new BN(opts.vaultId));
+        const vault = await TranchedVault.load(
+          prog,
+          assetMint,
+          new BN(opts.vaultId),
+        );
 
         const trancheIndex = parseInt(opts.tranche);
         const amount = new BN(opts.amount);
         const minSharesOut = new BN(opts.minShares);
 
-        output.info(`Depositing ${amount.toString()} into tranche ${trancheIndex}`);
+        output.info(
+          `Depositing ${amount.toString()} into tranche ${trancheIndex}`,
+        );
 
         if (options.dryRun) {
           output.success("Dry run complete.");
@@ -59,7 +65,9 @@ export function registerTranchedDepositCommand(parent: Command): void {
         spinner.succeed("Deposit confirmed");
         output.info(`Signature: ${sig}`);
       } catch (error) {
-        output.error(`Failed: ${error instanceof Error ? error.message : String(error)}`);
+        output.error(
+          `Failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
         process.exit(1);
       }
     });

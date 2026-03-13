@@ -30,13 +30,19 @@ export function registerTranchedRebalanceCommand(parent: Command): void {
         const idl = loadIdl(idlPath);
         const prog = new Program(idl as any, provider);
         const assetMint = new PublicKey(opts.assetMint);
-        const vault = await TranchedVault.load(prog, assetMint, new BN(opts.vaultId));
+        const vault = await TranchedVault.load(
+          prog,
+          assetMint,
+          new BN(opts.vaultId),
+        );
 
         const fromIndex = parseInt(opts.from);
         const toIndex = parseInt(opts.to);
         const amount = new BN(opts.amount);
 
-        output.info(`Rebalancing ${amount.toString()} from tranche ${fromIndex} to ${toIndex}`);
+        output.info(
+          `Rebalancing ${amount.toString()} from tranche ${fromIndex} to ${toIndex}`,
+        );
 
         if (options.dryRun) {
           output.success("Dry run complete.");
@@ -51,12 +57,19 @@ export function registerTranchedRebalanceCommand(parent: Command): void {
         const spinner = output.spinner("Sending transaction...");
         spinner.start();
 
-        const sig = await vault.rebalance(wallet.publicKey, fromIndex, toIndex, amount);
+        const sig = await vault.rebalance(
+          wallet.publicKey,
+          fromIndex,
+          toIndex,
+          amount,
+        );
 
         spinner.succeed("Rebalance complete");
         output.info(`Signature: ${sig}`);
       } catch (error) {
-        output.error(`Failed: ${error instanceof Error ? error.message : String(error)}`);
+        output.error(
+          `Failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
         process.exit(1);
       }
     });

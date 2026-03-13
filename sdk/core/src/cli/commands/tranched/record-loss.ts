@@ -28,7 +28,11 @@ export function registerTranchedRecordLossCommand(parent: Command): void {
         const idl = loadIdl(idlPath);
         const prog = new Program(idl as any, provider);
         const assetMint = new PublicKey(opts.assetMint);
-        const vault = await TranchedVault.load(prog, assetMint, new BN(opts.vaultId));
+        const vault = await TranchedVault.load(
+          prog,
+          assetMint,
+          new BN(opts.vaultId),
+        );
 
         const totalLoss = new BN(opts.amount);
         output.info(`Recording loss of ${totalLoss.toString()}`);
@@ -39,7 +43,9 @@ export function registerTranchedRecordLossCommand(parent: Command): void {
         }
 
         if (!options.yes) {
-          const confirmed = await output.confirm("Record loss? This is irreversible.");
+          const confirmed = await output.confirm(
+            "Record loss? This is irreversible.",
+          );
           if (!confirmed) return;
         }
 
@@ -51,7 +57,9 @@ export function registerTranchedRecordLossCommand(parent: Command): void {
         spinner.succeed("Loss recorded");
         output.info(`Signature: ${sig}`);
       } catch (error) {
-        output.error(`Failed: ${error instanceof Error ? error.message : String(error)}`);
+        output.error(
+          `Failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
         process.exit(1);
       }
     });

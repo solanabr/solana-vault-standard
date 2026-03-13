@@ -28,7 +28,11 @@ export function registerTranchedDistributeYieldCommand(parent: Command): void {
         const idl = loadIdl(idlPath);
         const prog = new Program(idl as any, provider);
         const assetMint = new PublicKey(opts.assetMint);
-        const vault = await TranchedVault.load(prog, assetMint, new BN(opts.vaultId));
+        const vault = await TranchedVault.load(
+          prog,
+          assetMint,
+          new BN(opts.vaultId),
+        );
 
         const totalYield = new BN(opts.amount);
         output.info(`Distributing ${totalYield.toString()} yield`);
@@ -51,7 +55,9 @@ export function registerTranchedDistributeYieldCommand(parent: Command): void {
         spinner.succeed("Yield distributed");
         output.info(`Signature: ${sig}`);
       } catch (error) {
-        output.error(`Failed: ${error instanceof Error ? error.message : String(error)}`);
+        output.error(
+          `Failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
         process.exit(1);
       }
     });
