@@ -77,7 +77,7 @@ pub fn compute_root(users: &[[u8; 32]]) -> [u8; 32] {
 
     // Build tree bottom-up
     while hashes.len() > 1 {
-        let mut next_level = Vec::with_capacity((hashes.len() + 1) / 2);
+        let mut next_level = Vec::with_capacity(hashes.len().div_ceil(2));
 
         for i in (0..hashes.len()).step_by(2) {
             if i + 1 < hashes.len() {
@@ -119,13 +119,17 @@ pub fn generate_proof(users: &[[u8; 32]], user_index: usize) -> Vec<[u8; 32]> {
     // Build tree and collect proof
     while hashes.len() > 1 {
         // Get sibling
-        let sibling_index = if index % 2 == 0 { index + 1 } else { index - 1 };
+        let sibling_index = if index.is_multiple_of(2) {
+            index + 1
+        } else {
+            index - 1
+        };
         if sibling_index < hashes.len() {
             proof.push(hashes[sibling_index]);
         }
 
         // Build next level
-        let mut next_level = Vec::with_capacity((hashes.len() + 1) / 2);
+        let mut next_level = Vec::with_capacity(hashes.len().div_ceil(2));
         for i in (0..hashes.len()).step_by(2) {
             if i + 1 < hashes.len() {
                 next_level.push(hash_pair(&hashes[i], &hashes[i + 1]));

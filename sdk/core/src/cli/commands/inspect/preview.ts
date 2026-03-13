@@ -17,6 +17,7 @@ export function registerPreviewCommand(program: Command): void {
     .option("--program-id <pubkey>", "Program ID (if vault not in config)")
     .option("--asset-mint <pubkey>", "Asset mint (if vault not in config)")
     .option("--vault-id <number>", "Vault ID", "1")
+    .option("--variant <variant>", "Vault variant override for raw addresses")
     .action(async (vaultArg, operation, amountStr, opts) => {
       const globalOpts = getGlobalOptions(program);
       const ctx = await createContext(globalOpts, opts, true, false);
@@ -24,6 +25,13 @@ export function registerPreviewCommand(program: Command): void {
 
       const resolved = resolveVaultArg(vaultArg, config, opts, output);
       if (!resolved) process.exit(1);
+
+      if (resolved.variant === "svs-10") {
+        output.error(
+          "SVS-10 has operator-time pricing. Use `solana-vault async status` to inspect pending and claimable requests.",
+        );
+        process.exit(1);
+      }
 
       const amount = new BN(amountStr);
       const validOps = ["deposit", "mint", "withdraw", "redeem"];
@@ -34,7 +42,7 @@ export function registerPreviewCommand(program: Command): void {
         process.exit(1);
       }
 
-      const idlPath = findIdlPath();
+      const idlPath = findIdlPath(resolved.variant);
       if (!idlPath) {
         output.error("IDL not found. Run `anchor build` first.");
         process.exit(1);
@@ -42,7 +50,7 @@ export function registerPreviewCommand(program: Command): void {
 
       try {
         const idl = loadIdl(idlPath);
-        const prog = new Program(idl as any, provider);
+        const prog = new Program(idl, provider);
         const vault = await SolanaVault.load(
           prog,
           resolved.assetMint,

@@ -115,7 +115,7 @@ export function registerBatchCommand(program: Command): void {
           if (!idlPath) throw new Error("IDL not found");
 
           const idl = loadIdl(idlPath);
-          const prog = new Program(idl as any, provider);
+          const prog = new Program(idl, provider);
           const vault = await SolanaVault.load(prog, assetMint, vaultId);
 
           let signature: string | undefined;

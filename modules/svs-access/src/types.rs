@@ -1,10 +1,11 @@
 //! Access control types.
 
 /// Access control mode for the vault.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 #[repr(u8)]
 pub enum AccessMode {
     /// Open access - anyone can interact with the vault.
+    #[default]
     Open = 0,
     /// Whitelist - only users with valid merkle proofs can interact.
     Whitelist = 1,
@@ -26,12 +27,6 @@ impl AccessMode {
     /// Check if merkle proof is required.
     pub fn requires_proof(&self) -> bool {
         matches!(self, AccessMode::Whitelist | AccessMode::Blacklist)
-    }
-}
-
-impl Default for AccessMode {
-    fn default() -> Self {
-        AccessMode::Open
     }
 }
 

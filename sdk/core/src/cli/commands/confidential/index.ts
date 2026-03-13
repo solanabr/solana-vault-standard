@@ -9,6 +9,17 @@ import { getGlobalOptions } from "../../index";
 import { resolveVault } from "../../config/vault-aliases";
 import { getCluster } from "../../utils";
 
+interface PrivacyWallet {
+  publicKey: PublicKey;
+  payer: Keypair;
+  signTransaction: (...args: unknown[]) => Promise<unknown>;
+  signAllTransactions: (...args: unknown[]) => Promise<unknown>;
+}
+
+function toPrivacyWallet(wallet: unknown): PrivacyWallet {
+  return wallet as PrivacyWallet;
+}
+
 export function registerConfidentialCommands(program: Command): void {
   const ct = program
     .command("ct")
@@ -95,9 +106,10 @@ export function registerConfidentialCommands(program: Command): void {
           process.exit(1);
         }
 
+        const privacyWallet = toPrivacyWallet(provider.wallet);
         const vault = new ConfidentialSolanaVault(
           provider.connection,
-          provider.wallet as any,
+          privacyWallet,
           idl,
         );
 
@@ -113,7 +125,7 @@ export function registerConfidentialCommands(program: Command): void {
         );
 
         // Derive ElGamal keypair and AES key from wallet
-        const walletKeypair = (provider.wallet as any).payer as Keypair;
+        const walletKeypair = privacyWallet.payer;
         const elgamalKeypair = deriveElGamalKeypair(
           walletKeypair,
           userSharesAccount,
@@ -233,9 +245,10 @@ export function registerConfidentialCommands(program: Command): void {
           process.exit(1);
         }
 
+        const privacyWallet = toPrivacyWallet(provider.wallet);
         const vault = new ConfidentialSolanaVault(
           provider.connection,
-          provider.wallet as any,
+          privacyWallet,
           idl,
         );
 
@@ -261,7 +274,7 @@ export function registerConfidentialCommands(program: Command): void {
         );
 
         // Derive AES key
-        const walletKeypair = (provider.wallet as any).payer as Keypair;
+        const walletKeypair = privacyWallet.payer;
         const aesKey = deriveAesKey(walletKeypair, userSharesAccount);
 
         // Compute new decryptable balance (current + pending)
@@ -356,9 +369,10 @@ export function registerConfidentialCommands(program: Command): void {
           process.exit(1);
         }
 
+        const privacyWallet = toPrivacyWallet(provider.wallet);
         const vault = new ConfidentialSolanaVault(
           provider.connection,
-          provider.wallet as any,
+          privacyWallet,
           idl,
         );
 

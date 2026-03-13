@@ -74,7 +74,7 @@ export function registerSyncCommand(program: Command): void {
 
       try {
         const idl = loadIdl(idlPath);
-        const prog = new Program(idl as any, provider);
+        const prog = new Program(idl, provider);
         const vault = await ManagedVault.load(prog, assetMint, vaultId);
         const state = await vault.getState();
 

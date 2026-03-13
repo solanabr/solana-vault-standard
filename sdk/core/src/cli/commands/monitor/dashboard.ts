@@ -46,7 +46,7 @@ export function registerDashboardCommand(program: Command): void {
 
       try {
         const idl = loadIdl(idlPath);
-        const prog = new Program(idl as any, provider);
+        const prog = new Program(idl, provider);
         const vault = await SolanaVault.load(
           prog,
           resolved.assetMint,

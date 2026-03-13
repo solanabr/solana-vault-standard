@@ -13,6 +13,7 @@
     "test:local": "anchor test --skip-local-validator",
     "test:modules": "./scripts/test-modules.sh",
     "test:sdk": "yarn workspaces foreach -A run test",
+    "test:svs10:bankrun": "env -u npm_config_argv -u npm_config_version_git_tag -u npm_config_version_commit_hooks -u npm_config_version_git_message -u npm_config_version_tag_prefix NODE_OPTIONS=--require=./scripts/suppress-bankrun-warnings.cjs npx -y node@20 ./node_modules/mocha/bin/_mocha -r ts-node/register/transpile-only tests/svs-10.bankrun.ts --timeout 120000",
     "clean": "yarn workspaces foreach -A run clean",
     "test-svs1:basic": "npx ts-node scripts/svs-1/basic.ts",
     "test-svs1:slippage": "npx ts-node scripts/svs-1/slippage.ts",
@@ -30,8 +31,11 @@
   "devDependencies": {
     "@types/chai": "^4.3.20",
     "@types/mocha": "^10.0.10",
+    "anchor-bankrun": "^0.5.0",
     "chai": "^4.5.0",
     "mocha": "^10.8.2",
+    "solana-bankrun": "^0.4.0",
+    "spl-token-bankrun": "^0.2.6",
     "ts-mocha": "^10.0.0",
     "typescript": "^5.7.3"
   }

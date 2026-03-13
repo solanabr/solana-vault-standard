@@ -86,6 +86,7 @@ describe("CLI Module", () => {
       expect(commands).to.include("timelock");
       expect(commands).to.include("strategy");
       expect(commands).to.include("portfolio");
+      expect(commands).to.include("async");
     });
 
     it("has correct version", () => {
@@ -170,6 +171,26 @@ describe("CLI Module", () => {
           "my-vault": {
             address: "11111111111111111111111111111111",
             variant: "svs-1",
+          },
+        },
+      };
+
+      const result = safeValidateConfig(config);
+      expect(result.success).to.be.true;
+    });
+
+    it("validates svs-10 vault aliases", () => {
+      const config = {
+        defaults: {
+          cluster: "devnet",
+          keypair: "~/.config/solana/id.json",
+          output: "table",
+          confirmation: "confirmed",
+        },
+        vaults: {
+          "async-vault": {
+            address: "11111111111111111111111111111111",
+            variant: "svs-10",
           },
         },
       };
@@ -305,6 +326,49 @@ describe("CLI Module", () => {
 
       expect(newConfig.vaults["new-vault"]).to.exist;
       expect(newConfig.vaults["new-vault"].address).to.equal(validAddress);
+    });
+
+    it("resolves raw vault argument with svs-10 override", () => {
+      const output = {
+        table: () => {},
+        json: () => {},
+        csv: () => {},
+        success: () => {},
+        error: () => {},
+        warn: () => {},
+        info: () => {},
+        debug: () => {},
+        spinner: () => {
+          const s = {
+            start: () => s,
+            stop: () => s,
+            succeed: () => s,
+            fail: () => s,
+            text: "",
+          };
+          return s;
+        },
+        confirm: async () => true,
+        format: "table" as const,
+        verbose: false,
+        quiet: false,
+      };
+
+      const resolved = resolveVaultArg(
+        "11111111111111111111111111111111",
+        testConfig,
+        {
+          programId: "2iu8yL4cuJkG5aYQWpn5Tos5mJfsR1D2JibVWA8E3UiT",
+          assetMint: "So11111111111111111111111111111111111111112",
+          vaultId: "10",
+          variant: "svs-10",
+        },
+        output,
+      );
+
+      expect(resolved).to.not.equal(null);
+      expect(resolved?.variant).to.equal("svs-10");
+      expect(resolved?.vaultId.toString()).to.equal("10");
     });
 
     it("removes vault alias from config", () => {
@@ -528,6 +592,7 @@ describe("CLI Module", () => {
       expect(SVS_PROGRAMS["svs-2"].devnet).to.be.a("string");
       expect(SVS_PROGRAMS["svs-3"].devnet).to.be.a("string");
       expect(SVS_PROGRAMS["svs-4"].devnet).to.be.a("string");
+      expect(SVS_PROGRAMS["svs-10"].devnet).to.be.a("string");
     });
 
     it("devnet addresses are valid pubkeys", () => {
@@ -578,14 +643,16 @@ describe("CLI Module", () => {
       };
 
       const issues: string[] = [];
-      batch.operations.forEach((op: any, i) => {
-        if (
-          ["deposit", "withdraw", "mint", "redeem"].includes(op.operation) &&
-          !op.amount
-        ) {
-          issues.push(`Operation ${i + 1}: missing amount`);
-        }
-      });
+      batch.operations.forEach(
+        (op: { operation: string; vault?: string; amount?: string }, i) => {
+          if (
+            ["deposit", "withdraw", "mint", "redeem"].includes(op.operation) &&
+            !op.amount
+          ) {
+            issues.push(`Operation ${i + 1}: missing amount`);
+          }
+        },
+      );
 
       expect(issues).to.have.length(1);
     });
@@ -605,11 +672,13 @@ describe("CLI Module", () => {
       ];
       const issues: string[] = [];
 
-      batch.operations.forEach((op: any, i) => {
-        if (!validOps.includes(op.operation)) {
-          issues.push(`Operation ${i + 1}: invalid operation`);
-        }
-      });
+      batch.operations.forEach(
+        (op: { operation: string; vault?: string; amount?: string }, i) => {
+          if (!validOps.includes(op.operation)) {
+            issues.push(`Operation ${i + 1}: invalid operation`);
+          }
+        },
+      );
 
       expect(issues).to.have.length(1);
     });
@@ -851,6 +920,26 @@ describe("CLI Module", () => {
       expect(subcommands).to.include("redeem");
       expect(subcommands).to.include("rebalance");
       expect(subcommands).to.include("clear");
+    });
+
+    it("async command has subcommands", () => {
+      const program = createCli();
+      const asyncCmd = program.commands.find((c) => c.name() === "async");
+
+      expect(asyncCmd).to.exist;
+
+      const subcommands = asyncCmd!.commands.map((c) => c.name());
+      expect(subcommands).to.include("status");
+      expect(subcommands).to.include("request-deposit");
+      expect(subcommands).to.include("cancel-deposit");
+      expect(subcommands).to.include("fulfill-deposit");
+      expect(subcommands).to.include("claim-deposit");
+      expect(subcommands).to.include("request-redeem");
+      expect(subcommands).to.include("cancel-redeem");
+      expect(subcommands).to.include("fulfill-redeem");
+      expect(subcommands).to.include("claim-redeem");
+      expect(subcommands).to.include("set-operator");
+      expect(subcommands).to.include("set-vault-operator");
     });
   });
 });

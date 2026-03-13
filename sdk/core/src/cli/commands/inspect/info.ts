@@ -7,9 +7,10 @@ import { createContext } from "../../middleware";
 import { getGlobalOptions } from "../../index";
 import { resolveVault, isValidPublicKey } from "../../config/vault-aliases";
 import { SolanaVault } from "../../../vault";
-import { deriveVaultAddresses } from "../../../pda";
+import { AsyncVault } from "../../../async-vault";
+import { deriveAsyncVaultAddresses, deriveVaultAddresses } from "../../../pda";
 import { formatAddress } from "../../output";
-import { findIdlPath, loadIdl } from "../../utils";
+import { findIdlPath, loadIdl, parseVariant } from "../../utils";
 
 export function registerInfoCommand(program: Command): void {
   program
@@ -25,15 +26,23 @@ export function registerInfoCommand(program: Command): void {
       "Asset mint address (required if vault not in config)",
     )
     .option("--vault-id <number>", "Vault ID", "1")
+    .option("--variant <variant>", "Vault variant override for raw addresses")
     .action(async (vaultArg, opts) => {
       const globalOpts = getGlobalOptions(program);
       const ctx = await createContext(globalOpts, opts, true, false);
-      const { output, config, connection, provider } = ctx;
+      const { output, config, provider } = ctx;
+
+      const parsedVariant = parseVariant(opts.variant);
+      if (opts.variant && !parsedVariant) {
+        output.error(`Invalid variant: ${opts.variant}`);
+        process.exit(1);
+      }
 
       let programId: PublicKey;
       let assetMint: PublicKey | undefined;
       let vaultId: BN;
       let vaultAddress: PublicKey | undefined;
+      let variant = parsedVariant ?? "svs-1";
 
       if (vaultArg && isValidPublicKey(vaultArg)) {
         vaultAddress = new PublicKey(vaultArg);
@@ -54,6 +63,7 @@ export function registerInfoCommand(program: Command): void {
           programId = resolved.programId;
           assetMint = resolved.assetMint;
           vaultId = resolved.vaultId || new BN(opts.vaultId);
+          variant = resolved.variant;
         } catch (error) {
           output.error(error instanceof Error ? error.message : String(error));
           process.exit(1);
@@ -70,28 +80,52 @@ export function registerInfoCommand(program: Command): void {
       }
 
       if (assetMint) {
-        const addresses = deriveVaultAddresses(programId!, assetMint, vaultId);
-        vaultAddress = addresses.vault;
-
         output.info("Derived Addresses:");
-        output.table(
-          ["Type", "Address", "Bump"],
-          [
+        if (variant === "svs-10") {
+          const addresses = deriveAsyncVaultAddresses(programId!, assetMint, vaultId);
+          vaultAddress = addresses.vault;
+          output.table(
+            ["Type", "Address", "Bump"],
             [
-              "Vault PDA",
-              addresses.vault.toBase58(),
-              addresses.vaultBump.toString(),
+              [
+                "Vault PDA",
+                addresses.vault.toBase58(),
+                addresses.vaultBump.toString(),
+              ],
+              [
+                "Shares Mint",
+                addresses.sharesMint.toBase58(),
+                addresses.sharesMintBump.toString(),
+              ],
+              [
+                "Share Escrow",
+                addresses.shareEscrow.toBase58(),
+                addresses.shareEscrowBump.toString(),
+              ],
             ],
+          );
+        } else {
+          const addresses = deriveVaultAddresses(programId!, assetMint, vaultId);
+          vaultAddress = addresses.vault;
+          output.table(
+            ["Type", "Address", "Bump"],
             [
-              "Shares Mint",
-              addresses.sharesMint.toBase58(),
-              addresses.sharesMintBump.toString(),
+              [
+                "Vault PDA",
+                addresses.vault.toBase58(),
+                addresses.vaultBump.toString(),
+              ],
+              [
+                "Shares Mint",
+                addresses.sharesMint.toBase58(),
+                addresses.sharesMintBump.toString(),
+              ],
             ],
-          ],
-        );
+          );
+        }
       }
 
-      const idlPath = findIdlPath();
+      const idlPath = findIdlPath(variant);
       if (!idlPath) {
         output.warn("IDL not found. Run `anchor build` to generate IDL.");
         output.info("Showing derived addresses only.");
@@ -100,11 +134,70 @@ export function registerInfoCommand(program: Command): void {
 
       try {
         const idl = loadIdl(idlPath);
-        const prog = new Program(idl as any, provider);
+        const prog = new Program(idl, provider);
 
         if (!assetMint) {
           output.error("Asset mint required to load vault state");
           process.exit(1);
+        }
+
+        if (variant === "svs-10") {
+          const vault = await AsyncVault.load(prog, assetMint, vaultId);
+          const state = await vault.getState();
+          const mintedShares = await vault.mintedShareSupply();
+
+          output.success("Async Vault State");
+
+          if (globalOpts.output === "json") {
+            output.json({
+              vault: vaultAddress?.toBase58(),
+              authority: state.authority.toBase58(),
+              operator: state.operator.toBase58(),
+              assetMint: state.assetMint.toBase58(),
+              sharesMint: state.sharesMint.toBase58(),
+              assetVault: state.assetVault.toBase58(),
+              shareEscrow: state.shareEscrow.toBase58(),
+              totalAssets: state.totalAssets.toString(),
+              totalShares: state.totalShares.toString(),
+              mintedShares: mintedShares.toString(),
+              pendingDepositAssets: state.pendingDepositAssets.toString(),
+              pendingClaimShares: state.pendingClaimShares.toString(),
+              decimalsOffset: state.decimalsOffset,
+              paused: state.paused,
+              vaultId: state.vaultId.toString(),
+              maxStaleness: state.maxStaleness.toString(),
+              requestExpirySecs: state.requestExpirySecs.toString(),
+            });
+          } else {
+            output.table(
+              ["Property", "Value"],
+              [
+                ["Authority", formatAddress(state.authority.toBase58())],
+                ["Operator", formatAddress(state.operator.toBase58())],
+                ["Asset Mint", formatAddress(state.assetMint.toBase58())],
+                ["Shares Mint", formatAddress(state.sharesMint.toBase58())],
+                ["Asset Vault", formatAddress(state.assetVault.toBase58())],
+                ["Share Escrow", formatAddress(state.shareEscrow.toBase58())],
+                ["Total Assets", state.totalAssets.toString()],
+                ["Total Shares", state.totalShares.toString()],
+                ["Minted Shares", mintedShares.toString()],
+                [
+                  "Pending Deposit Assets",
+                  state.pendingDepositAssets.toString(),
+                ],
+                [
+                  "Pending Claim Shares",
+                  state.pendingClaimShares.toString(),
+                ],
+                ["Decimals Offset", state.decimalsOffset.toString()],
+                ["Paused", state.paused ? "Yes" : "No"],
+                ["Vault ID", state.vaultId.toString()],
+                ["Max Staleness", state.maxStaleness.toString()],
+                ["Request Expiry", state.requestExpirySecs.toString()],
+              ],
+            );
+          }
+          return;
         }
 
         const vault = await SolanaVault.load(prog, assetMint, vaultId);

@@ -87,11 +87,7 @@ pub fn validate_deviation(
     }
 
     // Calculate deviation: |oracle - expected| * BPS / expected
-    let diff = if oracle_price > expected_price {
-        oracle_price - expected_price
-    } else {
-        expected_price - oracle_price
-    };
+    let diff = oracle_price.abs_diff(expected_price);
 
     let deviation_bps = (diff as u128)
         .checked_mul(BPS_DENOMINATOR as u128)
@@ -135,7 +131,7 @@ pub fn validate_oracle(
 /// # Returns
 /// Ok(()) if valid
 pub fn validate_staleness_config(max_staleness: i64) -> Result<(), OracleError> {
-    if max_staleness < MIN_STALENESS || max_staleness > MAX_STALENESS {
+    if !(MIN_STALENESS..=MAX_STALENESS).contains(&max_staleness) {
         return Err(OracleError::InvalidPrice);
     }
     Ok(())

@@ -5,6 +5,7 @@ import { Program } from "@coral-xyz/anchor";
 import { createContext } from "../../middleware";
 import { getGlobalOptions } from "../../index";
 import { SolanaVault } from "../../../vault";
+import { AsyncVault, AsyncVaultState } from "../../../async-vault";
 import { findIdlPath, loadIdl, resolveVaultArg } from "../../utils";
 import { SvsVariant } from "../../types";
 
@@ -16,6 +17,7 @@ export function registerPermissionsCommand(program: Command): void {
     .option("--program-id <pubkey>", "Program ID (if vault not in config)")
     .option("--asset-mint <pubkey>", "Asset mint (if vault not in config)")
     .option("--vault-id <number>", "Vault ID", "1")
+    .option("--variant <variant>", "Vault variant override for raw addresses")
     .action(async (vaultArg, opts) => {
       const globalOpts = getGlobalOptions(program);
       const ctx = await createContext(globalOpts, opts, true, false);
@@ -24,7 +26,7 @@ export function registerPermissionsCommand(program: Command): void {
       const resolved = resolveVaultArg(vaultArg, config, opts, output);
       if (!resolved) process.exit(1);
 
-      const idlPath = findIdlPath();
+      const idlPath = findIdlPath(resolved.variant);
       if (!idlPath) {
         output.error("IDL not found. Run `anchor build` first.");
         process.exit(1);
@@ -32,17 +34,18 @@ export function registerPermissionsCommand(program: Command): void {
 
       try {
         const idl = loadIdl(idlPath);
-        const prog = new Program(idl as any, provider);
-        const vault = await SolanaVault.load(
-          prog,
-          resolved.assetMint,
-          resolved.vaultId,
-        );
+        const prog = new Program(idl, provider);
+        const vault =
+          resolved.variant === "svs-10"
+            ? await AsyncVault.load(prog, resolved.assetMint, resolved.vaultId)
+            : await SolanaVault.load(prog, resolved.assetMint, resolved.vaultId);
         const state = await vault.getState();
 
         const totalAssets = await vault.totalAssets();
         const totalShares = await vault.totalShares();
         const variant = resolved.variant;
+        const asyncState =
+          variant === "svs-10" ? (state as AsyncVaultState) : null;
 
         if (globalOpts.output === "json") {
           output.json({
@@ -52,6 +55,16 @@ export function registerPermissionsCommand(program: Command): void {
               address: state.authority.toBase58(),
               capabilities: getAuthorityCapabilities(variant),
             },
+            operator:
+              asyncState
+                ? {
+                    address: asyncState.operator.toBase58(),
+                    capabilities: [
+                      "Fulfill deposit requests",
+                      "Fulfill redeem requests",
+                    ],
+                  }
+                : undefined,
             accessMode: "OPEN",
             paused: state.paused,
             totalAssets: totalAssets.toString(),
@@ -70,6 +83,15 @@ export function registerPermissionsCommand(program: Command): void {
           output.info(`    • ${cap}`);
         }
         output.info("");
+        if (asyncState) {
+          output.info("OPERATOR");
+          output.info(`  Address: ${asyncState.operator.toBase58()}`);
+          output.info("  Can:");
+          output.info("    • Fulfill pending deposit requests");
+          output.info("    • Fulfill pending redeem requests");
+          output.info("");
+        }
+
         output.info("ACCESS MODE");
         output.info("  Mode: OPEN (anyone can deposit/withdraw)");
         output.info("  Status: " + (state.paused ? "⏸ PAUSED" : "✓ ACTIVE"));
@@ -107,6 +129,10 @@ function getAuthorityCapabilities(variant: SvsVariant): string[] {
 
   if (variant === "svs-2" || variant === "svs-4") {
     base.push("Sync stored balance with actual balance");
+  }
+
+  if (variant === "svs-10") {
+    base.push("Set vault operator");
   }
 
   return base;

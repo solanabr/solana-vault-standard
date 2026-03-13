@@ -6,7 +6,7 @@
  */
 
 import { PublicKey } from "@solana/web3.js";
-import { BN } from "@coral-xyz/anchor";
+import { BN, Idl } from "@coral-xyz/anchor";
 import * as fs from "fs";
 import * as path from "path";
 import * as yaml from "yaml";
@@ -38,7 +38,7 @@ const IDL_BASE_PATH = path.resolve(__dirname, "..", "..", "target", "idl");
 /**
  * Find IDL file path for a given SVS variant.
  *
- * @param variant - Optional SVS variant (svs-1, svs-2, svs-3, svs-4)
+ * @param variant - Optional SVS variant (svs-1, svs-2, svs-3, svs-4, svs-10)
  * @returns Path to IDL file if found, null otherwise
  *
  * @example
@@ -60,7 +60,13 @@ export function findIdlPath(variant?: SvsVariant): string | null {
   }
 
   // Fall back to first available IDL
-  const idlNames = ["svs_1.json", "svs_2.json", "svs_3.json", "svs_4.json"];
+  const idlNames = [
+    "svs_1.json",
+    "svs_2.json",
+    "svs_3.json",
+    "svs_4.json",
+    "svs_10.json",
+  ];
   for (const name of idlNames) {
     const idlPath = path.join(IDL_BASE_PATH, name);
     if (fs.existsSync(idlPath)) {
@@ -78,8 +84,8 @@ export function findIdlPath(variant?: SvsVariant): string | null {
  * @returns Parsed IDL object
  * @throws If file doesn't exist or contains invalid JSON
  */
-export function loadIdl(idlPath: string): unknown {
-  return JSON.parse(fs.readFileSync(idlPath, "utf-8"));
+export function loadIdl(idlPath: string): Idl {
+  return JSON.parse(fs.readFileSync(idlPath, "utf-8")) as Idl;
 }
 
 /**
@@ -116,7 +122,7 @@ export interface ResolvedVaultParams {
   assetMint: PublicKey;
   /** Vault ID (for multi-vault deployments) */
   vaultId: BN;
-  /** SVS variant (svs-1, svs-2, svs-3, svs-4) */
+  /** SVS variant (svs-1, svs-2, svs-3, svs-4, svs-10) */
   variant: SvsVariant;
 }
 
@@ -147,9 +153,20 @@ export interface ResolvedVaultParams {
 export function resolveVaultArg(
   vaultArg: string,
   config: CliConfig,
-  opts: { programId?: string; assetMint?: string; vaultId?: string },
+  opts: {
+    programId?: string;
+    assetMint?: string;
+    vaultId?: string;
+    variant?: string;
+  },
   output: OutputAdapter,
 ): ResolvedVaultParams | null {
+  const parsedVariant = parseVariant(opts.variant);
+  if (opts.variant && !parsedVariant) {
+    output.error(`Invalid variant: ${opts.variant}`);
+    return null;
+  }
+
   // Raw PublicKey address
   if (isValidPublicKey(vaultArg)) {
     if (!opts.programId || !opts.assetMint) {
@@ -162,7 +179,7 @@ export function resolveVaultArg(
       programId: new PublicKey(opts.programId),
       assetMint: new PublicKey(opts.assetMint),
       vaultId: new BN(opts.vaultId || "1"),
-      variant: "svs-1",
+      variant: parsedVariant ?? "svs-1",
     };
   }
 
@@ -186,6 +203,28 @@ export function resolveVaultArg(
     output.error(error instanceof Error ? error.message : String(error));
     return null;
   }
+}
+
+export function parseVariant(value?: string): SvsVariant | null {
+  if (!value) {
+    return null;
+  }
+
+  const normalized = value.toLowerCase();
+  switch (normalized) {
+    case "svs-1":
+    case "svs-2":
+    case "svs-3":
+    case "svs-4":
+    case "svs-10":
+      return normalized;
+    default:
+      return null;
+  }
+}
+
+export function isAsyncVariant(variant: SvsVariant): boolean {
+  return variant === "svs-10";
 }
 
 /**

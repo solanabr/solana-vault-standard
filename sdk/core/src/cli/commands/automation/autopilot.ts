@@ -214,7 +214,7 @@ export function registerAutopilotCommand(program: Command): void {
           if (!idlPath) throw new Error(`IDL for ${variant} not found`);
 
           const idl = loadIdl(idlPath);
-          const prog = new Program(idl as any, provider);
+          const prog = new Program(idl, provider);
           const vault = await ManagedVault.load(
             prog,
             resolved.assetMint,

@@ -125,7 +125,7 @@ pub fn calculate_reward_debt(user_shares: u64, acc_per_share: u128) -> Result<u1
         .ok_or(RewardError::MathOverflow)?
         .checked_div(REWARD_PRECISION)
         .ok_or(RewardError::DivisionByZero)
-        .map(|v| v.checked_mul(REWARD_PRECISION).unwrap_or(u128::MAX))
+        .map(|v| v.saturating_mul(REWARD_PRECISION))
 }
 
 /// Calculate reward debt using scaled value (matches storage format).
