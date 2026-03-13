@@ -109,3 +109,12 @@ impl OraclePrice {
 
     pub const SEED_PREFIX: &'static [u8] = b"oracle_price";
 }
+
+impl OraclePrice {
+    /// Deserialize from raw account data (skips 8-byte discriminator)
+    pub fn from_account_info(info: &AccountInfo) -> anchor_lang::Result<OraclePrice> {
+        let data = info.try_borrow_data()?;
+        OraclePrice::try_deserialize(&mut &data[..])
+            .map_err(|_| anchor_lang::error!(crate::error::VaultError::InvalidOracle))
+    }
+}

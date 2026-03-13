@@ -52,42 +52,17 @@ pub fn handler(
         let vault_ta_info = &ctx.remaining_accounts[i + 1];
 
         // Read OraclePrice account
-        let oracle_data = oracle_info.try_borrow_data()?;
-        if oracle_data.len() >= OraclePrice::LEN {
-            // OraclePrice layout:
-            // [0..8]   discriminator
-            // [8..40]  vault: Pubkey
-            // [40..72] asset_mint: Pubkey
-            // [72..80] price: u64
-            // [80..88] updated_at: i64
-            // [88..120] authority: Pubkey
-            // [120]    bump: u8
-            let price_bytes: [u8; 8] = oracle_data[72..80]
-                .try_into().map_err(|_| VaultError::MathOverflow)?;
-            let updated_at_bytes: [u8; 8] = oracle_data[80..88]
-                .try_into().map_err(|_| VaultError::MathOverflow)?;
-            let price = u64::from_le_bytes(price_bytes);
-            let updated_at = i64::from_le_bytes(updated_at_bytes);
+        // Deserialize OraclePrice using Anchor's AccountDeserialize — no raw offsets
+        let oracle = OraclePrice::from_account_info(oracle_info)?;
+        require!(oracle.vault == ctx.accounts.vault.key(), VaultError::InvalidOracle);
+        let age = clock.unix_timestamp.saturating_sub(oracle.updated_at) as u64;
+        require!(age <= MAX_ORACLE_STALENESS, VaultError::OracleStale);
+        require!(oracle.price > 0, VaultError::InvalidOracle);
+        prices.push(oracle.price);
 
-            // Validate staleness
-            let age = clock.unix_timestamp.saturating_sub(updated_at) as u64;
-            require!(age <= MAX_ORACLE_STALENESS, VaultError::OracleStale);
-            require!(price > 0, VaultError::InvalidOracle);
-
-            prices.push(price);
-        } else {
-            return Err(error!(VaultError::InvalidOracle));
-        }
-
-        // Read token account balance at offset [64..72]
-        let vault_data = vault_ta_info.try_borrow_data()?;
-        let balance = if vault_data.len() >= 72 {
-            u64::from_le_bytes(vault_data[64..72].try_into().map_err(|_| VaultError::MathOverflow)?)
-        } else { 0 };
+        // Read token account balance using typed helper
+        let balance = crate::math::read_token_balance(vault_ta_info)?;
         balances.push(balance);
-
-        // Read asset decimals from oracle account entry data
-        // We'll use base_decimals as fallback — ideally pass AssetEntry instead
         decimals.push(asset_decimals);
 
         i += 2;

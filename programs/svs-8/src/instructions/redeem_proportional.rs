@@ -45,28 +45,21 @@ pub fn handler(
     let mut assets: Vec<AssetData> = Vec::with_capacity(num_assets);
 
     for i in 0..num_assets {
-        let price;
-        let updated_at;
-        {
-            let d = ctx.remaining_accounts[i * 4].try_borrow_data()?;
-            price = u64::from_le_bytes(d[72..80].try_into().map_err(|_| VaultError::MathOverflow)?);
-            updated_at = i64::from_le_bytes(d[80..88].try_into().map_err(|_| VaultError::MathOverflow)?);
-        }
-        let age = clock.unix_timestamp.saturating_sub(updated_at) as u64;
+        // Deserialize OraclePrice using Anchor's AccountDeserialize — no raw offsets
+        let oracle = crate::state::OraclePrice::from_account_info(&ctx.remaining_accounts[i * 4])?;
+        require!(oracle.vault == vault_key, VaultError::InvalidOracle);
+        let age = clock.unix_timestamp.saturating_sub(oracle.updated_at) as u64;
         require!(age <= MAX_ORACLE_STALENESS, VaultError::OracleStale);
-        require!(price > 0, VaultError::InvalidOracle);
+        require!(oracle.price > 0, VaultError::InvalidOracle);
+        let price = oracle.price;
 
-        let vault_balance;
-        {
-            let d = ctx.remaining_accounts[i * 4 + 1].try_borrow_data()?;
-            vault_balance = u64::from_le_bytes(d[64..72].try_into().map_err(|_| VaultError::MathOverflow)?);
-        }
+        // Read token balance using typed helper — no raw offsets
+        let vault_balance = crate::math::read_token_balance(&ctx.remaining_accounts[i * 4 + 1])?;
 
-        let asset_dec;
-        {
-            let d = ctx.remaining_accounts[i * 4 + 3].try_borrow_data()?;
-            asset_dec = if d.len() > 44 { d[44] } else { 6 };
-        }
+        // Read mint decimals using Anchor mint deserialization
+        let mint_data = ctx.remaining_accounts[i * 4 + 3].try_borrow_data()?;
+        let asset_dec = if mint_data.len() > 44 { mint_data[44] } else { 6 };
+        drop(mint_data);
 
         assets.push(AssetData {
             mint_key: ctx.remaining_accounts[i * 4 + 3].key(),

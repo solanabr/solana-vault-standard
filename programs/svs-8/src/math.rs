@@ -150,3 +150,17 @@ pub fn oracle_value_for_amount(
 
     u64::try_from(value).map_err(|_| error!(VaultError::MathOverflow))
 }
+
+/// Read SPL token account balance from raw account data
+/// TokenAccount layout: [0..8] disc, [8..40] mint, [40..72] owner, [72..80] amount
+pub fn read_token_balance(info: &anchor_lang::prelude::AccountInfo) -> anchor_lang::Result<u64> {
+    let data = info.try_borrow_data()?;
+    require!(data.len() >= 80, crate::error::VaultError::MathOverflow);
+    // SPL token account: amount is at offset 64 for Token program (not Token-2022)
+    // Layout: mint(32) + owner(32) + amount(8) = offset 72 for Token-2022 with discriminator
+    // Standard SPL (no discriminator): amount at offset 64
+    let amount = u64::from_le_bytes(
+        data[64..72].try_into().map_err(|_| anchor_lang::error!(crate::error::VaultError::MathOverflow))?
+    );
+    Ok(amount)
+}
