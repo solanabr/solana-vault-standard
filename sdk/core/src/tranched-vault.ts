@@ -283,13 +283,11 @@ export class TranchedVault {
 
     return this.program.methods
       .deposit(params.assets, params.minSharesOut)
-      .accountsStrict({
+      .accountsPartial({
         user,
         vault: this.vault,
         targetTranche,
-        tranche1: others[0],
-        tranche2: others[1],
-        tranche3: others[2],
+        ...others,
         assetMint: this.assetMint,
         userAssetAccount,
         assetVault: this.assetVault,
@@ -333,13 +331,11 @@ export class TranchedVault {
 
     return this.program.methods
       .redeem(params.shares, params.minAssetsOut)
-      .accountsStrict({
+      .accountsPartial({
         user,
         vault: this.vault,
         targetTranche,
-        tranche1: others[0],
-        tranche2: others[1],
-        tranche3: others[2],
+        ...others,
         assetMint: this.assetMint,
         userAssetAccount,
         assetVault: this.assetVault,
@@ -368,16 +364,13 @@ export class TranchedVault {
 
     return this.program.methods
       .distributeYield(totalYield)
-      .accountsStrict({
+      .accountsPartial({
         manager,
         vault: this.vault,
         assetMint: this.assetMint,
         managerAssetAccount,
         assetVault: this.assetVault,
-        tranche0: allTranches[0],
-        tranche1: allTranches[1],
-        tranche2: allTranches[2],
-        tranche3: allTranches[3],
+        ...allTranches,
         assetTokenProgram: this.assetTokenProgram,
       })
       .rpc();
@@ -390,13 +383,10 @@ export class TranchedVault {
 
     return this.program.methods
       .recordLoss(totalLoss)
-      .accountsStrict({
+      .accountsPartial({
         manager,
         vault: this.vault,
-        tranche0: allTranches[0],
-        tranche1: allTranches[1],
-        tranche2: allTranches[2],
-        tranche3: allTranches[3],
+        ...allTranches,
       })
       .rpc();
   }
@@ -420,24 +410,24 @@ export class TranchedVault {
     );
 
     const excludeSet = new Set([fromIndex, toIndex]);
-    const otherTranches: any[] = [null, null];
+    const keys = ["otherTranche0", "otherTranche1"];
+    const otherTranches: Record<string, PublicKey> = {};
     let slot = 0;
     for (let i = 0; i < state.numTranches; i++) {
       if (!excludeSet.has(i)) {
         const [pda] = getTrancheAddress(this.program.programId, this.vault, i);
-        otherTranches[slot++] = pda;
+        otherTranches[keys[slot++]] = pda;
       }
     }
 
     return this.program.methods
       .rebalanceTranches(amount)
-      .accountsStrict({
+      .accountsPartial({
         manager,
         vault: this.vault,
         fromTranche,
         toTranche,
-        otherTranche0: otherTranches[0],
-        otherTranche1: otherTranches[1],
+        ...otherTranches,
       })
       .rpc();
   }
@@ -502,13 +492,11 @@ export class TranchedVault {
         config.capBps ?? null,
         config.subordinationBps ?? null,
       )
-      .accountsStrict({
+      .accountsPartial({
         authority,
         vault: this.vault,
         targetTranche,
-        tranche1: others[0],
-        tranche2: others[1],
-        tranche3: others[2],
+        ...others,
       })
       .rpc();
   }
@@ -594,23 +582,25 @@ export class TranchedVault {
   private _collectOtherTranches(
     numTranches: number,
     excludeIndex: number,
-  ): any[] {
-    const result: any[] = [null, null, null];
+  ): Record<string, PublicKey> {
+    const keys = ["tranche1", "tranche2", "tranche3"];
+    const result: Record<string, PublicKey> = {};
     let slot = 0;
     for (let i = 0; i < numTranches; i++) {
       if (i !== excludeIndex) {
         const [pda] = getTrancheAddress(this.program.programId, this.vault, i);
-        result[slot++] = pda;
+        result[keys[slot++]] = pda;
       }
     }
     return result;
   }
 
-  private _collectAllTranches(numTranches: number): any[] {
-    const result: any[] = [null, null, null, null];
+  private _collectAllTranches(numTranches: number): Record<string, PublicKey> {
+    const keys = ["tranche0", "tranche1", "tranche2", "tranche3"];
+    const result: Record<string, PublicKey> = {};
     for (let i = 0; i < numTranches; i++) {
       const [pda] = getTrancheAddress(this.program.programId, this.vault, i);
-      result[i] = pda;
+      result[keys[i]] = pda;
     }
     return result;
   }
