@@ -5,14 +5,14 @@ resolution = true
 skip-lint = false
 
 [programs.devnet]
-svs_8 = "67eP4TQdcpBvQ8TSKG46kth5D8mgRc1ZYH8RjEjye5NP"
+svs_8 = "E8bGqwitsaFELBtuhbwAKwVBKjAjGzrfcnBPishvvRsA"
 svs_1 = "Bv8aVSQ3DJUe3B7TqQZRZgrNvVTh8TjfpwpoeR1ckDMC"
 svs_2 = "3UrYrxh1HmVgq7WPygZ5x1gNEaWFwqTMs7geNqMnsrtD"
 svs_3 = "EcpnYtaCBrZ4p4uq7dDr55D3fL9nsxbCNqpyUREGpPkh"
 svs_4 = "2WP7LXWqrp1W4CwEJuVt2SxWPNY2n6AYmijh6Z4EeidY"
 
 [programs.localnet]
-svs_8 = "67eP4TQdcpBvQ8TSKG46kth5D8mgRc1ZYH8RjEjye5NP"
+svs_8 = "E8bGqwitsaFELBtuhbwAKwVBKjAjGzrfcnBPishvvRsA"
 svs_1 = "Bv8aVSQ3DJUe3B7TqQZRZgrNvVTh8TjfpwpoeR1ckDMC"
 svs_2 = "3UrYrxh1HmVgq7WPygZ5x1gNEaWFwqTMs7geNqMnsrtD"
 svs_3 = "EcpnYtaCBrZ4p4uq7dDr55D3fL9nsxbCNqpyUREGpPkh"
