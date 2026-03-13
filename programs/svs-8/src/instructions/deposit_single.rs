@@ -158,10 +158,10 @@ pub struct DepositSingle<'info> {
     pub user: Signer<'info>,
 
     #[account(mut)]
-    pub vault: Account<'info, MultiAssetVault>,
+    pub vault: Box<Account<'info, MultiAssetVault>>,
 
     #[account(has_one = vault, has_one = asset_mint)]
-    pub asset_entry: Account<'info, AssetEntry>,
+    pub asset_entry: Box<Account<'info, AssetEntry>>,
 
     pub asset_mint: InterfaceAccount<'info, Mint>,
 
@@ -175,22 +175,22 @@ pub struct DepositSingle<'info> {
         constraint = oracle_price.vault == vault.key() @ VaultError::InvalidOracle,
         constraint = oracle_price.asset_mint == asset_mint.key() @ VaultError::InvalidOracle,
     )]
-    pub oracle_price: Account<'info, OraclePrice>,
+    pub oracle_price: Box<Account<'info, OraclePrice>>,
 
     #[account(
         mut,
         constraint = asset_vault_account.key() == asset_entry.asset_vault @ VaultError::AssetNotFound,
     )]
-    pub asset_vault_account: InterfaceAccount<'info, TokenAccount>,
+    pub asset_vault_account: Box<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(
         mut,
         constraint = shares_mint.key() == vault.shares_mint @ VaultError::AssetNotFound,
     )]
-    pub shares_mint: InterfaceAccount<'info, Mint>,
+    pub shares_mint: Box<InterfaceAccount<'info, Mint>>,
 
     #[account(mut)]
-    pub user_asset_account: InterfaceAccount<'info, TokenAccount>,
+    pub user_asset_account: Box<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(
         init_if_needed,
@@ -199,7 +199,7 @@ pub struct DepositSingle<'info> {
         associated_token::authority = user,
         associated_token::token_program = shares_token_program,
     )]
-    pub user_shares_account: InterfaceAccount<'info, TokenAccount>,
+    pub user_shares_account: Box<InterfaceAccount<'info, TokenAccount>>,
 
     pub token_program: Interface<'info, TokenInterface>,
     pub shares_token_program: Interface<'info, TokenInterface>,
