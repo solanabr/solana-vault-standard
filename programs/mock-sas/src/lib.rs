@@ -60,6 +60,14 @@ pub mod mock_sas {
 
         Ok(())
     }
+
+    pub fn revoke_attestation(ctx: Context<RevokeAttestation>) -> Result<()> {
+        let account_info = ctx.accounts.attestation.to_account_info();
+        let mut data = account_info.try_borrow_mut_data()?;
+        // revoked field is at offset: 8 (disc) + 32 (subject) + 32 (issuer) + 1 (type) + 2 (country) + 8 (issued_at) + 8 (expires_at) = 91
+        data[91] = 1; // true
+        Ok(())
+    }
 }
 
 // Account size: 8 (disc) + 32 + 32 + 1 + 2 + 8 + 8 + 1 + 1 + 32 = 125
@@ -85,4 +93,14 @@ pub struct CreateAttestation<'info> {
     pub subject: UncheckedAccount<'info>,
 
     pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct RevokeAttestation<'info> {
+    #[account(mut)]
+    pub authority: Signer<'info>,
+
+    /// CHECK: Raw attestation account — revoked flag set directly
+    #[account(mut)]
+    pub attestation: UncheckedAccount<'info>,
 }

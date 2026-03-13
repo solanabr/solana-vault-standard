@@ -2662,6 +2662,368 @@ describe("svs-11 (Credit Markets Vault)", () => {
     });
   });
 
+  describe("Oracle Staleness Gate", () => {
+    let staleInvestor: Keypair;
+    let staleInvestorTokenAccount: PublicKey;
+    let staleInvestmentRequest: PublicKey;
+    let staleAttestation: PublicKey;
+
+    before(async () => {
+      staleInvestor = Keypair.generate();
+      const airdrop = await connection.requestAirdrop(
+        staleInvestor.publicKey,
+        5 * anchor.web3.LAMPORTS_PER_SOL
+      );
+      await connection.confirmTransaction(airdrop);
+
+      const ata = await getOrCreateAssociatedTokenAccount(
+        connection,
+        payer,
+        assetMint,
+        staleInvestor.publicKey,
+        false,
+        undefined,
+        undefined,
+        TOKEN_PROGRAM_ID
+      );
+      staleInvestorTokenAccount = ata.address;
+
+      await mintTo(
+        connection,
+        payer,
+        assetMint,
+        staleInvestorTokenAccount,
+        payer.publicKey,
+        BigInt(depositAmount.toString()),
+        [],
+        undefined,
+        TOKEN_PROGRAM_ID
+      );
+
+      [staleInvestmentRequest] = getInvestmentRequestPDA(
+        staleInvestor.publicKey
+      );
+      [staleAttestation] = getAttestationPDA(
+        staleInvestor.publicKey,
+        attester.publicKey
+      );
+
+      await attestationMockProgram.methods
+        .createAttestation(
+          attester.publicKey,
+          0,
+          [66, 82],
+          new BN(0)
+        )
+        .accountsPartial({
+          authority: payer.publicKey,
+          attestation: staleAttestation,
+          subject: staleInvestor.publicKey,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
+
+      // Request deposit while oracle is fresh
+      await program.methods
+        .requestDeposit(depositAmount)
+        .accountsPartial({
+          investor: staleInvestor.publicKey,
+          vault,
+          investmentRequest: staleInvestmentRequest,
+          investorTokenAccount: staleInvestorTokenAccount,
+          depositVault,
+          assetMint,
+          attestation: staleAttestation,
+          frozenCheck: null,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          clock: SYSVAR_CLOCK_PUBKEY,
+        })
+        .signers([staleInvestor])
+        .rpc();
+    });
+
+    it("rejects approve_deposit when oracle is stale", async () => {
+      // Set oracle timestamp to a value older than maxStaleness (3600s)
+      const staleTimestamp = new BN(1_000_000);
+
+      await oracleProgram.methods
+        .updateTimestamp(staleTimestamp)
+        .accountsPartial({
+          authority: payer.publicKey,
+          oracleData: navOracle,
+        })
+        .rpc();
+
+      try {
+        await program.methods
+          .approveDeposit()
+          .accountsPartial({
+            manager: manager.publicKey,
+            vault,
+            investmentRequest: staleInvestmentRequest,
+            investor: staleInvestor.publicKey,
+            navOracle,
+            attestation: staleAttestation,
+            frozenCheck: null,
+            clock: SYSVAR_CLOCK_PUBKEY,
+          })
+          .signers([manager])
+          .rpc();
+        expect.fail("should have thrown");
+      } catch (err: any) {
+        expect(err.error.errorCode.number).to.equal(6019);
+        expect(err.error.errorCode.code).to.equal("OracleStale");
+      }
+    });
+
+    it("approve_deposit succeeds after oracle timestamp restored", async () => {
+      // Restore oracle to current time by re-setting the price (set_price writes current timestamp)
+      await oracleProgram.methods
+        .setPrice(PRICE_SCALE)
+        .accountsPartial({
+          authority: payer.publicKey,
+          oracleData: navOracle,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
+
+      await program.methods
+        .approveDeposit()
+        .accountsPartial({
+          manager: manager.publicKey,
+          vault,
+          investmentRequest: staleInvestmentRequest,
+          investor: staleInvestor.publicKey,
+          navOracle,
+          attestation: staleAttestation,
+          frozenCheck: null,
+          clock: SYSVAR_CLOCK_PUBKEY,
+        })
+        .signers([manager])
+        .rpc();
+
+      const request = await program.account.investmentRequest.fetch(
+        staleInvestmentRequest
+      );
+      expect(JSON.stringify(request.status)).to.equal(
+        JSON.stringify({ approved: {} })
+      );
+
+      // Clean up: claim deposit
+      const staleSharesAta = await getOrCreateAssociatedTokenAccount(
+        connection,
+        payer,
+        sharesMint,
+        staleInvestor.publicKey,
+        false,
+        undefined,
+        undefined,
+        TOKEN_2022_PROGRAM_ID
+      );
+
+      await program.methods
+        .claimDeposit()
+        .accountsPartial({
+          investor: staleInvestor.publicKey,
+          vault,
+          investmentRequest: staleInvestmentRequest,
+          sharesMint,
+          investorSharesAccount: staleSharesAta.address,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+        })
+        .signers([staleInvestor])
+        .rpc();
+    });
+  });
+
+  describe("Attestation Expiry Gate", () => {
+    let expInvestor: Keypair;
+    let expInvestorTokenAccount: PublicKey;
+    let expInvestmentRequest: PublicKey;
+    let expAttestation: PublicKey;
+
+    before(async () => {
+      expInvestor = Keypair.generate();
+      const airdrop = await connection.requestAirdrop(
+        expInvestor.publicKey,
+        5 * anchor.web3.LAMPORTS_PER_SOL
+      );
+      await connection.confirmTransaction(airdrop);
+
+      const ata = await getOrCreateAssociatedTokenAccount(
+        connection,
+        payer,
+        assetMint,
+        expInvestor.publicKey,
+        false,
+        undefined,
+        undefined,
+        TOKEN_PROGRAM_ID
+      );
+      expInvestorTokenAccount = ata.address;
+
+      await mintTo(
+        connection,
+        payer,
+        assetMint,
+        expInvestorTokenAccount,
+        payer.publicKey,
+        BigInt(depositAmount.toString()),
+        [],
+        undefined,
+        TOKEN_PROGRAM_ID
+      );
+
+      [expInvestmentRequest] = getInvestmentRequestPDA(expInvestor.publicKey);
+
+      // Create attestation with type=1 so PDA is unique, and expires_at in the past
+      [expAttestation] = getAttestationPDA(
+        expInvestor.publicKey,
+        attester.publicKey,
+        1
+      );
+
+      await attestationMockProgram.methods
+        .createAttestation(
+          attester.publicKey,
+          1,
+          [66, 82],
+          new BN(1_000_000) // far in the past
+        )
+        .accountsPartial({
+          authority: payer.publicKey,
+          attestation: expAttestation,
+          subject: expInvestor.publicKey,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
+    });
+
+    it("rejects request_deposit with expired attestation", async () => {
+      try {
+        await program.methods
+          .requestDeposit(depositAmount)
+          .accountsPartial({
+            investor: expInvestor.publicKey,
+            vault,
+            investmentRequest: expInvestmentRequest,
+            investorTokenAccount: expInvestorTokenAccount,
+            depositVault,
+            assetMint,
+            attestation: expAttestation,
+            frozenCheck: null,
+            assetTokenProgram: TOKEN_PROGRAM_ID,
+            systemProgram: SystemProgram.programId,
+            clock: SYSVAR_CLOCK_PUBKEY,
+          })
+          .signers([expInvestor])
+          .rpc();
+        expect.fail("should have thrown");
+      } catch (err: any) {
+        expect(err.error.errorCode.number).to.equal(6018);
+        expect(err.error.errorCode.code).to.equal("AttestationExpired");
+      }
+    });
+  });
+
+  describe("Attestation Revocation Gate", () => {
+    let revInvestor: Keypair;
+    let revInvestorTokenAccount: PublicKey;
+    let revInvestmentRequest: PublicKey;
+    let revAttestation: PublicKey;
+
+    before(async () => {
+      revInvestor = Keypair.generate();
+      const airdrop = await connection.requestAirdrop(
+        revInvestor.publicKey,
+        5 * anchor.web3.LAMPORTS_PER_SOL
+      );
+      await connection.confirmTransaction(airdrop);
+
+      const ata = await getOrCreateAssociatedTokenAccount(
+        connection,
+        payer,
+        assetMint,
+        revInvestor.publicKey,
+        false,
+        undefined,
+        undefined,
+        TOKEN_PROGRAM_ID
+      );
+      revInvestorTokenAccount = ata.address;
+
+      await mintTo(
+        connection,
+        payer,
+        assetMint,
+        revInvestorTokenAccount,
+        payer.publicKey,
+        BigInt(depositAmount.toString()),
+        [],
+        undefined,
+        TOKEN_PROGRAM_ID
+      );
+
+      [revInvestmentRequest] = getInvestmentRequestPDA(revInvestor.publicKey);
+      [revAttestation] = getAttestationPDA(
+        revInvestor.publicKey,
+        attester.publicKey
+      );
+
+      // Create valid attestation (expires_at=0 means no expiry)
+      await attestationMockProgram.methods
+        .createAttestation(
+          attester.publicKey,
+          0,
+          [66, 82],
+          new BN(0)
+        )
+        .accountsPartial({
+          authority: payer.publicKey,
+          attestation: revAttestation,
+          subject: revInvestor.publicKey,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
+
+      // Revoke the attestation
+      await attestationMockProgram.methods
+        .revokeAttestation()
+        .accountsPartial({
+          authority: payer.publicKey,
+          attestation: revAttestation,
+        })
+        .rpc();
+    });
+
+    it("rejects request_deposit with revoked attestation", async () => {
+      try {
+        await program.methods
+          .requestDeposit(depositAmount)
+          .accountsPartial({
+            investor: revInvestor.publicKey,
+            vault,
+            investmentRequest: revInvestmentRequest,
+            investorTokenAccount: revInvestorTokenAccount,
+            depositVault,
+            assetMint,
+            attestation: revAttestation,
+            frozenCheck: null,
+            assetTokenProgram: TOKEN_PROGRAM_ID,
+            systemProgram: SystemProgram.programId,
+            clock: SYSVAR_CLOCK_PUBKEY,
+          })
+          .signers([revInvestor])
+          .rpc();
+        expect.fail("should have thrown");
+      } catch (err: any) {
+        expect(err.error.errorCode.number).to.equal(6017);
+        expect(err.error.errorCode.code).to.equal("AttestationRevoked");
+      }
+    });
+  });
+
   describe("Double Pause/Unpause", () => {
     it("rejects pause when already paused", async () => {
       await program.methods

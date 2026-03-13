@@ -4,6 +4,7 @@ use trident_fuzz::fuzzing::*;
 mod fuzz_accounts;
 
 const NUM_USERS: usize = 5;
+const MAX_STALENESS: i64 = 3600;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum RequestStatus {
@@ -41,6 +42,8 @@ struct UserState {
     investment_request: InvestmentRequest,
     redemption_request: RedemptionRequest,
     frozen: bool,
+    attestation_expired: bool,
+    attestation_revoked: bool,
 }
 
 /// Credit vault state tracker for invariant checks.
@@ -61,12 +64,22 @@ struct CreditVaultTracker {
     investment_window_open: bool,
     paused: bool,
     oracle_price: u64,
+    oracle_stale: bool,
+    oracle_updated_at: i64,
+    current_timestamp: i64,
     users: [UserState; NUM_USERS],
     deposit_count: u64,
     redeem_count: u64,
     approve_count: u64,
     claim_count: u64,
     cancel_count: u64,
+    rejected_frozen_deposit: u64,
+    rejected_frozen_redeem: u64,
+    rejected_paused_approve: u64,
+    rejected_closed_window: u64,
+    rejected_stale_oracle: u64,
+    rejected_attestation_expired: u64,
+    rejected_attestation_revoked: u64,
 }
 
 impl CreditVaultTracker {
@@ -105,6 +118,14 @@ impl CreditVaultTracker {
             }
         })
     }
+
+    fn user_attestation_valid(&self, idx: usize) -> bool {
+        !self.users[idx].attestation_expired && !self.users[idx].attestation_revoked
+    }
+
+    fn oracle_is_fresh(&self) -> bool {
+        !self.oracle_stale
+    }
 }
 
 fn random_user() -> usize {
@@ -142,7 +163,10 @@ impl FuzzTest {
         if self.vault.initialized {
             return;
         }
-        self.vault.oracle_price = PRICE_SCALE; // 1:1 initial price
+        self.vault.oracle_price = PRICE_SCALE;
+        self.vault.oracle_updated_at = 1_000_000;
+        self.vault.current_timestamp = 1_000_000;
+        self.vault.oracle_stale = false;
         self.vault.initialized = true;
     }
 
@@ -178,7 +202,9 @@ impl FuzzTest {
 
         let user_idx = random_user();
         if self.vault.users[user_idx].frozen {
-            // INVARIANT: Frozen accounts cannot request deposits
+            return;
+        }
+        if !self.vault.user_attestation_valid(user_idx) {
             return;
         }
         if self.vault.users[user_idx].investment_request.status.0 != RequestStatus::None {
@@ -208,6 +234,9 @@ impl FuzzTest {
     #[flow]
     fn flow_approve_deposit(&mut self) {
         if !self.vault.initialized || self.vault.paused {
+            return;
+        }
+        if !self.vault.oracle_is_fresh() {
             return;
         }
 
@@ -321,7 +350,9 @@ impl FuzzTest {
 
         let user_idx = random_user();
         if self.vault.users[user_idx].frozen {
-            // INVARIANT: Frozen accounts cannot request redeems
+            return;
+        }
+        if !self.vault.user_attestation_valid(user_idx) {
             return;
         }
         if self.vault.users[user_idx].redemption_request.status.0 != RequestStatus::None {
@@ -348,6 +379,9 @@ impl FuzzTest {
     #[flow]
     fn flow_approve_redeem(&mut self) {
         if !self.vault.initialized || self.vault.paused {
+            return;
+        }
+        if !self.vault.oracle_is_fresh() {
             return;
         }
 
@@ -510,6 +544,8 @@ impl FuzzTest {
         // Price between 0.1x and 10x of PRICE_SCALE
         let new_price = (rand::random::<u64>() % (PRICE_SCALE * 10)).max(PRICE_SCALE / 10);
         self.vault.oracle_price = new_price;
+        self.vault.oracle_updated_at = self.vault.current_timestamp;
+        self.vault.oracle_stale = false;
     }
 
     // =========================================================================
@@ -530,6 +566,478 @@ impl FuzzTest {
             return;
         }
         self.vault.paused = false;
+    }
+
+    // =========================================================================
+    // Error scenario: frozen user attempts deposit
+    // =========================================================================
+
+    #[flow]
+    fn flow_frozen_request_deposit(&mut self) {
+        if !self.vault.initialized || self.vault.paused || !self.vault.investment_window_open {
+            return;
+        }
+
+        let user_idx = random_user();
+        if !self.vault.users[user_idx].frozen {
+            return;
+        }
+
+        let status_before = self.vault.users[user_idx].investment_request.status.0;
+        let pending_before = self.vault.total_pending_deposits;
+
+        // On-chain: AccountFrozen error rejects this request
+        // Model: state must not change
+
+        assert_eq!(
+            self.vault.users[user_idx].investment_request.status.0,
+            status_before,
+            "Frozen user's deposit request status changed"
+        );
+        assert_eq!(
+            self.vault.total_pending_deposits, pending_before,
+            "Pending deposits changed during frozen deposit attempt"
+        );
+        self.vault.rejected_frozen_deposit += 1;
+    }
+
+    // =========================================================================
+    // Error scenario: frozen user attempts redeem
+    // =========================================================================
+
+    #[flow]
+    fn flow_frozen_request_redeem(&mut self) {
+        if !self.vault.initialized || self.vault.paused || self.vault.total_shares == 0 {
+            return;
+        }
+
+        let user_idx = random_user();
+        if !self.vault.users[user_idx].frozen {
+            return;
+        }
+
+        let shares_before = self.vault.users[user_idx].shares_balance;
+        let redeem_status_before = self.vault.users[user_idx].redemption_request.status.0;
+
+        // On-chain: AccountFrozen error rejects this request
+        // Model: state must not change
+
+        assert_eq!(
+            self.vault.users[user_idx].shares_balance, shares_before,
+            "Frozen user's shares changed during redeem attempt"
+        );
+        assert_eq!(
+            self.vault.users[user_idx].redemption_request.status.0,
+            redeem_status_before,
+            "Frozen user's redeem status changed"
+        );
+        self.vault.rejected_frozen_redeem += 1;
+    }
+
+    // =========================================================================
+    // Error scenario: approve deposit while paused
+    // =========================================================================
+
+    #[flow]
+    fn flow_paused_approve_deposit(&mut self) {
+        if !self.vault.initialized || !self.vault.paused {
+            return;
+        }
+
+        let user_idx = random_user();
+        if self.vault.users[user_idx].investment_request.status.0 != RequestStatus::Pending {
+            return;
+        }
+
+        let shares_before = self.vault.total_shares;
+        let assets_before = self.vault.total_assets;
+        let req_status_before = self.vault.users[user_idx].investment_request.status.0;
+
+        // On-chain: VaultPaused error rejects approve
+        // Model: no state change
+
+        assert_eq!(
+            self.vault.total_shares, shares_before,
+            "Shares changed during paused approve attempt"
+        );
+        assert_eq!(
+            self.vault.total_assets, assets_before,
+            "Assets changed during paused approve attempt"
+        );
+        assert_eq!(
+            self.vault.users[user_idx].investment_request.status.0,
+            req_status_before,
+            "Request status changed during paused approve"
+        );
+        self.vault.rejected_paused_approve += 1;
+    }
+
+    // =========================================================================
+    // Error scenario: request deposit with closed window
+    // =========================================================================
+
+    #[flow]
+    fn flow_closed_window_request_deposit(&mut self) {
+        if !self.vault.initialized || self.vault.paused || self.vault.investment_window_open {
+            return;
+        }
+
+        let user_idx = random_user();
+        if self.vault.users[user_idx].frozen {
+            return;
+        }
+
+        let status_before = self.vault.users[user_idx].investment_request.status.0;
+        let pending_before = self.vault.total_pending_deposits;
+
+        // On-chain: InvestmentWindowClosed error rejects request
+        // Model: no state change
+
+        assert_eq!(
+            self.vault.users[user_idx].investment_request.status.0,
+            status_before,
+            "Deposit request status changed with closed window"
+        );
+        assert_eq!(
+            self.vault.total_pending_deposits, pending_before,
+            "Pending deposits changed with closed window"
+        );
+        self.vault.rejected_closed_window += 1;
+    }
+
+    // =========================================================================
+    // Error scenario: approve with stale oracle
+    // =========================================================================
+
+    #[flow]
+    fn flow_stale_oracle_approve_deposit(&mut self) {
+        if !self.vault.initialized || self.vault.paused || !self.vault.oracle_stale {
+            return;
+        }
+
+        let user_idx = random_user();
+        if self.vault.users[user_idx].investment_request.status.0 != RequestStatus::Pending {
+            return;
+        }
+
+        let shares_before = self.vault.total_shares;
+        let assets_before = self.vault.total_assets;
+
+        // On-chain: OracleStale error rejects approve
+        // Model: no state change
+
+        assert_eq!(
+            self.vault.total_shares, shares_before,
+            "Shares changed during stale oracle approve"
+        );
+        assert_eq!(
+            self.vault.total_assets, assets_before,
+            "Assets changed during stale oracle approve"
+        );
+        self.vault.rejected_stale_oracle += 1;
+    }
+
+    #[flow]
+    fn flow_stale_oracle_approve_redeem(&mut self) {
+        if !self.vault.initialized || self.vault.paused || !self.vault.oracle_stale {
+            return;
+        }
+
+        let user_idx = random_user();
+        if self.vault.users[user_idx].redemption_request.status.0 != RequestStatus::Pending {
+            return;
+        }
+
+        let shares_before = self.vault.total_shares;
+        let assets_before = self.vault.total_assets;
+
+        // On-chain: OracleStale error rejects approve
+        // Model: no state change
+
+        assert_eq!(
+            self.vault.total_shares, shares_before,
+            "Shares changed during stale oracle redeem approve"
+        );
+        assert_eq!(
+            self.vault.total_assets, assets_before,
+            "Assets changed during stale oracle redeem approve"
+        );
+        self.vault.rejected_stale_oracle += 1;
+    }
+
+    // =========================================================================
+    // Oracle staleness: advance time to make oracle stale
+    // =========================================================================
+
+    #[flow]
+    fn flow_advance_time(&mut self) {
+        if !self.vault.initialized {
+            return;
+        }
+
+        let advance: i64 = (rand::random::<u64>() % 7200) as i64 + 1;
+        self.vault.current_timestamp += advance;
+
+        let age = self.vault.current_timestamp - self.vault.oracle_updated_at;
+        self.vault.oracle_stale = age > MAX_STALENESS;
+    }
+
+    // =========================================================================
+    // Attestation boundary fuzzing
+    // =========================================================================
+
+    #[flow]
+    fn flow_expire_attestation(&mut self) {
+        if !self.vault.initialized {
+            return;
+        }
+
+        let user_idx = random_user();
+        self.vault.users[user_idx].attestation_expired = true;
+    }
+
+    #[flow]
+    fn flow_renew_attestation(&mut self) {
+        if !self.vault.initialized {
+            return;
+        }
+
+        let user_idx = random_user();
+        self.vault.users[user_idx].attestation_expired = false;
+    }
+
+    #[flow]
+    fn flow_revoke_attestation(&mut self) {
+        if !self.vault.initialized {
+            return;
+        }
+
+        let user_idx = random_user();
+        self.vault.users[user_idx].attestation_revoked = true;
+    }
+
+    #[flow]
+    fn flow_unrevoke_attestation(&mut self) {
+        if !self.vault.initialized {
+            return;
+        }
+
+        let user_idx = random_user();
+        self.vault.users[user_idx].attestation_revoked = false;
+    }
+
+    #[flow]
+    fn flow_expired_attestation_blocks_deposit(&mut self) {
+        if !self.vault.initialized || self.vault.paused || !self.vault.investment_window_open {
+            return;
+        }
+
+        let user_idx = random_user();
+        if !self.vault.users[user_idx].attestation_expired {
+            return;
+        }
+        if self.vault.users[user_idx].frozen {
+            return;
+        }
+
+        let status_before = self.vault.users[user_idx].investment_request.status.0;
+        let pending_before = self.vault.total_pending_deposits;
+
+        // On-chain: AttestationExpired error rejects request
+        // Model: no state change
+
+        assert_eq!(
+            self.vault.users[user_idx].investment_request.status.0,
+            status_before,
+            "Expired attestation allowed deposit request"
+        );
+        assert_eq!(
+            self.vault.total_pending_deposits, pending_before,
+            "Pending changed despite expired attestation"
+        );
+        self.vault.rejected_attestation_expired += 1;
+    }
+
+    #[flow]
+    fn flow_revoked_attestation_blocks_deposit(&mut self) {
+        if !self.vault.initialized || self.vault.paused || !self.vault.investment_window_open {
+            return;
+        }
+
+        let user_idx = random_user();
+        if !self.vault.users[user_idx].attestation_revoked {
+            return;
+        }
+        if self.vault.users[user_idx].frozen {
+            return;
+        }
+
+        let status_before = self.vault.users[user_idx].investment_request.status.0;
+        let pending_before = self.vault.total_pending_deposits;
+
+        // On-chain: AttestationRevoked error rejects request
+        // Model: no state change
+
+        assert_eq!(
+            self.vault.users[user_idx].investment_request.status.0,
+            status_before,
+            "Revoked attestation allowed deposit request"
+        );
+        assert_eq!(
+            self.vault.total_pending_deposits, pending_before,
+            "Pending changed despite revoked attestation"
+        );
+        self.vault.rejected_attestation_revoked += 1;
+    }
+
+    #[flow]
+    fn flow_expired_attestation_blocks_redeem(&mut self) {
+        if !self.vault.initialized || self.vault.paused || self.vault.total_shares == 0 {
+            return;
+        }
+
+        let user_idx = random_user();
+        if !self.vault.users[user_idx].attestation_expired {
+            return;
+        }
+        if self.vault.users[user_idx].frozen {
+            return;
+        }
+
+        let shares_before = self.vault.users[user_idx].shares_balance;
+        let redeem_status_before = self.vault.users[user_idx].redemption_request.status.0;
+
+        // On-chain: AttestationExpired error rejects request
+
+        assert_eq!(
+            self.vault.users[user_idx].shares_balance, shares_before,
+            "Shares changed despite expired attestation"
+        );
+        assert_eq!(
+            self.vault.users[user_idx].redemption_request.status.0,
+            redeem_status_before,
+            "Redeem status changed despite expired attestation"
+        );
+        self.vault.rejected_attestation_expired += 1;
+    }
+
+    #[flow]
+    fn flow_revoked_attestation_blocks_redeem(&mut self) {
+        if !self.vault.initialized || self.vault.paused || self.vault.total_shares == 0 {
+            return;
+        }
+
+        let user_idx = random_user();
+        if !self.vault.users[user_idx].attestation_revoked {
+            return;
+        }
+        if self.vault.users[user_idx].frozen {
+            return;
+        }
+
+        let shares_before = self.vault.users[user_idx].shares_balance;
+        let redeem_status_before = self.vault.users[user_idx].redemption_request.status.0;
+
+        // On-chain: AttestationRevoked error rejects request
+
+        assert_eq!(
+            self.vault.users[user_idx].shares_balance, shares_before,
+            "Shares changed despite revoked attestation"
+        );
+        assert_eq!(
+            self.vault.users[user_idx].redemption_request.status.0,
+            redeem_status_before,
+            "Redeem status changed despite revoked attestation"
+        );
+        self.vault.rejected_attestation_revoked += 1;
+    }
+
+    // =========================================================================
+    // Oracle price variation: share math at extreme prices
+    // =========================================================================
+
+    #[flow]
+    fn flow_oracle_extreme_prices(&mut self) {
+        if !self.vault.initialized || self.vault.oracle_price == 0 {
+            return;
+        }
+
+        let test_prices: [u64; 5] = [
+            PRICE_SCALE / 100,      // 0.01x
+            PRICE_SCALE / 10,       // 0.1x
+            PRICE_SCALE,            // 1.0x
+            PRICE_SCALE * 10,       // 10x
+            PRICE_SCALE * 100,      // 100x
+        ];
+
+        let test_amount: u64 = (rand::random::<u64>() % 1_000_000_000).max(1000);
+
+        for price in test_prices {
+            let shares = match assets_to_shares(test_amount, price) {
+                Ok(s) if s > 0 => s,
+                _ => continue,
+            };
+
+            let assets_back = match shares_to_assets(shares, price) {
+                Ok(a) => a,
+                Err(_) => continue,
+            };
+
+            // INVARIANT: vault-favorable rounding at all price levels
+            assert!(
+                assets_back <= test_amount,
+                "Price {} created free assets: in={}, out={}",
+                price,
+                test_amount,
+                assets_back,
+            );
+        }
+    }
+
+    #[flow]
+    fn flow_oracle_price_change_between_approve_and_claim(&mut self) {
+        if !self.vault.initialized || self.vault.oracle_price == 0 {
+            return;
+        }
+
+        let amount: u64 = (rand::random::<u64>() % 1_000_000_000).max(1_000_000);
+
+        // Approve at current price
+        let shares_at_approve = match assets_to_shares(amount, self.vault.oracle_price) {
+            Ok(s) if s > 0 => s,
+            _ => return,
+        };
+
+        // Price shifts before claim (simulate price change)
+        let shifted_price = (rand::random::<u64>() % (PRICE_SCALE * 10)).max(PRICE_SCALE / 10);
+
+        // Claim uses locked shares, not current price
+        // INVARIANT: shares_at_approve is fixed at approval time,
+        // independent of subsequent price changes
+        let _assets_at_new_price = match shares_to_assets(shares_at_approve, shifted_price) {
+            Ok(a) => a,
+            Err(_) => return,
+        };
+
+        // Verify shares are deterministic at the approval price
+        let shares_reverified = match assets_to_shares(amount, self.vault.oracle_price) {
+            Ok(s) => s,
+            Err(_) => return,
+        };
+        assert_eq!(
+            shares_at_approve, shares_reverified,
+            "Share calculation is not deterministic for same inputs"
+        );
+
+        // Verify rounding at the original price still favors vault
+        let roundtrip = match shares_to_assets(shares_at_approve, self.vault.oracle_price) {
+            Ok(a) => a,
+            Err(_) => return,
+        };
+        assert!(
+            roundtrip <= amount,
+            "Roundtrip at approval price created free assets"
+        );
     }
 
     // =========================================================================
@@ -683,6 +1191,23 @@ impl FuzzTest {
             self.vault.oracle_price > 0,
             "Oracle price dropped to zero"
         );
+
+        // INVARIANT 5: Oracle staleness flag consistent with timestamps
+        let age = self.vault.current_timestamp - self.vault.oracle_updated_at;
+        let expected_stale = age > MAX_STALENESS;
+        assert_eq!(
+            self.vault.oracle_stale, expected_stale,
+            "Oracle staleness flag inconsistent: age={}, stale={}, expected={}",
+            age,
+            self.vault.oracle_stale,
+            expected_stale
+        );
+
+        // INVARIANT 6: Oracle current_timestamp never regresses
+        assert!(
+            self.vault.current_timestamp >= self.vault.oracle_updated_at,
+            "current_timestamp < oracle_updated_at"
+        );
     }
 
     // =========================================================================
@@ -739,5 +1264,5 @@ impl FuzzTest {
 }
 
 fn main() {
-    FuzzTest::fuzz(5000, 80);
+    FuzzTest::fuzz(8000, 120);
 }

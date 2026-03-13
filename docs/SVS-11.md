@@ -176,11 +176,8 @@ pub enum AccessMode {
 pub fn initialize_pool(
     ctx: Context<InitializePool>,
     vault_id: u64,
-    name: String,           // shares token name
-    symbol: String,         // shares token symbol
-    uri: String,            // shares token metadata URI
-    minimum_investment: u64,
-    max_staleness: i64,
+    minimum_investment: u64,  // minimum deposit amount (in asset decimals)
+    max_staleness: i64,       // max oracle age in seconds (60..=86400)
 ) -> Result<()>
 ```
 
@@ -253,7 +250,7 @@ pub struct Attestation {
 
 ### Compliance Features
 
-- **Account Freezing**: Manager creates `FrozenAccount` PDA to block an investor. Checked via `Option<Account<'info, FrozenAccount>>` -- if the account exists, the investor is frozen.
+- **Account Freezing**: Manager creates `FrozenAccount` PDA to block an investor. Checked via `Option<Account<'info, FrozenAccount>>` -- if the account exists, the investor is frozen. Frozen accounts can still claim already-approved deposits and redemptions — freezing only blocks new requests and approvals.
 - **Investment Windows**: Deposits and redemptions only accepted when `investment_window_open == true`.
 - **Pause**: Halts approve_deposit, approve_redeem, draw_down, repay. Requests and claims still work.
 
@@ -447,7 +444,7 @@ const repayTx = await vault.repay(500_000_000);
 | `programs/svs-11/src/instructions/module_admin.rs` | Module admin (with `modules` feature) |
 | `sdk/core/src/credit-vault.ts` | TypeScript SDK |
 | `tests/svs-11.ts` | Anchor test suite |
-| `scripts/e2e-svs11-devnet.ts` | Devnet E2E test script |
+| `scripts/svs-11/` | Modular devnet E2E scripts |
 
 ---
 

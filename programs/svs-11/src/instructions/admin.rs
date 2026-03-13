@@ -109,8 +109,26 @@ pub fn update_attester_handler(
     Ok(())
 }
 
+#[derive(Accounts)]
+pub struct UpdateOracleConfig<'info> {
+    #[account(
+        constraint = authority.key() == vault.authority @ VaultError::Unauthorized,
+    )]
+    pub authority: Signer<'info>,
+
+    #[account(
+        mut,
+        seeds = [VAULT_SEED, vault.asset_mint.as_ref(), &vault.vault_id.to_le_bytes()],
+        bump = vault.bump,
+    )]
+    pub vault: Account<'info, CreditVault>,
+
+    /// CHECK: Validated as executable below
+    pub new_oracle_program_account: UncheckedAccount<'info>,
+}
+
 pub fn update_oracle_config_handler(
-    ctx: Context<Admin>,
+    ctx: Context<UpdateOracleConfig>,
     new_nav_oracle: Pubkey,
     new_oracle_program: Pubkey,
     new_max_staleness: i64,
@@ -122,6 +140,14 @@ pub fn update_oracle_config_handler(
     require!(
         new_oracle_program != Pubkey::default(),
         VaultError::InvalidAddress
+    );
+    require!(
+        ctx.accounts.new_oracle_program_account.key() == new_oracle_program,
+        VaultError::OracleInvalidProgram
+    );
+    require!(
+        ctx.accounts.new_oracle_program_account.executable,
+        VaultError::OracleInvalidProgram
     );
     require!(
         new_max_staleness >= 60 && new_max_staleness <= 86400,

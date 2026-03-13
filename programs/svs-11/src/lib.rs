@@ -133,7 +133,7 @@ pub mod svs_11 {
 
     /// Update the NAV oracle configuration.
     pub fn update_oracle_config(
-        ctx: Context<Admin>,
+        ctx: Context<UpdateOracleConfig>,
         new_nav_oracle: Pubkey,
         new_oracle_program: Pubkey,
         new_max_staleness: i64,

@@ -12,6 +12,12 @@ pub mod mock_oracle {
         oracle.updated_at = Clock::get()?.unix_timestamp;
         Ok(())
     }
+
+    pub fn update_timestamp(ctx: Context<UpdateTimestamp>, timestamp: i64) -> Result<()> {
+        let oracle = &mut ctx.accounts.oracle_data;
+        oracle.updated_at = timestamp;
+        Ok(())
+    }
 }
 
 #[derive(Accounts)]
@@ -29,6 +35,19 @@ pub struct SetPrice<'info> {
     pub oracle_data: Account<'info, OracleData>,
 
     pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct UpdateTimestamp<'info> {
+    #[account(mut)]
+    pub authority: Signer<'info>,
+
+    #[account(
+        mut,
+        seeds = [b"oracle"],
+        bump,
+    )]
+    pub oracle_data: Account<'info, OracleData>,
 }
 
 #[account]
