@@ -16,9 +16,16 @@ import {
   OperatorApprovalState,
 } from "../src/async-vault";
 
-import idl from "../../../target/idl/svs_10.json";
+import * as fs from "fs";
+import * as path from "path";
 
 // Derive error codes from the IDL so they stay in sync with the program
+const idl = JSON.parse(
+  fs.readFileSync(
+    path.join(__dirname, "../../../target/idl/svs_10.json"),
+    "utf-8",
+  ),
+);
 const AsyncVaultErrorCode = Object.fromEntries(
   idl.errors.map((e: { code: number; name: string }) => [e.name, e.code]),
 ) as Record<string, number>;
