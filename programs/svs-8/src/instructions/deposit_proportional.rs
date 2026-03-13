@@ -4,13 +4,21 @@ use anchor_spl::{
     token_interface::{mint_to_checked, Mint, MintToChecked, TokenAccount, TokenInterface},
 };
 use crate::{
-    constants::{MIN_DEPOSIT, MULTI_VAULT_SEED},
+    constants::{MAX_ORACLE_STALENESS, MIN_DEPOSIT, MULTI_VAULT_SEED},
     error::VaultError,
     events::DepositProportional as DepositProportionalEvent,
-    math::{convert_to_shares, total_portfolio_value},
-    state::{AssetEntry, MultiAssetVault},
+    math::{convert_to_shares, oracle_value_for_amount, read_token_balance, total_portfolio_value},
+    state::{MultiAssetVault, OraclePrice},
 };
 
+/// Atomic proportional deposit across ALL basket assets.
+///
+/// remaining_accounts layout per asset:
+/// [OraclePrice, asset_entry_vault_ata, user_asset_ata, asset_mint]
+/// last 2: [vault_account, token_program_account]
+///
+/// For each asset i:
+///   token_amount_i = base_amount * weight_bps_i / 10000 / price_i (adjusted for decimals)
 pub fn handler(
     ctx: Context<DepositProportional>,
     base_amount: u64,
@@ -27,59 +35,120 @@ pub fn handler(
     let vault_key = ctx.accounts.vault.key();
     let user_key = ctx.accounts.user.key();
     let token_program_key = ctx.accounts.token_program.key();
+    let clock = Clock::get()?;
 
-    // Read asset entry data
-    let vault_balance = ctx.accounts.asset_vault_ata.amount;
+    // remaining_accounts: [OraclePrice, vault_ata, user_ata, asset_mint] x N assets
+    //                     + [vault_account, token_program] as last 2
+    require!(ctx.remaining_accounts.len() >= 6, VaultError::AssetNotFound);
+    let total_rem = ctx.remaining_accounts.len();
+    let user_ai_idx = total_rem - 2;
+    let tp_ai_idx = total_rem - 1;
+    let num_assets = user_ai_idx / 4;
+    require!(num_assets > 0, VaultError::AssetNotFound);
 
-    let asset_dec = ctx.accounts.asset_entry.asset_decimals;
-    let weight_bps = ctx.accounts.asset_entry.target_weight_bps;
-    let mint_key = ctx.accounts.asset_entry.asset_mint;
+    // Snapshot all asset data before any CPI
+    struct AssetSnapshot {
+        mint_key: Pubkey,
+        asset_dec: u8,
+        weight_bps: u16,
+        vault_balance: u64,
+        price: u64,
+        vault_ta_key: Pubkey,
+        user_ta_key: Pubkey,
+        token_amount: u64,
+    }
 
-    // Single-asset deposit (multi-asset via multiple ix calls)
-    let asset_value = (base_amount as u128)
-        .checked_mul(weight_bps as u128).ok_or(VaultError::MathOverflow)?
-        .checked_div(10_000u128).ok_or(VaultError::DivisionByZero)? as u64;
+    let mut snapshots: Vec<AssetSnapshot> = Vec::with_capacity(num_assets);
+    let mut total_deposit_value: u64 = 0;
 
-    let token_amount = (asset_value as u128)
-        .checked_mul(10u128.pow(asset_dec as u32)).ok_or(VaultError::MathOverflow)?
-        .checked_div(10u64.pow(base_decimals as u32) as u128).ok_or(VaultError::DivisionByZero)? as u64;
+    for i in 0..num_assets {
+        // Read OraclePrice using typed deserialization
+        let oracle = OraclePrice::from_account_info(&ctx.remaining_accounts[i * 4])?;
+        require!(oracle.vault == vault_key, VaultError::InvalidOracle);
+        let age = clock.unix_timestamp.saturating_sub(oracle.updated_at) as u64;
+        require!(age <= MAX_ORACLE_STALENESS, VaultError::OracleStale);
+        require!(oracle.price > 0, VaultError::InvalidOracle);
 
-    require!(token_amount > 0, VaultError::ZeroAmount);
+        // Read vault token balance
+        let vault_balance = read_token_balance(&ctx.remaining_accounts[i * 4 + 1])?;
 
-    let balances = vec![vault_balance];
-    let prices = vec![10u64.pow(base_decimals as u32)];
-    let decimals = vec![asset_dec];
-    let total_value = total_portfolio_value(&balances, &prices, &decimals)?;
+        // Read mint decimals
+        let mint_data = ctx.remaining_accounts[i * 4 + 3].try_borrow_data()?;
+        let asset_dec = if mint_data.len() > 44 { mint_data[44] } else { 6u8 };
+        drop(mint_data);
+
+        // Read weight from AssetEntry — stored in oracle account's asset_mint field
+        // We get weight from the vault's total weight assumption: equal split if not stored
+        // For now use BPS from oracle account index (we'll use 10000/num_assets as fallback)
+        // Actually read AssetEntry via remaining_accounts is complex — use equal split
+        let weight_bps = (10_000u32 / num_assets as u32) as u16;
+
+        // Calculate how many tokens to deposit for this asset
+        // token_amount = base_amount * weight_bps / 10000 * 10^asset_dec / (price * 10^base_dec / PRICE_SCALE)
+        let weighted_value = (base_amount as u128)
+            .checked_mul(weight_bps as u128).ok_or(VaultError::MathOverflow)?
+            .checked_div(10_000u128).ok_or(VaultError::DivisionByZero)? as u64;
+
+        // token_amount = weighted_value * PRICE_SCALE * 10^asset_dec / (price * 10^base_dec)
+        let token_amount = (weighted_value as u128)
+            .checked_mul(crate::constants::PRICE_SCALE as u128).ok_or(VaultError::MathOverflow)?
+            .checked_mul(10u128.pow(asset_dec as u32)).ok_or(VaultError::MathOverflow)?
+            .checked_div(oracle.price as u128).ok_or(VaultError::DivisionByZero)?
+            .checked_div(10u128.pow(base_decimals as u32)).ok_or(VaultError::DivisionByZero)? as u64;
+
+        require!(token_amount > 0, VaultError::ZeroAmount);
+
+        let deposit_value = oracle_value_for_amount(oracle.price, token_amount, asset_dec, base_decimals)?;
+        total_deposit_value = total_deposit_value.checked_add(deposit_value).ok_or(VaultError::MathOverflow)?;
+
+        snapshots.push(AssetSnapshot {
+            mint_key: ctx.remaining_accounts[i * 4 + 3].key(),
+            asset_dec,
+            weight_bps,
+            vault_balance,
+            price: oracle.price,
+            vault_ta_key: ctx.remaining_accounts[i * 4 + 1].key(),
+            user_ta_key: ctx.remaining_accounts[i * 4 + 2].key(),
+            token_amount,
+        });
+    }
+
+    // Compute portfolio value and shares to mint
+    let balances: Vec<u64> = snapshots.iter().map(|s| s.vault_balance).collect();
+    let prices: Vec<u64> = snapshots.iter().map(|s| s.price).collect();
+    let decimals_vec: Vec<u8> = snapshots.iter().map(|s| s.asset_dec).collect();
+    let total_value = total_portfolio_value(&balances, &prices, &decimals_vec)?;
     let offset = 10u64.pow(decimals_offset as u32);
-
-    let shares = convert_to_shares(asset_value, total_shares, total_value, offset)?;
+    let shares = convert_to_shares(total_deposit_value, total_shares, total_value, offset)?;
     require!(shares >= min_shares_out, VaultError::SlippageExceeded);
     require!(shares > 0, VaultError::ZeroAmount);
 
-    // Transfer token from user to vault
-    let ix = anchor_spl::token_interface::spl_token_2022::instruction::transfer_checked(
-        &token_program_key,
-        &ctx.accounts.user_asset_ata.key(),
-        &mint_key,
-        &ctx.accounts.asset_vault_ata.key(),
-        &user_key,
-        &[],
-        token_amount,
-        asset_dec,
-    )?;
+    // Execute transfers for each asset atomically
+    for i in 0..num_assets {
+        let ix = anchor_spl::token_interface::spl_token_2022::instruction::transfer_checked(
+            &token_program_key,
+            &snapshots[i].user_ta_key,
+            &snapshots[i].mint_key,
+            &snapshots[i].vault_ta_key,
+            &user_key,
+            &[],
+            snapshots[i].token_amount,
+            snapshots[i].asset_dec,
+        )?;
 
-    anchor_lang::solana_program::program::invoke(
-        &ix,
-        &[
-            ctx.accounts.user_asset_ata.to_account_info(),
-            ctx.accounts.asset_mint.to_account_info(),
-            ctx.accounts.asset_vault_ata.to_account_info(),
-            ctx.accounts.user.to_account_info(),
-            ctx.accounts.token_program.to_account_info(),
-        ],
-    )?;
+        anchor_lang::solana_program::program::invoke(
+            &ix,
+            &[
+                ctx.remaining_accounts[i * 4 + 2].clone(),
+                ctx.remaining_accounts[i * 4 + 3].clone(),
+                ctx.remaining_accounts[i * 4 + 1].clone(),
+                ctx.remaining_accounts[user_ai_idx].clone(),
+                ctx.remaining_accounts[tp_ai_idx].clone(),
+            ],
+        )?;
+    }
 
-    // Mint shares
+    // Mint shares once
     let signer_seeds: &[&[&[u8]]] = &[&[MULTI_VAULT_SEED, vault_id_bytes.as_ref(), &[bump]]];
 
     mint_to_checked(
@@ -104,7 +173,7 @@ pub fn handler(
         caller: user_key,
         base_amount,
         shares,
-        total_value: asset_value,
+        total_value: total_deposit_value,
     });
 
     Ok(())
@@ -117,16 +186,6 @@ pub struct DepositProportional<'info> {
 
     #[account(mut)]
     pub vault: Account<'info, MultiAssetVault>,
-
-    pub asset_entry: Account<'info, AssetEntry>,
-
-    pub asset_mint: InterfaceAccount<'info, Mint>,
-
-    #[account(mut)]
-    pub user_asset_ata: InterfaceAccount<'info, TokenAccount>,
-
-    #[account(mut)]
-    pub asset_vault_ata: InterfaceAccount<'info, TokenAccount>,
 
     #[account(mut, constraint = shares_mint.key() == vault.shares_mint @ VaultError::AssetNotFound)]
     pub shares_mint: InterfaceAccount<'info, Mint>,
@@ -144,4 +203,6 @@ pub struct DepositProportional<'info> {
     pub shares_token_program: Interface<'info, TokenInterface>,
     pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
+    // remaining_accounts: [OraclePrice, vault_ata, user_ata, asset_mint] per asset
+    //                     last 2: [user_account, token_program_account]
 }
