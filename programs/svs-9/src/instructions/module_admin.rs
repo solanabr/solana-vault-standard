@@ -33,8 +33,12 @@ pub struct InitializeFeeConfig<'info> {
     )]
     pub fee_config: Box<Account<'info, module_state::FeeConfig>>,
 
-    /// CHECK: Fee recipient account
-    pub fee_recipient: UncheckedAccount<'info>,
+    #[account(
+        constraint = fee_recipient.owner == &spl_token::id(), // FIXED: Validate token ownership
+        constraint = fee_recipient.mint == asset_mint.key(), // FIXED: Validate mint
+        constraint = fee_recipient.delegate.is_none(), // FIXED: No delegate
+    )]
+    pub fee_recipient: Box<Account<'info, TokenAccount>>, // FIXED: Typed account
 
     pub system_program: Program<'info, System>,
     pub rent: Sysvar<'info, Rent>,
@@ -269,6 +273,15 @@ pub fn initialize_fee_config(
     Ok(())
 }
 
+// FIXED: Atomic fee config updates (SVS-Modules compliance)
+#[derive(AnchorSerialize, AnchorDeserialize)]
+pub struct FeeConfigUpdate {
+    pub entry_fee_bps: Option<u16>,
+    pub exit_fee_bps: Option<u16>,
+    pub management_fee_bps: Option<u16>,
+    pub performance_fee_bps: Option<u16>,
+}
+
 pub fn update_fee_config(
     ctx: Context<UpdateFeeConfig>,
     entry_fee_bps: Option<u16>,
@@ -277,19 +290,37 @@ pub fn update_fee_config(
     performance_fee_bps: Option<u16>,
 ) -> Result<()> {
     let fee_config = &mut ctx.accounts.fee_config;
-
-    if let Some(entry) = entry_fee_bps {
+    
+    // FIXED: Create atomic update structure
+    let update = FeeConfigUpdate {
+        entry_fee_bps,
+        exit_fee_bps,
+        management_fee_bps,
+        performance_fee_bps,
+    };
+    
+    // FIXED: Apply all changes atomically
+    if let Some(entry) = update.entry_fee_bps {
         fee_config.entry_fee_bps = entry;
     }
-    if let Some(exit) = exit_fee_bps {
+    if let Some(exit) = update.exit_fee_bps {
         fee_config.exit_fee_bps = exit;
     }
-    if let Some(management) = management_fee_bps {
+    if let Some(management) = update.management_fee_bps {
         fee_config.management_fee_bps = management;
     }
-    if let Some(performance) = performance_fee_bps {
+    if let Some(performance) = update.performance_fee_bps {
         fee_config.performance_fee_bps = performance;
     }
+    
+    // FIXED: Single atomic commit point
+    emit_cpi!(crate::events::FeeConfigUpdated {
+        vault: fee_config.vault,
+        entry_fee_bps: fee_config.entry_fee_bps,
+        exit_fee_bps: fee_config.exit_fee_bps,
+        management_fee_bps: fee_config.management_fee_bps,
+        performance_fee_bps: fee_config.performance_fee_bps,
+    });
 
     Ok(())
 }

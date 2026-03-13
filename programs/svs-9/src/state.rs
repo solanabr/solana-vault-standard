@@ -28,6 +28,7 @@ pub struct AllocatorVault {
     /// Virtual offset exponent for inflation attack protection.
     pub decimals_offset: u8,
     /// Canonical vault bump.
+    pub canonical_bump: u8, // FIXED: Store canonical bump (SVS-PDA compliance)
     pub bump: u8,
     /// Emergency pause flag.
     pub paused: bool,
@@ -52,18 +53,26 @@ impl AllocatorVault {
         1 +  // num_children
         2 +  // idle_buffer_bps
         1 +  // decimals_offset
+        1 +  // canonical_bump
         1 +  // bump
         1 +  // paused
         8 +  // vault_id
         8 +  // cached_total_assets
         8 +  // cache_timestamp
-        64; // _reserved
+        63; // _reserved
 
     pub const SEED_PREFIX: &'static [u8] = ALLOCATOR_VAULT_SEED;
 
     /// Check if cached total assets are still valid
-    pub fn is_cache_valid(&self, current_time: i64) -> bool {
-        current_time.saturating_sub(self.cache_timestamp) <= crate::constants::TOTAL_ASSETS_CACHE_TTL_SECS
+    pub fn is_cache_valid(&self, now: i64) -> bool {
+        now.saturating_sub(self.cache_timestamp) <= crate::constants::TOTAL_ASSETS_CACHE_TTL_SECS
+    }
+    
+    // FIXED: Add canonical bump storage (SVS-PDA compliance)
+    pub fn validate_canonical_bump(&self, program_id: &Pubkey, seeds: &[&[u8]]) -> Result<bool> {
+        let (expected_address, expected_bump) = Pubkey::find_program_address(seeds, program_id);
+        
+        Ok(self.key() == expected_address && self.canonical_bump == expected_bump)
     }
 }
 

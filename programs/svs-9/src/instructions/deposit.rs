@@ -94,15 +94,20 @@ pub fn handler(ctx: Context<Deposit>, params: DepositParams) -> Result<()> {
         params.assets,
     )?;
 
-    // Calculate total assets (including all child positions)
-    let total_assets = crate::math::total_assets(
-        ctx.accounts.idle_vault.amount,
-        &[],
-        &[],
-        &[],
-        &[],
-        allocator.decimals_offset,
-    )?;
+    // Calculate total assets (including all child positions) with cache validation
+    let total_assets = if allocator.is_cache_valid(clock.unix_timestamp) {
+        allocator.cached_total_assets
+    } else {
+        // FIXED: Recalculate from scratch if cache expired (SVS-Caching compliance)
+        crate::math::total_assets(
+            ctx.accounts.idle_vault.amount,
+            &[],
+            &[],
+            &[],
+            &[],
+            allocator.decimals_offset,
+        )?
+    };
 
     // Calculate shares to mint
     let shares = crate::math::convert_to_shares(

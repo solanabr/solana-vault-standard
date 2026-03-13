@@ -18,7 +18,7 @@ pub struct Initialize<'info> {
         init,
         payer = payer,
         space = AllocatorVault::LEN,
-        seeds = [ALLOCATOR_VAULT_SEED, asset_mint.key().as_ref(), vault_id.to_le_bytes().as_ref()],
+        seeds = [ALLOCATOR_VAULT_SEED, asset_mint.key().as_ref(), vault_id.to_le_bytes().as_ref(), payer.key().as_ref()], // FIXED: Unique identifier
         bump
     )]
     pub allocator: Box<Account<'info, AllocatorVault>>,
@@ -87,7 +87,7 @@ pub fn handler(ctx: Context<Initialize>, params: InitializeParams) -> Result<()>
     require!(params.name.len() <= 32, VaultError::InvalidAccountData);
     require!(params.symbol.len() <= 10, VaultError::InvalidAccountData);
 
-    // Initialize vault state
+    // Initialize vault state with canonical bump
     allocator.authority = ctx.accounts.payer.key();
     allocator.curator = ctx.accounts.payer.key(); // Initially same as authority
     allocator.asset_mint = ctx.accounts.asset_mint.key();
@@ -97,6 +97,7 @@ pub fn handler(ctx: Context<Initialize>, params: InitializeParams) -> Result<()>
     allocator.num_children = 0;
     allocator.idle_buffer_bps = params.idle_buffer_bps;
     allocator.decimals_offset = 0; // Will be set based on asset decimals
+    allocator.canonical_bump = ctx.bumps.allocator; // FIXED: Store canonical bump
     allocator.bump = ctx.bumps.allocator;
     allocator.paused = false;
     allocator.vault_id = params.vault_id;
