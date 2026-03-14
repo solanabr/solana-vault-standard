@@ -6,6 +6,45 @@
  * of underlying SPL tokens.
  *
  * Vault Variants:
+ * - SVS-1: Public vault with live balance
+ * - SVS-2: Managed vault with stored balance
+ * - SVS-3: Confidential vault with Token-2022 confidential transfers
+ * - SVS-4: Privacy-preserving vault with ZK proofs
+ * - SVS-8: Multi-asset basket vault (ERC-7575 analog)
+ *
+ * @packageDocumentation
+ */
+export * from "./vault";
+export * from "./managed-vault";
+export * from "./pda";
+export * from "./math";
+
+// On-chain Module Support (v2)
+export * from "./modules";
+
+// SDK Modules (client-side)
+export * from "./fees";
+export * from "./cap";
+export * from "./emergency";
+export * from "./access-control";
+export * from "./multi-asset";
+export * from "./timelock";
+export * from "./strategy";
+
+// SVS-8: Multi-Asset Basket Vault SDK
+export * from "./basket-vault";
+
+// Re-export common types
+export { BN } from "@coral-xyz/anchor";
+export { PublicKey } from "@solana/web3.js";
+/**
+ * Solana Vault Standard (SVS) SDK
+ *
+ * Native port of ERC-4626 to Solana. Provides a standardized interface
+ * for tokenized vaults with shares representing proportional ownership
+ * of underlying SPL tokens.
+ *
+ * Vault Variants:
  * - SVS-1: Public vault with live balance (reads asset_vault.amount)
  * - SVS-2: Managed vault with stored balance (uses vault.total_assets)
  * - SVS-3: Confidential vault with Token-2022 confidential transfers
