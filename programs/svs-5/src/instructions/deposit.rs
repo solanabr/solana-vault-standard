@@ -16,7 +16,7 @@ use crate::{
 };
 
 #[cfg(feature = "modules")]
-use crate::module_hooks;
+use svs_module_hooks as module_hooks;
 
 #[derive(Accounts)]
 pub struct Deposit<'info> {
@@ -86,9 +86,16 @@ pub fn handler(ctx: Context<Deposit>, assets: u64, min_shares_out: u64) -> Resul
         let user_key = ctx.accounts.user.key();
 
         // 1. Access control check (whitelist/blacklist + frozen)
-        module_hooks::check_deposit_access(remaining, &vault_key, &user_key, &[])?;
+        module_hooks::check_deposit_access(remaining, &crate::ID, &vault_key, &user_key, &[])?;
         // 2. Cap enforcement
-        module_hooks::check_deposit_caps(remaining, &vault_key, &user_key, total_assets, assets)?;
+        module_hooks::check_deposit_caps(
+            remaining,
+            &crate::ID,
+            &vault_key,
+            &user_key,
+            total_assets,
+            assets,
+        )?;
 
         let shares = convert_to_shares(
             assets,
@@ -99,7 +106,7 @@ pub fn handler(ctx: Context<Deposit>, assets: u64, min_shares_out: u64) -> Resul
         )?;
 
         // 3. Apply entry fee
-        let result = module_hooks::apply_entry_fee(remaining, &vault_key, shares)?;
+        let result = module_hooks::apply_entry_fee(remaining, &crate::ID, &vault_key, shares)?;
         result.net_shares
     };
 
