@@ -75,13 +75,19 @@ impl StreamVault {
         }
 
         // Linear interpolation: accrued = stream_amount * elapsed / duration (floor)
-        let elapsed = now
+        // Safety: validate non-negative before i64→u64 cast to prevent wrapping
+        let elapsed_i64 = now
             .checked_sub(self.stream_start)
-            .ok_or(VaultError::MathOverflow)? as u64;
-        let duration = self
+            .ok_or(VaultError::MathOverflow)?;
+        require!(elapsed_i64 >= 0, VaultError::MathOverflow);
+        let elapsed = elapsed_i64 as u64;
+
+        let duration_i64 = self
             .stream_end
             .checked_sub(self.stream_start)
-            .ok_or(VaultError::MathOverflow)? as u64;
+            .ok_or(VaultError::MathOverflow)?;
+        require!(duration_i64 > 0, VaultError::MathOverflow);
+        let duration = duration_i64 as u64;
 
         let accrued = math::mul_div(self.stream_amount, elapsed, duration, math::Rounding::Floor)?;
 
