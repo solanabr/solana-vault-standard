@@ -1,0 +1,22 @@
+[package]
+name = "svs-9"
+version = "0.1.0"
+description = "SVS-9: Allocator Vault (Vault-of-Vaults) — Solana Vault Standard"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "svs_9"
+
+[features]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+cpi = ["no-entrypoint"]
+default = []
+modules = []
+idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
+
+[dependencies]
+anchor-lang = { version = "0.32.1", features = ["init-if-needed"] }
+anchor-spl = { version = "0.32.1", features = ["token", "token_2022", "associated_token", "metadata"] }
