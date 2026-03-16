@@ -241,6 +241,8 @@ solana-vault sync my-vault                    # Sync balance (SVS-2/4)
 ### Vault PDA
 **Seeds:** `["vault", asset_mint, vault_id (u64 LE)]`
 
+> **SVS-5 note:** StreamVault uses seed `"stream_vault"` instead of `"vault"`.
+
 ```typescript
 const [vault] = PublicKey.findProgramAddressSync(
   [Buffer.from("vault"), assetMint.toBuffer(), vaultId.toArrayLike(Buffer, "le", 8)],

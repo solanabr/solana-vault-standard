@@ -141,7 +141,7 @@ pub struct StreamVault {
 // Total: 251 bytes
 ```
 
-**Key differences from SVS-2**: `total_assets` is replaced by five streaming fields — `base_assets`, `stream_amount`, `stream_start`, `stream_end`, and `last_checkpoint`. The account discriminator is 8 bytes (Anchor standard), bringing the full on-chain allocation to 259 bytes.
+**Key differences from SVS-2**: `total_assets` is replaced by five streaming fields — `base_assets`, `stream_amount`, `stream_start`, `stream_end`, and `last_checkpoint`. Total: 251 bytes (including 8-byte Anchor discriminator).
 
 ## Instructions
 
@@ -202,7 +202,7 @@ assets = (shares * (effective_total_assets(now) + 1)) / (total_supply + offset)
 | Operation | Formula | Rounding | Rationale |
 |-----------|---------|----------|-----------|
 | **deposit** | `shares = convertToShares(assets)` | Floor | Favors vault |
-| **mint** | `assets = convertToAssets(shares) + 1` | Ceiling | Protects depositor |
+| **mint** | `assets = convertToAssets(shares) + 1` | Ceiling | Favors vault |
 | **withdraw** | `shares = convertToShares(assets) + 1` | Ceiling | Favors vault |
 | **redeem** | `assets = convertToAssets(shares)` | Floor | Favors vault |
 
@@ -579,12 +579,13 @@ See [SVS-1.md#module-integration](SVS-1.md#module-integration) for hook architec
 | `programs/svs-5/src/math.rs` | effective_total_assets, mul_div |
 | `programs/svs-5/src/instructions/distribute_yield.rs` | distribute_yield handler |
 | `programs/svs-5/src/instructions/checkpoint.rs` | checkpoint handler |
-| `programs/svs-5/src/instructions/deposit.rs` | deposit / mint handlers |
+| `programs/svs-5/src/instructions/deposit.rs` | deposit handler |
+| `programs/svs-5/src/instructions/mint.rs` | mint handler |
 | `programs/svs-5/src/instructions/withdraw.rs` | withdraw / redeem handlers |
 | `programs/svs-5/src/instructions/admin.rs` | pause, unpause, transfer_authority |
 | `programs/svs-5/src/error.rs` | VaultError enum |
 | `programs/svs-5/src/events.rs` | YieldStreamStarted, Checkpoint events |
-| `programs/svs-5/src/module_hooks.rs` | Module integration (with `modules` feature) |
+| `svs-module-hooks/` (shared crate) | Module integration (with `modules` feature) |
 
 ---
 
