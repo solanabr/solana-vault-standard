@@ -192,9 +192,12 @@ async function main() {
   const profitLoss = victimRedeemed - VICTIM_DEPOSIT;
   console.log(`  Result: ${profitLoss >= 0 ? '+' : ''}${profitLoss.toFixed(2)} ${profitLoss >= 0 ? 'profit' : 'loss'}`);
 
-  const lossPercent = Math.abs(profitLoss) / VICTIM_DEPOSIT * 100;
+  const lossPercent = -profitLoss / VICTIM_DEPOSIT * 100; // positive = loss
   console.log("\n" + "=".repeat(70));
-  if (lossPercent < 1) {
+  if (profitLoss >= 0) {
+    console.log("  ✅ PROTECTED: Victim did not lose tokens despite donation attack");
+    console.log(`     Result: +${(profitLoss / VICTIM_DEPOSIT * 100).toFixed(4)}% (virtual offset protection working)`);
+  } else if (lossPercent < 1) {
     console.log("  ✅ PROTECTED: Victim redeemed ~full deposit despite donation attack");
     console.log(`     Loss: ${lossPercent.toFixed(4)}% (virtual offset protection working)`);
   } else {
