@@ -64,6 +64,18 @@ pub fn handler(ctx: Context<DistributeYield>, yield_amount: u64, duration: i64) 
         });
     }
 
+    // Recognize any remaining un-accrued yield from previous stream.
+    // After checkpoint, stream_amount holds the un-accrued remainder.
+    // These tokens are already in the vault — reflect them in base_assets
+    // so they aren't lost when stream_amount is overwritten below.
+    if vault.stream_amount > 0 {
+        vault.base_assets = vault
+            .base_assets
+            .checked_add(vault.stream_amount)
+            .ok_or(VaultError::MathOverflow)?;
+        vault.stream_amount = 0;
+    }
+
     // Transfer yield tokens from authority to asset vault
     transfer_checked(
         CpiContext::new(

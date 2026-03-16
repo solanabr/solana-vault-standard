@@ -4,11 +4,15 @@
 
 use anchor_lang::prelude::*;
 
-use crate::{events::Checkpointed, state::StreamVault};
+use crate::{constants::VAULT_SEED, events::Checkpointed, state::StreamVault};
 
 #[derive(Accounts)]
 pub struct Checkpoint<'info> {
-    #[account(mut)]
+    #[account(
+        mut,
+        seeds = [VAULT_SEED, vault.asset_mint.as_ref(), &vault.vault_id.to_le_bytes()],
+        bump = vault.bump,
+    )]
     pub vault: Account<'info, StreamVault>,
 }
 
