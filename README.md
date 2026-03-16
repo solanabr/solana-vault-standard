@@ -360,7 +360,7 @@ const [sharesMint] = PublicKey.findProgramAddressSync(
 # Build all programs
 anchor build
 
-# Run all tests (130 tests, requires proof backend for SVS-3/SVS-4)
+# Run all tests (165+ tests, requires proof backend for SVS-3/SVS-4)
 anchor test
 
 # Run with modules feature (includes 16 module tests)
@@ -413,6 +413,7 @@ solana-vault-standard/
 │   ├── svs-2.ts                  # SVS-2 stored balance + sync tests (35)
 │   ├── svs-3.ts                  # SVS-3 confidential live balance tests (42)
 │   ├── svs-4.ts                  # SVS-4 confidential stored balance tests (43)
+│   ├── svs-5.ts                  # SVS-5 streaming yield tests (35)
 │   ├── helpers/
 │   │   └── proof-client.ts       # ZK proof backend client helpers
 │   ├── admin-extended.ts         # Admin function tests
