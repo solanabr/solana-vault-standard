@@ -221,13 +221,14 @@ pub fn get_stream_info(ctx: Context<VaultView>) -> Result<()> {
     let clock = Clock::get()?;
     let effective_total = vault.effective_total_assets(clock.unix_timestamp)?;
 
-    // Pack stream info: base_assets(8) + stream_amount(8) + stream_start(8) + stream_end(8) + effective_total(8)
-    let mut data = [0u8; 40];
+    // Pack stream info: base_assets(8) + stream_amount(8) + stream_start(8) + stream_end(8) + effective_total(8) + last_checkpoint(8)
+    let mut data = [0u8; 48];
     data[0..8].copy_from_slice(&vault.base_assets.to_le_bytes());
     data[8..16].copy_from_slice(&vault.stream_amount.to_le_bytes());
     data[16..24].copy_from_slice(&vault.stream_start.to_le_bytes());
     data[24..32].copy_from_slice(&vault.stream_end.to_le_bytes());
     data[32..40].copy_from_slice(&effective_total.to_le_bytes());
+    data[40..48].copy_from_slice(&vault.last_checkpoint.to_le_bytes());
     set_return_data(&data);
     Ok(())
 }

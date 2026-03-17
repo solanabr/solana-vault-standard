@@ -2,7 +2,6 @@
 
 use anchor_lang::prelude::*;
 use anchor_spl::{
-    associated_token::AssociatedToken,
     token_2022::{self, MintTo, Token2022},
     token_interface::{transfer_checked, Mint, TokenAccount, TokenInterface, TransferChecked},
 };
@@ -54,29 +53,29 @@ pub struct Deposit<'info> {
     pub shares_mint: InterfaceAccount<'info, Mint>,
 
     #[account(
-        init_if_needed,
-        payer = user,
-        associated_token::mint = shares_mint,
-        associated_token::authority = user,
-        associated_token::token_program = token_2022_program,
+        mut,
+        constraint = user_shares_account.mint == vault.shares_mint,
+        constraint = user_shares_account.owner == user.key(),
     )]
     pub user_shares_account: InterfaceAccount<'info, TokenAccount>,
 
     pub asset_token_program: Interface<'info, TokenInterface>,
     pub token_2022_program: Program<'info, Token2022>,
-    pub associated_token_program: Program<'info, AssociatedToken>,
-    pub system_program: Program<'info, System>,
 }
 
 pub fn handler(ctx: Context<Deposit>, assets: u64, min_shares_out: u64) -> Result<()> {
     require!(assets > 0, VaultError::ZeroAmount);
     require!(assets >= MIN_DEPOSIT_AMOUNT, VaultError::DepositTooSmall);
 
-    let vault = &ctx.accounts.vault;
-    let total_shares = ctx.accounts.shares_mint.supply;
-    // SVS-5: Use INTERPOLATED balance (effective_total_assets)
     let clock = Clock::get()?;
-    let total_assets = vault.effective_total_assets(clock.unix_timestamp)?;
+    let now = clock.unix_timestamp;
+
+    // SVS-5: Auto-checkpoint for consistent pricing across all operations
+    let vault = &mut ctx.accounts.vault;
+    vault.checkpoint(now)?;
+
+    let total_shares = ctx.accounts.shares_mint.supply;
+    let total_assets = vault.base_assets;
 
     // ===== Module Hooks (if enabled) =====
     #[cfg(feature = "modules")]
@@ -86,7 +85,7 @@ pub fn handler(ctx: Context<Deposit>, assets: u64, min_shares_out: u64) -> Resul
         let user_key = ctx.accounts.user.key();
 
         // 1. Access control check (whitelist/blacklist + frozen)
-        module_hooks::check_deposit_access(remaining, &crate::ID, &vault_key, &user_key, &[])?;
+        module_hooks::check_access(remaining, &crate::ID, &vault_key, &user_key, &[])?;
         // 2. Cap enforcement
         module_hooks::check_deposit_caps(
             remaining,

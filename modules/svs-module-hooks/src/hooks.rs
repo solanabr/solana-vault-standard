@@ -100,8 +100,9 @@ pub struct WithdrawModuleResult {
 // Hook Functions
 // =============================================================================
 
-/// Check access control for deposit.
-pub fn check_deposit_access(
+/// Check access control (whitelist/blacklist + frozen account).
+/// Used for both entry (deposit/mint) and exit (withdraw/redeem) operations.
+pub fn check_access(
     remaining_accounts: &[AccountInfo],
     program_id: &Pubkey,
     vault_key: &Pubkey,

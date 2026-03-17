@@ -9,6 +9,7 @@ import {
   getAccount,
   getAssociatedTokenAddressSync,
   ASSOCIATED_TOKEN_PROGRAM_ID,
+  createAssociatedTokenAccountIdempotentInstruction,
   transfer,
 } from "@solana/spl-token";
 import { Keypair, PublicKey, SystemProgram, SYSVAR_RENT_PUBKEY } from "@solana/web3.js";
@@ -44,6 +45,17 @@ describe("svs-5 (Streaming Yield Vault)", () => {
     return PublicKey.findProgramAddressSync(
       [Buffer.from("shares"), vault.toBuffer()],
       program.programId
+    );
+  };
+
+  const createSharesAtaIx = (payerKey: PublicKey, owner: PublicKey, mint: PublicKey) => {
+    return createAssociatedTokenAccountIdempotentInstruction(
+      payerKey,
+      getAssociatedTokenAddressSync(mint, owner, false, TOKEN_2022_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID),
+      owner,
+      mint,
+      TOKEN_2022_PROGRAM_ID,
+      ASSOCIATED_TOKEN_PROGRAM_ID,
     );
   };
 
@@ -115,7 +127,7 @@ describe("svs-5 (Streaming Yield Vault)", () => {
   describe("Initialize", () => {
     it("creates a new streaming vault", async () => {
       const tx = await program.methods
-        .initialize(vaultId, "SVS-5 Stream Vault", "svVault5", "https://example.com/vault5.json")
+        .initialize(vaultId, "SVS-5 Stream Vault", "svVault5")
         .accountsStrict({
           authority: payer.publicKey,
           vault: vault,
@@ -170,9 +182,8 @@ describe("svs-5 (Streaming Yield Vault)", () => {
           userSharesAccount: userSharesAccount,
           assetTokenProgram: TOKEN_PROGRAM_ID,
           token2022Program: TOKEN_2022_PROGRAM_ID,
-          associatedTokenProgram: anchor.utils.token.ASSOCIATED_PROGRAM_ID,
-          systemProgram: SystemProgram.programId,
         })
+        .preInstructions([createSharesAtaIx(payer.publicKey, payer.publicKey, sharesMint)])
         .rpc();
 
       const userAssetAfter = await getAccount(connection, userAssetAccount);
@@ -211,9 +222,8 @@ describe("svs-5 (Streaming Yield Vault)", () => {
           userSharesAccount: userSharesAccount,
           assetTokenProgram: TOKEN_PROGRAM_ID,
           token2022Program: TOKEN_2022_PROGRAM_ID,
-          associatedTokenProgram: anchor.utils.token.ASSOCIATED_PROGRAM_ID,
-          systemProgram: SystemProgram.programId,
         })
+        .preInstructions([createSharesAtaIx(payer.publicKey, payer.publicKey, sharesMint)])
         .rpc();
 
       const vaultAfter = await program.account.streamVault.fetch(vault);
@@ -542,9 +552,8 @@ describe("svs-5 (Streaming Yield Vault)", () => {
           userSharesAccount: userSharesAccount,
           assetTokenProgram: TOKEN_PROGRAM_ID,
           token2022Program: TOKEN_2022_PROGRAM_ID,
-          associatedTokenProgram: anchor.utils.token.ASSOCIATED_PROGRAM_ID,
-          systemProgram: SystemProgram.programId,
         })
+        .preInstructions([createSharesAtaIx(payer.publicKey, payer.publicKey, sharesMint)])
         .rpc();
 
       const sharesAfter = await getAccount(connection, userSharesAccount, undefined, TOKEN_2022_PROGRAM_ID);
@@ -594,9 +603,8 @@ describe("svs-5 (Streaming Yield Vault)", () => {
             userSharesAccount: userSharesAccount,
             assetTokenProgram: TOKEN_PROGRAM_ID,
             token2022Program: TOKEN_2022_PROGRAM_ID,
-            associatedTokenProgram: anchor.utils.token.ASSOCIATED_PROGRAM_ID,
-            systemProgram: SystemProgram.programId,
           })
+          .preInstructions([createSharesAtaIx(payer.publicKey, payer.publicKey, sharesMint)])
           .rpc();
         expect.fail("Should reject when paused");
       } catch (err: any) {
@@ -876,9 +884,8 @@ describe("svs-5 (Streaming Yield Vault)", () => {
             userSharesAccount: userSharesAccount,
             assetTokenProgram: TOKEN_PROGRAM_ID,
             token2022Program: TOKEN_2022_PROGRAM_ID,
-            associatedTokenProgram: anchor.utils.token.ASSOCIATED_PROGRAM_ID,
-            systemProgram: SystemProgram.programId,
           })
+          .preInstructions([createSharesAtaIx(payer.publicKey, payer.publicKey, sharesMint)])
           .rpc();
         expect.fail("Should reject zero deposit");
       } catch (err: any) {
@@ -928,9 +935,8 @@ describe("svs-5 (Streaming Yield Vault)", () => {
             userSharesAccount: userSharesAccount,
             assetTokenProgram: TOKEN_PROGRAM_ID,
             token2022Program: TOKEN_2022_PROGRAM_ID,
-            associatedTokenProgram: anchor.utils.token.ASSOCIATED_PROGRAM_ID,
-            systemProgram: SystemProgram.programId,
           })
+          .preInstructions([createSharesAtaIx(payer.publicKey, payer.publicKey, sharesMint)])
           .rpc();
         expect.fail("Should reject due to slippage");
       } catch (err: any) {

@@ -30,8 +30,6 @@ require!(assets <= total_assets, VaultError::InsufficientAssets);
 
 **Fix**: Remove the alias and check `assets` directly.
 
-## 3. `check_deposit_access` naming
+## 3. `check_access` naming (resolved)
 
-Both SVS-2 and SVS-5 call `check_deposit_access()` in withdraw/redeem handlers. The function checks general access control (frozen accounts, blacklists), not deposit-specific access. This is confusing when reading withdraw/redeem code.
-
-**Fix**: Consider renaming to `check_access` or `check_account_access` to reflect its general purpose. This is a cross-cutting change that affects the module hooks interface.
+Renamed `check_deposit_access()` to `check_access()` across all variants. The function checks general access control (frozen accounts, blacklists), not deposit-specific access.

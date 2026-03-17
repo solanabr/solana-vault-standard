@@ -25,7 +25,7 @@ import {
   getMint,
 } from "@solana/spl-token";
 import { Keypair, PublicKey, SystemProgram, SYSVAR_RENT_PUBKEY } from "@solana/web3.js";
-import { setupTest, getVaultPDA, getSharesMintPDA, fundAccounts, ASSET_DECIMALS, SHARE_DECIMALS } from "./helpers";
+import { setupTest, getVaultPDA, getSharesMintPDA, fundAccounts, createSharesAtaIx, ASSET_DECIMALS, SHARE_DECIMALS } from "./helpers";
 
 interface UserState {
   name: string;
@@ -87,7 +87,7 @@ async function main() {
   const assetVault = anchor.utils.token.associatedAddress({ mint: assetMint, owner: vault });
 
   await program.methods
-    .initialize(vaultId, "Multi-User Stream Test", "MULTI", "https://test.com")
+    .initialize(vaultId, "Multi-User Stream Test", "MULTI")
     .accountsStrict({
       authority: payer.publicKey, vault, assetMint, sharesMint, assetVault,
       assetTokenProgram: TOKEN_PROGRAM_ID, token2022Program: TOKEN_2022_PROGRAM_ID,
@@ -116,8 +116,8 @@ async function main() {
       userAssetAccount: alice.assetAccount, assetVault, sharesMint,
       userSharesAccount: alice.sharesAccount,
       assetTokenProgram: TOKEN_PROGRAM_ID, token2022Program: TOKEN_2022_PROGRAM_ID,
-      associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID, systemProgram: SystemProgram.programId,
     })
+    .preInstructions([createSharesAtaIx(alice.keypair.publicKey, alice.keypair.publicKey, sharesMint)])
     .signers([alice.keypair])
     .rpc();
 
@@ -149,8 +149,8 @@ async function main() {
       userAssetAccount: bob.assetAccount, assetVault, sharesMint,
       userSharesAccount: bob.sharesAccount,
       assetTokenProgram: TOKEN_PROGRAM_ID, token2022Program: TOKEN_2022_PROGRAM_ID,
-      associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID, systemProgram: SystemProgram.programId,
     })
+    .preInstructions([createSharesAtaIx(bob.keypair.publicKey, bob.keypair.publicKey, sharesMint)])
     .signers([bob.keypair])
     .rpc();
 

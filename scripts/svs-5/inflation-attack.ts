@@ -25,7 +25,7 @@ import {
   ASSOCIATED_TOKEN_PROGRAM_ID,
 } from "@solana/spl-token";
 import { Keypair, SystemProgram, SYSVAR_RENT_PUBKEY } from "@solana/web3.js";
-import { setupTest, getVaultPDA, getSharesMintPDA, fundAccounts, ASSET_DECIMALS } from "./helpers";
+import { setupTest, getVaultPDA, getSharesMintPDA, fundAccounts, createSharesAtaIx, ASSET_DECIMALS } from "./helpers";
 
 async function main() {
   const { connection, payer, program, programId } = await setupTest("Inflation/Donation Attack (Streaming)");
@@ -79,7 +79,7 @@ async function main() {
   const assetVault = anchor.utils.token.associatedAddress({ mint: assetMint, owner: vault });
 
   await program.methods
-    .initialize(vaultId, "Inflation Test Vault", "INFLAT", "https://test.com")
+    .initialize(vaultId, "Inflation Test Vault", "INFLAT")
     .accountsStrict({
       authority: payer.publicKey, vault, assetMint, sharesMint, assetVault,
       assetTokenProgram: TOKEN_PROGRAM_ID, token2022Program: TOKEN_2022_PROGRAM_ID,
@@ -106,8 +106,8 @@ async function main() {
       userAssetAccount: attackerAta.address, assetVault, sharesMint,
       userSharesAccount: attackerSharesAccount,
       assetTokenProgram: TOKEN_PROGRAM_ID, token2022Program: TOKEN_2022_PROGRAM_ID,
-      associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID, systemProgram: SystemProgram.programId,
     })
+    .preInstructions([createSharesAtaIx(attacker.publicKey, attacker.publicKey, sharesMint)])
     .signers([attacker])
     .rpc();
 
@@ -153,8 +153,8 @@ async function main() {
       userAssetAccount: victimAta.address, assetVault, sharesMint,
       userSharesAccount: victimSharesAccount,
       assetTokenProgram: TOKEN_PROGRAM_ID, token2022Program: TOKEN_2022_PROGRAM_ID,
-      associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID, systemProgram: SystemProgram.programId,
     })
+    .preInstructions([createSharesAtaIx(victim.publicKey, victim.publicKey, sharesMint)])
     .signers([victim])
     .rpc();
 

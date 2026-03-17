@@ -28,9 +28,8 @@ pub mod svs_5 {
         vault_id: u64,
         name: String,
         symbol: String,
-        uri: String,
     ) -> Result<()> {
-        instructions::initialize::handler(ctx, vault_id, name, symbol, uri)
+        instructions::initialize::handler(ctx, vault_id, name, symbol)
     }
 
     /// Deposit assets and receive shares

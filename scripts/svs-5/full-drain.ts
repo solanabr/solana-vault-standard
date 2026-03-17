@@ -23,7 +23,7 @@ import {
   getMint,
 } from "@solana/spl-token";
 import { Keypair, PublicKey, SystemProgram, SYSVAR_RENT_PUBKEY } from "@solana/web3.js";
-import { setupTest, getVaultPDA, getSharesMintPDA, fundAccounts, ASSET_DECIMALS, SHARE_DECIMALS } from "./helpers";
+import { setupTest, getVaultPDA, getSharesMintPDA, fundAccounts, createSharesAtaIx, ASSET_DECIMALS, SHARE_DECIMALS } from "./helpers";
 
 async function main() {
   const { connection, payer, program, programId } = await setupTest("Full Drain");
@@ -57,7 +57,7 @@ async function main() {
   );
 
   await program.methods
-    .initialize(vaultId1, "Drain Test 1", "DRAIN1", "https://test.com")
+    .initialize(vaultId1, "Drain Test 1", "DRAIN1")
     .accountsStrict({
       authority: payer.publicKey, vault: vault1, assetMint, sharesMint: sharesMint1, assetVault: assetVault1,
       assetTokenProgram: TOKEN_PROGRAM_ID, token2022Program: TOKEN_2022_PROGRAM_ID,
@@ -76,8 +76,8 @@ async function main() {
       user: payer.publicKey, vault: vault1, assetMint, userAssetAccount: userAta.address,
       assetVault: assetVault1, sharesMint: sharesMint1, userSharesAccount: userSharesAccount1,
       assetTokenProgram: TOKEN_PROGRAM_ID, token2022Program: TOKEN_2022_PROGRAM_ID,
-      associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID, systemProgram: SystemProgram.programId,
     })
+    .preInstructions([createSharesAtaIx(payer.publicKey, payer.publicKey, sharesMint1)])
     .rpc();
 
   // Distribute yield (short stream for testing)
@@ -144,7 +144,7 @@ async function main() {
   const assetVault2 = anchor.utils.token.associatedAddress({ mint: assetMint, owner: vault2 });
 
   await program.methods
-    .initialize(vaultId2, "Drain Test 2", "DRAIN2", "https://test.com")
+    .initialize(vaultId2, "Drain Test 2", "DRAIN2")
     .accountsStrict({
       authority: payer.publicKey, vault: vault2, assetMint, sharesMint: sharesMint2, assetVault: assetVault2,
       assetTokenProgram: TOKEN_PROGRAM_ID, token2022Program: TOKEN_2022_PROGRAM_ID,
@@ -178,8 +178,8 @@ async function main() {
         userAssetAccount: ata.address, assetVault: assetVault2, sharesMint: sharesMint2,
         userSharesAccount: sharesAccount,
         assetTokenProgram: TOKEN_PROGRAM_ID, token2022Program: TOKEN_2022_PROGRAM_ID,
-        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID, systemProgram: SystemProgram.programId,
       })
+      .preInstructions([createSharesAtaIx(user.keypair.publicKey, user.keypair.publicKey, sharesMint2)])
       .signers([user.keypair])
       .rpc();
 
@@ -264,8 +264,8 @@ async function main() {
         user: payer.publicKey, vault: vault1, assetMint, userAssetAccount: userAta.address,
         assetVault: assetVault1, sharesMint: sharesMint1, userSharesAccount: userSharesAccount1Again,
         assetTokenProgram: TOKEN_PROGRAM_ID, token2022Program: TOKEN_2022_PROGRAM_ID,
-        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID, systemProgram: SystemProgram.programId,
       })
+      .preInstructions([createSharesAtaIx(payer.publicKey, payer.publicKey, sharesMint1)])
       .rpc();
 
     const newShares = await getAccount(connection, userSharesAccount1Again, undefined, TOKEN_2022_PROGRAM_ID);

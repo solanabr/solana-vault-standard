@@ -27,7 +27,7 @@ import {
 } from "@solana/spl-token";
 import { Keypair, SystemProgram, SYSVAR_RENT_PUBKEY } from "@solana/web3.js";
 import { Svs5 } from "../../target/types/svs_5";
-import { setupTest, getVaultPDA, getSharesMintPDA, fundAccount, ASSET_DECIMALS } from "./helpers";
+import { setupTest, getVaultPDA, getSharesMintPDA, fundAccount, createSharesAtaIx, ASSET_DECIMALS } from "./helpers";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -68,7 +68,7 @@ async function main() {
   );
 
   await program.methods
-    .initialize(vaultId, "Edge Case Test Vault", "EDGE", "https://test.com")
+    .initialize(vaultId, "Edge Case Test Vault", "EDGE")
     .accountsStrict({
       authority: payer.publicKey, vault, assetMint, sharesMint, assetVault,
       assetTokenProgram: TOKEN_PROGRAM_ID, token2022Program: TOKEN_2022_PROGRAM_ID,
@@ -84,8 +84,8 @@ async function main() {
       user: payer.publicKey, vault, assetMint, userAssetAccount: userAta.address,
       assetVault, sharesMint, userSharesAccount,
       assetTokenProgram: TOKEN_PROGRAM_ID, token2022Program: TOKEN_2022_PROGRAM_ID,
-      associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID, systemProgram: SystemProgram.programId,
     })
+    .preInstructions([createSharesAtaIx(payer.publicKey, payer.publicKey, sharesMint)])
     .rpc();
 
   console.log("  Setup complete\n");
@@ -101,8 +101,9 @@ async function main() {
         user: payer.publicKey, vault, assetMint, userAssetAccount: userAta.address,
         assetVault, sharesMint, userSharesAccount,
         assetTokenProgram: TOKEN_PROGRAM_ID, token2022Program: TOKEN_2022_PROGRAM_ID,
-        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID, systemProgram: SystemProgram.programId,
-      }).rpc();
+      })
+      .preInstructions([createSharesAtaIx(payer.publicKey, payer.publicKey, sharesMint)])
+      .rpc();
     console.log("  ❌ FAILED: Should have rejected"); results.push({ name: "Zero amount", passed: false });
   } catch {
     console.log("  ✅ PASSED: Correctly rejected"); results.push({ name: "Zero amount", passed: true });
@@ -242,8 +243,9 @@ async function main() {
         user: payer.publicKey, vault, assetMint, userAssetAccount: userAta.address,
         assetVault, sharesMint, userSharesAccount,
         assetTokenProgram: TOKEN_PROGRAM_ID, token2022Program: TOKEN_2022_PROGRAM_ID,
-        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID, systemProgram: SystemProgram.programId,
-      }).rpc();
+      })
+      .preInstructions([createSharesAtaIx(payer.publicKey, payer.publicKey, sharesMint)])
+      .rpc();
     console.log("  ❌ FAILED: Should have rejected"); results.push({ name: "Deposit when paused", passed: false });
   } catch (err: any) {
     if (err.toString().includes("VaultPaused")) {

@@ -4,7 +4,13 @@
  */
 
 import { Program, BN } from "@coral-xyz/anchor";
-import { Connection, Keypair, PublicKey } from "@solana/web3.js";
+import { Connection, Keypair, PublicKey, TransactionInstruction } from "@solana/web3.js";
+import {
+  TOKEN_2022_PROGRAM_ID,
+  ASSOCIATED_TOKEN_PROGRAM_ID,
+  createAssociatedTokenAccountIdempotentInstruction,
+  getAssociatedTokenAddressSync,
+} from "@solana/spl-token";
 import * as anchor from "@coral-xyz/anchor";
 import { Svs5 } from "../../target/types/svs_5";
 import {
@@ -43,4 +49,25 @@ export interface SetupResult {
 
 export async function setupTest(testName: string): Promise<SetupResult> {
   return genericSetupTest<Svs5>(testName, "svs_5");
+}
+
+/** Create ATA for shares token (idempotent — safe to call if ATA already exists) */
+export function createSharesAtaIx(
+  payer: PublicKey,
+  owner: PublicKey,
+  sharesMint: PublicKey,
+): TransactionInstruction {
+  return createAssociatedTokenAccountIdempotentInstruction(
+    payer,
+    getSharesAtaAddress(owner, sharesMint),
+    owner,
+    sharesMint,
+    TOKEN_2022_PROGRAM_ID,
+    ASSOCIATED_TOKEN_PROGRAM_ID,
+  );
+}
+
+/** Derive the shares ATA address for a given owner */
+function getSharesAtaAddress(owner: PublicKey, sharesMint: PublicKey): PublicKey {
+  return getAssociatedTokenAddressSync(sharesMint, owner, false, TOKEN_2022_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID);
 }

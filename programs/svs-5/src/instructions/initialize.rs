@@ -64,7 +64,6 @@ pub fn handler(
     vault_id: u64,
     name: String,
     symbol: String,
-    _uri: String,
 ) -> Result<()> {
     let asset_decimals = ctx.accounts.asset_mint.decimals;
     require!(

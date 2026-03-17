@@ -35,12 +35,15 @@ import {
   TOKEN_2022_PROGRAM_ID,
   ASSOCIATED_TOKEN_PROGRAM_ID,
   getAssociatedTokenAddressSync,
+  createAssociatedTokenAccountIdempotentInstruction,
 } from "@solana/spl-token";
 
 import {
   SolanaVault,
   VaultState,
   CreateVaultParams,
+  DepositParams,
+  MintParams,
   getTokenProgramForMint,
 } from "./vault";
 import { deriveVaultAddresses } from "./pda";
@@ -60,6 +63,7 @@ export interface StreamInfo {
   streamStart: BN;
   streamEnd: BN;
   effectiveTotal: BN;
+  lastCheckpoint: BN;
 }
 
 /**
@@ -144,7 +148,7 @@ export class StreamingVault extends SolanaVault {
     );
 
     await program.methods
-      .initialize(id, params.name, params.symbol, params.uri)
+      .initialize(id, params.name, params.symbol)
       .accountsStrict({
         authority: provider.wallet.publicKey,
         vault: addresses.vault,
@@ -160,6 +164,71 @@ export class StreamingVault extends SolanaVault {
       .rpc();
 
     return StreamingVault.load(program, params.assetMint, id);
+  }
+
+  /**
+   * Create ATA instruction for user's shares account if it doesn't exist.
+   * SVS-5 deposit/mint don't use init_if_needed — ATA must exist beforehand.
+   */
+  private createSharesAtaIx(user: PublicKey) {
+    return createAssociatedTokenAccountIdempotentInstruction(
+      user,
+      this.getUserSharesAccount(user),
+      user,
+      this.sharesMint,
+      TOKEN_2022_PROGRAM_ID,
+      ASSOCIATED_TOKEN_PROGRAM_ID,
+    );
+  }
+
+  /**
+   * Deposit assets and receive shares.
+   * Overrides base to prepend ATA creation (SVS-5 doesn't use init_if_needed).
+   */
+  override async deposit(user: PublicKey, params: DepositParams): Promise<string> {
+    const userAssetAccount = this.getUserAssetAccount(user);
+    const userSharesAccount = this.getUserSharesAccount(user);
+
+    return this.program.methods
+      .deposit(params.assets, params.minSharesOut)
+      .accountsStrict({
+        user,
+        vault: this.vault,
+        assetMint: this.assetMint,
+        userAssetAccount,
+        assetVault: this.assetVault,
+        sharesMint: this.sharesMint,
+        userSharesAccount,
+        assetTokenProgram: this.assetTokenProgram,
+        token2022Program: TOKEN_2022_PROGRAM_ID,
+      })
+      .preInstructions([this.createSharesAtaIx(user)])
+      .rpc();
+  }
+
+  /**
+   * Mint exact shares by paying assets.
+   * Overrides base to prepend ATA creation (SVS-5 doesn't use init_if_needed).
+   */
+  override async mint(user: PublicKey, params: MintParams): Promise<string> {
+    const userAssetAccount = this.getUserAssetAccount(user);
+    const userSharesAccount = this.getUserSharesAccount(user);
+
+    return this.program.methods
+      .mint(params.shares, params.maxAssetsIn)
+      .accountsStrict({
+        user,
+        vault: this.vault,
+        assetMint: this.assetMint,
+        userAssetAccount,
+        assetVault: this.assetVault,
+        sharesMint: this.sharesMint,
+        userSharesAccount,
+        assetTokenProgram: this.assetTokenProgram,
+        token2022Program: TOKEN_2022_PROGRAM_ID,
+      })
+      .preInstructions([this.createSharesAtaIx(user)])
+      .rpc();
   }
 
   /**
@@ -239,6 +308,7 @@ export class StreamingVault extends SolanaVault {
       streamStart: state.streamStart,
       streamEnd: state.streamEnd,
       effectiveTotal,
+      lastCheckpoint: state.lastCheckpoint,
     };
   }
 

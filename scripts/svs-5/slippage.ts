@@ -23,7 +23,7 @@ import {
   ASSOCIATED_TOKEN_PROGRAM_ID,
 } from "@solana/spl-token";
 import { Keypair, SystemProgram, SYSVAR_RENT_PUBKEY } from "@solana/web3.js";
-import { setupTest, getVaultPDA, getSharesMintPDA, ASSET_DECIMALS } from "./helpers";
+import { setupTest, getVaultPDA, getSharesMintPDA, createSharesAtaIx, ASSET_DECIMALS } from "./helpers";
 
 async function main() {
   const { connection, payer, program, programId } = await setupTest("Slippage Protection");
@@ -50,7 +50,7 @@ async function main() {
   );
 
   await program.methods
-    .initialize(vaultId, "Slippage Test Vault", "SLIP", "https://test.com")
+    .initialize(vaultId, "Slippage Test Vault", "SLIP")
     .accountsStrict({
       authority: payer.publicKey, vault, assetMint, sharesMint, assetVault,
       assetTokenProgram: TOKEN_PROGRAM_ID, token2022Program: TOKEN_2022_PROGRAM_ID,
@@ -65,8 +65,8 @@ async function main() {
     .accountsStrict({
       user: payer.publicKey, vault, assetMint, userAssetAccount: userAta.address, assetVault, sharesMint, userSharesAccount,
       assetTokenProgram: TOKEN_PROGRAM_ID, token2022Program: TOKEN_2022_PROGRAM_ID,
-      associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID, systemProgram: SystemProgram.programId,
     })
+    .preInstructions([createSharesAtaIx(payer.publicKey, payer.publicKey, sharesMint)])
     .rpc();
 
   // Start a yield stream to test slippage during active streaming
@@ -95,8 +95,8 @@ async function main() {
       .accountsStrict({
         user: payer.publicKey, vault, assetMint, userAssetAccount: userAta.address, assetVault, sharesMint, userSharesAccount,
         assetTokenProgram: TOKEN_PROGRAM_ID, token2022Program: TOKEN_2022_PROGRAM_ID,
-        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID, systemProgram: SystemProgram.programId,
       })
+      .preInstructions([createSharesAtaIx(payer.publicKey, payer.publicKey, sharesMint)])
       .rpc();
     console.log("  ❌ FAILED: Should have reverted"); failed++;
   } catch (err: any) {
@@ -118,8 +118,8 @@ async function main() {
       .accountsStrict({
         user: payer.publicKey, vault, assetMint, userAssetAccount: userAta.address, assetVault, sharesMint, userSharesAccount,
         assetTokenProgram: TOKEN_PROGRAM_ID, token2022Program: TOKEN_2022_PROGRAM_ID,
-        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID, systemProgram: SystemProgram.programId,
       })
+      .preInstructions([createSharesAtaIx(payer.publicKey, payer.publicKey, sharesMint)])
       .rpc();
     console.log("  ✅ PASSED: Deposit succeeded"); passed++;
   } catch (err: any) {
@@ -137,8 +137,8 @@ async function main() {
       .accountsStrict({
         user: payer.publicKey, vault, assetMint, userAssetAccount: userAta.address, assetVault, sharesMint, userSharesAccount,
         assetTokenProgram: TOKEN_PROGRAM_ID, token2022Program: TOKEN_2022_PROGRAM_ID,
-        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID, systemProgram: SystemProgram.programId,
       })
+      .preInstructions([createSharesAtaIx(payer.publicKey, payer.publicKey, sharesMint)])
       .rpc();
     console.log("  ❌ FAILED: Should have reverted"); failed++;
   } catch {

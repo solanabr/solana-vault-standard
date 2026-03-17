@@ -24,7 +24,7 @@ import {
   getMint,
 } from "@solana/spl-token";
 import { Keypair, SystemProgram, SYSVAR_RENT_PUBKEY } from "@solana/web3.js";
-import { setupTest, getVaultPDA, getSharesMintPDA, ASSET_DECIMALS, SHARE_DECIMALS } from "./helpers";
+import { setupTest, getVaultPDA, getSharesMintPDA, createSharesAtaIx, ASSET_DECIMALS, SHARE_DECIMALS } from "./helpers";
 
 async function main() {
   const { connection, payer, program, programId } = await setupTest("Streaming Balance Behavior");
@@ -53,7 +53,7 @@ async function main() {
   );
 
   await program.methods
-    .initialize(vaultId, "Stream Balance Test", "SBAL", "https://test.com")
+    .initialize(vaultId, "Stream Balance Test", "SBAL")
     .accountsStrict({
       authority: payer.publicKey, vault, assetMint, sharesMint, assetVault,
       assetTokenProgram: TOKEN_PROGRAM_ID, token2022Program: TOKEN_2022_PROGRAM_ID,
@@ -70,8 +70,8 @@ async function main() {
       user: payer.publicKey, vault, assetMint, userAssetAccount: userAta.address,
       assetVault, sharesMint, userSharesAccount,
       assetTokenProgram: TOKEN_PROGRAM_ID, token2022Program: TOKEN_2022_PROGRAM_ID,
-      associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID, systemProgram: SystemProgram.programId,
     })
+    .preInstructions([createSharesAtaIx(payer.publicKey, payer.publicKey, sharesMint)])
     .rpc();
 
   // ============================================================================

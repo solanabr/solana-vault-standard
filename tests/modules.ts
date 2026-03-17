@@ -507,7 +507,7 @@ describe("SVS-1 Modules (Feature: modules)", () => {
 /**
  * NOTE: Integration tests for module enforcement in deposit/withdraw
  *
- * The module hooks (check_deposit_access, check_deposit_caps, apply_entry_fee, etc.)
+ * The module hooks (check_access, check_deposit_caps, apply_entry_fee, etc.)
  * live in modules/svs-module-hooks/src/hooks.rs and are wired into the
  * deposit/withdraw handlers when built with --features modules.
  *

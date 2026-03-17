@@ -31,6 +31,7 @@ import {
   getSharesMintPDA,
   explorerUrl,
   accountUrl,
+  createSharesAtaIx,
   ASSET_DECIMALS,
 } from "./helpers";
 
@@ -92,7 +93,7 @@ async function main() {
   console.log("-".repeat(70));
 
   const initTx = await program.methods
-    .initialize(vaultId, "SVS-5 Test Vault", "svSTREAM", "https://arweave.net/vault-metadata")
+    .initialize(vaultId, "SVS-5 Test Vault", "svSTREAM")
     .accountsStrict({
       authority: payer.publicKey,
       vault, assetMint, sharesMint, assetVault,
@@ -120,9 +121,8 @@ async function main() {
       vault, assetMint, userAssetAccount, assetVault, sharesMint, userSharesAccount,
       assetTokenProgram: TOKEN_PROGRAM_ID,
       token2022Program: TOKEN_2022_PROGRAM_ID,
-      associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-      systemProgram: SystemProgram.programId,
     })
+    .preInstructions([createSharesAtaIx(payer.publicKey, payer.publicKey, sharesMint)])
     .rpc();
 
   console.log(`  Tx: ${depositTx}`);
@@ -209,8 +209,9 @@ async function main() {
       .accountsStrict({
         user: payer.publicKey, vault, assetMint, userAssetAccount, assetVault, sharesMint, userSharesAccount,
         assetTokenProgram: TOKEN_PROGRAM_ID, token2022Program: TOKEN_2022_PROGRAM_ID,
-        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID, systemProgram: SystemProgram.programId,
-      }).rpc();
+      })
+      .preInstructions([createSharesAtaIx(payer.publicKey, payer.publicKey, sharesMint)])
+      .rpc();
     console.log("  ERROR: Deposit should have failed when paused!");
   } catch (err: any) {
     if (err.toString().includes("VaultPaused")) {

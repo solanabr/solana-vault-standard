@@ -172,7 +172,7 @@ All view functions call `effective_total_assets(clock.unix_timestamp)` internall
 | **preview_redeem** | vault, shares_mint | assets: u64 | Uses effective_total_assets(now) |
 | **convert_to_shares** | vault, shares_mint | shares: u64 | Uses effective_total_assets(now) |
 | **convert_to_assets** | vault, shares_mint | assets: u64 | Uses effective_total_assets(now) |
-| **get_stream_info** | vault | StreamInfo | Returns base_assets, stream_amount, stream_start, stream_end, last_checkpoint, accrued_now |
+| **get_stream_info** | vault | StreamInfo | Returns base_assets, stream_amount, stream_start, stream_end, effective_total, last_checkpoint |
 
 **Key difference**: `get_stream_info` is new in SVS-5. It exposes the full streaming state including the already-accrued amount at query time, useful for dashboards and off-chain monitors.
 
@@ -229,7 +229,7 @@ const vault = await StreamingVault.load(connection, vaultPubkey);
 const info = await vault.getStreamInfo();
 console.log(`base_assets:    ${info.baseAssets}`);
 console.log(`stream_amount:  ${info.streamAmount}`);
-console.log(`accrued so far: ${info.accruedNow}`);
+console.log(`effective total: ${info.effectiveTotal}`);
 console.log(`stream_end:     ${new Date(Number(info.streamEnd) * 1000).toISOString()}`);
 
 // Distribute yield for 14 days (authority)
@@ -277,9 +277,8 @@ class StreamingVault extends SolanaVault {
     streamAmount: bigint;
     streamStart: bigint;
     streamEnd: bigint;
+    effectiveTotal: bigint;      // base_assets + accrued stream yield
     lastCheckpoint: bigint;
-    accruedNow: bigint;          // effective_total_assets(now) - baseAssets
-    effectiveTotalAssets: bigint;
   }>;
 
   // Inherited from SolanaVault (same interface as SVS-1/SVS-2)
@@ -391,7 +390,8 @@ const now = BigInt(Math.floor(Date.now() / 1000));
 
 if (info.streamEnd > now) {
   const remainingSecs = info.streamEnd - now;
-  const remaining = info.streamAmount - info.accruedNow;
+  const accrued = info.effectiveTotal - info.baseAssets;
+  const remaining = info.streamAmount - accrued;
   console.log(`Stream active: ${remaining} tokens over ${remainingSecs}s remaining`);
 } else {
   console.log('No active stream. Vault in idle state.');
