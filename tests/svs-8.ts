@@ -442,4 +442,60 @@ describe("svs-8 (Multi Asset Basket)", () => {
     expect(vaultAfter.totalShares.toNumber()).to.be.greaterThan(sharesBefore.toNumber());
     console.log("shares after proportional deposit:", vaultAfter.totalShares.toString());
   });
+
+  it("redeems single asset", async () => {
+    // Use a fresh vault to avoid accumulated state from previous tests
+    const VAULT_ID_SINGLE = new BN(999);
+    const [vaultSingle] = PublicKey.findProgramAddressSync(
+      [Buffer.from("multi_vault"), VAULT_ID_SINGLE.toArrayLike(Buffer, "le", 8)],
+      program.programId
+    );
+    const [sharesMintSingle] = PublicKey.findProgramAddressSync(
+      [Buffer.from("shares"), vaultSingle.toBuffer()],
+      program.programId
+    );
+    const [assetEntrySingle] = PublicKey.findProgramAddressSync(
+      [Buffer.from("asset_entry"), vaultSingle.toBuffer(), mintA.toBuffer()],
+      program.programId
+    );
+    const [oracleSingle] = PublicKey.findProgramAddressSync(
+      [Buffer.from("oracle_price"), vaultSingle.toBuffer(), mintA.toBuffer()],
+      program.programId
+    );
+    const assetVaultSingleKeypair = anchor.web3.Keypair.generate();
+
+    // Initialize fresh vault
+    await program.methods.initialize(VAULT_ID_SINGLE, "Single Test", "SNG", "https://example.com", 6)
+      .accountsPartial({ authority: user.publicKey, sharesMint: sharesMintSingle, tokenProgram: TOKEN_2022_PROGRAM_ID, systemProgram: SystemProgram.programId, rent: anchor.web3.SYSVAR_RENT_PUBKEY })
+      .rpc();
+
+    await program.methods.addAsset(10_000)
+      .accountsPartial({ vault: vaultSingle, authority: user.publicKey, assetMint: mintA, oracle: anchor.web3.Keypair.generate().publicKey, assetEntry: assetEntrySingle, assetVault: assetVaultSingleKeypair.publicKey, tokenProgram: TOKEN_PROGRAM_ID, systemProgram: SystemProgram.programId, rent: anchor.web3.SYSVAR_RENT_PUBKEY })
+      .signers([assetVaultSingleKeypair]).rpc();
+
+    await program.methods.updateOracle(new BN(1_000_000_000))
+      .accountsPartial({ vault: vaultSingle, assetMint: mintA, systemProgram: SystemProgram.programId })
+      .rpc();
+
+    const userSharesSingle = await getOrCreateAssociatedTokenAccount(
+      provider.connection, user.payer, sharesMintSingle, user.publicKey, false, undefined, undefined, TOKEN_2022_PROGRAM_ID
+    );
+
+    // Deposit 1 token
+    await program.methods.depositSingle(new BN(1_000_000), new BN(0))
+      .accountsPartial({ user: user.publicKey, vault: vaultSingle, assetEntry: assetEntrySingle, assetMint: mintA, oraclePrice: oracleSingle, assetVaultAccount: assetVaultSingleKeypair.publicKey, sharesMint: sharesMintSingle, userAssetAccount: userAtaA, userSharesAccount: userSharesSingle.address, tokenProgram: TOKEN_PROGRAM_ID, sharesTokenProgram: TOKEN_2022_PROGRAM_ID, associatedTokenProgram: anchor.utils.token.ASSOCIATED_PROGRAM_ID, systemProgram: SystemProgram.programId })
+      .rpc();
+
+    const vaultBefore = await program.account.multiAssetVault.fetch(vaultSingle);
+    const sharesToRedeem = vaultBefore.totalShares.divn(2);
+    expect(sharesToRedeem.toNumber()).to.be.greaterThan(0);
+
+    await program.methods.redeemSingle(sharesToRedeem, new BN(0))
+      .accounts({ user: user.publicKey, vault: vaultSingle, assetEntry: assetEntrySingle, assetMint: mintA, oraclePrice: oracleSingle, assetVaultAccount: assetVaultSingleKeypair.publicKey, userAssetAccount: userAtaA, sharesMint: sharesMintSingle, userSharesAccount: userSharesSingle.address, tokenProgram: TOKEN_PROGRAM_ID, sharesTokenProgram: TOKEN_2022_PROGRAM_ID, systemProgram: SystemProgram.programId })
+      .rpc();
+
+    const vaultAfter = await program.account.multiAssetVault.fetch(vaultSingle);
+    expect(vaultAfter.totalShares.toNumber()).to.be.lessThan(vaultBefore.totalShares.toNumber());
+    console.log("shares after redeem_single:", vaultAfter.totalShares.toString());
+  });
 });

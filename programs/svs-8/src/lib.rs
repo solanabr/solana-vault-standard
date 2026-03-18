@@ -83,6 +83,13 @@ pub mod svs_8 {
         instructions::update_oracle::handler(ctx, price)
     }
 
+    pub fn redeem_single(
+        ctx: Context<RedeemSingle>,
+        shares: u64,
+        min_assets_out: u64,
+    ) -> Result<()> {
+        instructions::redeem_single::handler(ctx, shares, min_assets_out)
+    }
     pub fn transfer_authority(ctx: Context<Admin>, new_authority: Pubkey) -> Result<()> {
         instructions::admin::transfer_authority(ctx, new_authority)
     }

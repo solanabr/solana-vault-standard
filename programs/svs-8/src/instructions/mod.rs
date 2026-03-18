@@ -7,6 +7,7 @@ pub mod redeem_proportional;
 pub mod remove_asset;
 pub mod update_weights;
 pub mod update_oracle;
+pub mod redeem_single;
 
 pub use admin::*;
 pub use add_asset::*;
@@ -17,3 +18,4 @@ pub use redeem_proportional::*;
 pub use remove_asset::*;
 pub use update_weights::*;
 pub use update_oracle::*;
+pub use redeem_single::*;
