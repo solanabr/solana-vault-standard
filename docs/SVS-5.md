@@ -147,12 +147,12 @@ pub struct StreamVault {
 
 | Instruction | Accounts | Args | Access Control | Notes |
 |-------------|----------|------|----------------|-------|
-| **initialize** | vault, authority, asset_mint, shares_mint, asset_vault, token_program, system_program | decimals_offset, vault_id | Anyone | Creates vault with base_assets = 0, stream_amount = 0 |
-| **deposit** | vault, shares_mint, asset_vault, user_asset, user_shares, depositor, token_program | assets | Anyone (when not paused) | Mints shares at effective_total_assets(now), increments base_assets |
-| **mint** | vault, shares_mint, asset_vault, user_asset, user_shares, depositor, token_program | shares | Anyone (when not paused) | Mints exact shares, transfers required assets at effective_total_assets(now), increments base_assets |
-| **withdraw** | vault, shares_mint, asset_vault, user_asset, user_shares, owner, token_program | assets | Token account owner | Burns shares at effective_total_assets(now), decrements base_assets |
-| **redeem** | vault, shares_mint, asset_vault, user_asset, user_shares, owner, token_program | shares | Token account owner | Burns exact shares at effective_total_assets(now), decrements base_assets |
-| **distribute_yield** | vault, asset_vault, yield_source, authority, token_program | yield_amount, duration | **Authority only** | Transfers tokens, starts new stream; auto-checkpoints active stream |
+| **initialize** | authority, vault, asset_mint, shares_mint, asset_vault, asset_token_program, token_2022_program, associated_token_program, system_program, rent | vault_id, name, symbol | Anyone | Creates vault with base_assets = 0, stream_amount = 0 |
+| **deposit** | user, vault, asset_mint, user_asset_account, asset_vault, shares_mint, user_shares_account, asset_token_program, token_2022_program | assets, min_shares_out | Anyone (when not paused) | Auto-checkpoints, mints shares at base_assets, increments base_assets |
+| **mint** | user, vault, asset_mint, user_asset_account, asset_vault, shares_mint, user_shares_account, asset_token_program, token_2022_program | shares, max_assets_in | Anyone (when not paused) | Auto-checkpoints, mints exact shares, transfers required assets, increments base_assets |
+| **withdraw** | user, vault, asset_mint, user_asset_account, asset_vault, shares_mint, user_shares_account, asset_token_program, token_2022_program | assets, max_shares_in | Token account owner | Auto-checkpoints, burns shares at base_assets, decrements base_assets |
+| **redeem** | user, vault, asset_mint, user_asset_account, asset_vault, shares_mint, user_shares_account, asset_token_program, token_2022_program | shares, min_assets_out | Token account owner | Auto-checkpoints, burns exact shares at base_assets, decrements base_assets |
+| **distribute_yield** | authority, vault, asset_mint, authority_asset_account, asset_vault, asset_token_program | yield_amount, duration | **Authority only** | Transfers tokens, starts new stream; auto-checkpoints active stream |
 | **checkpoint** | vault | - | **Permissionless** | Materializes accrued yield into base_assets |
 | **pause** | vault, authority | - | Authority only | Sets paused = true |
 | **unpause** | vault, authority | - | Authority only | Sets paused = false |
