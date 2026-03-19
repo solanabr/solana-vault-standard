@@ -1,0 +1,10 @@
+//! Program constants: PDA seeds, limits, and decimals configuration.
+
+pub const VAULT_SEED: &[u8] = b"sol_vault";
+pub const SHARES_MINT_SEED: &[u8] = b"shares";
+
+pub const MAX_DECIMALS: u8 = 9;
+pub const SHARES_DECIMALS: u8 = 9;
+pub const WSOL_DECIMALS: u8 = 9;
+
+pub const MIN_DEPOSIT_AMOUNT: u64 = 1_000;

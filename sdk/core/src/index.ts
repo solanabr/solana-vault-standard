@@ -10,6 +10,8 @@
  * - SVS-2: Managed vault with stored balance (uses vault.total_assets)
  * - SVS-3: Confidential vault with Token-2022 confidential transfers
  * - SVS-4: Privacy-preserving vault with ZK proofs
+ * - SVS-7: Native SOL vault with SOL/wSOL interfaces
+ * - SVS-6: Native SOL streaming yield vault
  *
  * @example
  * ```ts
@@ -33,6 +35,7 @@
 
 export * from "./vault";
 export * from "./managed-vault";
+export * from "./native-sol-vault";
 export * from "./native-sol-stream-vault";
 export * from "./pda";
 export * from "./math";

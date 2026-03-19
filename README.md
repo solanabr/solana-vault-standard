@@ -12,6 +12,7 @@ Tokenized vault programs and TypeScript SDK for building yield-bearing vaults on
 | **SVS-4** | Private Vault (Stored) | Stored balance | Encrypted | Requires sync() | ✅ Devnet |
 | **SVS-5** | Streaming Yield Vault | Streaming | None | Permissionless checkpoint | 🧪 Experimental |
 | **SVS-6** | Native SOL Streaming Vault | Streaming | None | `accrue_yield()` + `distribute_yield()` | 🧪 Ranger MVP |
+| **SVS-7** | Native SOL Vault | Live or Stored | None | `deposit_sol` / `deposit_wsol` + `sync()` (Stored) | 🧪 Experimental |
 
 ### Balance Model Comparison
 
@@ -49,6 +50,7 @@ Tokenized vault programs and TypeScript SDK for building yield-bearing vaults on
 | SVS-3 | `EcpnYtaCBrZ4p4uq7dDr55D3fL9nsxbCNqpyUREGpPkh` | Same as devnet |
 | SVS-4 | `2WP7LXWqrp1W4CwEJuVt2SxWPNY2n6AYmijh6Z4EeidY` | Same as devnet |
 | SVS-6 | `GuBDfEKriv9ZYMfneTFHQ9zqc3W79fF78YfAL79mBJVb` | Same as devnet |
+| SVS-7 | `9NUs7GY7MWDVcBzjji2u6UEN3HeD6nkTzVXssTdLJV21` | Same as devnet |
 
 ## Installation
 
@@ -66,7 +68,7 @@ cd proofs-backend && cargo run
 ## Quick Start
 
 ```typescript
-import { SolanaVault, ManagedVault, NativeSolStreamVault } from "@stbr/solana-vault";
+import { SolanaVault, ManagedVault, NativeSolVault, NativeSolStreamVault } from "@stbr/solana-vault";
 import { BN } from "@coral-xyz/anchor";
 
 // SVS-1: Load live-balance vault
@@ -101,6 +103,13 @@ await nativeVault.distributeYield(authority, {
   durationSeconds: 60,
 });
 await nativeVault.accrueYield();
+
+// SVS-7: native SOL vault (non-streaming)
+const solVault = await NativeSolVault.load(svs7Program, 1);
+await solVault.depositSol(user.publicKey, {
+  assets: new BN(1_000_000_000),
+  minSharesOut: new BN(1),
+});
 ```
 
 ## Features

@@ -8,6 +8,7 @@ TypeScript SDK and CLI for the Solana Vault Standard (SVS). Build yield-bearing 
 ## Features
 
 - **Core Vault Operations** - Deposit, mint, withdraw, redeem with slippage protection
+- **Native SOL Vaults** - SVS-7 wrapper with dual `*_sol` / `*_wsol` operations
 - **Native SOL Streaming Vaults** - SVS-6 wrapper with `distributeYield()` + `accrueYield()`
 - **Preview Functions** - Off-chain calculation of expected shares/assets
 - **Inflation Attack Protection** - Virtual offset mechanism prevents donation attacks
@@ -30,6 +31,7 @@ npm install @stbr/solana-vault
 import {
   SolanaVault,
   ManagedVault,
+  NativeSolVault,
   NativeSolStreamVault,
 } from "@stbr/solana-vault";
 import { BN } from "@coral-xyz/anchor";
@@ -64,6 +66,13 @@ await nativeVault.distributeYield(authority, {
   durationSeconds: 60,
 });
 await nativeVault.accrueYield();
+
+// SVS-7 native SOL vault
+const solVault = await NativeSolVault.load(svs7Program, 1);
+await solVault.depositSol(user.publicKey, {
+  assets: new BN(1_000_000_000),
+  minSharesOut: new BN(1),
+});
 ```
 
 ### CLI Usage
@@ -93,6 +102,7 @@ solana-vault dashboard my-vault      # Live monitoring
 // Core vault operations
 export { SolanaVault } from "./vault";
 export { ManagedVault } from "./managed-vault";
+export { NativeSolVault } from "./native-sol-vault";
 export { NativeSolStreamVault } from "./native-sol-stream-vault";
 
 // Share/asset conversion math
@@ -248,6 +258,7 @@ const maxAssets = applySlippage(requiredAssets, 50, false);
 | SVS-2 | Stored (cached, needs sync) | Public | Yield aggregators, managed funds |
 | SVS-3 | Live | Confidential | Private savings |
 | SVS-4 | Stored | Confidential | Private managed funds |
+| SVS-7 | Live or Stored (native SOL) | Public | Native SOL deposits with optional sync model |
 
 **Note:** SVS-3/SVS-4 require the `@stbr/svs-privacy-sdk` package and a proof backend.
 
