@@ -8,6 +8,7 @@ TypeScript SDK and CLI for the Solana Vault Standard (SVS). Build yield-bearing 
 ## Features
 
 - **Core Vault Operations** - Deposit, mint, withdraw, redeem with slippage protection
+- **Native SOL Streaming Vaults** - SVS-6 wrapper with `distributeYield()` + `accrueYield()`
 - **Preview Functions** - Off-chain calculation of expected shares/assets
 - **Inflation Attack Protection** - Virtual offset mechanism prevents donation attacks
 - **Vault-Favoring Rounding** - All operations round to protect vault solvency
@@ -26,7 +27,11 @@ npm install @stbr/solana-vault
 ### SDK Usage
 
 ```typescript
-import { SolanaVault, ManagedVault } from "@stbr/solana-vault";
+import {
+  SolanaVault,
+  ManagedVault,
+  NativeSolStreamVault,
+} from "@stbr/solana-vault";
 import { BN } from "@coral-xyz/anchor";
 
 // Load an SVS-1 vault (live balance)
@@ -51,6 +56,14 @@ await vault.redeem(user, {
 // SVS-2 vaults: use ManagedVault for sync() support
 const managed = await ManagedVault.load(program, assetMint, 1);
 await managed.sync(authority); // Sync stored balance with actual
+
+// SVS-6 native SOL streaming vault
+const nativeVault = await NativeSolStreamVault.load(nativeProgram, 1);
+await nativeVault.distributeYield(authority, {
+  yieldAmount: new BN(500_000_000),
+  durationSeconds: 60,
+});
+await nativeVault.accrueYield();
 ```
 
 ### CLI Usage
@@ -80,6 +93,7 @@ solana-vault dashboard my-vault      # Live monitoring
 // Core vault operations
 export { SolanaVault } from "./vault";
 export { ManagedVault } from "./managed-vault";
+export { NativeSolStreamVault } from "./native-sol-stream-vault";
 
 // Share/asset conversion math
 export { convertToShares, convertToAssets, Rounding } from "./math";

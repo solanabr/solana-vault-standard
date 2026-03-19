@@ -48,6 +48,7 @@
     "test-svs4:confidential-redeem": "npx ts-node scripts/svs-4/confidential-redeem.ts",
     "test-svs4:edge-cases": "npx ts-node scripts/svs-4/edge-cases.ts",
     "test-svs4:all": "npm run test-svs4:basic && npm run test-svs4:sync-confidential && npm run test-svs4:sync-timing-attack && npm run test-svs4:confidential-redeem && npm run test-svs4:edge-cases",
+    "test-svs6:native-demo": "npx ts-node scripts/svs-6/native-sol-demo.ts",
     "test-devnet:all": "npm run test-svs1:all && npm run test-svs2:all && npm run test-svs3:all && npm run test-svs4:all"
   },
   "dependencies": {

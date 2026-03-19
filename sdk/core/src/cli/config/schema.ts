@@ -12,7 +12,7 @@ import { z } from "zod";
 const ClusterSchema = z.enum(["devnet", "mainnet-beta", "testnet", "localnet"]);
 const CommitmentSchema = z.enum(["processed", "confirmed", "finalized"]);
 const OutputFormatSchema = z.enum(["table", "json", "csv"]);
-const SvsVariantSchema = z.enum(["svs-1", "svs-2", "svs-3", "svs-4"]);
+const SvsVariantSchema = z.enum(["svs-1", "svs-2", "svs-3", "svs-4", "svs-6"]);
 
 const ProfileConfigSchema = z.object({
   cluster: ClusterSchema.optional(),

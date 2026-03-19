@@ -33,6 +33,7 @@
 
 export * from "./vault";
 export * from "./managed-vault";
+export * from "./native-sol-stream-vault";
 export * from "./pda";
 export * from "./math";
 

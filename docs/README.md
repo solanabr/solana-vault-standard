@@ -44,7 +44,7 @@ Four program variants cover public/private and live/stored balance models:
 | Variant | Purpose | Status |
 |---------|---------|--------|
 | [SVS-5](specs-SVS05.md) | Streaming Yield | Draft |
-| [SVS-6](specs-SVS06.md) | Streaming + Confidential | Draft |
+| [SVS-6](ranger-svs6-mvp.md) | Native SOL Streaming Yield (MVP) | Experimental |
 | [SVS-7](specs-SVS07.md) | Native SOL | Draft |
 | [SVS-8](specs-SVS08.md) | Multi-Asset Basket | Draft |
 | [SVS-9](specs-SVS09.md) | Allocator (Vault-of-Vaults) | Draft |
@@ -106,6 +106,7 @@ Optional on-chain modules for additional functionality:
 | [**DEPLOYMENT.md**](DEPLOYMENT.md) | Deployment procedures |
 | [**SDK.md**](SDK.md) | TypeScript SDK usage |
 | [**CLI.md**](CLI.md) | Command-line interface |
+| [**ranger-svs6-mvp.md**](ranger-svs6-mvp.md) | SVS-6 milestone delivery + demo plan |
 
 ---
 
@@ -119,6 +120,7 @@ Optional on-chain modules for additional functionality:
 | SVS-2 | `3UrYrxh1HmVgq7WPygZ5x1gNEaWFwqTMs7geNqMnsrtD` |
 | SVS-3 | `EcpnYtaCBrZ4p4uq7dDr55D3fL9nsxbCNqpyUREGpPkh` |
 | SVS-4 | `2WP7LXWqrp1W4CwEJuVt2SxWPNY2n6AYmijh6Z4EeidY` |
+| SVS-6 | `GuBDfEKriv9ZYMfneTFHQ9zqc3W79fF78YfAL79mBJVb` |
 
 ### Mainnet
 

@@ -38,7 +38,7 @@ const IDL_BASE_PATH = path.resolve(__dirname, "..", "..", "target", "idl");
 /**
  * Find IDL file path for a given SVS variant.
  *
- * @param variant - Optional SVS variant (svs-1, svs-2, svs-3, svs-4)
+ * @param variant - Optional SVS variant (svs-1, svs-2, svs-3, svs-4, svs-6)
  * @returns Path to IDL file if found, null otherwise
  *
  * @example
@@ -60,7 +60,13 @@ export function findIdlPath(variant?: SvsVariant): string | null {
   }
 
   // Fall back to first available IDL
-  const idlNames = ["svs_1.json", "svs_2.json", "svs_3.json", "svs_4.json"];
+  const idlNames = [
+    "svs_1.json",
+    "svs_2.json",
+    "svs_3.json",
+    "svs_4.json",
+    "svs_6.json",
+  ];
   for (const name of idlNames) {
     const idlPath = path.join(IDL_BASE_PATH, name);
     if (fs.existsSync(idlPath)) {
@@ -116,7 +122,7 @@ export interface ResolvedVaultParams {
   assetMint: PublicKey;
   /** Vault ID (for multi-vault deployments) */
   vaultId: BN;
-  /** SVS variant (svs-1, svs-2, svs-3, svs-4) */
+  /** SVS variant (svs-1, svs-2, svs-3, svs-4, svs-6) */
   variant: SvsVariant;
 }
 
