@@ -107,6 +107,7 @@ Optional on-chain modules for additional functionality:
 | [**SDK.md**](SDK.md) | TypeScript SDK usage |
 | [**CLI.md**](CLI.md) | Command-line interface |
 | [**ranger-svs6-mvp.md**](ranger-svs6-mvp.md) | SVS-6 milestone delivery + demo plan |
+| [**SVS-6-MARGINFI.md**](SVS-6-MARGINFI.md) | Marginfi mSOL reference integration (Bear Vault parity) |
 | [**video/svs-7-demo-plan.md**](video/svs-7-demo-plan.md) | SVS-7 demo script and recording checklist |
 
 ---

@@ -33,6 +33,14 @@
 import { PublicKey, TransactionInstruction } from "@solana/web3.js";
 import { BN } from "@coral-xyz/anchor";
 
+// Ranger Build Bear Vault (mSOL -> Marginfi) reference constants.
+export const MSOL_MINT_DEVNET = new PublicKey(
+  "mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So",
+);
+export const MARGINFI_GROUP_DEVNET = new PublicKey(
+  "J9VZnaMGTELGCPsqMxk8aoyEGYcVzhorj48HvtDdEtc8",
+);
+
 /**
  * Strategy type identifiers
  */
@@ -97,6 +105,20 @@ export interface StrategyAccounts {
   receiptAccount?: PublicKey;
   /** Additional accounts for CPI */
   additionalAccounts: PublicKey[];
+}
+
+/**
+ * Marginfi-only mSOL route config (Ranger SVS-6 MVP pattern).
+ */
+export interface MarginfiMsolRouteConfig {
+  /** Marginfi group account */
+  marginfiGroup: PublicKey;
+  /** Marginfi bank account */
+  marginfiBank: PublicKey;
+  /** Marginfi liquidity vault token account */
+  marginfiLiquidityVault: PublicKey;
+  /** mSOL mint used by the route */
+  msolMint: PublicKey;
 }
 
 /**
@@ -787,6 +809,81 @@ export class StrategyManager {
 // ============================================================================
 // Protocol-Specific Templates (Placeholder Helpers)
 // ============================================================================
+
+/**
+ * Create a Marginfi-only mSOL strategy config template.
+ * Mirrors the ranger-build-bear-vault scope: mSOL deposits routed to Marginfi.
+ */
+export function createMarginfiMsolStrategy(
+  id: string,
+  name: string,
+  marginfiProgramId: PublicKey,
+  route: MarginfiMsolRouteConfig,
+  options?: {
+    maxAllocationBps?: number;
+    expectedApyBps?: number;
+    riskScore?: number;
+  },
+): StrategyConfig {
+  return {
+    id,
+    name,
+    type: StrategyType.Lending,
+    programId: marginfiProgramId,
+    status: StrategyStatus.Active,
+    maxAllocationBps: options?.maxAllocationBps ?? 7000, // 70% default
+    expectedApyBps: options?.expectedApyBps ?? 650, // 6.5% default
+    riskScore: options?.riskScore ?? 4,
+    accounts: {
+      // Bank is treated as primary strategy state account.
+      protocolState: route.marginfiBank,
+      receiptMint: route.msolMint,
+      additionalAccounts: [
+        route.marginfiGroup,
+        route.marginfiBank,
+        route.marginfiLiquidityVault,
+      ],
+    },
+  };
+}
+
+/**
+ * Preview minted shares for Marginfi mSOL deposit flow.
+ * Formula follows ranger-build-bear-vault:
+ * - first deposit mints 1:1 shares
+ * - later deposits mint proportional shares
+ */
+export function previewMarginfiMsolDepositShares(
+  amount: BN,
+  totalShares: BN,
+  marginfiAssetsBefore: BN,
+): BN {
+  if (amount.lte(new BN(0))) {
+    return new BN(0);
+  }
+
+  if (totalShares.isZero() || marginfiAssetsBefore.isZero()) {
+    return amount;
+  }
+
+  return amount.mul(totalShares).div(marginfiAssetsBefore);
+}
+
+/**
+ * Preview mSOL assets withdrawn for a given share burn.
+ * Formula follows ranger-build-bear-vault pro-rata redemption.
+ */
+export function previewMarginfiMsolWithdrawAssets(
+  shares: BN,
+  totalShares: BN,
+  marginfiAssetsBefore: BN,
+): BN {
+  if (shares.lte(new BN(0)) || totalShares.isZero()) {
+    return new BN(0);
+  }
+
+  return shares.mul(marginfiAssetsBefore).div(totalShares);
+}
 
 /**
  * Create a lending strategy config template.

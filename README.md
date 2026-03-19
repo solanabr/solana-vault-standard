@@ -68,8 +68,17 @@ cd proofs-backend && cargo run
 ## Quick Start
 
 ```typescript
-import { SolanaVault, ManagedVault, NativeSolVault, NativeSolStreamVault } from "@stbr/solana-vault";
+import {
+  SolanaVault,
+  ManagedVault,
+  NativeSolVault,
+  NativeSolStreamVault,
+  createMarginfiMsolStrategy,
+  MSOL_MINT_DEVNET,
+  MARGINFI_GROUP_DEVNET,
+} from "@stbr/solana-vault";
 import { BN } from "@coral-xyz/anchor";
+import { PublicKey } from "@solana/web3.js";
 
 // SVS-1: Load live-balance vault
 const vault = await SolanaVault.load(program, assetMint, 1);
@@ -104,6 +113,19 @@ await nativeVault.distributeYield(authority, {
 });
 await nativeVault.accrueYield();
 
+// SVS-6 strategy template: Marginfi mSOL route (Bear Vault parity)
+const marginfiStrategy = createMarginfiMsolStrategy(
+  "marginfi-msol",
+  "Marginfi mSOL",
+  new PublicKey(process.env.MARGINFI_PROGRAM_ID!),
+  {
+    marginfiGroup: MARGINFI_GROUP_DEVNET,
+    marginfiBank: new PublicKey("REPLACE_MARGINFI_BANK"),
+    marginfiLiquidityVault: new PublicKey("REPLACE_MARGINFI_LIQUIDITY_VAULT"),
+    msolMint: MSOL_MINT_DEVNET,
+  }
+);
+
 // SVS-7: native SOL vault (non-streaming)
 const solVault = await NativeSolVault.load(svs7Program, 1);
 await solVault.depositSol(user.publicKey, {
@@ -122,6 +144,7 @@ await solVault.depositSol(user.publicKey, {
 | **Multi-Vault Support** | Multiple vaults per asset via `vault_id` |
 | **Emergency Controls** | Pause/unpause and authority transfer |
 | **CPI-Composable Views** | Preview functions callable from other programs |
+| **Marginfi mSOL Templates** | Bear-vault parity helpers for mSOL share/withdraw preview math |
 
 ## On-Chain Modules (SVS-1)
 

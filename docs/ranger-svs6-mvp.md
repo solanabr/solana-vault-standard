@@ -25,6 +25,20 @@ Ship a runnable SVS-6 milestone for Ranger hackathon demos:
 6. Anchor integration test added:
    - `tests/svs-6.ts`
 
+## Bear Vault Marginfi mSOL Parity
+
+Reference: `workspace/projects/ranger-build-bear-vault`
+
+- Added SDK strategy helpers that mirror Bear Vault mSOL math:
+  - first deposit mints 1:1 shares,
+  - follow-up deposits mint proportional shares,
+  - withdrawals redeem proportional Marginfi-side assets.
+- Added Marginfi constants and route template for CLI/SDK flows in:
+  - `sdk/core/src/strategy.ts`
+  - `sdk/core/tests/strategy.test.ts`
+- Migration note and proof record:
+  - `docs/SVS-6-MARGINFI.md`
+
 ## Reproducible Commands
 
 ```bash
@@ -55,6 +69,10 @@ Post-deploy checks:
 1. Confirm deployed program id matches `GuBDfEKriv9ZYMfneTFHQ9zqc3W79fF78YfAL79mBJVb`.
 2. Run `scripts/svs-6/native-sol-demo.ts` against devnet.
 3. Capture tx links for initialize/deposit/distribute/accrue/withdraw.
+
+Observed proof snapshot (2026-03-19 UTC):
+- Program show command confirms upgradeable owner and authority.
+- Last deployed slot: `449515708` (`2026-03-19T07:59:41Z`).
 
 ## Video Demo Outline (2-3 min)
 

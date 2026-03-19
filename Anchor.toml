@@ -33,3 +33,7 @@ wallet = "~/.config/solana/id.json"
 # Run by pattern: anchor test -- "tests/svs-*.ts"
 # Note: modules.ts tests require: anchor build -- --features modules
 test = "npx ts-mocha -p ./tsconfig.json -t 1000000 tests/svs-*.ts tests/modules.ts"
+
+[test]
+startup_wait = 40000
+

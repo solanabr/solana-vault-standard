@@ -2,6 +2,8 @@
 
 Native port of ERC-4626 to Solana. Standardized interface for tokenized vaults with shares representing proportional ownership of underlying SPL tokens.
 
+Task-contract note: for delegated workers, `project_ref`, `repo_root`, `execution_cwd`, `allowed_write_roots`, and `artifact_root` from Being are authoritative. This file provides repo conventions only and does not override the worker task contract.
+
 **Stack**: Anchor 0.31+, Rust 1.82+, Token-2022, TypeScript
 **Reference**: `eth/` contains original Solidity spec, `solana-tokenized-vault-4626/` for patterns
 

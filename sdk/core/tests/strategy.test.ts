@@ -6,12 +6,16 @@ import { PublicKey, Keypair } from "@solana/web3.js";
 import {
   StrategyType,
   StrategyStatus,
+  MSOL_MINT_DEVNET,
+  MARGINFI_GROUP_DEVNET,
   StrategyConfig,
   StrategyPosition,
   StrategyManager,
   calculateStrategyAllocations,
   previewDeploy,
   previewRecall,
+  previewMarginfiMsolDepositShares,
+  previewMarginfiMsolWithdrawAssets,
   getTotalDeployed,
   getCurrentWeights,
   strategyNeedsRebalance,
@@ -19,6 +23,7 @@ import {
   validateTargetWeights,
   checkStrategyHealth,
   getPortfolioHealth,
+  createMarginfiMsolStrategy,
   createLendingStrategy,
   createLiquidStakingStrategy,
   createLpStrategy,
@@ -797,6 +802,69 @@ describe("SDK Strategy Module", () => {
 
       expect(strategy.type).to.equal(StrategyType.LiquidityProvision);
       expect(strategy.riskScore).to.equal(7);
+    });
+
+    it("creates Marginfi mSOL strategy", () => {
+      const marginfiBank = Keypair.generate().publicKey;
+      const marginfiLiquidityVault = Keypair.generate().publicKey;
+      const strategy = createMarginfiMsolStrategy(
+        "marginfi-msol",
+        "Marginfi mSOL",
+        PROGRAM_1,
+        {
+          marginfiGroup: MARGINFI_GROUP_DEVNET,
+          marginfiBank,
+          marginfiLiquidityVault,
+          msolMint: MSOL_MINT_DEVNET,
+        },
+      );
+
+      expect(strategy.type).to.equal(StrategyType.Lending);
+      expect(strategy.accounts.protocolState.toBase58()).to.equal(
+        marginfiBank.toBase58(),
+      );
+      expect(strategy.accounts.receiptMint?.toBase58()).to.equal(
+        MSOL_MINT_DEVNET.toBase58(),
+      );
+      expect(strategy.accounts.additionalAccounts).to.have.length(3);
+    });
+  });
+
+  describe("Marginfi mSOL Math", () => {
+    it("uses 1:1 share minting for first deposit", () => {
+      const minted = previewMarginfiMsolDepositShares(
+        new BN(100_000_000),
+        new BN(0),
+        new BN(0),
+      );
+      expect(minted.toString()).to.equal("100000000");
+    });
+
+    it("mints proportional shares for follow-up deposits", () => {
+      const minted = previewMarginfiMsolDepositShares(
+        new BN(100_000_000),
+        new BN(500_000_000),
+        new BN(600_000_000),
+      );
+      expect(minted.toString()).to.equal("83333333");
+    });
+
+    it("withdraws proportional assets by shares", () => {
+      const withdrawn = previewMarginfiMsolWithdrawAssets(
+        new BN(25_000_000),
+        new BN(100_000_000),
+        new BN(120_000_000),
+      );
+      expect(withdrawn.toString()).to.equal("30000000");
+    });
+
+    it("returns zero withdraw when total shares are zero", () => {
+      const withdrawn = previewMarginfiMsolWithdrawAssets(
+        new BN(25_000_000),
+        new BN(0),
+        new BN(120_000_000),
+      );
+      expect(withdrawn.toString()).to.equal("0");
     });
   });
 
