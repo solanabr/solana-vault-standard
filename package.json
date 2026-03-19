@@ -48,7 +48,12 @@
     "test-svs4:confidential-redeem": "npx ts-node scripts/svs-4/confidential-redeem.ts",
     "test-svs4:edge-cases": "npx ts-node scripts/svs-4/edge-cases.ts",
     "test-svs4:all": "npm run test-svs4:basic && npm run test-svs4:sync-confidential && npm run test-svs4:sync-timing-attack && npm run test-svs4:confidential-redeem && npm run test-svs4:edge-cases",
-    "test-devnet:all": "npm run test-svs1:all && npm run test-svs2:all && npm run test-svs3:all && npm run test-svs4:all"
+    "test-svs9:deposit": "npx ts-node scripts/svs-9/deposit.ts",
+    "test-svs9:redeem": "npx ts-node scripts/svs-9/redeem.ts",
+    "test-svs9:harvest": "npx ts-node scripts/svs-9/harvest.ts",
+    "test-svs9:deallocate": "npx ts-node scripts/svs-9/deallocate.ts",
+    "test-svs9:all": "npm run test-svs9:deposit && npm run test-svs9:redeem && npm run test-svs9:harvest && npm run test-svs9:deallocate",
+    "test-devnet:all": "npm run test-svs1:all && npm run test-svs2:all && npm run test-svs3:all && npm run test-svs4:all && npm run test-svs9:all"
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.31.1",

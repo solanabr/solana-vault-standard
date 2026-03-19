@@ -36,6 +36,9 @@ export * from "./managed-vault";
 export * from "./pda";
 export * from "./math";
 
+// SVS-9 Allocator Vault
+export * from "./svs9";
+
 // On-chain Module Support (v2)
 export * from "./modules";
 

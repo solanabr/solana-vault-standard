@@ -1,0 +1,26 @@
+[package]
+name = "svs-9"
+version = "0.1.0"
+description = "SVS-9: Solana Vault Standard - Allocator Vault"
+edition = "2021"
+license = "MIT"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "svs_9"
+
+[features]
+default = []
+cpi = ["no-entrypoint"]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
+modules = ["svs-module-hooks"]
+
+[dependencies]
+anchor-lang = { version = "0.31.1", features = ["init-if-needed"] }
+anchor-spl = { version = "0.31.1", features = ["token", "associated_token", "metadata"] }
+svs-math = { path = "../../modules/svs-math" }
+svs-module-hooks = { path = "../../modules/svs-module-hooks", optional = true }
+
