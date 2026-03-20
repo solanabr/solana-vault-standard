@@ -81,7 +81,7 @@ pub fn handler(ctx: Context<Withdraw>, assets: u64, max_shares_in: u64) -> Resul
         let user_key = ctx.accounts.user.key();
 
         // 1. Access control check (frozen account)
-        module_hooks::check_access(remaining, &crate::ID, &vault_key, &user_key, &[])?;
+        module_hooks::check_deposit_access(remaining, &crate::ID, &vault_key, &user_key, &[])?;
 
         // 2. Lock check - ensure shares are not locked
         module_hooks::check_share_lock(

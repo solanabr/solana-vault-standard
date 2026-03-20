@@ -30,6 +30,6 @@ require!(assets <= total_assets, VaultError::InsufficientAssets);
 
 **Fix**: Remove the alias and check `assets` directly.
 
-## 3. `check_access` naming (resolved)
+## 3. `check_deposit_access` naming
 
-Renamed `check_deposit_access()` to `check_access()` across all variants. The function checks general access control (frozen accounts, blacklists), not deposit-specific access.
+Kept as `check_deposit_access()` across all variants. A future rename can be done in a dedicated PR to avoid cross-program scope creep.

@@ -92,7 +92,7 @@ pub fn handler(ctx: Context<Deposit>, assets: u64, min_shares_out: u64) -> Resul
         let user_key = ctx.accounts.user.key();
 
         // 1. Access control check (whitelist/blacklist + frozen)
-        module_hooks::check_access(remaining, &crate::ID, &vault_key, &user_key, &[])?;
+        module_hooks::check_deposit_access(remaining, &crate::ID, &vault_key, &user_key, &[])?;
 
         // 2. Cap enforcement
         module_hooks::check_deposit_caps(

@@ -280,7 +280,7 @@ Functions: `hash_leaf`, `hash_pair`, `verify_proof`, `compute_root`, `generate_p
 
 ### Functions
 
-**`check_access(mode, merkle_root, user, proof) -> Result<()>`**
+**`check_deposit_access(mode, merkle_root, user, proof) -> Result<()>`**
 - `Open`: always passes
 - `Whitelist`: proof must verify the user is in the tree
 - `Blacklist`: proof must NOT verify (user not in tree; empty root = everyone allowed)
@@ -413,7 +413,7 @@ The hook functions live in the shared `svs-module-hooks` crate. Each vault progr
 
 ```
 deposit flow:
-  1. check_access()    → verify whitelist/blacklist + freeze
+  1. check_deposit_access()    → verify whitelist/blacklist + freeze
   2. check_deposit_caps()      → enforce global + per-user caps
   3. convert_to_shares()       → compute shares for deposited assets
   4. apply_entry_fee()         → deduct fee shares, mint to fee_recipient
@@ -423,7 +423,7 @@ deposit flow:
 
 ```
 withdraw/redeem flow:
-  1. check_access()    → verify whitelist/blacklist + freeze
+  1. check_deposit_access()    → verify whitelist/blacklist + freeze
   2. check_share_lock()        → verify lock has expired
   3. convert_to_assets()       → compute assets for burned shares
   4. apply_exit_fee()          → deduct fee assets, transfer to fee_recipient

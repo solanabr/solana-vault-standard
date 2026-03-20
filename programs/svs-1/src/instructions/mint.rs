@@ -102,7 +102,7 @@ pub fn handler(ctx: Context<MintShares>, shares: u64, max_assets_in: u64) -> Res
         let user_key = ctx.accounts.user.key();
 
         // 1. Access control check (whitelist/blacklist + frozen)
-        module_hooks::check_access(remaining, &crate::ID, &vault_key, &user_key, &[])?;
+        module_hooks::check_deposit_access(remaining, &crate::ID, &vault_key, &user_key, &[])?;
 
         // 2. Cap enforcement (critical: prevents cap bypass via mint)
         module_hooks::check_deposit_caps(
