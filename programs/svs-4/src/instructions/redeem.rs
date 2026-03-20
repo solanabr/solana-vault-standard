@@ -19,9 +19,6 @@ use crate::{
     state::ConfidentialVault,
 };
 
-#[cfg(feature = "modules")]
-use svs_module_hooks as module_hooks;
-
 /// Redeem confidential shares for assets
 ///
 /// Requires pre-verified proof context accounts for:
@@ -108,36 +105,8 @@ pub fn handler(
         Rounding::Floor,
     )?;
 
-    // ===== Module Hooks (if enabled) =====
-    #[cfg(feature = "modules")]
-    let net_assets = {
-        let remaining = ctx.remaining_accounts;
-        let clock = Clock::get()?;
-        let vault_key = vault.key();
-        let user_key = ctx.accounts.user.key();
-
-        // 1. Access control check (frozen account)
-        module_hooks::check_deposit_access(remaining, &crate::ID, &vault_key, &user_key, &[])?;
-
-        // 2. Lock check - ensure shares are not locked
-        module_hooks::check_share_lock(
-            remaining,
-            &crate::ID,
-            &vault_key,
-            &user_key,
-            clock.unix_timestamp,
-        )?;
-
-        // 3. Apply exit fee
-        let result = module_hooks::apply_exit_fee(remaining, &crate::ID, &vault_key, assets)?;
-        result.net_assets
-    };
-
-    #[cfg(not(feature = "modules"))]
-    let net_assets = assets;
-
-    // Slippage check (on net assets after fee)
-    require!(net_assets >= min_assets_out, VaultError::SlippageExceeded);
+    // Slippage check
+    require!(assets >= min_assets_out, VaultError::SlippageExceeded);
 
     // Check vault has enough assets
     require!(assets <= vault.total_assets, VaultError::InsufficientAssets);
@@ -207,7 +176,7 @@ pub fn handler(
             },
             signer_seeds,
         ),
-        net_assets,
+        assets,
         ctx.accounts.asset_mint.decimals,
     )?;
 
@@ -223,7 +192,7 @@ pub fn handler(
         caller: ctx.accounts.user.key(),
         receiver: ctx.accounts.user.key(),
         owner: ctx.accounts.user.key(),
-        assets: net_assets,
+        assets,
         shares,
     });
 

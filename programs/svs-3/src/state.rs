@@ -14,6 +14,8 @@ pub struct ConfidentialVault {
     pub shares_mint: Pubkey,
     /// Token account holding assets
     pub asset_vault: Pubkey,
+    /// Unused in SVS-3 (live balance reads asset_vault.amount directly)
+    pub total_assets: u64,
     /// Virtual offset exponent (9 - asset_decimals) for inflation attack protection
     pub decimals_offset: u8,
     /// PDA bump seed
@@ -36,6 +38,7 @@ impl ConfidentialVault {
         32 +  // asset_mint
         32 +  // shares_mint
         32 +  // asset_vault
+        8 +   // total_assets
         1 +   // decimals_offset
         1 +   // bump
         1 +   // paused
@@ -68,10 +71,15 @@ pub enum AccessMode {
 pub mod module_state {
     use super::*;
 
-    pub use svs_module_hooks::{
-        ACCESS_CONFIG_SEED, CAP_CONFIG_SEED, FEE_CONFIG_SEED, FROZEN_ACCOUNT_SEED,
-        LOCK_CONFIG_SEED, REWARD_CONFIG_SEED, SHARE_LOCK_SEED, USER_DEPOSIT_SEED, USER_REWARD_SEED,
-    };
+    pub const FEE_CONFIG_SEED: &[u8] = b"fee_config";
+    pub const CAP_CONFIG_SEED: &[u8] = b"cap_config";
+    pub const USER_DEPOSIT_SEED: &[u8] = b"user_deposit";
+    pub const LOCK_CONFIG_SEED: &[u8] = b"lock_config";
+    pub const SHARE_LOCK_SEED: &[u8] = b"share_lock";
+    pub const ACCESS_CONFIG_SEED: &[u8] = b"access_config";
+    pub const FROZEN_ACCOUNT_SEED: &[u8] = b"frozen";
+    pub const REWARD_CONFIG_SEED: &[u8] = b"reward_config";
+    pub const USER_REWARD_SEED: &[u8] = b"user_reward";
 
     #[account]
     pub struct FeeConfig {
