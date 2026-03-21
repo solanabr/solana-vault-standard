@@ -46,7 +46,23 @@ import {
   MintParams,
   getTokenProgramForMint,
 } from "./vault";
-import { deriveVaultAddresses } from "./pda";
+import { getSharesMintAddress } from "./pda";
+
+/** SVS-5 vault PDA uses "stream_vault" seed instead of "vault" */
+const STREAM_VAULT_SEED = Buffer.from("stream_vault");
+
+function deriveStreamVaultAddresses(
+  programId: PublicKey,
+  assetMint: PublicKey,
+  vaultId: BN,
+) {
+  const [vault, vaultBump] = PublicKey.findProgramAddressSync(
+    [STREAM_VAULT_SEED, assetMint.toBuffer(), vaultId.toArrayLike(Buffer, "le", 8)],
+    programId,
+  );
+  const [sharesMint, sharesMintBump] = getSharesMintAddress(programId, vault);
+  return { vault, vaultBump, sharesMint, sharesMintBump };
+}
 
 export interface StreamingVaultState extends VaultState {
   baseAssets: BN;
@@ -86,7 +102,7 @@ export class StreamingVault extends SolanaVault {
   ): Promise<StreamingVault> {
     const provider = program.provider as AnchorProvider;
     const id = typeof vaultId === "number" ? new BN(vaultId) : vaultId;
-    const addresses = deriveVaultAddresses(program.programId, assetMint, id);
+    const addresses = deriveStreamVaultAddresses(program.programId, assetMint, id);
 
     const assetTokenProgram = await getTokenProgramForMint(
       provider.connection,
@@ -128,7 +144,7 @@ export class StreamingVault extends SolanaVault {
       typeof params.vaultId === "number"
         ? new BN(params.vaultId)
         : params.vaultId;
-    const addresses = deriveVaultAddresses(
+    const addresses = deriveStreamVaultAddresses(
       program.programId,
       params.assetMint,
       id,

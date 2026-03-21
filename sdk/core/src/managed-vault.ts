@@ -35,15 +35,10 @@ import {
 
 import {
   SolanaVault,
-  VaultState,
   CreateVaultParams,
   getTokenProgramForMint,
 } from "./vault";
 import { deriveVaultAddresses } from "./pda";
-
-export interface ManagedVaultState extends VaultState {
-  totalAssets: BN;
-}
 
 /**
  * SVS-2 Managed Vault SDK
@@ -163,7 +158,7 @@ export class ManagedVault extends SolanaVault {
    * For the live on-chain balance, use totalAssets() from the base class.
    */
   async storedTotalAssets(): Promise<BN> {
-    const state = (await this.refresh()) as ManagedVaultState;
+    const state = await this.refresh();
     return state.totalAssets;
   }
 }

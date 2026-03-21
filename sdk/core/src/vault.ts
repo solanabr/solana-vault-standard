@@ -83,6 +83,7 @@ export interface VaultState {
   assetMint: PublicKey;
   sharesMint: PublicKey;
   assetVault: PublicKey;
+  totalAssets: BN;
   decimalsOffset: number;
   bump: number;
   paused: boolean;
