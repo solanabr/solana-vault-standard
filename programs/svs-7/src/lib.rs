@@ -38,9 +38,8 @@ pub mod svs_7 {
         vault_id: u64,
         name: String,
         symbol: String,
-        uri: String,
     ) -> Result<()> {
-        instructions::initialize::handler(ctx, vault_id, name, symbol, uri)
+        instructions::initialize::handler(ctx, vault_id, name, symbol)
     }
 
     // ============ Native SOL Interface ============
@@ -92,6 +91,12 @@ pub mod svs_7 {
         min_shares_out: u64,
     ) -> Result<()> {
         instructions::deposit_wsol::handler(ctx, amount, min_shares_out)
+    }
+
+    /// Mint exact shares by paying wSOL.
+    /// Required wSOL computed with ceiling rounding (favors vault).
+    pub fn mint_wsol(ctx: Context<MintWsol>, shares: u64, max_amount_in: u64) -> Result<()> {
+        instructions::mint_wsol::handler(ctx, shares, max_amount_in)
     }
 
     /// Withdraw exact wSOL by burning required shares (no unwrap).

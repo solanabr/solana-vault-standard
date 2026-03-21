@@ -43,7 +43,9 @@ const DEPOSIT_LAMPORTS = new BN(1 * LAMPORTS_PER_SOL);
 const REDEEM_PERCENTAGE = 0.5;
 
 async function main() {
-  const { connection, payer, program, programId } = await setupSvs7Test("Basic Functionality");
+  const { connection, payer, program, programId } = await setupSvs7Test(
+    "Basic Functionality",
+  );
 
   // Step 1: Derive PDAs
   console.log("\n" + "-".repeat(70));
@@ -55,11 +57,18 @@ async function main() {
   const [sharesMint] = getSharesMintPDA(programId, vault);
 
   // wSOL vault: ATA of vault PDA for NATIVE_MINT (SPL Token)
-  const wsolVault = anchor.utils.token.associatedAddress({ mint: NATIVE_MINT, owner: vault });
+  const wsolVault = anchor.utils.token.associatedAddress({
+    mint: NATIVE_MINT,
+    owner: vault,
+  });
 
   // User shares account: ATA of user for sharesMint (Token-2022)
   const userSharesAccount = getAssociatedTokenAddressSync(
-    sharesMint, payer.publicKey, false, TOKEN_2022_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID
+    sharesMint,
+    payer.publicKey,
+    false,
+    TOKEN_2022_PROGRAM_ID,
+    ASSOCIATED_TOKEN_PROGRAM_ID,
   );
 
   console.log(`  Vault ID: ${vaultId.toString()}`);
@@ -73,7 +82,7 @@ async function main() {
   console.log("-".repeat(70));
 
   const initTx = await program.methods
-    .initialize(vaultId, "SVS-7 Test Vault", "svSOL", "https://arweave.net/svs7-metadata")
+    .initialize(vaultId, "SVS-7 Test Vault", "svSOL")
     .accountsStrict({
       authority: payer.publicKey,
       vault,
@@ -118,23 +127,42 @@ async function main() {
   console.log(`  Tx: ${depositTx}`);
   console.log(`  Explorer: ${explorerUrl(depositTx)}`);
 
-  const userSharesAfterDeposit = await getAccount(connection, userSharesAccount, undefined, TOKEN_2022_PROGRAM_ID);
-  const sharesReceived = Number(userSharesAfterDeposit.amount) / LAMPORTS_PER_SOL;
+  const userSharesAfterDeposit = await getAccount(
+    connection,
+    userSharesAccount,
+    undefined,
+    TOKEN_2022_PROGRAM_ID,
+  );
+  const sharesReceived =
+    Number(userSharesAfterDeposit.amount) / LAMPORTS_PER_SOL;
   console.log(`  Shares Received: ${sharesReceived.toLocaleString()} svSOL`);
 
-  const wsolVaultAfter = await getAccount(connection, wsolVault, undefined, TOKEN_PROGRAM_ID);
-  console.log(`  wSOL Vault Balance: ${Number(wsolVaultAfter.amount) / LAMPORTS_PER_SOL} SOL`);
+  const wsolVaultAfter = await getAccount(
+    connection,
+    wsolVault,
+    undefined,
+    TOKEN_PROGRAM_ID,
+  );
+  console.log(
+    `  wSOL Vault Balance: ${Number(wsolVaultAfter.amount) / LAMPORTS_PER_SOL} SOL`,
+  );
 
   // Step 4: redeem_sol — create a temporary wSOL account for the unwrap
   console.log("\n" + "-".repeat(70));
   console.log("Step 4: Redeeming 50% of shares for native SOL");
   console.log("-".repeat(70));
 
-  const redeemShares = new BN(Math.floor(Number(userSharesAfterDeposit.amount) * REDEEM_PERCENTAGE));
+  const redeemShares = new BN(
+    Math.floor(Number(userSharesAfterDeposit.amount) * REDEEM_PERCENTAGE),
+  );
 
   // Create a temporary wSOL ATA for the user (redeem_sol closes it after unwrapping)
   const userWsolAccount = getAssociatedTokenAddressSync(
-    NATIVE_MINT, payer.publicKey, false, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID
+    NATIVE_MINT,
+    payer.publicKey,
+    false,
+    TOKEN_PROGRAM_ID,
+    ASSOCIATED_TOKEN_PROGRAM_ID,
   );
 
   // Create the ATA if it doesn't exist yet
@@ -143,9 +171,13 @@ async function main() {
   } catch {
     const createAtaTx = new Transaction().add(
       createAssociatedTokenAccountInstruction(
-        payer.publicKey, userWsolAccount, payer.publicKey, NATIVE_MINT,
-        TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID
-      )
+        payer.publicKey,
+        userWsolAccount,
+        payer.publicKey,
+        NATIVE_MINT,
+        TOKEN_PROGRAM_ID,
+        ASSOCIATED_TOKEN_PROGRAM_ID,
+      ),
     );
     await sendAndConfirmTransaction(connection, createAtaTx, [payer]);
     console.log(`  Created user wSOL ATA: ${userWsolAccount.toBase58()}`);
@@ -173,17 +205,29 @@ async function main() {
 
   const solBalanceAfter = await connection.getBalance(payer.publicKey);
   const solReceived = (solBalanceAfter - solBalanceBefore) / LAMPORTS_PER_SOL;
-  console.log(`  SOL received (approx, after fees): ${solReceived.toFixed(6)} SOL`);
+  console.log(
+    `  SOL received (approx, after fees): ${solReceived.toFixed(6)} SOL`,
+  );
 
-  const userSharesAfterRedeem = await getAccount(connection, userSharesAccount, undefined, TOKEN_2022_PROGRAM_ID);
-  console.log(`  Remaining shares: ${Number(userSharesAfterRedeem.amount) / LAMPORTS_PER_SOL} svSOL`);
+  const userSharesAfterRedeem = await getAccount(
+    connection,
+    userSharesAccount,
+    undefined,
+    TOKEN_2022_PROGRAM_ID,
+  );
+  console.log(
+    `  Remaining shares: ${Number(userSharesAfterRedeem.amount) / LAMPORTS_PER_SOL} svSOL`,
+  );
 
   // Step 5: Pause/Unpause
   console.log("\n" + "-".repeat(70));
   console.log("Step 5: Testing pause/unpause");
   console.log("-".repeat(70));
 
-  await program.methods.pause().accountsStrict({ authority: payer.publicKey, vault }).rpc();
+  await program.methods
+    .pause()
+    .accountsStrict({ authority: payer.publicKey, vault })
+    .rpc();
   const pausedVault = await program.account.solVault.fetch(vault);
   console.log(`  Vault Paused: ${pausedVault.paused}`);
 
@@ -212,7 +256,10 @@ async function main() {
     }
   }
 
-  await program.methods.unpause().accountsStrict({ authority: payer.publicKey, vault }).rpc();
+  await program.methods
+    .unpause()
+    .accountsStrict({ authority: payer.publicKey, vault })
+    .rpc();
   const unpausedVault = await program.account.solVault.fetch(vault);
   console.log(`  Vault Paused: ${unpausedVault.paused}`);
 

@@ -1,20 +1,18 @@
-//! mint_sol: user mints an exact number of shares by paying native SOL.
+//! mint_wsol: user mints an exact number of shares by paying pre-wrapped wSOL.
 //!
 //! Flow:
 //! 1. Read pre-deposit total_assets
-//! 2. Compute required lamports (ceiling rounding)
-//! 3. Slippage check (assets <= max_lamports_in)
-//! 4. system_program::transfer (user → wsol_vault)
-//! 5. sync_native + reload
-//! 6. Mint shares to user
-//! 7. Emit Deposit event
+//! 2. Compute required wSOL (ceiling rounding)
+//! 3. Slippage check (required_amount <= max_amount_in)
+//! 4. transfer_checked (wSOL from user → wsol_vault)
+//! 5. Mint shares to user
+//! 6. Emit Deposit event
 
 use anchor_lang::prelude::*;
-use anchor_lang::solana_program::program::invoke;
 use anchor_spl::{
     associated_token::AssociatedToken,
     token_2022::{self, MintTo, Token2022},
-    token_interface::{Mint, TokenAccount, TokenInterface},
+    token_interface::{transfer_checked, Mint, TokenAccount, TokenInterface, TransferChecked},
 };
 
 use crate::{
@@ -29,7 +27,7 @@ use crate::{
 use svs_module_hooks as module_hooks;
 
 #[derive(Accounts)]
-pub struct MintSol<'info> {
+pub struct MintWsol<'info> {
     #[account(mut)]
     pub user: Signer<'info>,
 
@@ -38,6 +36,18 @@ pub struct MintSol<'info> {
         constraint = !vault.paused @ VaultError::VaultPaused,
     )]
     pub vault: Account<'info, SolVault>,
+
+    /// Native SOL mint (So11111111111111111111111111111111) — needed for transfer_checked
+    #[account(address = crate::constants::NATIVE_MINT @ VaultError::Unauthorized)]
+    pub native_mint: InterfaceAccount<'info, Mint>,
+
+    /// User's wSOL token account (source of funds)
+    #[account(
+        mut,
+        constraint = user_wsol_account.mint == native_mint.key(),
+        constraint = user_wsol_account.owner == user.key(),
+    )]
+    pub user_wsol_account: InterfaceAccount<'info, TokenAccount>,
 
     #[account(
         mut,
@@ -68,11 +78,11 @@ pub struct MintSol<'info> {
     pub system_program: Program<'info, System>,
 }
 
-/// Mint an exact number of shares by paying native SOL.
+/// Mint an exact number of shares by paying pre-wrapped wSOL.
 ///
 /// Required assets are computed with ceiling rounding (protects vault).
-/// Slippage guard: assets_required <= max_lamports_in.
-pub fn handler(ctx: Context<MintSol>, shares: u64, max_lamports_in: u64) -> Result<()> {
+/// Slippage guard: required_amount <= max_amount_in.
+pub fn handler(ctx: Context<MintWsol>, shares: u64, max_amount_in: u64) -> Result<()> {
     // 1. VALIDATION
     require!(shares > 0, VaultError::ZeroAmount);
 
@@ -98,8 +108,8 @@ pub fn handler(ctx: Context<MintSol>, shares: u64, max_lamports_in: u64) -> Resu
     #[cfg(not(feature = "modules"))]
     let net_shares = shares;
 
-    // 3. COMPUTE required lamports (ceiling rounding — user pays more, protects vault)
-    let required_lamports = convert_to_assets(
+    // 3. COMPUTE required wSOL (ceiling rounding — user pays more, protects vault)
+    let required_amount = convert_to_assets(
         net_shares,
         total_assets,
         total_shares,
@@ -107,7 +117,7 @@ pub fn handler(ctx: Context<MintSol>, shares: u64, max_lamports_in: u64) -> Resu
         Rounding::Ceiling,
     )?;
 
-    // Module cap check (after computing required_lamports)
+    // Module cap check (after computing required_amount)
     #[cfg(feature = "modules")]
     {
         let remaining = ctx.remaining_accounts;
@@ -119,45 +129,38 @@ pub fn handler(ctx: Context<MintSol>, shares: u64, max_lamports_in: u64) -> Resu
             &vault_key,
             &user_key,
             total_assets,
-            required_lamports,
+            required_amount,
         )?;
     }
 
     // 4. MINIMUM DEPOSIT CHECK
-    require!(required_lamports > 0, VaultError::ZeroAmount);
-    require!(required_lamports >= MIN_DEPOSIT_AMOUNT, VaultError::DepositTooSmall);
+    require!(required_amount > 0, VaultError::ZeroAmount);
+    require!(required_amount >= MIN_DEPOSIT_AMOUNT, VaultError::DepositTooSmall);
 
-    // 5. SLIPPAGE CHECK — user wants at most max_lamports_in spent
-    require!(required_lamports <= max_lamports_in, VaultError::SlippageExceeded);
+    // 5. SLIPPAGE CHECK — user wants at most max_amount_in spent
+    require!(required_amount <= max_amount_in, VaultError::SlippageExceeded);
 
-    // 5a. Transfer native SOL from user to vault's wSOL account
-    anchor_lang::system_program::transfer(
+    // 5a. Transfer wSOL from user to vault (standard SPL transfer — no sync needed)
+    transfer_checked(
         CpiContext::new(
-            ctx.accounts.system_program.to_account_info(),
-            anchor_lang::system_program::Transfer {
-                from: ctx.accounts.user.to_account_info(),
+            ctx.accounts.token_program.to_account_info(),
+            TransferChecked {
+                from: ctx.accounts.user_wsol_account.to_account_info(),
                 to: ctx.accounts.wsol_vault.to_account_info(),
+                mint: ctx.accounts.native_mint.to_account_info(),
+                authority: ctx.accounts.user.to_account_info(),
             },
         ),
-        required_lamports,
+        required_amount,
+        ctx.accounts.native_mint.decimals,
     )?;
-
-    // 5b. sync_native to update wSOL token account balance
-    let sync_ix = spl_token_2022::instruction::sync_native(
-        ctx.accounts.token_program.key,
-        ctx.accounts.wsol_vault.to_account_info().key,
-    )?;
-    invoke(&sync_ix, &[ctx.accounts.wsol_vault.to_account_info()])?;
-
-    // 5c. Reload wSOL account data
-    ctx.accounts.wsol_vault.reload()?;
 
     // Vault PDA signer seeds
     let vault_id_bytes = ctx.accounts.vault.vault_id.to_le_bytes();
     let bump = ctx.accounts.vault.bump;
     let signer_seeds: &[&[&[u8]]] = &[&[SOL_VAULT_SEED, vault_id_bytes.as_ref(), &[bump]]];
 
-    // 5d. Mint shares to user
+    // 5b. Mint shares to user
     token_2022::mint_to(
         CpiContext::new_with_signer(
             ctx.accounts.token_2022_program.to_account_info(),
@@ -176,7 +179,7 @@ pub fn handler(ctx: Context<MintSol>, shares: u64, max_lamports_in: u64) -> Resu
         vault: ctx.accounts.vault.key(),
         caller: ctx.accounts.user.key(),
         owner: ctx.accounts.user.key(),
-        assets: required_lamports,
+        assets: required_amount,
         shares: net_shares,
     });
 

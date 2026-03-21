@@ -60,14 +60,17 @@ const MIN_DEPOSIT_LAMPORTS = 1_000;
 function getVaultPDA(programId: PublicKey, vaultId: BN): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
     [SOL_VAULT_SEED, vaultId.toArrayLike(Buffer, "le", 8)],
-    programId
+    programId,
   );
 }
 
-function getSharesMintPDA(programId: PublicKey, vault: PublicKey): [PublicKey, number] {
+function getSharesMintPDA(
+  programId: PublicKey,
+  vault: PublicKey,
+): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
     [SHARES_MINT_SEED, vault.toBuffer()],
-    programId
+    programId,
   );
 }
 
@@ -76,7 +79,7 @@ function getWsolVaultATA(vault: PublicKey): PublicKey {
     NATIVE_MINT,
     vault,
     true, // allowOwnerOffCurve — vault is a PDA
-    TOKEN_PROGRAM_ID
+    TOKEN_PROGRAM_ID,
   );
 }
 
@@ -85,7 +88,7 @@ function getUserSharesATA(sharesMint: PublicKey, owner: PublicKey): PublicKey {
     sharesMint,
     owner,
     false,
-    TOKEN_2022_PROGRAM_ID
+    TOKEN_2022_PROGRAM_ID,
   );
 }
 
@@ -94,7 +97,7 @@ function getUserWsolATA(owner: PublicKey): PublicKey {
     NATIVE_MINT,
     owner,
     false,
-    TOKEN_PROGRAM_ID
+    TOKEN_PROGRAM_ID,
   );
 }
 
@@ -107,7 +110,7 @@ async function createFundedWsolAccount(
   connection: anchor.web3.Connection,
   payer: Keypair,
   owner: PublicKey,
-  lamports: number
+  lamports: number,
 ): Promise<PublicKey> {
   const wsolATA = getUserWsolATA(owner);
 
@@ -117,12 +120,12 @@ async function createFundedWsolAccount(
   tx.add(
     createAssociatedTokenAccountInstruction(
       payer.publicKey, // fee payer
-      wsolATA,         // ATA address
-      owner,           // owner
+      wsolATA, // ATA address
+      owner, // owner
       NATIVE_MINT,
       TOKEN_PROGRAM_ID,
-      ASSOCIATED_TOKEN_PROGRAM_ID
-    )
+      ASSOCIATED_TOKEN_PROGRAM_ID,
+    ),
   );
 
   // Fund with native SOL
@@ -131,7 +134,7 @@ async function createFundedWsolAccount(
       fromPubkey: payer.publicKey,
       toPubkey: wsolATA,
       lamports,
-    })
+    }),
   );
 
   // Sync the lamport balance → wSOL amount
@@ -151,7 +154,7 @@ async function createFundedWsolAccount(
 async function ensureEmptyWsolAccount(
   connection: anchor.web3.Connection,
   payer: Keypair,
-  owner: PublicKey
+  owner: PublicKey,
 ): Promise<PublicKey> {
   const wsolATA = getUserWsolATA(owner);
 
@@ -171,8 +174,8 @@ async function ensureEmptyWsolAccount(
           owner,
           NATIVE_MINT,
           TOKEN_PROGRAM_ID,
-          ASSOCIATED_TOKEN_PROGRAM_ID
-        )
+          ASSOCIATED_TOKEN_PROGRAM_ID,
+        ),
       );
 
       await sendAndConfirmTransaction(connection, tx, [payer]);
@@ -198,7 +201,7 @@ async function ensureEmptyWsolAccount(
 // ─────────────────────────────────────────────────────────────────────────────
 function parseReturnU64(
   logs: string[] | null | undefined,
-  _returnData?: unknown
+  _returnData?: unknown,
 ): BN | null {
   if (!logs) return null;
 
@@ -256,12 +259,7 @@ describe("svs-7: Native SOL Vault", () => {
       ctx = { vaultId, vault, sharesMint, wsolVault };
 
       const tx = await program.methods
-        .initialize(
-          vaultId,
-          "SVS-7 Live Vault",
-          "svSOL-L",
-          "https://example.com/svs7-live.json"
-        )
+        .initialize(vaultId, "SVS-7 Live Vault", "svSOL-L")
         .accountsStrict({
           authority: payer.publicKey,
           vault,
@@ -279,15 +277,24 @@ describe("svs-7: Native SOL Vault", () => {
       console.log("  [Live] initialize tx:", tx);
 
       const vaultAccount = await program.account.solVault.fetch(vault);
-      expect(vaultAccount.authority.toBase58()).to.equal(payer.publicKey.toBase58());
-      expect(vaultAccount.sharesMint.toBase58()).to.equal(sharesMint.toBase58());
+      expect(vaultAccount.authority.toBase58()).to.equal(
+        payer.publicKey.toBase58(),
+      );
+      expect(vaultAccount.sharesMint.toBase58()).to.equal(
+        sharesMint.toBase58(),
+      );
       expect(vaultAccount.wsolVault.toBase58()).to.equal(wsolVault.toBase58());
       expect(vaultAccount.paused).to.equal(false);
       expect(vaultAccount.vaultId.toNumber()).to.equal(vaultId.toNumber());
       expect(vaultAccount.decimalsOffset).to.equal(0);
 
       // wSOL vault exists and is empty
-      const wsolAccount = await getAccount(connection, wsolVault, undefined, TOKEN_PROGRAM_ID);
+      const wsolAccount = await getAccount(
+        connection,
+        wsolVault,
+        undefined,
+        TOKEN_PROGRAM_ID,
+      );
       expect(Number(wsolAccount.amount)).to.equal(0);
     });
 
@@ -306,7 +313,10 @@ describe("svs-7: Native SOL Vault", () => {
     it("deposits native SOL and mints shares", async () => {
       const depositLamports = new BN(2 * LAMPORTS_PER_SOL);
 
-      const userSharesAccount = getUserSharesATA(ctx.sharesMint, payer.publicKey);
+      const userSharesAccount = getUserSharesATA(
+        ctx.sharesMint,
+        payer.publicKey,
+      );
       const solBefore = await connection.getBalance(payer.publicKey);
 
       const tx = await program.methods
@@ -331,9 +341,14 @@ describe("svs-7: Native SOL Vault", () => {
         connection,
         userSharesAccount,
         undefined,
-        TOKEN_2022_PROGRAM_ID
+        TOKEN_2022_PROGRAM_ID,
       );
-      const wsolAccount = await getAccount(connection, ctx.wsolVault, undefined, TOKEN_PROGRAM_ID);
+      const wsolAccount = await getAccount(
+        connection,
+        ctx.wsolVault,
+        undefined,
+        TOKEN_PROGRAM_ID,
+      );
 
       // User spent at least depositLamports (plus fees)
       expect(solBefore - solAfter).to.be.at.least(depositLamports.toNumber());
@@ -349,14 +364,22 @@ describe("svs-7: Native SOL Vault", () => {
     it("second deposit mints proportional shares", async () => {
       const depositLamports = new BN(1 * LAMPORTS_PER_SOL);
 
-      const userSharesAccount = getUserSharesATA(ctx.sharesMint, payer.publicKey);
+      const userSharesAccount = getUserSharesATA(
+        ctx.sharesMint,
+        payer.publicKey,
+      );
       const sharesBefore = await getAccount(
         connection,
         userSharesAccount,
         undefined,
-        TOKEN_2022_PROGRAM_ID
+        TOKEN_2022_PROGRAM_ID,
       );
-      const wsolBefore = await getAccount(connection, ctx.wsolVault, undefined, TOKEN_PROGRAM_ID);
+      const wsolBefore = await getAccount(
+        connection,
+        ctx.wsolVault,
+        undefined,
+        TOKEN_PROGRAM_ID,
+      );
 
       await program.methods
         .depositSol(depositLamports, new BN(0))
@@ -377,14 +400,20 @@ describe("svs-7: Native SOL Vault", () => {
         connection,
         userSharesAccount,
         undefined,
-        TOKEN_2022_PROGRAM_ID
+        TOKEN_2022_PROGRAM_ID,
       );
-      const wsolAfter = await getAccount(connection, ctx.wsolVault, undefined, TOKEN_PROGRAM_ID);
+      const wsolAfter = await getAccount(
+        connection,
+        ctx.wsolVault,
+        undefined,
+        TOKEN_PROGRAM_ID,
+      );
 
-      const newShares = Number(sharesAfter.amount) - Number(sharesBefore.amount);
+      const newShares =
+        Number(sharesAfter.amount) - Number(sharesBefore.amount);
       expect(newShares).to.be.greaterThan(0);
       expect(Number(wsolAfter.amount)).to.equal(
-        Number(wsolBefore.amount) + depositLamports.toNumber()
+        Number(wsolBefore.amount) + depositLamports.toNumber(),
       );
 
       // Second deposit of half the original should mint proportional shares
@@ -393,13 +422,16 @@ describe("svs-7: Native SOL Vault", () => {
         "  second deposit new shares:",
         newShares,
         "previous total:",
-        Number(sharesBefore.amount)
+        Number(sharesBefore.amount),
       );
     });
 
     it("respects min_shares_out slippage guard", async () => {
       const depositLamports = new BN(0.1 * LAMPORTS_PER_SOL);
-      const userSharesAccount = getUserSharesATA(ctx.sharesMint, payer.publicKey);
+      const userSharesAccount = getUserSharesATA(
+        ctx.sharesMint,
+        payer.publicKey,
+      );
 
       // Set min_shares_out to an absurdly high value to trigger slippage error
       try {
@@ -435,18 +467,26 @@ describe("svs-7: Native SOL Vault", () => {
         connection,
         payer,
         payer.publicKey,
-        depositAmount.toNumber() + 10_000 // extra for rent
+        depositAmount.toNumber() + 10_000, // extra for rent
       );
 
-      const userSharesAccount = getUserSharesATA(ctx.sharesMint, payer.publicKey);
+      const userSharesAccount = getUserSharesATA(
+        ctx.sharesMint,
+        payer.publicKey,
+      );
       const sharesBefore = await getAccount(
         connection,
         userSharesAccount,
         undefined,
-        TOKEN_2022_PROGRAM_ID
+        TOKEN_2022_PROGRAM_ID,
       );
 
-      const wsolBefore = await getAccount(connection, ctx.wsolVault, undefined, TOKEN_PROGRAM_ID);
+      const wsolBefore = await getAccount(
+        connection,
+        ctx.wsolVault,
+        undefined,
+        TOKEN_PROGRAM_ID,
+      );
 
       const tx = await program.methods
         .depositWsol(depositAmount, new BN(0))
@@ -471,13 +511,20 @@ describe("svs-7: Native SOL Vault", () => {
         connection,
         userSharesAccount,
         undefined,
-        TOKEN_2022_PROGRAM_ID
+        TOKEN_2022_PROGRAM_ID,
       );
-      const wsolAfter = await getAccount(connection, ctx.wsolVault, undefined, TOKEN_PROGRAM_ID);
+      const wsolAfter = await getAccount(
+        connection,
+        ctx.wsolVault,
+        undefined,
+        TOKEN_PROGRAM_ID,
+      );
 
-      expect(Number(sharesAfter.amount)).to.be.greaterThan(Number(sharesBefore.amount));
+      expect(Number(sharesAfter.amount)).to.be.greaterThan(
+        Number(sharesBefore.amount),
+      );
       expect(Number(wsolAfter.amount)).to.equal(
-        Number(wsolBefore.amount) + depositAmount.toNumber()
+        Number(wsolBefore.amount) + depositAmount.toNumber(),
       );
     });
   });
@@ -488,7 +535,10 @@ describe("svs-7: Native SOL Vault", () => {
     it("withdraws exact wSOL by burning shares (no unwrap)", async () => {
       const withdrawLamports = new BN(0.1 * LAMPORTS_PER_SOL);
 
-      const userSharesAccount = getUserSharesATA(ctx.sharesMint, payer.publicKey);
+      const userSharesAccount = getUserSharesATA(
+        ctx.sharesMint,
+        payer.publicKey,
+      );
       const userWsolAccount = getUserWsolATA(payer.publicKey);
 
       // Ensure user has an empty wSOL ATA to receive into
@@ -498,13 +548,13 @@ describe("svs-7: Native SOL Vault", () => {
         connection,
         userSharesAccount,
         undefined,
-        TOKEN_2022_PROGRAM_ID
+        TOKEN_2022_PROGRAM_ID,
       );
       const wsolUserBefore = await getAccount(
         connection,
         userWsolAccount,
         undefined,
-        TOKEN_PROGRAM_ID
+        TOKEN_PROGRAM_ID,
       );
 
       const tx = await program.methods
@@ -528,18 +578,20 @@ describe("svs-7: Native SOL Vault", () => {
         connection,
         userSharesAccount,
         undefined,
-        TOKEN_2022_PROGRAM_ID
+        TOKEN_2022_PROGRAM_ID,
       );
       const wsolUserAfter = await getAccount(
         connection,
         userWsolAccount,
         undefined,
-        TOKEN_PROGRAM_ID
+        TOKEN_PROGRAM_ID,
       );
 
-      expect(Number(sharesAfter.amount)).to.be.lessThan(Number(sharesBefore.amount));
+      expect(Number(sharesAfter.amount)).to.be.lessThan(
+        Number(sharesBefore.amount),
+      );
       expect(Number(wsolUserAfter.amount)).to.equal(
-        Number(wsolUserBefore.amount) + withdrawLamports.toNumber()
+        Number(wsolUserBefore.amount) + withdrawLamports.toNumber(),
       );
     });
   });
@@ -550,7 +602,10 @@ describe("svs-7: Native SOL Vault", () => {
     it("withdraws exact lamports as native SOL (burns shares, closes wSOL ATA)", async () => {
       const withdrawLamports = new BN(0.1 * LAMPORTS_PER_SOL);
 
-      const userSharesAccount = getUserSharesATA(ctx.sharesMint, payer.publicKey);
+      const userSharesAccount = getUserSharesATA(
+        ctx.sharesMint,
+        payer.publicKey,
+      );
 
       // withdraw_sol needs a wSOL ATA owned by user as a temporary landing pad.
       // The ATA must not exist before the call (program closes it in the same tx).
@@ -564,21 +619,25 @@ describe("svs-7: Native SOL Vault", () => {
             payer.publicKey,
             payer.publicKey,
             [],
-            TOKEN_PROGRAM_ID
-          )
+            TOKEN_PROGRAM_ID,
+          ),
         );
         await sendAndConfirmTransaction(connection, closeTx, [payer]);
       }
 
       // Create a fresh empty wSOL ATA
-      const userWsolAccount = await ensureEmptyWsolAccount(connection, payer, payer.publicKey);
+      const userWsolAccount = await ensureEmptyWsolAccount(
+        connection,
+        payer,
+        payer.publicKey,
+      );
 
       const solBefore = await connection.getBalance(payer.publicKey);
       const sharesBefore = await getAccount(
         connection,
         userSharesAccount,
         undefined,
-        TOKEN_2022_PROGRAM_ID
+        TOKEN_2022_PROGRAM_ID,
       );
 
       const tx = await program.methods
@@ -603,13 +662,15 @@ describe("svs-7: Native SOL Vault", () => {
         connection,
         userSharesAccount,
         undefined,
-        TOKEN_2022_PROGRAM_ID
+        TOKEN_2022_PROGRAM_ID,
       );
 
       // User received SOL (net of fees the balance increases meaningfully)
       expect(solAfter).to.be.greaterThan(solBefore);
       // Shares were burned
-      expect(Number(sharesAfter.amount)).to.be.lessThan(Number(sharesBefore.amount));
+      expect(Number(sharesAfter.amount)).to.be.lessThan(
+        Number(sharesBefore.amount),
+      );
       // wSOL ATA was closed (account no longer exists)
       const closedInfo = await connection.getAccountInfo(userWsolAccount);
       expect(closedInfo).to.be.null;
@@ -620,12 +681,15 @@ describe("svs-7: Native SOL Vault", () => {
 
   describe("Redeem wSOL", () => {
     it("redeems exact shares for wSOL (no unwrap)", async () => {
-      const userSharesAccount = getUserSharesATA(ctx.sharesMint, payer.publicKey);
+      const userSharesAccount = getUserSharesATA(
+        ctx.sharesMint,
+        payer.publicKey,
+      );
       const sharesBefore = await getAccount(
         connection,
         userSharesAccount,
         undefined,
-        TOKEN_2022_PROGRAM_ID
+        TOKEN_2022_PROGRAM_ID,
       );
 
       const redeemShares = new BN(Math.floor(Number(sharesBefore.amount) / 4));
@@ -635,13 +699,17 @@ describe("svs-7: Native SOL Vault", () => {
       }
 
       // Ensure user wSOL ATA exists to receive
-      const userWsolAccount = await ensureEmptyWsolAccount(connection, payer, payer.publicKey);
+      const userWsolAccount = await ensureEmptyWsolAccount(
+        connection,
+        payer,
+        payer.publicKey,
+      );
 
       const wsolUserBefore = await getAccount(
         connection,
         userWsolAccount,
         undefined,
-        TOKEN_PROGRAM_ID
+        TOKEN_PROGRAM_ID,
       );
 
       const tx = await program.methods
@@ -665,21 +733,27 @@ describe("svs-7: Native SOL Vault", () => {
         connection,
         userSharesAccount,
         undefined,
-        TOKEN_2022_PROGRAM_ID
+        TOKEN_2022_PROGRAM_ID,
       );
       const wsolUserAfter = await getAccount(
         connection,
         userWsolAccount,
         undefined,
-        TOKEN_PROGRAM_ID
+        TOKEN_PROGRAM_ID,
       );
 
-      const sharesBurned = Number(sharesBefore.amount) - Number(sharesAfter.amount);
+      const sharesBurned =
+        Number(sharesBefore.amount) - Number(sharesAfter.amount);
       expect(sharesBurned).to.equal(redeemShares.toNumber());
-      expect(Number(wsolUserAfter.amount)).to.be.greaterThan(Number(wsolUserBefore.amount));
+      expect(Number(wsolUserAfter.amount)).to.be.greaterThan(
+        Number(wsolUserBefore.amount),
+      );
 
       console.log("  shares burned:", sharesBurned);
-      console.log("  wSOL received:", Number(wsolUserAfter.amount) - Number(wsolUserBefore.amount));
+      console.log(
+        "  wSOL received:",
+        Number(wsolUserAfter.amount) - Number(wsolUserBefore.amount),
+      );
     });
   });
 
@@ -687,12 +761,15 @@ describe("svs-7: Native SOL Vault", () => {
 
   describe("Redeem SOL (native unwrap)", () => {
     it("redeems exact shares and receives native SOL", async () => {
-      const userSharesAccount = getUserSharesATA(ctx.sharesMint, payer.publicKey);
+      const userSharesAccount = getUserSharesATA(
+        ctx.sharesMint,
+        payer.publicKey,
+      );
       const sharesBefore = await getAccount(
         connection,
         userSharesAccount,
         undefined,
-        TOKEN_2022_PROGRAM_ID
+        TOKEN_2022_PROGRAM_ID,
       );
 
       const redeemShares = new BN(Math.floor(Number(sharesBefore.amount) / 4));
@@ -711,8 +788,8 @@ describe("svs-7: Native SOL Vault", () => {
             payer.publicKey,
             payer.publicKey,
             [],
-            TOKEN_PROGRAM_ID
-          )
+            TOKEN_PROGRAM_ID,
+          ),
         );
         await sendAndConfirmTransaction(connection, closeTx, [payer]);
         // Wait for close to propagate so ensureEmptyWsolAccount sees null
@@ -722,7 +799,11 @@ describe("svs-7: Native SOL Vault", () => {
           await new Promise((r) => setTimeout(r, 400));
         }
       }
-      const userWsolAccount = await ensureEmptyWsolAccount(connection, payer, payer.publicKey);
+      const userWsolAccount = await ensureEmptyWsolAccount(
+        connection,
+        payer,
+        payer.publicKey,
+      );
 
       const solBefore = await connection.getBalance(payer.publicKey);
 
@@ -748,10 +829,11 @@ describe("svs-7: Native SOL Vault", () => {
         connection,
         userSharesAccount,
         undefined,
-        TOKEN_2022_PROGRAM_ID
+        TOKEN_2022_PROGRAM_ID,
       );
 
-      const sharesBurned = Number(sharesBefore.amount) - Number(sharesAfter.amount);
+      const sharesBurned =
+        Number(sharesBefore.amount) - Number(sharesAfter.amount);
       expect(sharesBurned).to.equal(redeemShares.toNumber());
       expect(solAfter).to.be.greaterThan(solBefore);
 
@@ -767,12 +849,15 @@ describe("svs-7: Native SOL Vault", () => {
     it("mints exact shares by paying native SOL (ceiling rounding)", async () => {
       const mintShares = new BN(0.1 * LAMPORTS_PER_SOL); // 0.1 SOL worth of shares
 
-      const userSharesAccount = getUserSharesATA(ctx.sharesMint, payer.publicKey);
+      const userSharesAccount = getUserSharesATA(
+        ctx.sharesMint,
+        payer.publicKey,
+      );
       const sharesBefore = await getAccount(
         connection,
         userSharesAccount,
         undefined,
-        TOKEN_2022_PROGRAM_ID
+        TOKEN_2022_PROGRAM_ID,
       );
       const solBefore = await connection.getBalance(payer.publicKey);
 
@@ -797,18 +882,22 @@ describe("svs-7: Native SOL Vault", () => {
         connection,
         userSharesAccount,
         undefined,
-        TOKEN_2022_PROGRAM_ID
+        TOKEN_2022_PROGRAM_ID,
       );
       const solAfter = await connection.getBalance(payer.publicKey);
 
-      const newShares = Number(sharesAfter.amount) - Number(sharesBefore.amount);
+      const newShares =
+        Number(sharesAfter.amount) - Number(sharesBefore.amount);
       expect(newShares).to.equal(mintShares.toNumber());
       expect(solAfter).to.be.lessThan(solBefore);
     });
 
     it("mint_sol respects max_lamports_in slippage guard", async () => {
       const mintShares = new BN(LAMPORTS_PER_SOL);
-      const userSharesAccount = getUserSharesATA(ctx.sharesMint, payer.publicKey);
+      const userSharesAccount = getUserSharesATA(
+        ctx.sharesMint,
+        payer.publicKey,
+      );
 
       try {
         await program.methods
@@ -832,6 +921,175 @@ describe("svs-7: Native SOL Vault", () => {
     });
   });
 
+  // ── mint_wsol ───────────────────────────────────────────────────────────
+
+  describe("mint_wsol — exact shares for wSOL", () => {
+    it("mints exact shares by paying wSOL", async () => {
+      const mintShares = new BN(LAMPORTS_PER_SOL);
+      const userSharesAccount = getUserSharesATA(
+        ctx.sharesMint,
+        payer.publicKey,
+      );
+
+      // Create and fund a wSOL account for the user
+      const userWsolAccount = getAssociatedTokenAddressSync(
+        NATIVE_MINT,
+        payer.publicKey,
+        false,
+        TOKEN_PROGRAM_ID,
+      );
+
+      // Create wSOL ATA + fund with 2 SOL + sync
+      const createAndFundTx = new Transaction().add(
+        createAssociatedTokenAccountInstruction(
+          payer.publicKey,
+          userWsolAccount,
+          payer.publicKey,
+          NATIVE_MINT,
+          TOKEN_PROGRAM_ID,
+        ),
+        SystemProgram.transfer({
+          fromPubkey: payer.publicKey,
+          toPubkey: userWsolAccount,
+          lamports: 2 * LAMPORTS_PER_SOL,
+        }),
+        createSyncNativeInstruction(userWsolAccount, TOKEN_PROGRAM_ID),
+      );
+      await sendAndConfirmTransaction(connection, createAndFundTx, [payer]);
+
+      const sharesBefore = await getAccount(
+        connection,
+        userSharesAccount,
+        undefined,
+        TOKEN_2022_PROGRAM_ID,
+      );
+      const wsolBefore = await getAccount(
+        connection,
+        userWsolAccount,
+        undefined,
+        TOKEN_PROGRAM_ID,
+      );
+
+      const tx = await program.methods
+        .mintWsol(mintShares, new BN(2 * LAMPORTS_PER_SOL))
+        .accountsStrict({
+          user: payer.publicKey,
+          vault: ctx.vault,
+          nativeMint: NATIVE_MINT,
+          userWsolAccount,
+          wsolVault: ctx.wsolVault,
+          sharesMint: ctx.sharesMint,
+          userSharesAccount,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
+
+      console.log("  [Live] mint_wsol tx:", tx);
+
+      const sharesAfter = await getAccount(
+        connection,
+        userSharesAccount,
+        undefined,
+        TOKEN_2022_PROGRAM_ID,
+      );
+      const wsolAfter = await getAccount(
+        connection,
+        userWsolAccount,
+        undefined,
+        TOKEN_PROGRAM_ID,
+      );
+
+      const newShares =
+        Number(sharesAfter.amount) - Number(sharesBefore.amount);
+      expect(newShares).to.equal(mintShares.toNumber());
+      expect(Number(wsolAfter.amount)).to.be.lessThan(
+        Number(wsolBefore.amount),
+      );
+
+      // Clean up: close the wSOL account
+      const closeTx = new Transaction().add(
+        createCloseAccountInstruction(
+          userWsolAccount,
+          payer.publicKey,
+          payer.publicKey,
+          [],
+          TOKEN_PROGRAM_ID,
+        ),
+      );
+      await sendAndConfirmTransaction(connection, closeTx, [payer]);
+    });
+
+    it("mint_wsol respects max_amount_in slippage guard", async () => {
+      const mintShares = new BN(LAMPORTS_PER_SOL);
+      const userSharesAccount = getUserSharesATA(
+        ctx.sharesMint,
+        payer.publicKey,
+      );
+
+      // Create and fund a wSOL account
+      const userWsolAccount = getAssociatedTokenAddressSync(
+        NATIVE_MINT,
+        payer.publicKey,
+        false,
+        TOKEN_PROGRAM_ID,
+      );
+
+      const createAndFundTx = new Transaction().add(
+        createAssociatedTokenAccountInstruction(
+          payer.publicKey,
+          userWsolAccount,
+          payer.publicKey,
+          NATIVE_MINT,
+          TOKEN_PROGRAM_ID,
+        ),
+        SystemProgram.transfer({
+          fromPubkey: payer.publicKey,
+          toPubkey: userWsolAccount,
+          lamports: 2 * LAMPORTS_PER_SOL,
+        }),
+        createSyncNativeInstruction(userWsolAccount, TOKEN_PROGRAM_ID),
+      );
+      await sendAndConfirmTransaction(connection, createAndFundTx, [payer]);
+
+      try {
+        await program.methods
+          .mintWsol(mintShares, new BN(1)) // absurdly low max
+          .accountsStrict({
+            user: payer.publicKey,
+            vault: ctx.vault,
+            nativeMint: NATIVE_MINT,
+            userWsolAccount,
+            wsolVault: ctx.wsolVault,
+            sharesMint: ctx.sharesMint,
+            userSharesAccount,
+            tokenProgram: TOKEN_PROGRAM_ID,
+            token2022Program: TOKEN_2022_PROGRAM_ID,
+            associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+            systemProgram: SystemProgram.programId,
+          })
+          .rpc();
+        expect.fail("expected slippage error");
+      } catch (err: any) {
+        expect(err.toString()).to.include("SlippageExceeded");
+      }
+
+      // Clean up
+      const closeTx = new Transaction().add(
+        createCloseAccountInstruction(
+          userWsolAccount,
+          payer.publicKey,
+          payer.publicKey,
+          [],
+          TOKEN_PROGRAM_ID,
+        ),
+      );
+      await sendAndConfirmTransaction(connection, closeTx, [payer]);
+    });
+  });
+
   // ── Admin ─────────────────────────────────────────────────────────────────
 
   describe("Admin — pause / unpause / transfer_authority", () => {
@@ -849,7 +1107,10 @@ describe("svs-7: Native SOL Vault", () => {
     });
 
     it("rejects deposit when paused", async () => {
-      const userSharesAccount = getUserSharesATA(ctx.sharesMint, payer.publicKey);
+      const userSharesAccount = getUserSharesATA(
+        ctx.sharesMint,
+        payer.publicKey,
+      );
       try {
         await program.methods
           .depositSol(new BN(MIN_DEPOSIT_LAMPORTS), new BN(0))
@@ -897,10 +1158,15 @@ describe("svs-7: Native SOL Vault", () => {
         .rpc();
 
       let vaultAccount = await program.account.solVault.fetch(ctx.vault);
-      expect(vaultAccount.authority.toBase58()).to.equal(newAuthority.publicKey.toBase58());
+      expect(vaultAccount.authority.toBase58()).to.equal(
+        newAuthority.publicKey.toBase58(),
+      );
 
       // Airdrop to new authority so it can sign
-      const sig = await connection.requestAirdrop(newAuthority.publicKey, LAMPORTS_PER_SOL);
+      const sig = await connection.requestAirdrop(
+        newAuthority.publicKey,
+        LAMPORTS_PER_SOL,
+      );
       await connection.confirmTransaction(sig);
 
       // Transfer back to original payer
@@ -914,12 +1180,17 @@ describe("svs-7: Native SOL Vault", () => {
         .rpc();
 
       vaultAccount = await program.account.solVault.fetch(ctx.vault);
-      expect(vaultAccount.authority.toBase58()).to.equal(payer.publicKey.toBase58());
+      expect(vaultAccount.authority.toBase58()).to.equal(
+        payer.publicKey.toBase58(),
+      );
     });
 
     it("rejects non-authority attempting pause", async () => {
       const impostor = Keypair.generate();
-      const sig = await connection.requestAirdrop(impostor.publicKey, LAMPORTS_PER_SOL);
+      const sig = await connection.requestAirdrop(
+        impostor.publicKey,
+        LAMPORTS_PER_SOL,
+      );
       await connection.confirmTransaction(sig);
 
       try {
@@ -948,7 +1219,12 @@ describe("svs-7: Native SOL Vault", () => {
     });
 
     it("total_assets returns wSOL vault balance", async () => {
-      const wsolAccount = await getAccount(connection, ctx.wsolVault, undefined, TOKEN_PROGRAM_ID);
+      const wsolAccount = await getAccount(
+        connection,
+        ctx.wsolVault,
+        undefined,
+        TOKEN_PROGRAM_ID,
+      );
       const expectedLamports = Number(wsolAccount.amount);
 
       const sim = await program.methods
@@ -974,12 +1250,15 @@ describe("svs-7: Native SOL Vault", () => {
     });
 
     it("convert_to_assets returns positive value for non-zero shares input", async () => {
-      const userSharesAccount = getUserSharesATA(ctx.sharesMint, payer.publicKey);
+      const userSharesAccount = getUserSharesATA(
+        ctx.sharesMint,
+        payer.publicKey,
+      );
       const sharesAccount = await getAccount(
         connection,
         userSharesAccount,
         undefined,
-        TOKEN_2022_PROGRAM_ID
+        TOKEN_2022_PROGRAM_ID,
       );
 
       if (Number(sharesAccount.amount) === 0) {
@@ -1010,12 +1289,15 @@ describe("svs-7: Native SOL Vault", () => {
     });
 
     it("max_withdraw returns owner's redeemable lamports", async () => {
-      const userSharesAccount = getUserSharesATA(ctx.sharesMint, payer.publicKey);
+      const userSharesAccount = getUserSharesATA(
+        ctx.sharesMint,
+        payer.publicKey,
+      );
       const sharesAccount = await getAccount(
         connection,
         userSharesAccount,
         undefined,
-        TOKEN_2022_PROGRAM_ID
+        TOKEN_2022_PROGRAM_ID,
       );
 
       const sim = await program.methods
@@ -1062,7 +1344,10 @@ describe("svs-7: Native SOL Vault", () => {
 
   describe("Edge Cases", () => {
     it("deposit_sol with zero amount fails (ZeroAmount)", async () => {
-      const userSharesAccount = getUserSharesATA(ctx.sharesMint, payer.publicKey);
+      const userSharesAccount = getUserSharesATA(
+        ctx.sharesMint,
+        payer.publicKey,
+      );
       try {
         await program.methods
           .depositSol(new BN(0), new BN(0))
@@ -1085,7 +1370,10 @@ describe("svs-7: Native SOL Vault", () => {
     });
 
     it("deposit_sol below MIN_DEPOSIT fails (DepositTooSmall)", async () => {
-      const userSharesAccount = getUserSharesATA(ctx.sharesMint, payer.publicKey);
+      const userSharesAccount = getUserSharesATA(
+        ctx.sharesMint,
+        payer.publicKey,
+      );
       try {
         await program.methods
           .depositSol(new BN(MIN_DEPOSIT_LAMPORTS - 1), new BN(0))
@@ -1109,10 +1397,18 @@ describe("svs-7: Native SOL Vault", () => {
 
     it("withdraw_sol for more than vault holds fails (InsufficientAssets)", async () => {
       // Deposit small amount first to ensure vault has some balance
-      const userSharesAccount = getUserSharesATA(ctx.sharesMint, payer.publicKey);
+      const userSharesAccount = getUserSharesATA(
+        ctx.sharesMint,
+        payer.publicKey,
+      );
 
       // Try to withdraw more than total vault assets
-      const wsolAccount = await getAccount(connection, ctx.wsolVault, undefined, TOKEN_PROGRAM_ID);
+      const wsolAccount = await getAccount(
+        connection,
+        ctx.wsolVault,
+        undefined,
+        TOKEN_PROGRAM_ID,
+      );
       const tooMuch = new BN(Number(wsolAccount.amount) + LAMPORTS_PER_SOL);
 
       // Ensure user wSOL ATA exists (will be closed on success, but we expect failure)
@@ -1120,11 +1416,21 @@ describe("svs-7: Native SOL Vault", () => {
       const existingInfo = await connection.getAccountInfo(wsolATA);
       if (existingInfo !== null) {
         const closeTx = new Transaction().add(
-          createCloseAccountInstruction(wsolATA, payer.publicKey, payer.publicKey, [], TOKEN_PROGRAM_ID)
+          createCloseAccountInstruction(
+            wsolATA,
+            payer.publicKey,
+            payer.publicKey,
+            [],
+            TOKEN_PROGRAM_ID,
+          ),
         );
         await sendAndConfirmTransaction(connection, closeTx, [payer]);
       }
-      const userWsolAccount = await ensureEmptyWsolAccount(connection, payer, payer.publicKey);
+      const userWsolAccount = await ensureEmptyWsolAccount(
+        connection,
+        payer,
+        payer.publicKey,
+      );
 
       try {
         await program.methods

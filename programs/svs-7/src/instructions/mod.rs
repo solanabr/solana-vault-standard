@@ -5,6 +5,7 @@ pub mod deposit_sol;
 pub mod deposit_wsol;
 pub mod initialize;
 pub mod mint_sol;
+pub mod mint_wsol;
 pub mod redeem_sol;
 pub mod redeem_wsol;
 pub mod view;
@@ -24,6 +25,8 @@ pub use deposit_wsol::*;
 pub use initialize::*;
 #[allow(ambiguous_glob_reexports)]
 pub use mint_sol::*;
+#[allow(ambiguous_glob_reexports)]
+pub use mint_wsol::*;
 #[allow(ambiguous_glob_reexports)]
 pub use redeem_sol::*;
 #[allow(ambiguous_glob_reexports)]

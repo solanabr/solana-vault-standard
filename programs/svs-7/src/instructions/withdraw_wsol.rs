@@ -70,6 +70,12 @@ pub struct WithdrawWsol<'info> {
 }
 
 /// Withdraw exact wSOL by burning vault shares (no native SOL unwrap).
+///
+/// Exit fee behavior (modules feature): shares are computed from the gross withdrawal
+/// amount (`lamports`), but the user receives `net_lamports` (after fee deduction).
+/// This means withdraw(X) burns shares worth X but delivers X minus fee.
+/// This is a codebase-wide design decision consistent with other SVS vault types.
+/// Integrators should call preview_withdraw to determine actual assets received.
 pub fn handler(ctx: Context<WithdrawWsol>, lamports: u64, max_shares_in: u64) -> Result<()> {
     // 1. VALIDATION
     require!(lamports > 0, VaultError::ZeroAmount);

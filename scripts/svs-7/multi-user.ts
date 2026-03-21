@@ -49,24 +49,38 @@ interface UserState {
 }
 
 async function main() {
-  const { connection, payer, program, programId } = await setupSvs7Test("Multi-User Fairness");
+  const { connection, payer, program, programId } = await setupSvs7Test(
+    "Multi-User Fairness",
+  );
 
   // Create test users
   const users: UserState[] = [
     {
-      name: "Alice", keypair: Keypair.generate(), sharesAccount: PublicKey.default,
-      wsolAccount: PublicKey.default, depositLamports: 1 * LAMPORTS_PER_SOL,
-      sharesReceived: 0, lamportsRedeemed: 0,
+      name: "Alice",
+      keypair: Keypair.generate(),
+      sharesAccount: PublicKey.default,
+      wsolAccount: PublicKey.default,
+      depositLamports: 1 * LAMPORTS_PER_SOL,
+      sharesReceived: 0,
+      lamportsRedeemed: 0,
     },
     {
-      name: "Bob", keypair: Keypair.generate(), sharesAccount: PublicKey.default,
-      wsolAccount: PublicKey.default, depositLamports: 0.5 * LAMPORTS_PER_SOL,
-      sharesReceived: 0, lamportsRedeemed: 0,
+      name: "Bob",
+      keypair: Keypair.generate(),
+      sharesAccount: PublicKey.default,
+      wsolAccount: PublicKey.default,
+      depositLamports: 0.5 * LAMPORTS_PER_SOL,
+      sharesReceived: 0,
+      lamportsRedeemed: 0,
     },
     {
-      name: "Charlie", keypair: Keypair.generate(), sharesAccount: PublicKey.default,
-      wsolAccount: PublicKey.default, depositLamports: 2 * LAMPORTS_PER_SOL,
-      sharesReceived: 0, lamportsRedeemed: 0,
+      name: "Charlie",
+      keypair: Keypair.generate(),
+      sharesAccount: PublicKey.default,
+      wsolAccount: PublicKey.default,
+      depositLamports: 2 * LAMPORTS_PER_SOL,
+      sharesReceived: 0,
+      lamportsRedeemed: 0,
     },
   ];
 
@@ -80,8 +94,8 @@ async function main() {
   await fundAccounts(
     connection,
     payer,
-    users.map(u => u.keypair.publicKey),
-    3 // 3 SOL each — enough for deposits + fees
+    users.map((u) => u.keypair.publicKey),
+    3, // 3 SOL each — enough for deposits + fees
   );
   console.log("  All users funded with 3 SOL");
 
@@ -89,22 +103,33 @@ async function main() {
   const vaultId = new BN(Date.now());
   const [vault] = getSolVaultPDA(programId, vaultId);
   const [sharesMint] = getSharesMintPDA(programId, vault);
-  const wsolVault = anchor.utils.token.associatedAddress({ mint: NATIVE_MINT, owner: vault });
+  const wsolVault = anchor.utils.token.associatedAddress({
+    mint: NATIVE_MINT,
+    owner: vault,
+  });
 
   // Set up each user's accounts
   for (const user of users) {
     user.sharesAccount = getAssociatedTokenAddressSync(
-      sharesMint, user.keypair.publicKey, false, TOKEN_2022_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID
+      sharesMint,
+      user.keypair.publicKey,
+      false,
+      TOKEN_2022_PROGRAM_ID,
+      ASSOCIATED_TOKEN_PROGRAM_ID,
     );
     user.wsolAccount = getAssociatedTokenAddressSync(
-      NATIVE_MINT, user.keypair.publicKey, false, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID
+      NATIVE_MINT,
+      user.keypair.publicKey,
+      false,
+      TOKEN_PROGRAM_ID,
+      ASSOCIATED_TOKEN_PROGRAM_ID,
     );
   }
 
   // Initialize vault
   console.log("\n--- Initializing vault ---");
   await program.methods
-    .initialize(vaultId, "Multi-User Test Vault", "MULTI", "https://test.com")
+    .initialize(vaultId, "Multi-User Test Vault", "MULTI")
     .accountsStrict({
       authority: payer.publicKey,
       vault,
@@ -125,9 +150,13 @@ async function main() {
   for (const user of users) {
     const createAtaTx = new Transaction().add(
       createAssociatedTokenAccountInstruction(
-        payer.publicKey, user.wsolAccount, user.keypair.publicKey, NATIVE_MINT,
-        TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID
-      )
+        payer.publicKey,
+        user.wsolAccount,
+        user.keypair.publicKey,
+        NATIVE_MINT,
+        TOKEN_PROGRAM_ID,
+        ASSOCIATED_TOKEN_PROGRAM_ID,
+      ),
     );
     await sendAndConfirmTransaction(connection, createAtaTx, [payer]);
     console.log(`  ${user.name} wSOL ATA created`);
@@ -139,7 +168,9 @@ async function main() {
   console.log("=".repeat(70));
 
   for (const user of users) {
-    console.log(`\n--- ${user.name} deposits ${user.depositLamports / LAMPORTS_PER_SOL} SOL ---`);
+    console.log(
+      `\n--- ${user.name} deposits ${user.depositLamports / LAMPORTS_PER_SOL} SOL ---`,
+    );
 
     await program.methods
       .depositSol(new BN(user.depositLamports), new BN(0))
@@ -157,9 +188,16 @@ async function main() {
       .signers([user.keypair])
       .rpc();
 
-    const userSharesData = await getAccount(connection, user.sharesAccount, undefined, TOKEN_2022_PROGRAM_ID);
+    const userSharesData = await getAccount(
+      connection,
+      user.sharesAccount,
+      undefined,
+      TOKEN_2022_PROGRAM_ID,
+    );
     user.sharesReceived = Number(userSharesData.amount) / 10 ** SHARE_DECIMALS;
-    console.log(`  ${user.name} received: ${user.sharesReceived.toFixed(9)} svSOL shares`);
+    console.log(
+      `  ${user.name} received: ${user.sharesReceived.toFixed(9)} svSOL shares`,
+    );
   }
 
   // Analysis
@@ -178,12 +216,21 @@ async function main() {
     const actualPct = (user.sharesReceived / totalShares) * 100;
     const deviation = Math.abs(actualPct - expectedPct);
     const status = deviation < 0.01 ? "FAIR" : "SKEWED";
-    console.log(`  ${status} ${user.name}: ${actualPct.toFixed(4)}% of shares (expected ${expectedPct.toFixed(4)}%)`);
+    console.log(
+      `  ${status} ${user.name}: ${actualPct.toFixed(4)}% of shares (expected ${expectedPct.toFixed(4)}%)`,
+    );
   }
 
   // wSOL vault state
-  const wsolVaultState = await getAccount(connection, wsolVault, undefined, TOKEN_PROGRAM_ID);
-  console.log(`\n  wSOL vault total: ${Number(wsolVaultState.amount) / LAMPORTS_PER_SOL} SOL`);
+  const wsolVaultState = await getAccount(
+    connection,
+    wsolVault,
+    undefined,
+    TOKEN_PROGRAM_ID,
+  );
+  console.log(
+    `\n  wSOL vault total: ${Number(wsolVaultState.amount) / LAMPORTS_PER_SOL} SOL`,
+  );
 
   // All users redeem
   console.log("\n" + "=".repeat(70));
@@ -191,7 +238,12 @@ async function main() {
   console.log("=".repeat(70));
 
   for (const user of users) {
-    const userSharesData = await getAccount(connection, user.sharesAccount, undefined, TOKEN_2022_PROGRAM_ID);
+    const userSharesData = await getAccount(
+      connection,
+      user.sharesAccount,
+      undefined,
+      TOKEN_2022_PROGRAM_ID,
+    );
     if (Number(userSharesData.amount) === 0) continue;
 
     const solBefore = await connection.getBalance(user.keypair.publicKey);
@@ -217,7 +269,9 @@ async function main() {
     const netSol = solAfter - solBefore;
     user.lamportsRedeemed = netSol;
 
-    console.log(`\n  ${user.name}: ~${(netSol / LAMPORTS_PER_SOL).toFixed(6)} SOL net (incl ATA close refund, minus fees)`);
+    console.log(
+      `\n  ${user.name}: ~${(netSol / LAMPORTS_PER_SOL).toFixed(6)} SOL net (incl ATA close refund, minus fees)`,
+    );
   }
 
   // Final analysis
@@ -236,12 +290,18 @@ async function main() {
 
     // Allow up to 1% loss to cover tx fees and rent
     const status = pctLoss < 1 ? "FAIR" : "ISSUE";
-    console.log(`  ${status} ${user.name}: deposited ${depositSol} SOL, net ${redeemedSol.toFixed(6)} SOL (~${pctLoss.toFixed(4)}% loss)`);
+    console.log(
+      `  ${status} ${user.name}: deposited ${depositSol} SOL, net ${redeemedSol.toFixed(6)} SOL (~${pctLoss.toFixed(4)}% loss)`,
+    );
     if (pctLoss >= 2) allFair = false; // 2% threshold — covers fees generously
   }
 
   console.log("\n" + "=".repeat(70));
-  console.log(allFair ? "  Multi-user SOL accounting is FAIR" : "  Potential fairness issue");
+  console.log(
+    allFair
+      ? "  Multi-user SOL accounting is FAIR"
+      : "  Potential fairness issue",
+  );
   console.log("=".repeat(70) + "\n");
 
   if (!allFair) process.exit(1);

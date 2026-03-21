@@ -44,7 +44,9 @@ interface TestResult {
 }
 
 async function main() {
-  const { connection, payer, program, programId } = await setupSvs7Test("Edge Cases & Error Handling");
+  const { connection, payer, program, programId } = await setupSvs7Test(
+    "Edge Cases & Error Handling",
+  );
 
   const results: TestResult[] = [];
 
@@ -52,16 +54,23 @@ async function main() {
   const vaultId = new BN(Date.now());
   const [vault] = getSolVaultPDA(programId, vaultId);
   const [sharesMint] = getSharesMintPDA(programId, vault);
-  const wsolVault = anchor.utils.token.associatedAddress({ mint: NATIVE_MINT, owner: vault });
+  const wsolVault = anchor.utils.token.associatedAddress({
+    mint: NATIVE_MINT,
+    owner: vault,
+  });
   const userSharesAccount = getAssociatedTokenAddressSync(
-    sharesMint, payer.publicKey, false, TOKEN_2022_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID
+    sharesMint,
+    payer.publicKey,
+    false,
+    TOKEN_2022_PROGRAM_ID,
+    ASSOCIATED_TOKEN_PROGRAM_ID,
   );
 
   // Setup — initialize vault and make a seed deposit
   console.log("\n--- Setup ---");
 
   await program.methods
-    .initialize(vaultId, "Edge Case Test Vault", "EDGE", "https://test.com")
+    .initialize(vaultId, "Edge Case Test Vault", "EDGE")
     .accountsStrict({
       authority: payer.publicKey,
       vault,
@@ -96,7 +105,9 @@ async function main() {
 
   // TEST 1: Zero-address guard on transfer_authority
   console.log("-".repeat(70));
-  console.log("TEST 1: transfer_authority to zero address (should fail with InvalidAuthority)");
+  console.log(
+    "TEST 1: transfer_authority to zero address (should fail with InvalidAuthority)",
+  );
   console.log("-".repeat(70));
 
   try {
@@ -150,7 +161,9 @@ async function main() {
 
   // TEST 3: Deposit below minimum (MIN_DEPOSIT_AMOUNT = 1000 lamports)
   console.log("\n" + "-".repeat(70));
-  console.log("TEST 3: Deposit below minimum threshold (should fail with DepositTooSmall)");
+  console.log(
+    "TEST 3: Deposit below minimum threshold (should fail with DepositTooSmall)",
+  );
   console.log("-".repeat(70));
 
   try {
@@ -192,10 +205,18 @@ async function main() {
     const idlPath = path.join(__dirname, "../../target/idl/svs_7.json");
     const idl = JSON.parse(fs.readFileSync(idlPath, "utf-8"));
     const unauthorizedWallet = new anchor.Wallet(unauthorized);
-    const unauthorizedProvider = new anchor.AnchorProvider(connection, unauthorizedWallet, { commitment: "confirmed" });
-    const unauthorizedProgram = new Program(idl, unauthorizedProvider) as Program<Svs7>;
+    const unauthorizedProvider = new anchor.AnchorProvider(
+      connection,
+      unauthorizedWallet,
+      { commitment: "confirmed" },
+    );
+    const unauthorizedProgram = new Program(
+      idl,
+      unauthorizedProvider,
+    ) as Program<Svs7>;
 
-    await unauthorizedProgram.methods.pause()
+    await unauthorizedProgram.methods
+      .pause()
       .accountsStrict({ authority: unauthorized.publicKey, vault })
       .signers([unauthorized])
       .rpc();
@@ -208,10 +229,15 @@ async function main() {
 
   // TEST 5: Deposit while paused
   console.log("\n" + "-".repeat(70));
-  console.log("TEST 5: deposit_sol while paused (should fail with VaultPaused)");
+  console.log(
+    "TEST 5: deposit_sol while paused (should fail with VaultPaused)",
+  );
   console.log("-".repeat(70));
 
-  await program.methods.pause().accountsStrict({ authority: payer.publicKey, vault }).rpc();
+  await program.methods
+    .pause()
+    .accountsStrict({ authority: payer.publicKey, vault })
+    .rpc();
 
   try {
     await program.methods
@@ -240,14 +266,17 @@ async function main() {
     }
   }
 
-  await program.methods.unpause().accountsStrict({ authority: payer.publicKey, vault }).rpc();
+  await program.methods
+    .unpause()
+    .accountsStrict({ authority: payer.publicKey, vault })
+    .rpc();
 
   // Summary
   console.log("\n" + "=".repeat(70));
   console.log("  SUMMARY");
   console.log("=".repeat(70));
 
-  const passed = results.filter(r => r.passed).length;
+  const passed = results.filter((r) => r.passed).length;
   console.log(`\n  Results: ${passed}/${results.length} passed\n`);
 
   for (const result of results) {
@@ -255,7 +284,11 @@ async function main() {
   }
 
   console.log("\n" + "=".repeat(70));
-  console.log(passed === results.length ? "  ALL EDGE CASES HANDLED" : `  ${results.length - passed} ISSUES FOUND`);
+  console.log(
+    passed === results.length
+      ? "  ALL EDGE CASES HANDLED"
+      : `  ${results.length - passed} ISSUES FOUND`,
+  );
   console.log("=".repeat(70) + "\n");
 
   if (passed < results.length) process.exit(1);

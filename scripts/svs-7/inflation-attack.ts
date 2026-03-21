@@ -48,7 +48,9 @@ const DONATION_LAMPORTS = 1 * LAMPORTS_PER_SOL; // 1 SOL donation
 const VICTIM_DEPOSIT_LAMPORTS = 0.1 * LAMPORTS_PER_SOL; // 0.1 SOL
 
 async function main() {
-  const { connection, payer, program, programId } = await setupSvs7Test("Inflation/Donation Attack");
+  const { connection, payer, program, programId } = await setupSvs7Test(
+    "Inflation/Donation Attack",
+  );
 
   const attacker = Keypair.generate();
   const victim = Keypair.generate();
@@ -59,9 +61,10 @@ async function main() {
   // Fund test accounts with enough SOL for deposits + fees
   console.log("\n--- Funding test accounts ---");
   await fundAccounts(
-    connection, payer,
+    connection,
+    payer,
     [attacker.publicKey, victim.publicKey],
-    2 // 2 SOL each — enough for deposit + donation + fees
+    2, // 2 SOL each — enough for deposit + donation + fees
   );
   console.log("  Funded attacker and victim with 2 SOL each");
 
@@ -69,22 +72,37 @@ async function main() {
   const vaultId = new BN(Date.now());
   const [vault] = getSolVaultPDA(programId, vaultId);
   const [sharesMint] = getSharesMintPDA(programId, vault);
-  const wsolVault = anchor.utils.token.associatedAddress({ mint: NATIVE_MINT, owner: vault });
+  const wsolVault = anchor.utils.token.associatedAddress({
+    mint: NATIVE_MINT,
+    owner: vault,
+  });
 
   const attackerSharesAccount = getAssociatedTokenAddressSync(
-    sharesMint, attacker.publicKey, false, TOKEN_2022_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID
+    sharesMint,
+    attacker.publicKey,
+    false,
+    TOKEN_2022_PROGRAM_ID,
+    ASSOCIATED_TOKEN_PROGRAM_ID,
   );
   const victimSharesAccount = getAssociatedTokenAddressSync(
-    sharesMint, victim.publicKey, false, TOKEN_2022_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID
+    sharesMint,
+    victim.publicKey,
+    false,
+    TOKEN_2022_PROGRAM_ID,
+    ASSOCIATED_TOKEN_PROGRAM_ID,
   );
   const victimWsolAccount = getAssociatedTokenAddressSync(
-    NATIVE_MINT, victim.publicKey, false, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID
+    NATIVE_MINT,
+    victim.publicKey,
+    false,
+    TOKEN_PROGRAM_ID,
+    ASSOCIATED_TOKEN_PROGRAM_ID,
   );
 
   // Initialize vault (payer is authority)
   console.log("\n--- Initializing vault ---");
   await program.methods
-    .initialize(vaultId, "Inflation Test Vault", "INFLAT", "https://test.com")
+    .initialize(vaultId, "Inflation Test Vault", "INFLAT")
     .accountsStrict({
       authority: payer.publicKey,
       vault,
@@ -105,7 +123,9 @@ async function main() {
   console.log("=".repeat(70));
 
   // Step 1: Attacker deposits minimal amount
-  console.log(`\n--- Step 1: Attacker deposits ${ATTACKER_DEPOSIT_LAMPORTS} lamports (minimal) ---`);
+  console.log(
+    `\n--- Step 1: Attacker deposits ${ATTACKER_DEPOSIT_LAMPORTS} lamports (minimal) ---`,
+  );
 
   await program.methods
     .depositSol(new BN(ATTACKER_DEPOSIT_LAMPORTS), new BN(0))
@@ -123,15 +143,31 @@ async function main() {
     .signers([attacker])
     .rpc();
 
-  const attackerSharesAfter = await getAccount(connection, attackerSharesAccount, undefined, TOKEN_2022_PROGRAM_ID);
-  console.log(`  Attacker shares: ${Number(attackerSharesAfter.amount)} lamport-shares`);
+  const attackerSharesAfter = await getAccount(
+    connection,
+    attackerSharesAccount,
+    undefined,
+    TOKEN_2022_PROGRAM_ID,
+  );
+  console.log(
+    `  Attacker shares: ${Number(attackerSharesAfter.amount)} lamport-shares`,
+  );
 
-  const wsolVaultBefore = await getAccount(connection, wsolVault, undefined, TOKEN_PROGRAM_ID);
-  console.log(`  wSOL vault balance before donation: ${Number(wsolVaultBefore.amount)} lamports`);
+  const wsolVaultBefore = await getAccount(
+    connection,
+    wsolVault,
+    undefined,
+    TOKEN_PROGRAM_ID,
+  );
+  console.log(
+    `  wSOL vault balance before donation: ${Number(wsolVaultBefore.amount)} lamports`,
+  );
 
   // Step 2: Attacker donates 1 SOL directly to vault's wSOL account
   // This inflates wsol_vault.amount without going through deposit()
-  console.log(`\n--- Step 2: Attacker donates ${DONATION_LAMPORTS / LAMPORTS_PER_SOL} SOL directly to wSOL vault ---`);
+  console.log(
+    `\n--- Step 2: Attacker donates ${DONATION_LAMPORTS / LAMPORTS_PER_SOL} SOL directly to wSOL vault ---`,
+  );
   console.log("  (Bypasses deposit — uses system transfer + sync_native)");
 
   const donationTx = new Transaction();
@@ -141,26 +177,43 @@ async function main() {
       toPubkey: wsolVault,
       lamports: DONATION_LAMPORTS,
     }),
-    createSyncNativeInstruction(wsolVault, TOKEN_PROGRAM_ID)
+    createSyncNativeInstruction(wsolVault, TOKEN_PROGRAM_ID),
   );
   await sendAndConfirmTransaction(connection, donationTx, [attacker]);
 
-  const wsolVaultAfterDonation = await getAccount(connection, wsolVault, undefined, TOKEN_PROGRAM_ID);
-  console.log(`  wSOL vault balance after donation: ${Number(wsolVaultAfterDonation.amount) / LAMPORTS_PER_SOL} SOL`);
-  console.log("  Donation inflates share price — each attacker share now worth more");
+  const wsolVaultAfterDonation = await getAccount(
+    connection,
+    wsolVault,
+    undefined,
+    TOKEN_PROGRAM_ID,
+  );
+  console.log(
+    `  wSOL vault balance after donation: ${Number(wsolVaultAfterDonation.amount) / LAMPORTS_PER_SOL} SOL`,
+  );
+  console.log(
+    "  Donation inflates share price — each attacker share now worth more",
+  );
 
   // Step 3: Create victim's wSOL ATA ahead of time
   const createVictimWsolTx = new Transaction().add(
     createAssociatedTokenAccountInstruction(
-      payer.publicKey, victimWsolAccount, victim.publicKey, NATIVE_MINT,
-      TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID
-    )
+      payer.publicKey,
+      victimWsolAccount,
+      victim.publicKey,
+      NATIVE_MINT,
+      TOKEN_PROGRAM_ID,
+      ASSOCIATED_TOKEN_PROGRAM_ID,
+    ),
   );
   await sendAndConfirmTransaction(connection, createVictimWsolTx, [payer]);
 
   // Step 3: Victim deposits
-  console.log(`\n--- Step 3: Victim deposits ${VICTIM_DEPOSIT_LAMPORTS / LAMPORTS_PER_SOL} SOL ---`);
-  console.log("  If vulnerable, victim would get 0 shares due to inflated share price");
+  console.log(
+    `\n--- Step 3: Victim deposits ${VICTIM_DEPOSIT_LAMPORTS / LAMPORTS_PER_SOL} SOL ---`,
+  );
+  console.log(
+    "  If vulnerable, victim would get 0 shares due to inflated share price",
+  );
 
   await program.methods
     .depositSol(new BN(VICTIM_DEPOSIT_LAMPORTS), new BN(0))
@@ -178,9 +231,16 @@ async function main() {
     .signers([victim])
     .rpc();
 
-  const victimSharesAfter = await getAccount(connection, victimSharesAccount, undefined, TOKEN_2022_PROGRAM_ID);
+  const victimSharesAfter = await getAccount(
+    connection,
+    victimSharesAccount,
+    undefined,
+    TOKEN_2022_PROGRAM_ID,
+  );
   const victimSharesReceived = Number(victimSharesAfter.amount);
-  console.log(`  Victim shares received: ${victimSharesReceived} lamport-shares`);
+  console.log(
+    `  Victim shares received: ${victimSharesReceived} lamport-shares`,
+  );
 
   // ANALYSIS
   console.log("\n" + "=".repeat(70));
@@ -226,10 +286,15 @@ async function main() {
   const victimRedeemed = victimSolNet; // approximate — tx fees are small
 
   const profitLoss = victimRedeemed - VICTIM_DEPOSIT_LAMPORTS;
-  const lossPercent = Math.abs(Math.min(profitLoss, 0)) / VICTIM_DEPOSIT_LAMPORTS * 100;
+  const lossPercent =
+    (Math.abs(Math.min(profitLoss, 0)) / VICTIM_DEPOSIT_LAMPORTS) * 100;
 
-  console.log(`\n  Victim redeemed (net, approx): ${victimRedeemed / LAMPORTS_PER_SOL} SOL`);
-  console.log(`  Original deposit: ${VICTIM_DEPOSIT_LAMPORTS / LAMPORTS_PER_SOL} SOL`);
+  console.log(
+    `\n  Victim redeemed (net, approx): ${victimRedeemed / LAMPORTS_PER_SOL} SOL`,
+  );
+  console.log(
+    `  Original deposit: ${VICTIM_DEPOSIT_LAMPORTS / LAMPORTS_PER_SOL} SOL`,
+  );
   console.log(`  Approx loss: ${lossPercent.toFixed(4)}%`);
 
   console.log("\n" + "=".repeat(70));
@@ -239,10 +304,14 @@ async function main() {
   // With a 1000:1000000 donation ratio and 100000 victim deposit, loss may be
   // significant. We report the actual outcome.
   if (victimSharesReceived > 0) {
-    console.log("  PROTECTED: Victim received > 0 shares (not completely drained)");
+    console.log(
+      "  PROTECTED: Victim received > 0 shares (not completely drained)",
+    );
     console.log(`  Victim loss: ~${lossPercent.toFixed(2)}% of deposit`);
   } else {
-    console.log("  VULNERABLE: Victim received 0 shares — full loss on deposit");
+    console.log(
+      "  VULNERABLE: Victim received 0 shares — full loss on deposit",
+    );
     process.exit(1);
   }
   console.log("=".repeat(70) + "\n");

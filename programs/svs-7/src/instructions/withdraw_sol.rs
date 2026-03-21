@@ -81,6 +81,12 @@ pub struct WithdrawSol<'info> {
 ///
 /// Shares required are computed with ceiling rounding (protects vault).
 /// Slippage guard: shares_required <= max_shares_in.
+///
+/// Exit fee behavior (modules feature): shares are computed from the gross withdrawal
+/// amount (`lamports`), but the user receives `net_lamports` (after fee deduction).
+/// This means withdraw(X) burns shares worth X but delivers X minus fee.
+/// This is a codebase-wide design decision consistent with other SVS vault types.
+/// Integrators should call preview_withdraw to determine actual assets received.
 pub fn handler(ctx: Context<WithdrawSol>, lamports: u64, max_shares_in: u64) -> Result<()> {
     // 1. VALIDATION
     require!(lamports > 0, VaultError::ZeroAmount);

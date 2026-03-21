@@ -37,29 +37,42 @@ import {
 } from "./helpers";
 
 // Test amounts
-const DEPOSIT_1_SOL = new BN(2 * LAMPORTS_PER_SOL);  // deposit_sol round
+const DEPOSIT_1_SOL = new BN(2 * LAMPORTS_PER_SOL); // deposit_sol round
 const DEPOSIT_2_WSOL = new BN(1 * LAMPORTS_PER_SOL); // deposit_wsol round
 
 async function main() {
-  const { connection, payer, program, programId } = await setupSvs7Test("SOL/wSOL Round-Trip");
+  const { connection, payer, program, programId } = await setupSvs7Test(
+    "SOL/wSOL Round-Trip",
+  );
 
   // Derive PDAs
   const vaultId = new BN(Date.now());
   const [vault] = getSolVaultPDA(programId, vaultId);
   const [sharesMint] = getSharesMintPDA(programId, vault);
-  const wsolVault = anchor.utils.token.associatedAddress({ mint: NATIVE_MINT, owner: vault });
+  const wsolVault = anchor.utils.token.associatedAddress({
+    mint: NATIVE_MINT,
+    owner: vault,
+  });
   const userSharesAccount = getAssociatedTokenAddressSync(
-    sharesMint, payer.publicKey, false, TOKEN_2022_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID
+    sharesMint,
+    payer.publicKey,
+    false,
+    TOKEN_2022_PROGRAM_ID,
+    ASSOCIATED_TOKEN_PROGRAM_ID,
   );
   // User's wSOL ATA (SPL Token, not Token-2022)
   const userWsolAccount = getAssociatedTokenAddressSync(
-    NATIVE_MINT, payer.publicKey, false, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID
+    NATIVE_MINT,
+    payer.publicKey,
+    false,
+    TOKEN_PROGRAM_ID,
+    ASSOCIATED_TOKEN_PROGRAM_ID,
   );
 
   // Initialize vault
   console.log("\n--- Initializing vault ---");
   await program.methods
-    .initialize(vaultId, "Round-Trip Test Vault", "RTRIP", "https://test.com")
+    .initialize(vaultId, "Round-Trip Test Vault", "RTRIP")
     .accountsStrict({
       authority: payer.publicKey,
       vault,
@@ -81,9 +94,13 @@ async function main() {
   } catch {
     const createAtaTx = new Transaction().add(
       createAssociatedTokenAccountInstruction(
-        payer.publicKey, userWsolAccount, payer.publicKey, NATIVE_MINT,
-        TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID
-      )
+        payer.publicKey,
+        userWsolAccount,
+        payer.publicKey,
+        NATIVE_MINT,
+        TOKEN_PROGRAM_ID,
+        ASSOCIATED_TOKEN_PROGRAM_ID,
+      ),
     );
     await sendAndConfirmTransaction(connection, createAtaTx, [payer]);
     console.log("  Created user wSOL ATA");
@@ -96,7 +113,9 @@ async function main() {
   console.log("  ROUND-TRIP 1: deposit_sol → redeem_wsol");
   console.log("=".repeat(70));
 
-  console.log(`\n--- Depositing ${DEPOSIT_1_SOL.toNumber() / LAMPORTS_PER_SOL} SOL (native) ---`);
+  console.log(
+    `\n--- Depositing ${DEPOSIT_1_SOL.toNumber() / LAMPORTS_PER_SOL} SOL (native) ---`,
+  );
 
   const solBalanceBefore1 = await connection.getBalance(payer.publicKey);
 
@@ -117,14 +136,24 @@ async function main() {
 
   console.log(`  Tx: ${explorerUrl(depositSolTx)}`);
 
-  const sharesAfterDeposit1 = await getAccount(connection, userSharesAccount, undefined, TOKEN_2022_PROGRAM_ID);
+  const sharesAfterDeposit1 = await getAccount(
+    connection,
+    userSharesAccount,
+    undefined,
+    TOKEN_2022_PROGRAM_ID,
+  );
   const sharesBalance1 = Number(sharesAfterDeposit1.amount);
   console.log(`  Shares received: ${sharesBalance1 / LAMPORTS_PER_SOL} svSOL`);
 
   // Redeem for wSOL
   console.log("\n--- Redeeming all shares for wSOL ---");
 
-  const wsolBefore = await getAccount(connection, userWsolAccount, undefined, TOKEN_PROGRAM_ID);
+  const wsolBefore = await getAccount(
+    connection,
+    userWsolAccount,
+    undefined,
+    TOKEN_PROGRAM_ID,
+  );
 
   const redeemWsolTx = await program.methods
     .redeemWsol(new BN(sharesBalance1), new BN(0))
@@ -143,18 +172,27 @@ async function main() {
 
   console.log(`  Tx: ${explorerUrl(redeemWsolTx)}`);
 
-  const wsolAfter = await getAccount(connection, userWsolAccount, undefined, TOKEN_PROGRAM_ID);
+  const wsolAfter = await getAccount(
+    connection,
+    userWsolAccount,
+    undefined,
+    TOKEN_PROGRAM_ID,
+  );
   const wsolReceived = Number(wsolAfter.amount) - Number(wsolBefore.amount);
 
   console.log(`  wSOL received: ${wsolReceived / LAMPORTS_PER_SOL} wSOL`);
-  console.log(`  Original deposit: ${DEPOSIT_1_SOL.toNumber() / LAMPORTS_PER_SOL} SOL`);
+  console.log(
+    `  Original deposit: ${DEPOSIT_1_SOL.toNumber() / LAMPORTS_PER_SOL} SOL`,
+  );
 
   const loss1 = DEPOSIT_1_SOL.toNumber() - wsolReceived;
   const lossPct1 = (loss1 / DEPOSIT_1_SOL.toNumber()) * 100;
   console.log(`  Round-trip slippage: ${lossPct1.toFixed(6)}%`);
 
   if (lossPct1 < 0.01) {
-    console.log("  PASSED: Round-trip 1 accounting is correct (< 0.01% slippage)");
+    console.log(
+      "  PASSED: Round-trip 1 accounting is correct (< 0.01% slippage)",
+    );
   } else {
     console.log("  WARN: Significant round-trip slippage detected");
   }
@@ -176,15 +214,24 @@ async function main() {
       toPubkey: userWsolAccount,
       lamports: DEPOSIT_2_WSOL.toNumber(),
     }),
-    createSyncNativeInstruction(userWsolAccount, TOKEN_PROGRAM_ID)
+    createSyncNativeInstruction(userWsolAccount, TOKEN_PROGRAM_ID),
   );
   await sendAndConfirmTransaction(connection, wrapTx, [payer]);
 
-  const userWsolBalance = await getAccount(connection, userWsolAccount, undefined, TOKEN_PROGRAM_ID);
-  console.log(`  User wSOL balance: ${Number(userWsolBalance.amount) / LAMPORTS_PER_SOL} wSOL`);
+  const userWsolBalance = await getAccount(
+    connection,
+    userWsolAccount,
+    undefined,
+    TOKEN_PROGRAM_ID,
+  );
+  console.log(
+    `  User wSOL balance: ${Number(userWsolBalance.amount) / LAMPORTS_PER_SOL} wSOL`,
+  );
 
   // deposit_wsol
-  console.log(`\n--- Depositing ${DEPOSIT_2_WSOL.toNumber() / LAMPORTS_PER_SOL} wSOL ---`);
+  console.log(
+    `\n--- Depositing ${DEPOSIT_2_WSOL.toNumber() / LAMPORTS_PER_SOL} wSOL ---`,
+  );
 
   const depositWsolTx = await program.methods
     .depositWsol(DEPOSIT_2_WSOL, new BN(0))
@@ -205,7 +252,12 @@ async function main() {
 
   console.log(`  Tx: ${explorerUrl(depositWsolTx)}`);
 
-  const sharesAfterDeposit2 = await getAccount(connection, userSharesAccount, undefined, TOKEN_2022_PROGRAM_ID);
+  const sharesAfterDeposit2 = await getAccount(
+    connection,
+    userSharesAccount,
+    undefined,
+    TOKEN_2022_PROGRAM_ID,
+  );
   const sharesBalance2 = Number(sharesAfterDeposit2.amount);
   console.log(`  Shares received: ${sharesBalance2 / LAMPORTS_PER_SOL} svSOL`);
 
@@ -216,9 +268,13 @@ async function main() {
   } catch {
     const createAtaTx = new Transaction().add(
       createAssociatedTokenAccountInstruction(
-        payer.publicKey, userWsolAccount, payer.publicKey, NATIVE_MINT,
-        TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID
-      )
+        payer.publicKey,
+        userWsolAccount,
+        payer.publicKey,
+        NATIVE_MINT,
+        TOKEN_PROGRAM_ID,
+        ASSOCIATED_TOKEN_PROGRAM_ID,
+      ),
     );
     await sendAndConfirmTransaction(connection, createAtaTx, [payer]);
   }
@@ -249,14 +305,20 @@ async function main() {
   // Note: solAfter2 - solBefore2 includes lamport refund from closing the wSOL ATA
   const solReceived2 = solAfter2 - solBefore2;
 
-  console.log(`  SOL received (net, includes ATA close refund): ${solReceived2 / LAMPORTS_PER_SOL} SOL`);
-  console.log(`  Original deposit: ${DEPOSIT_2_WSOL.toNumber() / LAMPORTS_PER_SOL} SOL`);
+  console.log(
+    `  SOL received (net, includes ATA close refund): ${solReceived2 / LAMPORTS_PER_SOL} SOL`,
+  );
+  console.log(
+    `  Original deposit: ${DEPOSIT_2_WSOL.toNumber() / LAMPORTS_PER_SOL} SOL`,
+  );
 
   // Summary
   console.log("\n" + "=".repeat(70));
   console.log("  ROUND-TRIP SUMMARY");
   console.log("=".repeat(70));
-  console.log(`\n  RT1 (deposit_sol → redeem_wsol): ${lossPct1.toFixed(6)}% slippage`);
+  console.log(
+    `\n  RT1 (deposit_sol → redeem_wsol): ${lossPct1.toFixed(6)}% slippage`,
+  );
   console.log(`  RT2 (deposit_wsol → redeem_sol): wSOL returned to native SOL`);
   console.log("\n  Both round-trips completed successfully");
   console.log("=".repeat(70) + "\n");
