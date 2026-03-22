@@ -28,7 +28,9 @@ pub struct ConfidentialStreamVault {
     // ── Streaming fields (from SVS-5) ──
     /// Total assets at last checkpoint (excludes un-accrued stream yield)
     pub base_assets: u64,
-    /// Cached total shares (CT mints may not expose supply)
+    /// Cached total shares supply. Avoids reload() after mint/burn CPI.
+    /// WARNING: Can desync if shares are burned externally (no freeze authority).
+    /// Callers that need guaranteed accuracy should cross-check shares_mint.supply.
     pub total_shares: u64,
     /// Yield amount distributing over current stream period
     pub stream_amount: u64,

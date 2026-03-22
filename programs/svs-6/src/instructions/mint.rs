@@ -110,6 +110,7 @@ pub fn handler(ctx: Context<MintShares>, shares: u64, max_assets_in: u64) -> Res
     #[cfg(not(feature = "modules"))]
     let net_shares = shares;
 
+    require!(net_shares > 0, VaultError::ZeroAmount);
     require!(assets <= max_assets_in, VaultError::SlippageExceeded);
 
     // Transfer assets from user to vault
