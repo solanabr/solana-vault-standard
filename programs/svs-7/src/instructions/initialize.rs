@@ -16,7 +16,7 @@ use anchor_spl::{
 };
 
 use crate::{
-    constants::{MAX_DECIMALS, SHARES_DECIMALS, SHARES_MINT_SEED, SOL_VAULT_SEED},
+    constants::{SHARES_DECIMALS, SHARES_MINT_SEED, SOL_VAULT_SEED},
     error::VaultError,
     events::VaultInitialized,
     state::SolVault,
@@ -77,10 +77,8 @@ pub fn handler(
     ctx: Context<Initialize>,
     vault_id: u64,
 ) -> Result<()> {
-    // SOL always has 9 decimals — no need to validate asset_decimals
-    // decimals_offset = MAX_DECIMALS - SOL_DECIMALS = 9 - 9 = 0
+    // SOL always has 9 decimals; decimals_offset = 9 - 9 = 0
     let decimals_offset: u8 = 0;
-    require!(decimals_offset <= MAX_DECIMALS, VaultError::MathOverflow);
 
     let vault_key = ctx.accounts.vault.key();
     let vault_bump = ctx.bumps.vault;

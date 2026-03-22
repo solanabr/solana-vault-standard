@@ -15,7 +15,7 @@
  *
  * For the _sol instruction family the user still needs a wSOL ATA as the temporary
  * landing pad (close_account runs within the same tx so the account is gone after).
- * We create it with getOrCreateAssociatedTokenAccount before each such call.
+ * We create it with ensureEmptyWsolAccount before each such call.
  */
 
 import * as anchor from "@coral-xyz/anchor";

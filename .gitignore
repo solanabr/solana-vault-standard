@@ -266,6 +266,9 @@ flycheck_*.el
 # Local Claude settings (keep the default settings.json)
 .claude/settings.local.json
 
+# ARCANA working directory (local pipeline artifacts)
+.arcana/
+
 # Temporary files
 tmp/
 temp/
