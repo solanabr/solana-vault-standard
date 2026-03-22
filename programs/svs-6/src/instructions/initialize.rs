@@ -172,7 +172,7 @@ pub fn handler(
     vault.last_checkpoint = clock.unix_timestamp;
     vault.auditor_elgamal_pubkey = auditor_elgamal_pubkey;
     vault.confidential_authority = vault_key;
-    vault._reserved = [0u8; 32];
+    vault._reserved = [0u8; 64];
 
     emit!(VaultInitialized {
         vault: vault.key(),

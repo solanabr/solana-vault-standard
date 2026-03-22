@@ -48,7 +48,7 @@ pub struct ConfidentialStreamVault {
     pub confidential_authority: Pubkey,
 
     /// Reserved for future upgrades
-    pub _reserved: [u8; 32],
+    pub _reserved: [u8; 64],
 }
 
 impl ConfidentialStreamVault {
@@ -69,8 +69,8 @@ impl ConfidentialStreamVault {
         8 +   // last_checkpoint
         1 + 32 + // auditor_elgamal_pubkey (Option<[u8; 32]>)
         32 +  // confidential_authority
-        32;   // _reserved
-    // Total: 294 bytes (286 + 8 discriminator)
+        64;   // _reserved
+    // Total: 326 bytes (318 + 8 discriminator)
 
     pub const SEED_PREFIX: &'static [u8] = VAULT_SEED;
 
