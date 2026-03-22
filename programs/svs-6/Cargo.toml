@@ -22,9 +22,7 @@ modules = ["svs-module-hooks", "svs-fees", "svs-caps", "svs-locks", "svs-access"
 anchor-lang = "0.31.1"
 anchor-spl = { version = "0.31.1", features = ["token", "associated_token", "metadata"] }
 spl-token-2022 = "6.0.0"
-spl-token-metadata-interface = "0.5.1"
 spl-token-confidential-transfer-proof-extraction = "0.2.1"
-spl-pod = "0.4"
 solana-zk-sdk = "2.1.0"
 bytemuck = "1.14"
 constant_time_eq = { workspace = true }

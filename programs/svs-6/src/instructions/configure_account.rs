@@ -125,7 +125,5 @@ pub fn handler(
         )?;
     }
 
-    msg!("Configured confidential account for user: {}", user.key());
-
     Ok(())
 }

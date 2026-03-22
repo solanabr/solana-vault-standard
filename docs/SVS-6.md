@@ -379,14 +379,14 @@ Deposit and mint do not require ZK proofs. Minting encrypted tokens requires onl
 4. `total_shares` sourced from vault PDA, not mint supply
 
 ```typescript
-import { ConfidentialStreamingVault } from '@stbr/svs-privacy-sdk';
+import { ConfidentialStreamVault } from '@stbr/svs-privacy-sdk';
 import { Connection, Keypair, PublicKey } from '@solana/web3.js';
 
 const connection = new Connection('https://api.devnet.solana.com');
 const wallet = new Wallet(Keypair.fromSecretKey(/* ... */));
 const idl = JSON.parse(fs.readFileSync('target/idl/svs_6.json', 'utf-8'));
 
-const vault = new ConfidentialStreamingVault(connection, wallet, idl);
+const vault = new ConfidentialStreamVault(connection, wallet, idl);
 
 // Derive vault PDA
 const assetMint = new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'); // USDC
@@ -557,7 +557,7 @@ offset = 10^(9 - asset_decimals)
 | **Program ID** | `2w7aL5ZrD2i9RpzQBGSPAg7s61wVc8Qs8gtuQUTojEDE` |
 | **Network** | Devnet |
 | **SDK Package** | `@stbr/svs-privacy-sdk` |
-| **Class** | `ConfidentialStreamingVault` |
+| **Class** | `ConfidentialStreamVault` |
 
 ### Verification
 

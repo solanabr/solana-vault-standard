@@ -58,7 +58,5 @@ pub fn handler(
         ],
     )?;
 
-    msg!("Applied pending balance for user: {}", user.key());
-
     Ok(())
 }

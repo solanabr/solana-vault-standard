@@ -8,6 +8,7 @@ import {
   TransactionSignature,
 } from "@solana/web3.js";
 import {
+  TOKEN_PROGRAM_ID,
   TOKEN_2022_PROGRAM_ID,
   getAssociatedTokenAddressSync,
   createAssociatedTokenAccountIdempotentInstruction,
@@ -85,6 +86,16 @@ export class ConfidentialStreamVault {
       commitment: "confirmed",
     });
     this.program = new Program(idl, provider);
+  }
+
+  /**
+   * Detect the token program that owns a given mint (TOKEN_PROGRAM_ID or TOKEN_2022_PROGRAM_ID).
+   */
+  private async getAssetTokenProgram(assetMint: PublicKey): Promise<PublicKey> {
+    const info = await this.connection.getAccountInfo(assetMint);
+    if (!info) throw new Error("Asset mint not found");
+    if (info.owner.equals(TOKEN_2022_PROGRAM_ID)) return TOKEN_2022_PROGRAM_ID;
+    return TOKEN_PROGRAM_ID;
   }
 
   /**
@@ -188,6 +199,7 @@ export class ConfidentialStreamVault {
         vault: params.vault,
         sharesMint: vault.sharesMint,
         userSharesAccount,
+        proofContextAccount: null,
         instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
         token2022Program: TOKEN_2022_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
@@ -212,12 +224,13 @@ export class ConfidentialStreamVault {
   ): Promise<ConfidentialDepositResult> {
     const vault = await this.getVault(params.vault);
     const userPubkey = this.wallet.publicKey;
+    const assetTokenProgram = await this.getAssetTokenProgram(vault.assetMint);
 
     const userAssetAccount = getAssociatedTokenAddressSync(
       vault.assetMint,
       userPubkey,
       false,
-      TOKEN_2022_PROGRAM_ID,
+      assetTokenProgram,
     );
 
     const userSharesAccount = getAssociatedTokenAddressSync(
@@ -242,7 +255,7 @@ export class ConfidentialStreamVault {
         assetVault: vault.assetVault,
         sharesMint: vault.sharesMint,
         userSharesAccount,
-        assetTokenProgram: TOKEN_2022_PROGRAM_ID,
+        assetTokenProgram,
         token2022Program: TOKEN_2022_PROGRAM_ID,
       })
       .rpc();
@@ -296,12 +309,13 @@ export class ConfidentialStreamVault {
   ): Promise<ConfidentialWithdrawResult> {
     const vault = await this.getVault(params.vault);
     const userPubkey = this.wallet.publicKey;
+    const assetTokenProgram = await this.getAssetTokenProgram(vault.assetMint);
 
     const userAssetAccount = getAssociatedTokenAddressSync(
       vault.assetMint,
       userPubkey,
       false,
-      TOKEN_2022_PROGRAM_ID,
+      assetTokenProgram,
     );
 
     const userSharesAccount = getAssociatedTokenAddressSync(
@@ -332,7 +346,7 @@ export class ConfidentialStreamVault {
         userSharesAccount,
         equalityProofContext: params.equalityProofContext,
         rangeProofContext: params.rangeProofContext,
-        assetTokenProgram: TOKEN_2022_PROGRAM_ID,
+        assetTokenProgram,
         token2022Program: TOKEN_2022_PROGRAM_ID,
       })
       .rpc();
@@ -354,12 +368,13 @@ export class ConfidentialStreamVault {
   ): Promise<ConfidentialWithdrawResult> {
     const vault = await this.getVault(params.vault);
     const userPubkey = this.wallet.publicKey;
+    const assetTokenProgram = await this.getAssetTokenProgram(vault.assetMint);
 
     const userAssetAccount = getAssociatedTokenAddressSync(
       vault.assetMint,
       userPubkey,
       false,
-      TOKEN_2022_PROGRAM_ID,
+      assetTokenProgram,
     );
 
     const userSharesAccount = getAssociatedTokenAddressSync(
@@ -387,7 +402,7 @@ export class ConfidentialStreamVault {
         userSharesAccount,
         equalityProofContext: params.equalityProofContext,
         rangeProofContext: params.rangeProofContext,
-        assetTokenProgram: TOKEN_2022_PROGRAM_ID,
+        assetTokenProgram,
         token2022Program: TOKEN_2022_PROGRAM_ID,
       })
       .rpc();
@@ -453,12 +468,13 @@ export class ConfidentialStreamVault {
   ): Promise<TransactionSignature> {
     const vaultState = await this.getVault(vault);
     const authorityPubkey = this.wallet.publicKey;
+    const assetTokenProgram = await this.getAssetTokenProgram(vaultState.assetMint);
 
     const authorityAssetAccount = getAssociatedTokenAddressSync(
       vaultState.assetMint,
       authorityPubkey,
       false,
-      TOKEN_2022_PROGRAM_ID,
+      assetTokenProgram,
     );
 
     return await this.program.methods
@@ -469,7 +485,7 @@ export class ConfidentialStreamVault {
         assetMint: vaultState.assetMint,
         authorityAssetAccount,
         assetVault: vaultState.assetVault,
-        assetTokenProgram: TOKEN_2022_PROGRAM_ID,
+        assetTokenProgram,
       })
       .rpc();
   }
