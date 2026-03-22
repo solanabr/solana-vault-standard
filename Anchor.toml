@@ -34,4 +34,4 @@ startup_wait = 200000
 test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/svs-*.ts tests/modules.ts"
 
 [toolchain]
-anchor_version = "0.31.1"
+anchor_version = "0.32.1"

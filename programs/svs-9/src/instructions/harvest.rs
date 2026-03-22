@@ -62,7 +62,7 @@ pub struct Harvest<'info> {
     pub system_program: Program<'info, System>,
 }
 
-pub fn harvest_handler(ctx: Context<Harvest>) -> Result<()> {
+pub fn harvest_handler(ctx: Context<Harvest>, min_assets_out: u64) -> Result<()> {
     // 1. VALIDATION (via constraints)
 
     // 2. READ STATE — compute current value of our position in the child
@@ -95,9 +95,9 @@ pub fn harvest_handler(ctx: Context<Harvest>) -> Result<()> {
         .checked_div(child_total_assets as u128)
         .ok_or(VaultError::DivisionByZero)?;
 
-    // Round up to ensure we capture at least the yield
+    // Round down to favor the vault (leave any remainder as asset dust to compounding).
     let shares_to_redeem = u64::try_from(
-        shares_to_redeem_128.checked_add(1).ok_or(VaultError::MathOverflow)?
+        shares_to_redeem_128
     ).map_err(|_| VaultError::MathOverflow)?;
 
     // Cap at available shares
@@ -122,9 +122,9 @@ pub fn harvest_handler(ctx: Context<Harvest>) -> Result<()> {
     ]];
 
     let mut data = Vec::with_capacity(8 + 8 + 8);
-    data.extend_from_slice(&anchor_lang::solana_program::hash::hash(b"global:redeem").to_bytes()[..8]);
+    data.extend_from_slice(&[184, 12, 86, 149, 70, 196, 97, 225]);
     data.extend_from_slice(&shares_to_redeem.to_le_bytes());
-    data.extend_from_slice(&0u64.to_le_bytes()); // min_assets_out
+    data.extend_from_slice(&min_assets_out.to_le_bytes()); // min_assets_out
 
     let accounts = vec![
         AccountMeta::new(ctx.accounts.allocator_vault.key(), true),          // user

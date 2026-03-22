@@ -14,13 +14,12 @@ use anchor_lang::prelude::*;
 /// |    104 |   32 | shares_mint       |
 /// |    136 |   32 | idle_vault        |
 /// |    168 |    8 | vault_id          |
-/// |    176 |    8 | total_shares      |
-/// |    184 |    2 | idle_buffer_bps   |
-/// |    186 |    1 | num_children      |
-/// |    187 |    1 | decimals_offset   |
-/// |    188 |    1 | bump              |
-/// |    189 |    1 | paused            |
-/// |    190 |   64 | _reserved         |
+/// |    176 |    2 | idle_buffer_bps   |
+/// |    178 |    1 | num_children      |
+/// |    179 |    1 | decimals_offset   |
+/// |    180 |    1 | bump              |
+/// |    181 |    1 | paused            |
+/// |    182 |   64 | _reserved         |
 #[account]
 #[derive(InitSpace)]
 pub struct AllocatorVault {
@@ -34,8 +33,6 @@ pub struct AllocatorVault {
     pub shares_mint: Pubkey,
     /// ATA holding unallocated (idle) assets
     pub idle_vault: Pubkey,
-    /// Total outstanding shares (canonical supply mirror)
-    pub total_shares: u64,
     /// Number of active child vaults
     pub num_children: u8,
     /// Minimum idle ratio in bps (e.g. 1000 = 10%)

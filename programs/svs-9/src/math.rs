@@ -19,7 +19,7 @@ pub fn calculate_shares(assets: u64, total_assets: u64, total_shares: u64, decim
     let result = (assets as u128)
         .checked_mul(total_shares as u128 + virtual_offset)
         .ok_or(VaultError::MathOverflow)?
-        .checked_div(total_assets as u128 + virtual_offset)
+        .checked_div(total_assets as u128 + 1)
         .ok_or(VaultError::DivisionByZero)?;
 
     u64::try_from(result).map_err(|_| VaultError::MathOverflow.into())
@@ -27,7 +27,7 @@ pub fn calculate_shares(assets: u64, total_assets: u64, total_shares: u64, decim
 
 /// Calculates the number of assets to return for a given amount of shares.
 ///
-/// Formula: (shares × (total_assets + virtual_offset)) / (total_shares + virtual_offset)
+/// Formula: (shares × (total_assets + 1)) / (total_shares + virtual_offset)
 ///
 /// Uses the same `virtual_offset = 10^decimals_offset` as `calculate_shares` to keep
 /// the conversion symmetric and maintain the round-trip invariant.
@@ -37,7 +37,7 @@ pub fn calculate_assets(shares: u64, total_assets: u64, total_shares: u64, decim
     let virtual_offset = 10u128.pow(decimals_offset as u32);
 
     let result = (shares as u128)
-        .checked_mul(total_assets as u128 + virtual_offset)
+        .checked_mul(total_assets as u128 + 1)
         .ok_or(VaultError::MathOverflow)?
         .checked_div(total_shares as u128 + virtual_offset)
         .ok_or(VaultError::DivisionByZero)?;

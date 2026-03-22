@@ -31,6 +31,8 @@ pub struct Initialize<'info> {
     #[account(
         init,
         payer = authority,
+        seeds = [b"shares_mint", allocator_vault.key().as_ref()],
+        bump,
         mint::decimals = asset_mint.decimals,
         mint::authority = allocator_vault,
         mint::token_program = token_2022_program,
@@ -82,7 +84,6 @@ pub fn initialize_handler(ctx: Context<Initialize>, vault_id: u64, idle_buffer_b
     vault.asset_mint = ctx.accounts.asset_mint.key();
     vault.shares_mint = ctx.accounts.shares_mint.key();
     vault.idle_vault = ctx.accounts.idle_vault.key();
-    vault.total_shares = 0;
     vault.num_children = 0;
     vault.idle_buffer_bps = idle_buffer_bps;
     vault.decimals_offset = decimals_offset;

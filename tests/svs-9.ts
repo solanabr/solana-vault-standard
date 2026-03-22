@@ -116,7 +116,10 @@ describe("svs-9", () => {
       owner: allocatorVaultPDA,
     });
 
-    sharesMint = sharesMintKeypair.publicKey;
+    [sharesMint] = PublicKey.findProgramAddressSync(
+      [Buffer.from("shares_mint"), allocatorVaultPDA.toBuffer()],
+      program.programId
+    );
   });
   // ─── Helpers ───
   async function getRemainingAccounts(): Promise<anchor.web3.AccountMeta[]> {
@@ -134,6 +137,8 @@ describe("svs-9", () => {
         remainingAccounts.push({ pubkey: alloc.publicKey, isSigner: false, isWritable: false });
         remainingAccounts.push({ pubkey: alloc.account.childVault as PublicKey, isSigner: false, isWritable: false });
         remainingAccounts.push({ pubkey: alloc.account.childSharesAccount as PublicKey, isSigner: false, isWritable: false });
+        remainingAccounts.push({ pubkey: idleVaultATA, isSigner: false, isWritable: false }); // mock asset vault
+        remainingAccounts.push({ pubkey: sharesMint, isSigner: false, isWritable: false }); // mock shares mint
       }
     }
     return remainingAccounts;
@@ -157,7 +162,7 @@ describe("svs-9", () => {
         associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
       })
-      .signers([authority, sharesMintKeypair])
+      .signers([authority])
       .rpc();
 
     const state = await program.account.allocatorVault.fetch(allocatorVaultPDA);
@@ -321,7 +326,7 @@ describe("svs-9", () => {
 
     try {
       await program.methods
-        .allocate(allocateAmount)
+        .allocate(allocateAmount, new BN(0))
         .accountsPartial({
           curator: impostor.publicKey, // NÃO é o curator real
           allocatorVault: allocatorVaultPDA,
@@ -425,12 +430,12 @@ describe("svs-9", () => {
       .signers([authority])
       .rpc();
 
-    const allocation = await program.account.childAllocation.fetch(
-      childAllocationPDA
-    );
-    expect(allocation.enabled).to.be.false;
-    expect(allocation.maxWeightBps).to.equal(0);
-    expect(allocation.targetWeightBps).to.equal(0);
+    try {
+      await program.account.childAllocation.fetch(childAllocationPDA);
+      expect.fail("Account should have been closed");
+    } catch (e: any) {
+      expect(e.message).to.include("Account does not exist");
+    }
 
     const vaultState = await program.account.allocatorVault.fetch(
       allocatorVaultPDA

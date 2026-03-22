@@ -96,13 +96,16 @@ describe("SVS-9 E2E CPI CPI Test", () => {
     console.log("SVS-1 Vault initialized at:", childVaultClient.vault.toBase58());
 
     // 4. Initialize SVS-9 Allocator Vault
-    allocatorSharesMint = sharesMintKeypair.publicKey;
-
     // Use raw instruction since SDK create() doesn't pass the sharesMintKeypair signer
     const allocatorPDA = PublicKey.findProgramAddressSync(
       [Buffer.from("allocator_vault"), assetMint.toBuffer(), allocatorVaultId.toArrayLike(Buffer, "le", 8)],
       svs9Program.programId
     )[0];
+
+    [allocatorSharesMint] = PublicKey.findProgramAddressSync(
+      [Buffer.from("shares_mint"), allocatorPDA.toBuffer()],
+      svs9Program.programId
+    );
 
     const idleVault = getAssociatedTokenAddressSync(
       assetMint,
@@ -126,7 +129,7 @@ describe("SVS-9 E2E CPI CPI Test", () => {
         associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
       })
-      .signers([sharesMintKeypair])
+      .signers([])
       .rpc();
 
     // Load client
@@ -180,6 +183,7 @@ describe("SVS-9 E2E CPI CPI Test", () => {
     try {
       await allocatorClient.allocate({
         assets: excessAllocateAmount,
+        minSharesOut: new BN(0),
         childVault: childVaultClient.vault,
         childProgram: svs1Program.programId,
         childAssetMint: assetMint,
@@ -210,6 +214,7 @@ describe("SVS-9 E2E CPI CPI Test", () => {
     try {
       await allocatorClient.allocate({
         assets: excessAllocateAmount,
+        minSharesOut: new BN(0),
         childVault: childVaultClient.vault,
         childProgram: svs1Program.programId,
         childAssetMint: assetMint,
@@ -241,6 +246,7 @@ describe("SVS-9 E2E CPI CPI Test", () => {
 
     await allocatorClient.allocate({
       assets: allocateAmount,
+      minSharesOut: new BN(0),
       childVault: childVaultClient.vault,
       childProgram: svs1Program.programId,
       childAssetMint: assetMint,
@@ -278,6 +284,7 @@ describe("SVS-9 E2E CPI CPI Test", () => {
 
     // Harvest should pull out exactly the profit.
     await allocatorClient.harvest({
+      minAssetsOut: new BN(0),
       childVault: childVaultClient.vault,
       childProgram: svs1Program.programId,
       childAssetMint: assetMint,

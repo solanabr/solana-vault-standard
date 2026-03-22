@@ -6,6 +6,7 @@ use crate::error::*;
 
 #[derive(Accounts)]
 pub struct RemoveChild<'info> {
+    #[account(mut)]
     pub authority: Signer<'info>,
 
     #[account(
@@ -16,6 +17,7 @@ pub struct RemoveChild<'info> {
 
     #[account(
         mut,
+        close = authority,
         seeds = [CHILD_ALLOCATION_SEED, allocator_vault.key().as_ref(), child_vault.key().as_ref()],
         bump = child_allocation.bump,
         constraint = child_allocation.enabled @ VaultError::ChildAllocationDisabled,
@@ -37,10 +39,7 @@ pub fn remove_child_handler(ctx: Context<RemoveChild>) -> Result<()> {
     );
 
     // 6. UPDATE STATE
-    let child_allocation = &mut ctx.accounts.child_allocation;
-    child_allocation.enabled = false;
-    child_allocation.target_weight_bps = 0;
-    child_allocation.max_weight_bps = 0;
+    // The account is closed, but we must update the total active children constraint:
 
     let allocator_vault = &mut ctx.accounts.allocator_vault;
     allocator_vault.num_children = allocator_vault.num_children.checked_sub(1)

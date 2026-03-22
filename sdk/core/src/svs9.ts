@@ -231,6 +231,7 @@ export interface UpdateWeightsParams {
 
 export interface AllocateParams {
   assets: BN;
+  minSharesOut: BN;
   childVault: PublicKey;
   childProgram: PublicKey;
   childAssetMint: PublicKey;
@@ -240,6 +241,7 @@ export interface AllocateParams {
 
 export interface DeallocateParams {
   sharesToWithdraw: BN;
+  minAssetsOut: BN;
   childVault: PublicKey;
   childProgram: PublicKey;
   childAssetMint: PublicKey;
@@ -248,6 +250,7 @@ export interface DeallocateParams {
 }
 
 export interface HarvestParams {
+  minAssetsOut: BN;
   childVault: PublicKey;
   childProgram: PublicKey;
   childAssetMint: PublicKey;
@@ -256,6 +259,7 @@ export interface HarvestParams {
 }
 
 export interface RebalanceParams {
+  minOut: BN;
   childVault: PublicKey;
   childProgram: PublicKey;
   childAssetMint: PublicKey;
@@ -462,6 +466,29 @@ export class AllocatorVaultClient {
         remainingAccounts.push({ pubkey: alloc.publicKey, isSigner: false, isWritable: false });
         remainingAccounts.push({ pubkey: alloc.account.childVault as PublicKey, isSigner: false, isWritable: false });
         remainingAccounts.push({ pubkey: alloc.account.childSharesAccount as PublicKey, isSigner: false, isWritable: false });
+
+        let childVaultKey = alloc.account.childVault as PublicKey;
+        let assetVault = childVaultKey;
+        let sharesMint = childVaultKey;
+        try {
+          const vaultData = await this.provider.connection.getAccountInfo(childVaultKey);
+          if (vaultData) {
+            if (vaultData.data.length === 211) {
+              sharesMint = new PublicKey(vaultData.data.subarray(72, 104));
+              assetVault = new PublicKey(vaultData.data.subarray(104, 136));
+            } else if (vaultData.data.length === 197 || vaultData.data.length === 201) {
+              sharesMint = new PublicKey(vaultData.data.subarray(72, 104));
+              assetVault = new PublicKey(vaultData.data.subarray(104, 136));
+            } else if (vaultData.data.length === 246 || vaultData.data.length === 254) {
+              sharesMint = new PublicKey(vaultData.data.subarray(104, 136));
+              assetVault = new PublicKey(vaultData.data.subarray(136, 168));
+            }
+          }
+        } catch (e) {
+            // fallback
+        }
+        remainingAccounts.push({ pubkey: assetVault, isSigner: false, isWritable: false });
+        remainingAccounts.push({ pubkey: sharesMint, isSigner: false, isWritable: false });
       }
     }
     return remainingAccounts;
@@ -617,7 +644,7 @@ export class AllocatorVaultClient {
     const methodsNs = this.program.methods as any;
 
     return methodsNs
-      .allocate(params.assets)
+      .allocate(params.assets, params.minSharesOut)
       .accountsPartial({
         curator: this.provider.wallet.publicKey,
         allocatorVault: this.allocatorVault,
@@ -656,7 +683,7 @@ export class AllocatorVaultClient {
     const methodsNs = this.program.methods as any;
 
     return methodsNs
-      .deallocate(params.sharesToWithdraw)
+      .deallocate(params.sharesToWithdraw, params.minAssetsOut)
       .accountsPartial({
         curator: this.provider.wallet.publicKey,
         allocatorVault: this.allocatorVault,
@@ -693,7 +720,7 @@ export class AllocatorVaultClient {
     const methodsNs = this.program.methods as any;
 
     return methodsNs
-      .harvest()
+      .harvest(params.minAssetsOut)
       .accountsPartial({
         curator: this.provider.wallet.publicKey,
         allocatorVault: this.allocatorVault,
@@ -730,7 +757,7 @@ export class AllocatorVaultClient {
     const methodsNs = this.program.methods as any;
 
     let builder = methodsNs
-      .rebalance()
+      .rebalance(params.minOut)
       .accountsPartial({
         curator: this.provider.wallet.publicKey,
         allocatorVault: this.allocatorVault,

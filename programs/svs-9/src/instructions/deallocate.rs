@@ -59,7 +59,7 @@ pub struct Deallocate<'info> {
     pub system_program: Program<'info, System>,
 }
 
-pub fn deallocate_handler(ctx: Context<Deallocate>, shares_to_withdraw: u64) -> Result<()> {
+pub fn deallocate_handler(ctx: Context<Deallocate>, shares_to_withdraw: u64, min_assets_out: u64) -> Result<()> {
     // 1. VALIDATION
     require!(shares_to_withdraw > 0, VaultError::ZeroAmount);
     
@@ -85,9 +85,9 @@ pub fn deallocate_handler(ctx: Context<Deallocate>, shares_to_withdraw: u64) -> 
     // Manual CPI for child vault redeem instruction
     // Anchor discriminator: sha256("global:redeem")[..8]
     let mut data = Vec::with_capacity(8 + 8 + 8);
-    data.extend_from_slice(&anchor_lang::solana_program::hash::hash(b"global:redeem").to_bytes()[..8]);
+    data.extend_from_slice(&[184, 12, 86, 149, 70, 196, 97, 225]);
     data.extend_from_slice(&shares_to_withdraw.to_le_bytes()); 
-    data.extend_from_slice(&0u64.to_le_bytes());  // min_assets_out
+    data.extend_from_slice(&min_assets_out.to_le_bytes());  // min_assets_out
 
     let accounts = vec![
         AccountMeta::new(ctx.accounts.allocator_vault.key(), true),          // user

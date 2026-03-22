@@ -74,13 +74,13 @@ pub fn deposit_handler(ctx: Context<Deposit>, assets: u64, min_shares_out: u64) 
     let total_shares = ctx.accounts.shares_mint.supply;
     let num_children = ctx.accounts.allocator_vault.num_children as usize;
 
-    let child_accounts_len = num_children * 3;
+    let child_accounts_len = num_children * 5;
     let all_remaining = ctx.remaining_accounts;
     require!(
         all_remaining.len() >= child_accounts_len,
         VaultError::InvalidRemainingAccounts
     );
-    let (child_accounts, module_accounts) = all_remaining.split_at(child_accounts_len);
+    let (child_accounts, _module_accounts) = all_remaining.split_at(child_accounts_len);
 
     // 3. COMPUTE
     let total_assets = crate::utils::compute_total_assets(
@@ -166,8 +166,7 @@ pub fn deposit_handler(ctx: Context<Deposit>, assets: u64, min_shares_out: u64) 
     )?;
 
     // 6. UPDATE STATE
-    ctx.accounts.allocator_vault.total_shares = total_shares.checked_add(net_shares)
-        .ok_or(VaultError::MathOverflow)?;
+    // (no local state needs updating, child vault balances and share mint supply are updated via CPI)
 
     // 7. EMIT EVENT
     emit!(DepositEvent {

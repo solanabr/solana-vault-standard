@@ -90,18 +90,20 @@ pub fn compute_total_assets<'info>(
     num_children: u8,
     remaining_accounts: &[AccountInfo<'info>]
 ) -> Result<u64> {
-    if remaining_accounts.len() != (num_children as usize) * 3 {
+    if remaining_accounts.len() != (num_children as usize) * 5 {
         return Err(VaultError::InvalidRemainingAccounts.into());
     }
 
     let mut total: u128 = idle_amount as u128;
     let mut processed_children: std::vec::Vec<Pubkey> = std::vec::Vec::with_capacity(num_children as usize);
 
-    // Iterate through remaining accounts in chunks of 3
-    for chunk in remaining_accounts.chunks_exact(3) {
+    // Iterate through remaining accounts in chunks of 5
+    for chunk in remaining_accounts.chunks_exact(5) {
         let allocation_info = &chunk[0];
-        let vault_info    = &chunk[1]; // child vault state (identity only; live data from token accs)
+        let vault_info    = &chunk[1]; // child vault state
         let shares_info   = &chunk[2]; // allocator's ATA for child shares
+        let child_asset_vault = &chunk[3]; // child's asset token account
+        let child_shares_mint = &chunk[4]; // child's shares mint
 
         if processed_children.contains(vault_info.key) {
             return Err(VaultError::DuplicateChildVault.into());
@@ -134,9 +136,8 @@ pub fn compute_total_assets<'info>(
         }
 
         // 4. Read child vault total_assets, total_shares, and decimals_offset.
-        //    Attempts live-balance read for SVS-1 or falls back to stored-balance read.
         let (child_total_assets, child_total_shares, child_decimals_offset) =
-            read_child_live_balances(vault_info, shares_info)?;
+            read_child_live_balances(vault_info, child_asset_vault, child_shares_mint)?;
 
         // 5. Convert shares to assets using the child vault's NAV ratio
         let child_assets = calculate_assets(our_shares, child_total_assets, child_total_shares, child_decimals_offset)?;
@@ -148,60 +149,47 @@ pub fn compute_total_assets<'info>(
     u64::try_from(total).map_err(|_| VaultError::MathOverflow.into())
 }
 
-/// Reads the live asset balance and share supply from a child vault triplet.
-///
-/// Strategy (in order):
-/// 1. Try to deserialize `vault_info` as a `TokenAccount` (asset vault).
-///    If successful, use its `amount` as `total_assets` and deserialize
-///    `shares_info` as a Mint to get `supply` as `total_shares`.
-/// 2. Fallback: read raw u64 fields from `vault_info` using the named
-///    SVS-1 layout constants (`SVS1_VAULT_DECIMALS_OFFSET_BYTE`, etc.).
-///    In this mode the accounts are treated as a stored-balance vault state.
 fn read_child_live_balances<'info>(
     vault_info: &AccountInfo<'info>,
-    shares_info: &AccountInfo<'info>,
+    asset_info: &AccountInfo<'info>,
+    mint_info: &AccountInfo<'info>,
 ) -> Result<(u64, u64, u8)> {
-    // Attempt live-balance read (SVS-1 style: vault_info = asset token account)
-    let vault_data = vault_info.try_borrow_data()?;
+    let mut total_assets = 0;
+    let mut total_shares = 0;
+    let mut decimals_offset = 0;
 
-    // A SPL TokenAccount discriminator is not the standard Anchor 8-byte disc;
-    // instead token accounts have a fixed 165-byte layout. We detect by size.
-    if vault_data.len() == 165 {
-        // vault_info is a TokenAccount → read amount at offset 64 (SPL layout)
-        let total_assets = u64::from_le_bytes(
-            vault_data[64..72].try_into().map_err(|_| VaultError::MathOverflow)?,
-        );
-        drop(vault_data);
-
-        // shares_info should be the shares Mint (82 bytes for SPL, 234 for T22)
-        let shares_data = shares_info.try_borrow_data()?;
-        // supply is at offset 36 in a standard SPL Mint
-        let total_shares = if shares_data.len() >= 44 {
-            u64::from_le_bytes(
-                shares_data[36..44].try_into().map_err(|_| VaultError::MathOverflow)?,
-            )
-        } else {
-            0
-        };
-        
-        // For live-balance vaults, we still need to peek at the actual vault state
-        // to get the decimals_offset. In the SVS architecture, SVS-1 often doesn't
-        // pass the state in the "live-balance" triplet but we can assume 0 or
-        // handle it by requiring the state to be present.
-        //
-        // Optimization: In this implementation, we assume live-balance vaults like
-        // SVS-1 passed in this branch are using decimals_offset=0 for simplicity
-        // in CPI calls, or we'd need a 4th account in the triplet.
-        return Ok((total_assets, total_shares, 0));
+    let is_asset_token = asset_info.owner == &anchor_spl::token::ID || asset_info.owner == &anchor_spl::token_2022::ID;
+    if is_asset_token {
+        let asset_data = asset_info.try_borrow_data()?;
+        if asset_data.len() >= 165 {
+            total_assets = read_u64(&asset_data, 64).unwrap_or(0);
+        }
     }
 
-    // Fallback: stored-balance vault state.
-    // Use fixed offsets: total_assets at 8+32+32+32+32 = 136, total_shares at 144.
-    // u64 occupies 8 bytes, so we jump from 136 to 144 for the second field.
-    // decimals_offset is at 136 in SVS-1 raw state (before total_assets).
-    let decimals_offset = vault_data.get(SVS1_VAULT_DECIMALS_OFFSET_BYTE).cloned().unwrap_or(0);
-    let total_assets = read_u64(&vault_data, 136).unwrap_or(0);
-    let total_shares = read_u64(&vault_data, 144).unwrap_or(0);
+    let is_mint = mint_info.owner == &anchor_spl::token::ID || mint_info.owner == &anchor_spl::token_2022::ID;
+    if is_mint {
+        let mint_data = mint_info.try_borrow_data()?;
+        if mint_data.len() >= 44 {
+            total_shares = read_u64(&mint_data, 36).unwrap_or(0);
+        }
+    }
+
+    let vault_data = vault_info.try_borrow_data()?;
+    if vault_data.len() == 211 {
+        // SVS-1
+        decimals_offset = vault_data.get(136).cloned().unwrap_or(0);
+    } else if vault_data.len() == 197 || vault_data.len() == 201 {
+        // SVS-2/3/4
+        decimals_offset = vault_data.get(144).cloned().unwrap_or(0);
+    } else if vault_data.len() == 254 || vault_data.len() == 246 {
+        // SVS-9 (legacy 254, new 246)
+        // With total_shares removed, decimals_offset moved to 179
+        let offset = if vault_data.len() == 246 { 179 } else { 187 };
+        decimals_offset = vault_data.get(offset).cloned().unwrap_or(0);
+    } else if vault_info.owner == &anchor_spl::token::ID || vault_info.owner == &anchor_spl::token_2022::ID {
+        // Bare Token Account child vault
+        decimals_offset = 0;
+    }
 
     Ok((total_assets, total_shares, decimals_offset))
 }

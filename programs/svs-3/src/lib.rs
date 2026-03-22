@@ -4,6 +4,7 @@
 //! Share balances are encrypted on-chain, providing privacy for depositors.
 //! Uses live balance model (reads asset_vault.amount directly).
 
+#![allow(deprecated)]
 use anchor_lang::prelude::*;
 
 pub mod constants;

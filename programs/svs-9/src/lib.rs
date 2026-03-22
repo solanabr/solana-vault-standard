@@ -1,3 +1,4 @@
+#![allow(unexpected_cfgs)]
 use anchor_lang::prelude::*;
 
 pub mod constants;
@@ -29,20 +30,20 @@ pub mod svs_9 {
         deposit_handler(ctx, assets, min_shares_out)
     }
 
-    pub fn allocate(ctx: Context<Allocate>, assets: u64) -> Result<()> {
-        allocate_handler(ctx, assets)
+    pub fn allocate(ctx: Context<Allocate>, assets: u64, min_shares_out: u64) -> Result<()> {
+        allocate_handler(ctx, assets, min_shares_out)
     }
 
     pub fn redeem(ctx: Context<Redeem>, shares: u64, min_assets_out: u64) -> Result<()> {
         redeem_handler(ctx, shares, min_assets_out)
     }
 
-    pub fn harvest(ctx: Context<Harvest>) -> Result<()> {
-        harvest_handler(ctx)
+    pub fn harvest(ctx: Context<Harvest>, min_assets_out: u64) -> Result<()> {
+        harvest_handler(ctx, min_assets_out)
     }
 
-    pub fn deallocate(ctx: Context<Deallocate>, shares_to_withdraw: u64) -> Result<()> {
-        deallocate_handler(ctx, shares_to_withdraw)
+    pub fn deallocate(ctx: Context<Deallocate>, shares_to_withdraw: u64, min_assets_out: u64) -> Result<()> {
+        deallocate_handler(ctx, shares_to_withdraw, min_assets_out)
     }
 
     pub fn pause(ctx: Context<Pause>) -> Result<()> {
@@ -69,7 +70,7 @@ pub mod svs_9 {
         update_weights_handler(ctx, new_max_weight_bps)
     }
 
-    pub fn rebalance(ctx: Context<Rebalance>) -> Result<()> {
-        rebalance_handler(ctx)
+    pub fn rebalance(ctx: Context<Rebalance>, min_out: u64) -> Result<()> {
+        rebalance_handler(ctx, min_out)
     }
 }

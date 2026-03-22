@@ -72,7 +72,7 @@ pub struct Allocate<'info> {
     pub rent: Sysvar<'info, Rent>,
 }
 
-pub fn allocate_handler(ctx: Context<Allocate>, assets: u64) -> Result<()> {
+pub fn allocate_handler(ctx: Context<Allocate>, assets: u64, min_shares_out: u64) -> Result<()> {
     // 1. VALIDATION
     require!(assets > 0, VaultError::ZeroAmount);
     
@@ -127,9 +127,9 @@ pub fn allocate_handler(ctx: Context<Allocate>, assets: u64) -> Result<()> {
     // Manual CPI to child vault deposit instruction
     // Discriminator: sha256("global:deposit")[..8]
     let mut data = Vec::with_capacity(8 + 8 + 8);
-    data.extend_from_slice(&anchor_lang::solana_program::hash::hash(b"global:deposit").to_bytes()[..8]);
+    data.extend_from_slice(&[242, 35, 198, 137, 82, 225, 242, 182]);
     data.extend_from_slice(&assets.to_le_bytes()); // assets
-    data.extend_from_slice(&0u64.to_le_bytes());  // min_shares_out
+    data.extend_from_slice(&min_shares_out.to_le_bytes());  // min_shares_out
 
     let accounts = vec![
         AccountMeta::new(ctx.accounts.allocator_vault.key(), true), // caller (allocator_vault)

@@ -70,7 +70,7 @@ pub struct Rebalance<'info> {
     pub rent: Sysvar<'info, Rent>,
 }
 
-pub fn rebalance_handler(ctx: Context<Rebalance>) -> Result<()> {
+pub fn rebalance_handler(ctx: Context<Rebalance>, min_out: u64) -> Result<()> {
     // 1. VALIDATION (curator + paused + enabled checked by constraints)
 
     // 2. READ STATE
@@ -141,9 +141,9 @@ pub fn rebalance_handler(ctx: Context<Rebalance>) -> Result<()> {
 
         // 5. EXECUTE CPI — child_vault::deposit(actual_surplus, 0)
         let mut data = Vec::with_capacity(8 + 8 + 8);
-        data.extend_from_slice(&anchor_lang::solana_program::hash::hash(b"global:deposit").to_bytes()[..8]);
+        data.extend_from_slice(&[242, 35, 198, 137, 82, 225, 242, 182]);
         data.extend_from_slice(&actual_surplus.to_le_bytes());
-        data.extend_from_slice(&0u64.to_le_bytes()); // min_shares_out
+        data.extend_from_slice(&min_out.to_le_bytes()); // min_shares_out
 
         let accounts = vec![
             AccountMeta::new(ctx.accounts.allocator_vault.key(), true),
@@ -235,9 +235,9 @@ pub fn rebalance_handler(ctx: Context<Rebalance>) -> Result<()> {
 
         // 5. EXECUTE CPI — child_vault::redeem(shares_to_redeem, 0)
         let mut data = Vec::with_capacity(8 + 8 + 8);
-        data.extend_from_slice(&anchor_lang::solana_program::hash::hash(b"global:redeem").to_bytes()[..8]);
+        data.extend_from_slice(&[184, 12, 86, 149, 70, 196, 97, 225]);
         data.extend_from_slice(&shares_to_redeem.to_le_bytes());
-        data.extend_from_slice(&0u64.to_le_bytes()); // min_assets_out
+        data.extend_from_slice(&min_out.to_le_bytes()); // min_assets_out
 
         let accounts = vec![
             AccountMeta::new(ctx.accounts.allocator_vault.key(), true),          // user
