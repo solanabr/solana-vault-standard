@@ -79,7 +79,7 @@ async function main() {
   const assetVault = anchor.utils.token.associatedAddress({ mint: assetMint, owner: vault });
 
   await program.methods
-    .initialize(vaultId, "Inflation Test Vault", "INFLAT")
+    .initialize(vaultId)
     .accountsStrict({
       authority: payer.publicKey, vault, assetMint, sharesMint, assetVault,
       assetTokenProgram: TOKEN_PROGRAM_ID, token2022Program: TOKEN_2022_PROGRAM_ID,

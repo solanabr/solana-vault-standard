@@ -51,7 +51,7 @@ async function main() {
   );
 
   await program.methods
-    .initialize(vaultId, "Withdraw Mint Stream Test", "WDMS")
+    .initialize(vaultId)
     .accountsStrict({
       authority: payer.publicKey, vault, assetMint, sharesMint, assetVault,
       assetTokenProgram: TOKEN_PROGRAM_ID, token2022Program: TOKEN_2022_PROGRAM_ID,

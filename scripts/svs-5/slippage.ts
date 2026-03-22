@@ -50,7 +50,7 @@ async function main() {
   );
 
   await program.methods
-    .initialize(vaultId, "Slippage Test Vault", "SLIP")
+    .initialize(vaultId)
     .accountsStrict({
       authority: payer.publicKey, vault, assetMint, sharesMint, assetVault,
       assetTokenProgram: TOKEN_PROGRAM_ID, token2022Program: TOKEN_2022_PROGRAM_ID,

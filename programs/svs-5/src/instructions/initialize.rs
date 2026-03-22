@@ -62,8 +62,6 @@ pub struct Initialize<'info> {
 pub fn handler(
     ctx: Context<Initialize>,
     vault_id: u64,
-    name: String,
-    symbol: String,
 ) -> Result<()> {
     let asset_decimals = ctx.accounts.asset_mint.decimals;
     require!(
@@ -142,8 +140,6 @@ pub fn handler(
         shares_mint: vault.shares_mint,
         vault_id,
     });
-
-    msg!("Streaming vault initialized: {} for asset {}", name, symbol);
 
     Ok(())
 }

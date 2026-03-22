@@ -41,11 +41,11 @@ pub enum VaultError {
     StreamTooShort,
 
     // Module errors (kept for module_admin instructions)
-    #[msg("Deposit would exceed global vault cap")]
-    GlobalCapExceeded,
+    #[msg("Invalid fee configuration")]
+    InvalidFeeConfig,
 
-    #[msg("Entry fee exceeds maximum")]
-    EntryFeeExceedsMax,
+    #[msg("Invalid cap configuration")]
+    InvalidCapConfig,
 
     #[msg("Lock duration exceeds maximum")]
     LockDurationExceedsMax,

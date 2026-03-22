@@ -26,10 +26,8 @@ pub mod svs_5 {
     pub fn initialize(
         ctx: Context<Initialize>,
         vault_id: u64,
-        name: String,
-        symbol: String,
     ) -> Result<()> {
-        instructions::initialize::handler(ctx, vault_id, name, symbol)
+        instructions::initialize::handler(ctx, vault_id)
     }
 
     /// Deposit assets and receive shares

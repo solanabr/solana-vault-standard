@@ -57,7 +57,7 @@ async function main() {
   );
 
   await program.methods
-    .initialize(vaultId1, "Drain Test 1", "DRAIN1")
+    .initialize(vaultId1)
     .accountsStrict({
       authority: payer.publicKey, vault: vault1, assetMint, sharesMint: sharesMint1, assetVault: assetVault1,
       assetTokenProgram: TOKEN_PROGRAM_ID, token2022Program: TOKEN_2022_PROGRAM_ID,
@@ -144,7 +144,7 @@ async function main() {
   const assetVault2 = anchor.utils.token.associatedAddress({ mint: assetMint, owner: vault2 });
 
   await program.methods
-    .initialize(vaultId2, "Drain Test 2", "DRAIN2")
+    .initialize(vaultId2)
     .accountsStrict({
       authority: payer.publicKey, vault: vault2, assetMint, sharesMint: sharesMint2, assetVault: assetVault2,
       assetTokenProgram: TOKEN_PROGRAM_ID, token2022Program: TOKEN_2022_PROGRAM_ID,

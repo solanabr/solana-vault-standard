@@ -93,7 +93,7 @@ async function main() {
   console.log("-".repeat(70));
 
   const initTx = await program.methods
-    .initialize(vaultId, "SVS-5 Test Vault", "svSTREAM")
+    .initialize(vaultId)
     .accountsStrict({
       authority: payer.publicKey,
       vault, assetMint, sharesMint, assetVault,

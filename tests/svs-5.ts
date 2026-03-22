@@ -127,7 +127,7 @@ describe("svs-5 (Streaming Yield Vault)", () => {
   describe("Initialize", () => {
     it("creates a new streaming vault", async () => {
       const tx = await program.methods
-        .initialize(vaultId, "SVS-5 Stream Vault", "svVault5")
+        .initialize(vaultId)
         .accountsStrict({
           authority: payer.publicKey,
           vault: vault,

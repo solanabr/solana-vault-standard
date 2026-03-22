@@ -164,7 +164,7 @@ export class StreamingVault extends SolanaVault {
     );
 
     await program.methods
-      .initialize(id, params.name, params.symbol)
+      .initialize(id)
       .accountsStrict({
         authority: provider.wallet.publicKey,
         vault: addresses.vault,
