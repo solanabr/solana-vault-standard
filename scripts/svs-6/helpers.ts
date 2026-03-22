@@ -214,8 +214,10 @@ export async function redeemConfidential(
     user, userSharesAccount, availableCiphertext, currentBalance, sharesToRedeem
   );
 
-  const equalityContext = await createProofContext(provider, user, 3, equalityProof, EQUALITY_CONTEXT_SIZE);
-  const rangeContext = await createProofContext(provider, user, 6, rangeProof, RANGE_CONTEXT_SIZE);
+  const EQUALITY_PROOF_TYPE = 3;  // CiphertextCommitmentEquality
+  const RANGE_PROOF_TYPE = 6;    // BatchedRangeProofU64
+  const equalityContext = await createProofContext(provider, user, EQUALITY_PROOF_TYPE, equalityProof, EQUALITY_CONTEXT_SIZE);
+  const rangeContext = await createProofContext(provider, user, RANGE_PROOF_TYPE, rangeProof, RANGE_CONTEXT_SIZE);
 
   const remainingShares = currentBalance - sharesToRedeem;
   const aesKey = deriveAesKeyFromSignature(user, userSharesAccount);
@@ -258,15 +260,17 @@ export async function withdrawConfidential(
     user, userSharesAccount, availableCiphertext, currentBalance, sharesToBurn
   );
 
-  const equalityContext = await createProofContext(provider, user, 3, equalityProof, EQUALITY_CONTEXT_SIZE);
-  const rangeContext = await createProofContext(provider, user, 6, rangeProof, RANGE_CONTEXT_SIZE);
+  const EQUALITY_PROOF_TYPE = 3;  // CiphertextCommitmentEquality
+  const RANGE_PROOF_TYPE = 6;    // BatchedRangeProofU64
+  const equalityContext = await createProofContext(provider, user, EQUALITY_PROOF_TYPE, equalityProof, EQUALITY_CONTEXT_SIZE);
+  const rangeContext = await createProofContext(provider, user, RANGE_PROOF_TYPE, rangeProof, RANGE_CONTEXT_SIZE);
 
   const remainingShares = currentBalance - sharesToBurn;
   const aesKey = deriveAesKeyFromSignature(user, userSharesAccount);
   const newDecryptableBalance = createDecryptableBalance(aesKey, remainingShares);
 
   return program.methods
-    .withdraw(new BN(assetsToWithdraw), new BN(sharesToBurn + 1000), Array.from(newDecryptableBalance))
+    .withdraw(new BN(assetsToWithdraw), new BN(Math.ceil(sharesToBurn * 1.05)), Array.from(newDecryptableBalance))
     .accountsStrict({
       user: user.publicKey, vault, assetMint, userAssetAccount, assetVault,
       sharesMint, userSharesAccount,
