@@ -33,7 +33,6 @@ pub struct RedeemSol<'info> {
     pub user: Signer<'info>,
 
     #[account(
-        mut,
         constraint = !vault.paused @ VaultError::VaultPaused,
     )]
     pub vault: Account<'info, SolVault>,

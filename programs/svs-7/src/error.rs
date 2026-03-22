@@ -37,13 +37,49 @@ pub enum VaultError {
     #[msg("New authority cannot be the zero address")]
     InvalidAuthority,
 
-    // Module errors (always defined for IDL compatibility)
+    // Module errors (always defined for IDL compatibility — not behind #[cfg])
     #[msg("Deposit would exceed global vault cap")]
     GlobalCapExceeded,
+
+    #[msg("Deposit would exceed per-user cap")]
+    UserCapExceeded,
 
     #[msg("Entry fee exceeds maximum")]
     EntryFeeExceedsMax,
 
+    #[msg("Exit fee exceeds maximum")]
+    ExitFeeExceedsMax,
+
+    #[msg("Management fee exceeds maximum")]
+    ManagementFeeExceedsMax,
+
+    #[msg("Performance fee exceeds maximum")]
+    PerformanceFeeExceedsMax,
+
     #[msg("Lock duration exceeds maximum")]
     LockDurationExceedsMax,
+
+    #[msg("Shares are locked and cannot be redeemed yet")]
+    SharesLocked,
+
+    #[msg("Address is not whitelisted")]
+    NotWhitelisted,
+
+    #[msg("Address is blacklisted")]
+    Blacklisted,
+
+    #[msg("Account is frozen")]
+    AccountFrozen,
+
+    #[msg("Invalid merkle proof")]
+    InvalidProof,
+
+    #[msg("No fees to claim")]
+    NothingToClaim,
+
+    #[msg("Invalid fee configuration")]
+    InvalidFeeConfig,
+
+    #[msg("Invalid cap configuration")]
+    InvalidCapConfig,
 }

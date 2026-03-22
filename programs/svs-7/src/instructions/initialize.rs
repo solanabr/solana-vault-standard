@@ -76,8 +76,6 @@ pub struct Initialize<'info> {
 pub fn handler(
     ctx: Context<Initialize>,
     vault_id: u64,
-    name: String,
-    symbol: String,
 ) -> Result<()> {
     // SOL always has 9 decimals — no need to validate asset_decimals
     // decimals_offset = MAX_DECIMALS - SOL_DECIMALS = 9 - 9 = 0
@@ -152,8 +150,6 @@ pub fn handler(
         shares_mint: vault.shares_mint,
         vault_id,
     });
-
-    msg!("SVS-7 vault initialized: {} ({})", name, symbol);
 
     Ok(())
 }

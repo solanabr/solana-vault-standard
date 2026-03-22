@@ -12,7 +12,6 @@
 use anchor_lang::prelude::*;
 use anchor_lang::solana_program::program::invoke;
 use anchor_spl::{
-    associated_token::AssociatedToken,
     token_2022::{self, MintTo, Token2022},
     token_interface::{Mint, TokenAccount, TokenInterface},
 };
@@ -34,7 +33,6 @@ pub struct DepositSol<'info> {
     pub user: Signer<'info>,
 
     #[account(
-        mut,
         constraint = !vault.paused @ VaultError::VaultPaused,
     )]
     pub vault: Account<'info, SolVault>,
@@ -52,13 +50,10 @@ pub struct DepositSol<'info> {
     )]
     pub shares_mint: InterfaceAccount<'info, Mint>,
 
-    /// User's shares token account — created if it doesn't exist yet
     #[account(
-        init_if_needed,
-        payer = user,
-        associated_token::mint = shares_mint,
-        associated_token::authority = user,
-        associated_token::token_program = token_2022_program,
+        mut,
+        constraint = user_shares_account.mint == shares_mint.key(),
+        constraint = user_shares_account.owner == user.key(),
     )]
     pub user_shares_account: InterfaceAccount<'info, TokenAccount>,
 
@@ -66,7 +61,6 @@ pub struct DepositSol<'info> {
     #[account(address = anchor_spl::token::ID @ VaultError::Unauthorized)]
     pub token_program: Interface<'info, TokenInterface>,
     pub token_2022_program: Program<'info, Token2022>,
-    pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
 }
 

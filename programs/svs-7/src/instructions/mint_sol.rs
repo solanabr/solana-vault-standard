@@ -12,7 +12,6 @@
 use anchor_lang::prelude::*;
 use anchor_lang::solana_program::program::invoke;
 use anchor_spl::{
-    associated_token::AssociatedToken,
     token_2022::{self, MintTo, Token2022},
     token_interface::{Mint, TokenAccount, TokenInterface},
 };
@@ -34,7 +33,6 @@ pub struct MintSol<'info> {
     pub user: Signer<'info>,
 
     #[account(
-        mut,
         constraint = !vault.paused @ VaultError::VaultPaused,
     )]
     pub vault: Account<'info, SolVault>,
@@ -52,11 +50,9 @@ pub struct MintSol<'info> {
     pub shares_mint: InterfaceAccount<'info, Mint>,
 
     #[account(
-        init_if_needed,
-        payer = user,
-        associated_token::mint = shares_mint,
-        associated_token::authority = user,
-        associated_token::token_program = token_2022_program,
+        mut,
+        constraint = user_shares_account.mint == shares_mint.key(),
+        constraint = user_shares_account.owner == user.key(),
     )]
     pub user_shares_account: InterfaceAccount<'info, TokenAccount>,
 
@@ -64,7 +60,6 @@ pub struct MintSol<'info> {
     #[account(address = anchor_spl::token::ID @ VaultError::Unauthorized)]
     pub token_program: Interface<'info, TokenInterface>,
     pub token_2022_program: Program<'info, Token2022>,
-    pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
 }
 
@@ -82,7 +77,16 @@ pub fn handler(ctx: Context<MintSol>, shares: u64, max_lamports_in: u64) -> Resu
 
     let total_assets = ctx.accounts.wsol_vault.amount;
 
-    // ===== Module Hooks (if enabled) =====
+    // 3. COMPUTE required lamports from FULL shares (ceiling rounding — protects vault)
+    let required_lamports = convert_to_assets(
+        shares,
+        total_assets,
+        total_shares,
+        vault.decimals_offset,
+        Rounding::Ceiling,
+    )?;
+
+    // ===== Module Hooks: access → caps → fee (matches SVS-1 ordering) =====
     #[cfg(feature = "modules")]
     let net_shares = {
         let remaining = ctx.remaining_accounts;
@@ -90,29 +94,6 @@ pub fn handler(ctx: Context<MintSol>, shares: u64, max_lamports_in: u64) -> Resu
         let user_key = ctx.accounts.user.key();
 
         module_hooks::check_deposit_access(remaining, &crate::ID, &vault_key, &user_key, &[])?;
-
-        let result = module_hooks::apply_entry_fee(remaining, &crate::ID, &vault_key, shares)?;
-        result.net_shares
-    };
-
-    #[cfg(not(feature = "modules"))]
-    let net_shares = shares;
-
-    // 3. COMPUTE required lamports (ceiling rounding — user pays more, protects vault)
-    let required_lamports = convert_to_assets(
-        net_shares,
-        total_assets,
-        total_shares,
-        vault.decimals_offset,
-        Rounding::Ceiling,
-    )?;
-
-    // Module cap check (after computing required_lamports)
-    #[cfg(feature = "modules")]
-    {
-        let remaining = ctx.remaining_accounts;
-        let vault_key = vault.key();
-        let user_key = ctx.accounts.user.key();
         module_hooks::check_deposit_caps(
             remaining,
             &crate::ID,
@@ -121,7 +102,16 @@ pub fn handler(ctx: Context<MintSol>, shares: u64, max_lamports_in: u64) -> Resu
             total_assets,
             required_lamports,
         )?;
-    }
+
+        let result = module_hooks::apply_entry_fee(remaining, &crate::ID, &vault_key, shares)?;
+        result.net_shares
+    };
+
+    #[cfg(not(feature = "modules"))]
+    let net_shares = shares;
+
+    // Zero-share guard after fee application
+    require!(net_shares > 0, VaultError::ZeroAmount);
 
     // 4. MINIMUM DEPOSIT CHECK
     require!(required_lamports > 0, VaultError::ZeroAmount);

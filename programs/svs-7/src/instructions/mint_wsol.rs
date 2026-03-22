@@ -10,7 +10,6 @@
 
 use anchor_lang::prelude::*;
 use anchor_spl::{
-    associated_token::AssociatedToken,
     token_2022::{self, MintTo, Token2022},
     token_interface::{transfer_checked, Mint, TokenAccount, TokenInterface, TransferChecked},
 };
@@ -32,12 +31,11 @@ pub struct MintWsol<'info> {
     pub user: Signer<'info>,
 
     #[account(
-        mut,
         constraint = !vault.paused @ VaultError::VaultPaused,
     )]
     pub vault: Account<'info, SolVault>,
 
-    /// Native SOL mint (So11111111111111111111111111111111) — needed for transfer_checked
+    /// Native SOL mint — needed for transfer_checked
     #[account(address = crate::constants::NATIVE_MINT @ VaultError::Unauthorized)]
     pub native_mint: InterfaceAccount<'info, Mint>,
 
@@ -62,11 +60,9 @@ pub struct MintWsol<'info> {
     pub shares_mint: InterfaceAccount<'info, Mint>,
 
     #[account(
-        init_if_needed,
-        payer = user,
-        associated_token::mint = shares_mint,
-        associated_token::authority = user,
-        associated_token::token_program = token_2022_program,
+        mut,
+        constraint = user_shares_account.mint == shares_mint.key(),
+        constraint = user_shares_account.owner == user.key(),
     )]
     pub user_shares_account: InterfaceAccount<'info, TokenAccount>,
 
@@ -74,8 +70,6 @@ pub struct MintWsol<'info> {
     #[account(address = anchor_spl::token::ID @ VaultError::Unauthorized)]
     pub token_program: Interface<'info, TokenInterface>,
     pub token_2022_program: Program<'info, Token2022>,
-    pub associated_token_program: Program<'info, AssociatedToken>,
-    pub system_program: Program<'info, System>,
 }
 
 /// Mint an exact number of shares by paying pre-wrapped wSOL.
@@ -92,7 +86,16 @@ pub fn handler(ctx: Context<MintWsol>, shares: u64, max_amount_in: u64) -> Resul
 
     let total_assets = ctx.accounts.wsol_vault.amount;
 
-    // ===== Module Hooks (if enabled) =====
+    // 3. COMPUTE required wSOL from FULL shares (ceiling rounding — protects vault)
+    let required_amount = convert_to_assets(
+        shares,
+        total_assets,
+        total_shares,
+        vault.decimals_offset,
+        Rounding::Ceiling,
+    )?;
+
+    // ===== Module Hooks: access → caps → fee (matches SVS-1 ordering) =====
     #[cfg(feature = "modules")]
     let net_shares = {
         let remaining = ctx.remaining_accounts;
@@ -100,29 +103,6 @@ pub fn handler(ctx: Context<MintWsol>, shares: u64, max_amount_in: u64) -> Resul
         let user_key = ctx.accounts.user.key();
 
         module_hooks::check_deposit_access(remaining, &crate::ID, &vault_key, &user_key, &[])?;
-
-        let result = module_hooks::apply_entry_fee(remaining, &crate::ID, &vault_key, shares)?;
-        result.net_shares
-    };
-
-    #[cfg(not(feature = "modules"))]
-    let net_shares = shares;
-
-    // 3. COMPUTE required wSOL (ceiling rounding — user pays more, protects vault)
-    let required_amount = convert_to_assets(
-        net_shares,
-        total_assets,
-        total_shares,
-        vault.decimals_offset,
-        Rounding::Ceiling,
-    )?;
-
-    // Module cap check (after computing required_amount)
-    #[cfg(feature = "modules")]
-    {
-        let remaining = ctx.remaining_accounts;
-        let vault_key = vault.key();
-        let user_key = ctx.accounts.user.key();
         module_hooks::check_deposit_caps(
             remaining,
             &crate::ID,
@@ -131,7 +111,16 @@ pub fn handler(ctx: Context<MintWsol>, shares: u64, max_amount_in: u64) -> Resul
             total_assets,
             required_amount,
         )?;
-    }
+
+        let result = module_hooks::apply_entry_fee(remaining, &crate::ID, &vault_key, shares)?;
+        result.net_shares
+    };
+
+    #[cfg(not(feature = "modules"))]
+    let net_shares = shares;
+
+    // Zero-share guard after fee application
+    require!(net_shares > 0, VaultError::ZeroAmount);
 
     // 4. MINIMUM DEPOSIT CHECK
     require!(required_amount > 0, VaultError::ZeroAmount);

@@ -193,6 +193,34 @@ async function ensureEmptyWsolAccount(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Helper: ensure a Token-2022 shares ATA exists for the given owner.
+// If it already exists, this is a no-op.
+// ─────────────────────────────────────────────────────────────────────────────
+async function ensureSharesAccount(
+  connection: anchor.web3.Connection,
+  payer: Keypair,
+  sharesMint: PublicKey,
+  owner: PublicKey,
+): Promise<PublicKey> {
+  const sharesATA = getUserSharesATA(sharesMint, owner);
+  const info = await connection.getAccountInfo(sharesATA, "confirmed");
+  if (info !== null) return sharesATA;
+
+  const tx = new Transaction().add(
+    createAssociatedTokenAccountInstruction(
+      payer.publicKey,
+      sharesATA,
+      owner,
+      sharesMint,
+      TOKEN_2022_PROGRAM_ID,
+      ASSOCIATED_TOKEN_PROGRAM_ID,
+    ),
+  );
+  await sendAndConfirmTransaction(connection, tx, [payer]);
+  return sharesATA;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Helper: read a u64 LE value out of simulation logs.
 // The program uses set_return_data() which emits a log line:
 //   "Program return: <programId> <base64data>"
@@ -259,7 +287,7 @@ describe("svs-7: Native SOL Vault", () => {
       ctx = { vaultId, vault, sharesMint, wsolVault };
 
       const tx = await program.methods
-        .initialize(vaultId, "SVS-7 Live Vault", "svSOL-L")
+        .initialize(vaultId)
         .accountsStrict({
           authority: payer.publicKey,
           vault,
@@ -313,7 +341,9 @@ describe("svs-7: Native SOL Vault", () => {
     it("deposits native SOL and mints shares", async () => {
       const depositLamports = new BN(2 * LAMPORTS_PER_SOL);
 
-      const userSharesAccount = getUserSharesATA(
+      const userSharesAccount = await ensureSharesAccount(
+        connection,
+        payer,
         ctx.sharesMint,
         payer.publicKey,
       );
@@ -329,7 +359,6 @@ describe("svs-7: Native SOL Vault", () => {
           userSharesAccount,
           tokenProgram: TOKEN_PROGRAM_ID,
           token2022Program: TOKEN_2022_PROGRAM_ID,
-          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
         })
         .rpc();
@@ -391,7 +420,6 @@ describe("svs-7: Native SOL Vault", () => {
           userSharesAccount,
           tokenProgram: TOKEN_PROGRAM_ID,
           token2022Program: TOKEN_2022_PROGRAM_ID,
-          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
         })
         .rpc();
@@ -445,7 +473,6 @@ describe("svs-7: Native SOL Vault", () => {
             userSharesAccount,
             tokenProgram: TOKEN_PROGRAM_ID,
             token2022Program: TOKEN_2022_PROGRAM_ID,
-            associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
           })
           .rpc();
@@ -500,8 +527,6 @@ describe("svs-7: Native SOL Vault", () => {
           userSharesAccount,
           tokenProgram: TOKEN_PROGRAM_ID,
           token2022Program: TOKEN_2022_PROGRAM_ID,
-          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-          systemProgram: SystemProgram.programId,
         })
         .rpc();
 
@@ -871,7 +896,6 @@ describe("svs-7: Native SOL Vault", () => {
           userSharesAccount,
           tokenProgram: TOKEN_PROGRAM_ID,
           token2022Program: TOKEN_2022_PROGRAM_ID,
-          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
         })
         .rpc();
@@ -910,7 +934,6 @@ describe("svs-7: Native SOL Vault", () => {
             userSharesAccount,
             tokenProgram: TOKEN_PROGRAM_ID,
             token2022Program: TOKEN_2022_PROGRAM_ID,
-            associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
           })
           .rpc();
@@ -982,8 +1005,6 @@ describe("svs-7: Native SOL Vault", () => {
           userSharesAccount,
           tokenProgram: TOKEN_PROGRAM_ID,
           token2022Program: TOKEN_2022_PROGRAM_ID,
-          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-          systemProgram: SystemProgram.programId,
         })
         .rpc();
 
@@ -1067,8 +1088,6 @@ describe("svs-7: Native SOL Vault", () => {
             userSharesAccount,
             tokenProgram: TOKEN_PROGRAM_ID,
             token2022Program: TOKEN_2022_PROGRAM_ID,
-            associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-            systemProgram: SystemProgram.programId,
           })
           .rpc();
         expect.fail("expected slippage error");
@@ -1122,7 +1141,6 @@ describe("svs-7: Native SOL Vault", () => {
             userSharesAccount,
             tokenProgram: TOKEN_PROGRAM_ID,
             token2022Program: TOKEN_2022_PROGRAM_ID,
-            associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
           })
           .rpc();
@@ -1359,7 +1377,6 @@ describe("svs-7: Native SOL Vault", () => {
             userSharesAccount,
             tokenProgram: TOKEN_PROGRAM_ID,
             token2022Program: TOKEN_2022_PROGRAM_ID,
-            associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
           })
           .rpc();
@@ -1385,7 +1402,6 @@ describe("svs-7: Native SOL Vault", () => {
             userSharesAccount,
             tokenProgram: TOKEN_PROGRAM_ID,
             token2022Program: TOKEN_2022_PROGRAM_ID,
-            associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
           })
           .rpc();

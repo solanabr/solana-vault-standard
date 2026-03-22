@@ -75,7 +75,7 @@ pub mod module_state {
     // Re-export seeds from shared crate
     pub use svs_module_hooks::{
         ACCESS_CONFIG_SEED, CAP_CONFIG_SEED, FEE_CONFIG_SEED, FROZEN_ACCOUNT_SEED,
-        LOCK_CONFIG_SEED, REWARD_CONFIG_SEED, SHARE_LOCK_SEED, USER_DEPOSIT_SEED, USER_REWARD_SEED,
+        LOCK_CONFIG_SEED, SHARE_LOCK_SEED, USER_DEPOSIT_SEED,
     };
 
     /// Fee configuration for vault.
@@ -181,38 +181,6 @@ pub mod module_state {
         pub const LEN: usize = 8 + 32 + 32 + 32 + 8 + 1;
     }
 
-    /// Reward configuration for vault.
-    /// Seeds: ["reward_config", vault_pubkey, reward_mint_pubkey]
-    #[account]
-    pub struct RewardConfig {
-        pub vault: Pubkey,
-        pub reward_mint: Pubkey,
-        pub reward_vault: Pubkey,
-        pub reward_authority: Pubkey,
-        pub accumulated_per_share: u128,
-        pub last_update: i64,
-        pub bump: u8,
-    }
-
-    impl RewardConfig {
-        pub const LEN: usize = 8 + 32 + 32 + 32 + 32 + 16 + 8 + 1;
-    }
-
-    /// User reward tracking.
-    /// Seeds: ["user_reward", vault_pubkey, reward_mint_pubkey, user_pubkey]
-    #[account]
-    pub struct UserReward {
-        pub vault: Pubkey,
-        pub user: Pubkey,
-        pub reward_mint: Pubkey,
-        pub reward_debt: u128,
-        pub unclaimed: u64,
-        pub bump: u8,
-    }
-
-    impl UserReward {
-        pub const LEN: usize = 8 + 32 + 32 + 32 + 16 + 8 + 1;
-    }
 }
 
 #[cfg(feature = "modules")]
