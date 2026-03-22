@@ -116,6 +116,7 @@
     ]
   },
 
+  "includeCoAuthoredBy": false,
   "modelDefaults": {
     "agent": "opus",
     "command": "sonnet"

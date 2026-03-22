@@ -21,7 +21,7 @@ export const RPC_URL = process.env.RPC_URL || "https://api.devnet.solana.com";
 export const ASSET_DECIMALS = 6;
 export const SHARE_DECIMALS = 9;
 
-export type SvsVariant = "svs_1" | "svs_2" | "svs_3" | "svs_4" | "svs_5";
+export type SvsVariant = "svs_1" | "svs_2" | "svs_3" | "svs_4" | "svs_5" | "svs_6";
 
 export function loadKeypair(keypairPath: string): Keypair {
   const expandedPath = keypairPath.replace("~", process.env.HOME || "");
