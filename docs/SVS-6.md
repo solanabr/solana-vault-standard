@@ -54,13 +54,13 @@ SVS-6 = SVS-5 streaming math + SVS-3 confidential transfer mechanics. Understand
 
 | Account | Seeds | Purpose |
 |---------|-------|---------|
-| **ConfidentialStreamVault** | `["confidential_stream_vault", asset_mint, vault_id.to_le_bytes()]` | Vault state (294 bytes) |
+| **ConfidentialStreamVault** | `["confidential_stream_vault", asset_mint, vault_id.to_le_bytes()]` | Vault state (326 bytes) |
 | **Shares Mint** | `["shares", vault_pubkey]` | Token-2022 mint with `ConfidentialTransferMint` extension |
 | **Asset Vault** | ATA of (asset_mint, ConfidentialStreamVault PDA) | Holds locked assets + unstreamed yield |
 
 The vault PDA is also set as `confidential_authority` on the shares mint during initialization, enabling it to sign CT operations via CPI.
 
-### State: `ConfidentialStreamVault` Account (294 bytes)
+### State: `ConfidentialStreamVault` Account (326 bytes)
 
 ```rust
 #[account]
@@ -87,17 +87,17 @@ pub struct ConfidentialStreamVault {
     pub auditor_elgamal_pubkey: Option<[u8; 32]>,  // 33 bytes — optional compliance auditor
     pub confidential_authority: Pubkey,             // 32 bytes — CT authority (vault PDA)
 
-    pub _reserved: [u8; 32],                        // 32 bytes — future upgrades
+    pub _reserved: [u8; 64],                        // 64 bytes — future upgrades
 }
 // Seeds: ["confidential_stream_vault", asset_mint, vault_id.to_le_bytes()]
-// Total: 294 bytes (286 data + 8-byte Anchor discriminator)
+// Total: 326 bytes (318 data + 8-byte Anchor discriminator)
 ```
 
 **Key differences from SVS-5 `StreamVault`:**
 - `total_shares` field added — CT mints cannot expose a readable supply, so the vault tracks it directly
 - `auditor_elgamal_pubkey` — optional compliance auditor who can decrypt all share balances
 - `confidential_authority` — set to the vault PDA; authorizes CT inner operations
-- Smaller `_reserved` (32 vs 64 bytes) to accommodate the CT fields
+- `_reserved` kept at 64 bytes (matching SVS-5) for upgrade headroom
 
 **Size comparison:**
 
@@ -106,7 +106,7 @@ pub struct ConfidentialStreamVault {
 | SVS-1 `Vault` | 219 bytes | Base |
 | SVS-3 `ConfidentialVault` | 246 bytes | +CT fields |
 | SVS-5 `StreamVault` | 251 bytes | +streaming fields |
-| SVS-6 `ConfidentialStreamVault` | 294 bytes | +CT + streaming + `total_shares` |
+| SVS-6 `ConfidentialStreamVault` | 326 bytes | +CT + streaming + `total_shares` |
 
 ## Instructions
 
