@@ -39,17 +39,14 @@ pub struct Vault {
     pub asset_mint: Pubkey,          // 32 bytes
     pub shares_mint: Pubkey,         // 32 bytes
     pub asset_vault: Pubkey,         // 32 bytes
-    pub total_assets: u64,           // 8 bytes (UNUSED — always 0)
     pub decimals_offset: u8,         // 1 byte
     pub bump: u8,                    // 1 byte
     pub paused: bool,                // 1 byte
     pub vault_id: u64,               // 8 bytes
     pub _reserved: [u8; 64],         // 64 bytes
 }
-// Total: 211 bytes
+// Total: 203 bytes
 ```
-
-**Note**: `total_assets` field exists for struct compatibility but is always `0`. Live balance reads from `asset_vault.amount`.
 
 ## Instructions
 
@@ -596,11 +593,11 @@ See [specs-modules.md](specs-modules.md) for full specification.
 | `programs/svs-1/src/events.rs` | Event definitions |
 | `programs/svs-1/src/math.rs` | Share/asset conversion |
 | `programs/svs-1/src/instructions/` | Instruction handlers |
-| `programs/svs-1/src/module_hooks.rs` | Module integration (with `modules` feature) |
+| `modules/svs-module-hooks/` | Shared module hooks and state (with `modules` feature) |
 | `programs/svs-1/src/instructions/module_admin.rs` | Module admin instructions (with `modules` feature) |
 
 ---
 
 **Specification Version**: 1.0.0
-**Last Updated**: 2026-03-06
+**Last Updated**: 2026-03-12
 **Program Version**: 0.1.0

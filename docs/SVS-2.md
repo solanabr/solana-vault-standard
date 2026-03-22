@@ -405,7 +405,7 @@ Module hooks are fully integrated into deposit/mint/withdraw/redeem handlers. Se
 | `programs/svs-2/src/lib.rs` | Program entry |
 | `programs/svs-2/src/instructions/sync.rs` | sync() handler |
 | `programs/svs-2/src/state.rs` | Vault with active total_assets |
-| `programs/svs-2/src/module_hooks.rs` | Module integration (with `modules` feature) |
+| `modules/svs-module-hooks/` | Shared module hooks and state (with `modules` feature) |
 | `programs/svs-2/src/instructions/module_admin.rs` | Module admin instructions |
 
 ---

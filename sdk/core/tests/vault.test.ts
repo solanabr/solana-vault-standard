@@ -31,7 +31,6 @@ describe("SDK Vault Module", () => {
         assetMint: ASSET_MINT,
         sharesMint: PROGRAM_ID,
         assetVault: PROGRAM_ID,
-        totalAssets: new BN(1000),
         decimalsOffset: 3,
         bump: 255,
         paused: false,
@@ -42,7 +41,6 @@ describe("SDK Vault Module", () => {
       expect(state.assetMint).to.be.instanceOf(PublicKey);
       expect(state.sharesMint).to.be.instanceOf(PublicKey);
       expect(state.assetVault).to.be.instanceOf(PublicKey);
-      expect(state.totalAssets).to.be.instanceOf(BN);
       expect(state.decimalsOffset).to.be.a("number");
       expect(state.bump).to.be.a("number");
       expect(state.paused).to.be.a("boolean");
@@ -55,7 +53,6 @@ describe("SDK Vault Module", () => {
         assetMint: ASSET_MINT,
         sharesMint: PROGRAM_ID,
         assetVault: PROGRAM_ID,
-        totalAssets: new BN(0),
         decimalsOffset: 3,
         bump: 254,
         paused: true,
@@ -65,20 +62,18 @@ describe("SDK Vault Module", () => {
       expect(pausedState.paused).to.be.true;
     });
 
-    it("supports large totalAssets values", () => {
+    it("supports large vaultId values", () => {
       const state: VaultState = {
         authority: PROGRAM_ID,
         assetMint: ASSET_MINT,
         sharesMint: PROGRAM_ID,
         assetVault: PROGRAM_ID,
-        totalAssets: new BN("18446744073709551615"), // u64::MAX
         decimalsOffset: 0,
         bump: 255,
         paused: false,
         vaultId: new BN("18446744073709551615"),
       };
 
-      expect(state.totalAssets.toString()).to.equal("18446744073709551615");
       expect(state.vaultId.toString()).to.equal("18446744073709551615");
     });
   });

@@ -15,7 +15,7 @@ use crate::{
 };
 
 #[cfg(feature = "modules")]
-use crate::module_hooks;
+use svs_module_hooks as module_hooks;
 
 #[derive(Accounts)]
 pub struct Redeem<'info> {
@@ -96,13 +96,19 @@ pub fn handler(ctx: Context<Redeem>, shares: u64, min_assets_out: u64) -> Result
         let user_key = ctx.accounts.user.key();
 
         // 1. Access control check (frozen account)
-        module_hooks::check_deposit_access(remaining, &vault_key, &user_key, &[])?;
+        module_hooks::check_deposit_access(remaining, &crate::ID, &vault_key, &user_key, &[])?;
 
         // 2. Lock check - ensure shares are not locked
-        module_hooks::check_share_lock(remaining, &vault_key, &user_key, clock.unix_timestamp)?;
+        module_hooks::check_share_lock(
+            remaining,
+            &crate::ID,
+            &vault_key,
+            &user_key,
+            clock.unix_timestamp,
+        )?;
 
         // 3. Apply exit fee
-        let result = module_hooks::apply_exit_fee(remaining, &vault_key, assets)?;
+        let result = module_hooks::apply_exit_fee(remaining, &crate::ID, &vault_key, assets)?;
         result.net_assets
     };
 

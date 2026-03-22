@@ -280,7 +280,7 @@ Functions: `hash_leaf`, `hash_pair`, `verify_proof`, `compute_root`, `generate_p
 
 ### Functions
 
-**`check_deposit_access(mode, merkle_root, user, proof) -> Result<()>`**
+**`check_access(mode, merkle_root, user, proof) -> Result<()>`**
 - `Open`: always passes
 - `Whitelist`: proof must verify the user is in the tree
 - `Blacklist`: proof must NOT verify (user not in tree; empty root = everyone allowed)

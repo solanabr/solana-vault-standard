@@ -13,9 +13,6 @@ pub mod instructions;
 pub mod math;
 pub mod state;
 
-#[cfg(feature = "modules")]
-pub mod module_hooks;
-
 use instructions::*;
 
 declare_id!("2WP7LXWqrp1W4CwEJuVt2SxWPNY2n6AYmijh6Z4EeidY");

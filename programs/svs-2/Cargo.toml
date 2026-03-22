@@ -16,7 +16,7 @@ no-entrypoint = []
 no-idl = []
 no-log-ix-name = []
 idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
-modules = ["svs-fees", "svs-caps", "svs-locks", "svs-access", "svs-rewards"]
+modules = ["svs-module-hooks", "svs-fees", "svs-caps", "svs-locks", "svs-access", "svs-rewards"]
 
 [dependencies]
 anchor-lang = { version = "0.31.1", features = ["init-if-needed"] }
@@ -26,6 +26,7 @@ spl-token-metadata-interface = "0.5.1"
 constant_time_eq = { workspace = true }
 blake3 = { workspace = true }
 svs-math = { path = "../../modules/svs-math" }
+svs-module-hooks = { path = "../../modules/svs-module-hooks", optional = true }
 svs-fees = { path = "../../modules/svs-fees", optional = true }
 svs-caps = { path = "../../modules/svs-caps", optional = true }
 svs-locks = { path = "../../modules/svs-locks", optional = true }

@@ -19,6 +19,9 @@ use crate::{
     state::ConfidentialVault,
 };
 
+#[cfg(feature = "modules")]
+use svs_module_hooks as module_hooks;
+
 /// Withdraw exact assets by burning confidential shares
 ///
 /// Requires pre-verified proof context accounts for:
@@ -100,7 +103,35 @@ pub fn handler(
     let vault = &ctx.accounts.vault;
     let total_shares = ctx.accounts.shares_mint.supply;
 
-    // Calculate shares to burn (ceiling rounding - user burns more)
+    // ===== Module Hooks (if enabled) =====
+    #[cfg(feature = "modules")]
+    let (net_assets, _fee_assets) = {
+        let remaining = ctx.remaining_accounts;
+        let clock = Clock::get()?;
+        let vault_key = vault.key();
+        let user_key = ctx.accounts.user.key();
+
+        // 1. Access control check (frozen account)
+        module_hooks::check_deposit_access(remaining, &crate::ID, &vault_key, &user_key, &[])?;
+
+        // 2. Lock check - ensure shares are not locked
+        module_hooks::check_share_lock(
+            remaining,
+            &crate::ID,
+            &vault_key,
+            &user_key,
+            clock.unix_timestamp,
+        )?;
+
+        // 3. Apply exit fee
+        let result = module_hooks::apply_exit_fee(remaining, &crate::ID, &vault_key, assets)?;
+        (result.net_assets, result.fee_assets)
+    };
+
+    #[cfg(not(feature = "modules"))]
+    let net_assets = assets;
+
+    // Calculate shares to burn based on requested assets (ceiling rounding - user burns more)
     let shares = convert_to_shares(
         assets,
         vault.total_assets,
@@ -177,7 +208,7 @@ pub fn handler(
             },
             signer_seeds,
         ),
-        assets,
+        net_assets,
         ctx.accounts.asset_mint.decimals,
     )?;
 
@@ -193,7 +224,7 @@ pub fn handler(
         caller: ctx.accounts.user.key(),
         receiver: ctx.accounts.user.key(),
         owner: ctx.accounts.user.key(),
-        assets,
+        assets: net_assets,
         shares,
     });
 

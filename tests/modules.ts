@@ -508,7 +508,8 @@ describe("SVS-1 Modules (Feature: modules)", () => {
  * NOTE: Integration tests for module enforcement in deposit/withdraw
  *
  * The module hooks (check_deposit_access, check_deposit_caps, apply_entry_fee, etc.)
- * exist in module_hooks.rs but are not yet wired into the deposit/withdraw handlers.
+ * live in modules/svs-module-hooks/src/hooks.rs and are wired into the
+ * deposit/withdraw handlers when built with --features modules.
  *
  * TODO: Once deposit/withdraw accept remaining_accounts for modules:
  * - Test deposit blocked by access control
