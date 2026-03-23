@@ -92,6 +92,9 @@ pub fn handler(ctx: Context<DistributeYield>, total_yield: u64) -> Result<()> {
     let target_yields: Vec<u16> = tranche_data.iter().map(|&(_, _, y, _)| y).collect();
 
     // Phase 2: Compute waterfall distribution (pure math, no borrows)
+    let total_allocated: u64 = allocations.iter().sum();
+    require!(total_allocated > 0, TranchedVaultError::ZeroAmount);
+
     let distribution = match vault.waterfall_mode {
         WaterfallMode::Sequential => {
             distribute_yield_sequential(total_yield, &allocations, &target_yields)?

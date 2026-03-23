@@ -28,11 +28,10 @@ const VAULT_LAYOUT = {
   assetMint: { offset: 40, size: 32 },
   sharesMint: { offset: 72, size: 32 },
   assetVault: { offset: 104, size: 32 },
-  totalAssets: { offset: 136, size: 8 },
-  decimalsOffset: { offset: 144, size: 1 },
-  bump: { offset: 145, size: 1 },
-  paused: { offset: 146, size: 1 },
-  vaultId: { offset: 147, size: 8 },
+  decimalsOffset: { offset: 136, size: 1 },
+  bump: { offset: 137, size: 1 },
+  paused: { offset: 138, size: 1 },
+  vaultId: { offset: 139, size: 8 },
 };
 
 function parseArgs(): {
@@ -107,7 +106,6 @@ async function main() {
   const assetMint = readPubkey(data, VAULT_LAYOUT.assetMint.offset);
   const sharesMint = readPubkey(data, VAULT_LAYOUT.sharesMint.offset);
   const assetVault = readPubkey(data, VAULT_LAYOUT.assetVault.offset);
-  const storedTotalAssets = readU64(data, VAULT_LAYOUT.totalAssets.offset);
   const decimalsOffset = readU8(data, VAULT_LAYOUT.decimalsOffset.offset);
   const bump = readU8(data, VAULT_LAYOUT.bump.offset);
   const paused = readU8(data, VAULT_LAYOUT.paused.offset) !== 0;
@@ -122,22 +120,12 @@ async function main() {
   console.log(`  Decimals Offset: ${decimalsOffset}`);
   console.log(`  Bump:            ${bump}`);
   console.log(`  Paused:          ${paused ? "⛔ YES" : "✅ NO"}`);
-  console.log(`  Stored Assets:   ${storedTotalAssets}`);
 
   // Fetch live balance from asset vault
   try {
     const assetVaultAccount = await getAccount(connection, assetVault, undefined, TOKEN_PROGRAM_ID);
     const liveBalance = assetVaultAccount.amount;
     console.log(`  Live Balance:    ${liveBalance}`);
-
-    if (program === "svs-1" || program === "svs-3") {
-      console.log(`  (SVS-1/3 uses live balance for all calculations)`);
-    } else {
-      const diff = BigInt(liveBalance) - storedTotalAssets;
-      if (diff !== 0n) {
-        console.log(`  ⚠️  Desync:       ${diff > 0n ? "+" : ""}${diff} (needs sync())`);
-      }
-    }
   } catch {
     console.log(`  Live Balance:    ❌ Could not fetch`);
   }

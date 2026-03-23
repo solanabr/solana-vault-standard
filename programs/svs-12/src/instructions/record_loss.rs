@@ -1,3 +1,15 @@
+//! Record loss instruction.
+//!
+//! Decreases total_assets and tranche allocations without moving tokens out of
+//! asset_vault. The "stranded" tokens (asset_vault.amount > vault.total_assets)
+//! represent written-off collateral still held on-chain. This is intentional:
+//! the underlying credit may partially recover later, at which point the manager
+//! calls distribute_yield to re-allocate recovered value through the waterfall.
+//!
+//! A full wipe (total_assets reaches 0) sets `vault.wiped = true`, permanently
+//! blocking new deposits. Existing shareholders can still redeem after recovery
+//! via distribute_yield, but the vault does not reopen for new capital.
+
 use anchor_lang::prelude::*;
 
 use crate::{

@@ -24,9 +24,7 @@ pub struct TranchedVault {
     pub priority_bitmap: u8,
     pub vault_id: u64,
     pub waterfall_mode: WaterfallMode,
-    pub nav_oracle: Option<Pubkey>,
-    pub oracle_program: Option<Pubkey>,
-    pub _reserved: [u8; 63],
+    pub _reserved: [u8; 64],
 }
 
 impl TranchedVault {
@@ -44,9 +42,7 @@ impl TranchedVault {
         1 +   // priority_bitmap
         8 +   // vault_id
         1 +   // waterfall_mode
-        33 +  // nav_oracle (Option<Pubkey>)
-        33 +  // oracle_program (Option<Pubkey>)
-        63; // _reserved
+        64; // _reserved
 
     pub const SEED_PREFIX: &'static [u8] = TRANCHED_VAULT_SEED;
 }

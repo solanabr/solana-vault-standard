@@ -55,6 +55,7 @@ cd trident-tests && cargo build
 trident fuzz run fuzz_0  # SVS-1 math + modules
 trident fuzz run fuzz_1  # SVS-2 stored balance
 trident fuzz run fuzz_3  # SVS-3/4 CT state machine
+trident fuzz run fuzz_svs5  # SVS-5 streaming yield + modules
 
 # Run fuzz tests (actual program calls — requires anchor build -p svs_1)
 trident fuzz run fuzz_2
@@ -110,6 +111,7 @@ Located in `trident-tests/`. Uses `svs-math` and `svs-fees` crates directly — 
 | `fuzz_1` | 3 | SVS-2 stored balance vs actual balance, sync, yield | 5000 × 80 |
 | `fuzz_2` | 4 | SVS-1 actual program calls (dual-oracle) | 2000 × 40 |
 | `fuzz_3` | 5 | SVS-3/4 CT state machine, SVS-4 sync timing | 5000 × 80 |
+| `fuzz_svs5` | 6 | SVS-5 streaming yield, modules, timing edge cases | 5000 × 80 |
 
 **fuzz_0 flows (SVS-1 simulation + modules):**
 - Core: `flow_deposit`, `flow_mint`, `flow_withdraw`, `flow_redeem`, `flow_roundtrip_deposit_redeem`, `flow_inflation_attack`, `flow_zero_edge_cases`, `flow_max_value_edge_cases`
@@ -135,6 +137,19 @@ Located in `trident-tests/`. Uses `svs-math` and `svs-fees` crates directly — 
 - `flow_double_apply_pending`, `flow_withdraw_insufficient_available`, `flow_freeze_account`, `flow_unfreeze_account`
 - SVS-4: `flow_external_yield`, `flow_sync`, `flow_sync_with_pending_shares`
 - Invariants: unconfigured users can't deposit, double apply is no-op, withdraw only from available, stored ≤ actual
+
+**fuzz_svs5 flows (SVS-5 streaming yield + modules, 31 flows):**
+- Core: `flow_initialize`, `flow_deposit`, `flow_redeem`, `flow_roundtrip_deposit_redeem`
+- Streaming: `flow_distribute_yield`, `flow_checkpoint`, `flow_advance_clock`, `flow_deposit_mid_stream`
+- Timing: `flow_extreme_clock_jump`, `flow_stream_replacement_rapid`, `flow_checkpoint_after_stream_end`, `flow_deposit_after_stream_ends`
+- Operations: `flow_withdraw_during_stream`, `flow_mint_during_stream`, `flow_multiple_distribute_yield`
+- Security: `flow_inflation_attack_during_stream`, `flow_pause_during_active_stream`, `flow_zero_edge_cases`, `flow_view_invariants_during_stream`
+- Admin: `flow_pause`, `flow_unpause`
+- Fees: `flow_init_fees` (validates BPS limits, fee + net = gross)
+- Caps: `flow_init_caps`, `flow_deposit_exceeds_global_cap`, `flow_deposit_at_cap_boundary`
+- Locks: `flow_init_locks`, `flow_redeem_while_locked`
+- Access: `flow_init_access_whitelist`, `flow_init_access_blacklist`, `flow_freeze_user`, `flow_frozen_user_blocked`
+- Invariants (13): share price monotonicity, effective ≥ base, strict mid-stream bounds, checkpoint idempotency, fee accounting, per-user yield bounds, cap enforcement, total withdrawn ≤ deposits + stream, post-checkpoint base == original + stream, share price after stream ≥ before
 
 ## Running Tests
 
@@ -601,8 +616,9 @@ grcov . -s . --binary-path ./target/debug/ -t html --branch --ignore-not-existin
 | Integration Tests (SVS-1/2/3/4) | 256 tests |
 | Proof Backend Tests | 19 tests |
 | SDK Tests | 460 tests |
-| Fuzz Tests | 4 binaries, 40+ flows |
-| **Total** | **775+ test cases** |
+| Fuzz Tests | 5 binaries, 70+ flows |
+| Devnet Scripts (SVS-5) | 9 scripts, 50+ test cases |
+| **Total** | **825+ test cases** |
 
 ## Debugging Tests
 
@@ -729,6 +745,11 @@ trident init
 | `fuzz_2` | `initialize` → `deposit` → `preview_deposit` | Oracle matches program output |
 | `fuzz_3` | `configure` → `ct_deposit` → `apply_pending` → `withdraw` | CT state machine validity |
 | `fuzz_3` | `sync` with pending shares | Sync increases share price |
+| `fuzz_svs5` | `distribute_yield` → `advance_clock` → `checkpoint` | Yield accrues linearly, checkpoint idempotent |
+| `fuzz_svs5` | `deposit_mid_stream` / `withdraw_during_stream` / `mint_during_stream` | Mid-stream pricing uses interpolated balance |
+| `fuzz_svs5` | `extreme_clock_jump` past stream end | Stream fully consumed, share price monotonic |
+| `fuzz_svs5` | `stream_replacement_rapid` (3x in 3s) | Auto-checkpoint preserves yield |
+| `fuzz_svs5` | `init_fees` → `deposit` → `redeem` | fee + net = gross during streaming |
 
 ### Invariant Summary
 
@@ -754,6 +775,13 @@ deposit(assets, min_shares_out=oracle_prediction) succeeds
 unconfigured users cannot deposit
 withdraw only from available balance (not pending)
 double apply_pending is no-op
+
+# Streaming yield (fuzz_svs5)
+effective_total_assets >= base_assets  at all times
+base < effective < base + stream  during active stream (strict)
+checkpoint(checkpoint(x)) == checkpoint(x)  at same timestamp
+total_withdrawn <= total_deposited + stream_yield
+price_after_stream >= price_before_stream
 ```
 
 ---

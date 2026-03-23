@@ -70,4 +70,7 @@ pub enum TranchedVaultError {
 
     #[msg("Insufficient shares balance")]
     InsufficientShares,
+
+    #[msg("Invalid address: cannot be the zero address")]
+    InvalidAddress,
 }

@@ -39,6 +39,10 @@ pub fn unpause(ctx: Context<Admin>) -> Result<()> {
 }
 
 pub fn transfer_authority(ctx: Context<Admin>, new_authority: Pubkey) -> Result<()> {
+    require!(
+        new_authority != Pubkey::default(),
+        TranchedVaultError::InvalidAddress
+    );
     let old_authority = ctx.accounts.vault.authority;
     ctx.accounts.vault.authority = new_authority;
     emit!(AuthorityTransferred {
@@ -50,6 +54,10 @@ pub fn transfer_authority(ctx: Context<Admin>, new_authority: Pubkey) -> Result<
 }
 
 pub fn set_manager(ctx: Context<Admin>, new_manager: Pubkey) -> Result<()> {
+    require!(
+        new_manager != Pubkey::default(),
+        TranchedVaultError::InvalidAddress
+    );
     let old_manager = ctx.accounts.vault.manager;
     ctx.accounts.vault.manager = new_manager;
     emit!(ManagerChanged {

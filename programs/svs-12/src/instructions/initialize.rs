@@ -69,9 +69,7 @@ pub fn handler(ctx: Context<Initialize>, vault_id: u64, waterfall_mode: u8) -> R
     vault.priority_bitmap = 0;
     vault.vault_id = vault_id;
     vault.waterfall_mode = mode;
-    vault.nav_oracle = None;
-    vault.oracle_program = None;
-    vault._reserved = [0u8; 63];
+    vault._reserved = [0u8; 64];
 
     emit!(VaultInitialized {
         vault: vault.key(),

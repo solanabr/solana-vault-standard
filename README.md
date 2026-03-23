@@ -10,6 +10,7 @@ Tokenized vault programs and TypeScript SDK for building yield-bearing vaults on
 | **SVS-2** | Public Vault (Stored) | Stored balance | None | Requires sync() | ✅ Devnet |
 | **SVS-3** | Private Vault (Live) | Live balance | Encrypted | No sync needed | ✅ Devnet |
 | **SVS-4** | Private Vault (Stored) | Stored balance | Encrypted | Requires sync() | ✅ Devnet |
+| **SVS-5** | Streaming Yield Vault | Interpolated balance | None | distribute_yield() + checkpoint() | ✅ Devnet |
 | **SVS-12** | Tranched Vault | Stored balance | None | Manager-driven | ✅ Devnet |
 
 ### Balance Model Comparison
@@ -25,6 +26,13 @@ Tokenized vault programs and TypeScript SDK for building yield-bearing vaults on
 - Requires `sync()` call to recognize external donations
 - Authority controls when yield is recognized
 - May be preferred for yield strategies that require controlled distribution
+
+**Streaming Balance (SVS-5):**
+- Uses `base_assets + accrued_stream_yield` computed at current timestamp
+- Yield distributed linearly over configurable duration via `distribute_yield(amount, duration)`
+- `checkpoint()` materializes accrued yield into `base_assets` (permissionless)
+- Eliminates MEV from front-running discrete sync/yield operations
+- Suited for payroll vaults, vesting schedules, DCA strategies
 
 ### Privacy Model
 
@@ -47,6 +55,7 @@ Tokenized vault programs and TypeScript SDK for building yield-bearing vaults on
 | SVS-2 | `3UrYrxh1HmVgq7WPygZ5x1gNEaWFwqTMs7geNqMnsrtD` | Same as devnet |
 | SVS-3 | `EcpnYtaCBrZ4p4uq7dDr55D3fL9nsxbCNqpyUREGpPkh` | Same as devnet |
 | SVS-4 | `2WP7LXWqrp1W4CwEJuVt2SxWPNY2n6AYmijh6Z4EeidY` | Same as devnet |
+| SVS-5 | `3XQX3ZKGcy618XyWMmQiukYohJNSh3JNWoffq8ZeFdcS` | Same as devnet |
 | SVS-12 | `85wwufKdhpHxiBe4kMeFBfidL1Kqo62T65DHb46qNugA` | Same as devnet |
 
 ## Installation
@@ -65,7 +74,7 @@ cd proofs-backend && cargo run
 ## Quick Start
 
 ```typescript
-import { SolanaVault, ManagedVault } from "@stbr/solana-vault";
+import { SolanaVault, ManagedVault, StreamingVault } from "@stbr/solana-vault";
 import { BN } from "@coral-xyz/anchor";
 
 // SVS-1: Load live-balance vault
@@ -92,6 +101,15 @@ await vault.redeem(user, {
 
 // SVS-2 only: sync stored balance
 await managed.sync(authority);
+
+// SVS-5: Load streaming yield vault
+const streaming = await StreamingVault.load(program, assetMint, 1);
+
+// Distribute yield over 1 hour
+await streaming.distributeYield(authority, new BN(1_000_000), new BN(3600));
+
+// Permissionless checkpoint
+await streaming.checkpoint();
 ```
 
 ## Features
@@ -193,6 +211,11 @@ solana-vault sync my-vault                    # Sync balance (SVS-2/4)
 |   | (sync() for      | Balance      | (sync() for      | Balance   |
 |   |  yield accrual)  |              |  yield accrual)  |           |
 |   +------------------+              +--------+---------+           |
+|   |                  |                                             |
+|   | SVS-5            | Streaming                                   |
+|   | (distribute_yield| Balance                                     |
+|   |  + checkpoint)   |                                             |
+|   +------------------+                                             |
 |            |                                 |                     |
 |            v                                 v                     |
 |   +------------------+              +------------------+           |
@@ -219,6 +242,8 @@ solana-vault sync my-vault                    # Sync balance (SVS-2/4)
 
 ### Vault PDA
 **Seeds:** `["vault", asset_mint, vault_id (u64 LE)]`
+
+> **SVS-5 note:** StreamVault uses seed `"stream_vault"` instead of `"vault"`.
 
 ```typescript
 const [vault] = PublicKey.findProgramAddressSync(
@@ -251,12 +276,14 @@ const [sharesMint] = PublicKey.findProgramAddressSync(
 
 ### Admin Operations
 
-| Instruction | SVS-1 | SVS-2 | SVS-3 | SVS-4 | Description |
-|-------------|:-----:|:-----:|:-----:|:-----:|-------------|
-| `pause` | ✓ | ✓ | ✓ | ✓ | Emergency pause vault |
-| `unpause` | ✓ | ✓ | ✓ | ✓ | Resume operations |
-| `transfer_authority` | ✓ | ✓ | ✓ | ✓ | Transfer admin rights |
-| `sync` | ✗ | ✓ | ✗ | ✓ | Sync total_assets with balance |
+| Instruction | SVS-1 | SVS-2 | SVS-3 | SVS-4 | SVS-5 | Description |
+|-------------|:-----:|:-----:|:-----:|:-----:|:-----:|-------------|
+| `pause` | ✓ | ✓ | ✓ | ✓ | ✓ | Emergency pause vault |
+| `unpause` | ✓ | ✓ | ✓ | ✓ | ✓ | Resume operations |
+| `transfer_authority` | ✓ | ✓ | ✓ | ✓ | ✓ | Transfer admin rights |
+| `sync` | ✗ | ✓ | ✗ | ✓ | ✗ | Sync total_assets with balance |
+| `distribute_yield` | ✗ | ✗ | ✗ | ✗ | ✓ | Start streaming yield distribution |
+| `checkpoint` | ✗ | ✗ | ✗ | ✗ | ✓ | Materialize accrued yield (permissionless) |
 
 ### View Functions (All Programs)
 
@@ -275,6 +302,8 @@ const [sharesMint] = PublicKey.findProgramAddressSync(
 | `max_redeem` | Get maximum redeem amount |
 
 **SVS-3/SVS-4 view difference**: `max_withdraw` returns the vault's total assets (not user-specific) and `max_redeem` returns `u64::MAX`, because encrypted share balances can't be read on-chain. SVS-1/SVS-2 return user-specific values based on `owner_shares_account.amount`.
+
+**SVS-5 view addition**: `get_stream_info` returns current stream parameters (base_assets, stream_amount, stream_start, stream_end). All view functions use `effective_total_assets(now)` for share price computation.
 
 ### Private Vault Only (SVS-3, SVS-4)
 
@@ -311,6 +340,8 @@ const [sharesMint] = PublicKey.findProgramAddressSync(
 | `Deposit` | Assets deposited |
 | `Withdraw` | Assets withdrawn |
 | `VaultSynced` | Total assets synced (SVS-2, SVS-4 only) |
+| `YieldStreamStarted` | Yield stream started (SVS-5 only) |
+| `Checkpoint` | Yield materialized into base_assets (SVS-5 only) |
 | `VaultStatusChanged` | Pause/unpause |
 | `AuthorityTransferred` | Authority changed |
 
@@ -333,7 +364,7 @@ const [sharesMint] = PublicKey.findProgramAddressSync(
 # Build all programs
 anchor build
 
-# Run all tests (130 tests, requires proof backend for SVS-3/SVS-4)
+# Run all tests (165+ tests, requires proof backend for SVS-3/SVS-4)
 anchor test
 
 # Run with modules feature (includes 16 module tests)
@@ -364,6 +395,7 @@ solana-vault-standard/
 │   ├── svs-2/                    # Public vault, stored balance
 │   ├── svs-3/                    # Private vault, live balance (beta)
 │   ├── svs-4/                    # Private vault, stored balance (beta)
+│   ├── svs-5/                    # Streaming yield vault
 │   └── svs-12/                   # Tranched vault, waterfall yield/loss
 ├── modules/
 │   ├── svs-math/                 # Shared math (mul_div, rounding, conversion)
@@ -386,6 +418,7 @@ solana-vault-standard/
 │   ├── svs-2.ts                  # SVS-2 stored balance + sync tests (35)
 │   ├── svs-3.ts                  # SVS-3 confidential live balance tests (42)
 │   ├── svs-4.ts                  # SVS-4 confidential stored balance tests (43)
+│   ├── svs-5.ts                  # SVS-5 streaming yield tests (35)
 │   ├── helpers/
 │   │   └── proof-client.ts       # ZK proof backend client helpers
 │   ├── admin-extended.ts         # Admin function tests
@@ -407,6 +440,7 @@ solana-vault-standard/
     ├── SVS-2.md                 # SVS-2 spec (stored balance + sync)
     ├── SVS-3.md                 # SVS-3 spec (confidential live)
     ├── SVS-4.md                 # SVS-4 spec (confidential stored)
+    ├── SVS-5.md                 # SVS-5 spec (streaming yield)
     └── SVS-12.md                # SVS-12 spec (tranched vault)
 ```
 

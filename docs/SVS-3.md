@@ -13,7 +13,7 @@ SVS-3 extends SVS-1's live balance model with Token-2022 Confidential Transfers,
 
 **What's Public:**
 - Total vault assets (`asset_vault.amount`)
-- Share price (calculable from total_assets/total_shares)
+- Share price (calculable from asset_vault.amount / total_shares)
 - Transaction existence (not amounts)
 - Shares mint total supply
 
@@ -29,11 +29,11 @@ SVS-3 extends SVS-1's live balance model with Token-2022 Confidential Transfers,
 
 | Account | Seeds | Purpose |
 |---------|-------|---------|
-| `ConfidentialVault` | `["vault", asset_mint, vault_id.to_le_bytes()]` | Vault state (254 bytes) |
+| `ConfidentialVault` | `["vault", asset_mint, vault_id.to_le_bytes()]` | Vault state (246 bytes) |
 | Shares Mint | `["shares", vault_pubkey]` | Token-2022 mint with ConfidentialTransfer extension |
 | Asset Vault | `ATA(asset_mint, vault)` | Holds locked assets |
 
-### ConfidentialVault Struct (254 bytes)
+### ConfidentialVault Struct (246 bytes)
 
 ```rust
 #[account]
@@ -42,7 +42,6 @@ pub struct ConfidentialVault {
     pub asset_mint: Pubkey,                          // 32
     pub shares_mint: Pubkey,                         // 32
     pub asset_vault: Pubkey,                         // 32
-    pub total_assets: u64,                           // 8  (UNUSED — always 0, live balance)
     pub decimals_offset: u8,                         // 1
     pub bump: u8,                                    // 1
     pub paused: bool,                                // 1
@@ -51,7 +50,7 @@ pub struct ConfidentialVault {
     pub confidential_authority: Pubkey,              // 32
     pub _reserved: [u8; 32],                         // 32
 }
-// Total: 254 bytes (+ 8-byte Anchor discriminator)
+// Total: 246 bytes (+ 8-byte Anchor discriminator)
 ```
 
 **Differences from SVS-1 `Vault`:**

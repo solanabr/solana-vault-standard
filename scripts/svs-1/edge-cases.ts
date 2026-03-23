@@ -236,10 +236,12 @@ async function main() {
     })
     .rpc();
 
-  const vault1State = await program.account.vault.fetch(vault);
-  const vault2State = await program.account.vault.fetch(vault2);
+  // SVS-1 uses live balance — check actual asset_vault token balances
+  const vault1Balance = await getAccount(connection, assetVault, undefined, TOKEN_PROGRAM_ID);
+  const vault2Balance = await getAccount(connection, assetVault2, undefined, TOKEN_PROGRAM_ID);
 
-  if (vault1State.totalAssets.toNumber() !== vault2State.totalAssets.toNumber()) {
+  if (vault1Balance.amount !== vault2Balance.amount && vault2Balance.amount > 0n) {
+    console.log(`  Vault1 balance: ${vault1Balance.amount}, Vault2 balance: ${vault2Balance.amount}`);
     console.log("  ✅ PASSED: Vaults are isolated"); results.push({ name: "Vault isolation", passed: true });
   } else {
     console.log("  ❌ FAILED: Vaults not isolated"); results.push({ name: "Vault isolation", passed: false });

@@ -108,7 +108,6 @@ export class ConfidentialSolanaVault {
       assetMint: vault.assetMint,
       sharesMint: vault.sharesMint,
       assetVault: vault.assetVault,
-      totalAssets: vault.totalAssets,
       decimalsOffset: vault.decimalsOffset,
       bump: vault.bump,
       paused: vault.paused,
