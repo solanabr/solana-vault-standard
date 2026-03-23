@@ -48,7 +48,12 @@
     "test-svs4:confidential-redeem": "npx ts-node scripts/svs-4/confidential-redeem.ts",
     "test-svs4:edge-cases": "npx ts-node scripts/svs-4/edge-cases.ts",
     "test-svs4:all": "npm run test-svs4:basic && npm run test-svs4:sync-confidential && npm run test-svs4:sync-timing-attack && npm run test-svs4:confidential-redeem && npm run test-svs4:edge-cases",
-    "test-devnet:all": "npm run test-svs1:all && npm run test-svs2:all && npm run test-svs3:all && npm run test-svs4:all"
+    "test-svs8:initialize": "npx ts-node scripts/svs-8/01-initialize.ts",
+    "test-svs8:add-assets": "npx ts-node scripts/svs-8/02-add-assets.ts",
+    "test-svs8:deposit": "npx ts-node scripts/svs-8/03-deposit.ts",
+    "test-svs8:redeem": "npx ts-node scripts/svs-8/04-redeem.ts",
+    "test-svs8:all": "npm run test-svs8:initialize && npm run test-svs8:add-assets && npm run test-svs8:deposit && npm run test-svs8:redeem",
+    "test-devnet:all": "npm run test-svs1:all && npm run test-svs2:all && npm run test-svs3:all && npm run test-svs4:all && npm run test-svs8:all"
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.31.1",

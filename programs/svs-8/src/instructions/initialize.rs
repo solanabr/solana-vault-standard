@@ -1,21 +1,15 @@
-//! Initialize instruction: create streaming vault PDA, shares mint, and asset vault.
-
 use anchor_lang::prelude::*;
 use anchor_lang::solana_program::program::invoke_signed;
-use anchor_spl::{
-    associated_token::AssociatedToken,
-    token_2022::{
-        spl_token_2022::{extension::ExtensionType, instruction::initialize_mint2},
-        Token2022,
-    },
-    token_interface::{Mint, TokenAccount, TokenInterface},
+use anchor_spl::token_2022::{
+    spl_token_2022::{extension::ExtensionType, instruction::initialize_mint2},
+    Token2022,
 };
 
 use crate::{
     constants::{MAX_DECIMALS, SHARES_DECIMALS, SHARES_MINT_SEED, VAULT_SEED},
     error::VaultError,
     events::VaultInitialized,
-    state::StreamVault,
+    state::MultiAssetVault,
 };
 
 #[derive(Accounts)]
@@ -27,13 +21,11 @@ pub struct Initialize<'info> {
     #[account(
         init,
         payer = authority,
-        space = StreamVault::LEN,
-        seeds = [VAULT_SEED, asset_mint.key().as_ref(), &vault_id.to_le_bytes()],
+        space = MultiAssetVault::LEN,
+        seeds = [VAULT_SEED, &vault_id.to_le_bytes()],
         bump
     )]
-    pub vault: Account<'info, StreamVault>,
-
-    pub asset_mint: InterfaceAccount<'info, Mint>,
+    pub vault: Account<'info, MultiAssetVault>,
 
     /// CHECK: Shares mint is initialized via CPI in handler
     #[account(
@@ -43,26 +35,14 @@ pub struct Initialize<'info> {
     )]
     pub shares_mint: UncheckedAccount<'info>,
 
-    #[account(
-        init,
-        payer = authority,
-        associated_token::mint = asset_mint,
-        associated_token::authority = vault,
-        associated_token::token_program = asset_token_program,
-    )]
-    pub asset_vault: InterfaceAccount<'info, TokenAccount>,
-
-    pub asset_token_program: Interface<'info, TokenInterface>,
     pub token_2022_program: Program<'info, Token2022>,
-    pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
     pub rent: Sysvar<'info, Rent>,
 }
 
-pub fn handler(ctx: Context<Initialize>, vault_id: u64) -> Result<()> {
-    let asset_decimals = ctx.accounts.asset_mint.decimals;
+pub fn handler(ctx: Context<Initialize>, vault_id: u64, base_decimals: u8) -> Result<()> {
     require!(
-        asset_decimals <= MAX_DECIMALS,
+        base_decimals <= MAX_DECIMALS,
         VaultError::InvalidAssetDecimals
     );
 
@@ -113,29 +93,25 @@ pub fn handler(ctx: Context<Initialize>, vault_id: u64) -> Result<()> {
         &[shares_mint_seeds],
     )?;
 
-    let clock = Clock::get()?;
     let vault = &mut ctx.accounts.vault;
     vault.authority = ctx.accounts.authority.key();
-    vault.asset_mint = ctx.accounts.asset_mint.key();
     vault.shares_mint = ctx.accounts.shares_mint.key();
-    vault.asset_vault = ctx.accounts.asset_vault.key();
-    vault.base_assets = 0;
-    vault.stream_amount = 0;
-    vault.stream_start = 0;
-    vault.stream_end = 0;
-    vault.last_checkpoint = clock.unix_timestamp;
-    vault.decimals_offset = MAX_DECIMALS - asset_decimals;
+    vault.decimals_offset = MAX_DECIMALS
+        .checked_sub(base_decimals)
+        .ok_or(VaultError::MathOverflow)?;
     vault.bump = vault_bump;
     vault.paused = false;
     vault.vault_id = vault_id;
+    vault.num_assets = 0;
+    vault.base_decimals = base_decimals;
     vault._reserved = [0u8; 64];
 
     emit!(VaultInitialized {
         vault: vault.key(),
         authority: vault.authority,
-        asset_mint: vault.asset_mint,
         shares_mint: vault.shares_mint,
         vault_id,
+        base_decimals,
     });
 
     Ok(())

@@ -5,6 +5,12 @@ edition = "2021"
 description = "Oracle price module for SVS vault programs - price validation for async vaults"
 license = "Apache-2.0"
 
+[features]
+default = []
+pyth = []
+switchboard = []
+custom = []
+
 [dependencies]
 
 [dev-dependencies]

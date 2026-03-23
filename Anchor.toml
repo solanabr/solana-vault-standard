@@ -11,6 +11,7 @@ svs_3 = "EcpnYtaCBrZ4p4uq7dDr55D3fL9nsxbCNqpyUREGpPkh"
 svs_4 = "2WP7LXWqrp1W4CwEJuVt2SxWPNY2n6AYmijh6Z4EeidY"
 svs_5 = "3XQX3ZKGcy618XyWMmQiukYohJNSh3JNWoffq8ZeFdcS"
 svs_6 = "2w7aL5ZrD2i9RpzQBGSPAg7s61wVc8Qs8gtuQUTojEDE"
+svs_8 = "ESPx6aLuszKwk5oKSWLoCkAj9Pc7EpSSEezhNX5aPw6r"
 
 [programs.localnet]
 svs_1 = "Bv8aVSQ3DJUe3B7TqQZRZgrNvVTh8TjfpwpoeR1ckDMC"
@@ -19,6 +20,7 @@ svs_3 = "EcpnYtaCBrZ4p4uq7dDr55D3fL9nsxbCNqpyUREGpPkh"
 svs_4 = "2WP7LXWqrp1W4CwEJuVt2SxWPNY2n6AYmijh6Z4EeidY"
 svs_5 = "3XQX3ZKGcy618XyWMmQiukYohJNSh3JNWoffq8ZeFdcS"
 svs_6 = "2w7aL5ZrD2i9RpzQBGSPAg7s61wVc8Qs8gtuQUTojEDE"
+svs_8 = { address = "ESPx6aLuszKwk5oKSWLoCkAj9Pc7EpSSEezhNX5aPw6r", features = ["test-utils"] }
 
 [registry]
 url = "https://api.apr.dev"

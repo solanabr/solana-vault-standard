@@ -23,10 +23,7 @@ pub mod svs_5 {
     use super::*;
 
     /// Initialize a new streaming vault for the given asset
-    pub fn initialize(
-        ctx: Context<Initialize>,
-        vault_id: u64,
-    ) -> Result<()> {
+    pub fn initialize(ctx: Context<Initialize>, vault_id: u64) -> Result<()> {
         instructions::initialize::handler(ctx, vault_id)
     }
 

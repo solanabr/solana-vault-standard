@@ -57,7 +57,11 @@ function deriveStreamVaultAddresses(
   vaultId: BN,
 ) {
   const [vault, vaultBump] = PublicKey.findProgramAddressSync(
-    [STREAM_VAULT_SEED, assetMint.toBuffer(), vaultId.toArrayLike(Buffer, "le", 8)],
+    [
+      STREAM_VAULT_SEED,
+      assetMint.toBuffer(),
+      vaultId.toArrayLike(Buffer, "le", 8),
+    ],
     programId,
   );
   const [sharesMint, sharesMintBump] = getSharesMintAddress(programId, vault);
@@ -102,7 +106,11 @@ export class StreamingVault extends SolanaVault {
   ): Promise<StreamingVault> {
     const provider = program.provider as AnchorProvider;
     const id = typeof vaultId === "number" ? new BN(vaultId) : vaultId;
-    const addresses = deriveStreamVaultAddresses(program.programId, assetMint, id);
+    const addresses = deriveStreamVaultAddresses(
+      program.programId,
+      assetMint,
+      id,
+    );
 
     const assetTokenProgram = await getTokenProgramForMint(
       provider.connection,
@@ -201,7 +209,10 @@ export class StreamingVault extends SolanaVault {
    * Deposit assets and receive shares.
    * Overrides base to prepend ATA creation (SVS-5 doesn't use init_if_needed).
    */
-  override async deposit(user: PublicKey, params: DepositParams): Promise<string> {
+  override async deposit(
+    user: PublicKey,
+    params: DepositParams,
+  ): Promise<string> {
     const userAssetAccount = this.getUserAssetAccount(user);
     const userSharesAccount = this.getUserSharesAccount(user);
 
@@ -346,10 +357,7 @@ export class StreamingVault extends SolanaVault {
     return state.baseAssets;
   }
 
-  private computeEffectiveTotalAssets(
-    state: StreamingVaultState,
-    now: BN,
-  ): BN {
+  private computeEffectiveTotalAssets(state: StreamingVaultState, now: BN): BN {
     if (state.streamAmount.isZero() || now.lte(state.streamStart)) {
       return state.baseAssets;
     }

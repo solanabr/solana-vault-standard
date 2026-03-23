@@ -13,6 +13,8 @@ pub enum OracleError {
     PriceDeviationExceeded,
     /// Arithmetic overflow in price calculation.
     MathOverflow,
+    /// Oracle type not supported or not enabled via feature flag.
+    UnsupportedOracleType,
 }
 
 impl core::fmt::Display for OracleError {
@@ -23,6 +25,7 @@ impl core::fmt::Display for OracleError {
             OracleError::UnauthorizedUpdate => write!(f, "unauthorized oracle update"),
             OracleError::PriceDeviationExceeded => write!(f, "price deviation exceeds maximum"),
             OracleError::MathOverflow => write!(f, "arithmetic overflow in price calculation"),
+            OracleError::UnsupportedOracleType => write!(f, "unsupported oracle type"),
         }
     }
 }

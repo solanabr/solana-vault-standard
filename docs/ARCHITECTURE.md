@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Solana Vault Standard (SVS) provides tokenized vault programs for Solana. Four program variants cover the matrix of public/private and live/stored balance models.
+The Solana Vault Standard (SVS) provides tokenized vault programs for Solana. Variants cover single-asset (SVS-1 through SVS-6), multi-asset (SVS-8), and extended patterns.
 
 ## SVS Variants Matrix
 
@@ -18,6 +18,12 @@ The Solana Vault Standard (SVS) provides tokenized vault programs for Solana. Fo
     BALANCE     |     SVS-2       |     SVS-4       |
     (With sync) |                 |                 |
                 +-----------------+-----------------+
+    STREAMING   |                 |                 |
+    YIELD       |     SVS-5       |     SVS-6       |
+                +-----------------+-----------------+
+
+    MULTI-ASSET
+    BASKET          SVS-8 (up to 8 tokens, oracle-priced)
 ```
 
 ## Account Structure

@@ -315,4 +315,115 @@ mod tests {
         // Should round down, so back <= original
         assert!(back <= assets);
     }
+
+    #[test]
+    fn test_oracle_type_from_u8() {
+        use crate::provider::OracleType;
+
+        assert_eq!(OracleType::try_from(0u8).unwrap(), OracleType::Pyth);
+        assert_eq!(OracleType::try_from(1u8).unwrap(), OracleType::Switchboard);
+        assert_eq!(OracleType::try_from(2u8).unwrap(), OracleType::Custom);
+    }
+
+    #[test]
+    fn test_unsupported_oracle_type() {
+        use crate::error::OracleError;
+        use crate::provider::OracleType;
+
+        assert_eq!(
+            OracleType::try_from(3u8),
+            Err(OracleError::UnsupportedOracleType)
+        );
+        assert_eq!(
+            OracleType::try_from(255u8),
+            Err(OracleError::UnsupportedOracleType)
+        );
+    }
+
+    #[cfg(feature = "custom")]
+    #[test]
+    fn test_custom_read_price() {
+        use crate::providers::custom::read_price;
+
+        let price: u64 = 1_000_000_000;
+        let timestamp: i64 = 1700000000;
+
+        let mut data = Vec::new();
+        data.extend_from_slice(&price.to_le_bytes());
+        data.extend_from_slice(&timestamp.to_le_bytes());
+
+        let result = read_price(&data).unwrap();
+        assert_eq!(result.price, price);
+        assert_eq!(result.updated_at, timestamp);
+        assert_eq!(result.confidence, 0);
+    }
+
+    #[cfg(feature = "custom")]
+    #[test]
+    fn test_custom_read_price_short_data() {
+        use crate::error::OracleError;
+        use crate::providers::custom::read_price;
+
+        assert_eq!(read_price(&[0u8; 15]), Err(OracleError::InvalidPrice));
+        assert_eq!(read_price(&[]), Err(OracleError::InvalidPrice));
+    }
+
+    #[cfg(feature = "custom")]
+    #[test]
+    fn test_read_oracle_price_custom() {
+        use crate::provider::{read_oracle_price, OracleType};
+
+        let price: u64 = 2_000_000_000; // 2.0
+        let timestamp: i64 = 1000;
+        let current: i64 = 1500;
+        let max_staleness: i64 = 3600;
+
+        let mut data = Vec::new();
+        data.extend_from_slice(&price.to_le_bytes());
+        data.extend_from_slice(&timestamp.to_le_bytes());
+
+        let result = read_oracle_price(&data, OracleType::Custom, max_staleness, current).unwrap();
+        assert_eq!(result.price, price);
+        assert_eq!(result.updated_at, timestamp);
+    }
+
+    #[cfg(feature = "custom")]
+    #[test]
+    fn test_read_oracle_price_custom_stale() {
+        use crate::error::OracleError;
+        use crate::provider::{read_oracle_price, OracleType};
+
+        let price: u64 = 1_000_000_000;
+        let timestamp: i64 = 1000;
+        let current: i64 = 8200; // 2 hours later
+        let max_staleness: i64 = 3600;
+
+        let mut data = Vec::new();
+        data.extend_from_slice(&price.to_le_bytes());
+        data.extend_from_slice(&timestamp.to_le_bytes());
+
+        assert_eq!(
+            read_oracle_price(&data, OracleType::Custom, max_staleness, current),
+            Err(OracleError::StalePrice)
+        );
+    }
+
+    #[cfg(feature = "custom")]
+    #[test]
+    fn test_read_oracle_price_custom_zero_price() {
+        use crate::error::OracleError;
+        use crate::provider::{read_oracle_price, OracleType};
+
+        let price: u64 = 0;
+        let timestamp: i64 = 1000;
+
+        let mut data = Vec::new();
+        data.extend_from_slice(&price.to_le_bytes());
+        data.extend_from_slice(&timestamp.to_le_bytes());
+
+        assert_eq!(
+            read_oracle_price(&data, OracleType::Custom, 3600, 1500),
+            Err(OracleError::InvalidPrice)
+        );
+    }
 }
