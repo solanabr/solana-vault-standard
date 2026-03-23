@@ -13,6 +13,9 @@ use crate::{
     waterfall::check_subordination,
 };
 
+#[cfg(feature = "modules")]
+use svs_module_hooks as module_hooks;
+
 #[derive(Accounts)]
 pub struct Deposit<'info> {
     #[account(mut)]
@@ -89,6 +92,27 @@ pub fn handler(ctx: Context<Deposit>, assets: u64, min_shares_out: u64) -> Resul
     .map_err(|_| TranchedVaultError::MathOverflow)?;
 
     require!(shares > 0, TranchedVaultError::ZeroAmount);
+
+    #[cfg(feature = "modules")]
+    let shares = {
+        let remaining = ctx.remaining_accounts;
+        let vault_key = vault.key();
+        let user_key = ctx.accounts.user.key();
+
+        module_hooks::check_deposit_access(remaining, &crate::ID, &vault_key, &user_key, &[])?;
+        module_hooks::check_deposit_caps(
+            remaining,
+            &crate::ID,
+            &vault_key,
+            &user_key,
+            vault.total_assets,
+            assets,
+        )?;
+
+        let result = module_hooks::apply_entry_fee(remaining, &crate::ID, &vault_key, shares)?;
+        result.net_shares
+    };
+
     require!(
         shares >= min_shares_out,
         TranchedVaultError::SlippageExceeded

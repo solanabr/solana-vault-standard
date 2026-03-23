@@ -7,22 +7,19 @@ pub mod rebalance;
 pub mod record_loss;
 pub mod redeem;
 pub mod update_tranche_config;
+pub mod view;
 
+#[cfg(feature = "modules")]
+pub mod module_admin;
+
+// Glob re-exports required by Anchor's #[program] macro expansion.
+// Ambiguity is limited to `handler` names, which are always called
+// via qualified path (e.g., instructions::deposit::handler).
 #[allow(ambiguous_glob_reexports)]
-pub use add_tranche::*;
-#[allow(ambiguous_glob_reexports)]
-pub use admin::*;
-#[allow(ambiguous_glob_reexports)]
-pub use deposit::*;
-#[allow(ambiguous_glob_reexports)]
-pub use distribute_yield::*;
-#[allow(ambiguous_glob_reexports)]
-pub use initialize::*;
-#[allow(ambiguous_glob_reexports)]
-pub use rebalance::*;
-#[allow(ambiguous_glob_reexports)]
-pub use record_loss::*;
-#[allow(ambiguous_glob_reexports)]
-pub use redeem::*;
-#[allow(ambiguous_glob_reexports)]
-pub use update_tranche_config::*;
+pub use {
+    add_tranche::*, admin::*, deposit::*, distribute_yield::*, initialize::*, rebalance::*,
+    record_loss::*, redeem::*, update_tranche_config::*, view::*,
+};
+
+#[cfg(feature = "modules")]
+pub use module_admin::*;

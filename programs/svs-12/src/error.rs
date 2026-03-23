@@ -73,4 +73,10 @@ pub enum TranchedVaultError {
 
     #[msg("Invalid address: cannot be the zero address")]
     InvalidAddress,
+
+    #[msg("Invalid fee configuration")]
+    InvalidFeeConfig,
+
+    #[msg("Invalid lock configuration")]
+    InvalidLockConfig,
 }

@@ -45,9 +45,7 @@ Designed for structured credit products (CLO-style senior/mezzanine/junior), rea
 | priority_bitmap | u8 | Bit i set = priority i claimed |
 | vault_id | u64 | Unique vault identifier |
 | waterfall_mode | enum | Sequential or ProRataYieldSequentialLoss |
-| nav_oracle | Option\<Pubkey\> | Reserved for oracle integration |
-| oracle_program | Option\<Pubkey\> | Reserved for oracle program |
-| _reserved | [u8; 63] | Future expansion |
+| _reserved | [u8; 64] | Future expansion |
 
 ### Tranche (122 bytes + 8 disc)
 

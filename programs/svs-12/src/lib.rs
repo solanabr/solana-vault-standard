@@ -71,6 +71,18 @@ pub mod svs_12 {
         instructions::admin::set_manager(ctx, new_manager)
     }
 
+    pub fn preview_deposit(ctx: Context<TrancheView>, assets: u64) -> Result<()> {
+        instructions::view::preview_deposit(ctx, assets)
+    }
+
+    pub fn preview_redeem(ctx: Context<TrancheView>, shares: u64) -> Result<()> {
+        instructions::view::preview_redeem(ctx, shares)
+    }
+
+    pub fn get_tranche_state(ctx: Context<TrancheView>) -> Result<()> {
+        instructions::view::get_tranche_state(ctx)
+    }
+
     pub fn update_tranche_config(
         ctx: Context<UpdateTrancheConfig>,
         target_yield_bps: Option<u16>,
@@ -83,5 +95,88 @@ pub mod svs_12 {
             cap_bps,
             subordination_bps,
         )
+    }
+
+    #[cfg(feature = "modules")]
+    pub fn initialize_fee_config(
+        ctx: Context<InitializeFeeConfig>,
+        entry_fee_bps: u16,
+        exit_fee_bps: u16,
+        management_fee_bps: u16,
+        performance_fee_bps: u16,
+    ) -> Result<()> {
+        instructions::module_admin::initialize_fee_config(
+            ctx,
+            entry_fee_bps,
+            exit_fee_bps,
+            management_fee_bps,
+            performance_fee_bps,
+        )
+    }
+
+    #[cfg(feature = "modules")]
+    pub fn update_fee_config(
+        ctx: Context<UpdateFeeConfig>,
+        entry_fee_bps: Option<u16>,
+        exit_fee_bps: Option<u16>,
+        management_fee_bps: Option<u16>,
+        performance_fee_bps: Option<u16>,
+    ) -> Result<()> {
+        instructions::module_admin::update_fee_config(
+            ctx,
+            entry_fee_bps,
+            exit_fee_bps,
+            management_fee_bps,
+            performance_fee_bps,
+        )
+    }
+
+    #[cfg(feature = "modules")]
+    pub fn initialize_cap_config(
+        ctx: Context<InitializeCapConfig>,
+        global_cap: u64,
+        per_user_cap: u64,
+    ) -> Result<()> {
+        instructions::module_admin::initialize_cap_config(ctx, global_cap, per_user_cap)
+    }
+
+    #[cfg(feature = "modules")]
+    pub fn update_cap_config(
+        ctx: Context<UpdateCapConfig>,
+        global_cap: Option<u64>,
+        per_user_cap: Option<u64>,
+    ) -> Result<()> {
+        instructions::module_admin::update_cap_config(ctx, global_cap, per_user_cap)
+    }
+
+    #[cfg(feature = "modules")]
+    pub fn initialize_lock_config(
+        ctx: Context<InitializeLockConfig>,
+        lock_duration: i64,
+    ) -> Result<()> {
+        instructions::module_admin::initialize_lock_config(ctx, lock_duration)
+    }
+
+    #[cfg(feature = "modules")]
+    pub fn update_lock_config(ctx: Context<UpdateLockConfig>, lock_duration: i64) -> Result<()> {
+        instructions::module_admin::update_lock_config(ctx, lock_duration)
+    }
+
+    #[cfg(feature = "modules")]
+    pub fn initialize_access_config(
+        ctx: Context<InitializeAccessConfig>,
+        mode: state::AccessMode,
+        merkle_root: [u8; 32],
+    ) -> Result<()> {
+        instructions::module_admin::initialize_access_config(ctx, mode, merkle_root)
+    }
+
+    #[cfg(feature = "modules")]
+    pub fn update_access_config(
+        ctx: Context<UpdateAccessConfig>,
+        mode: Option<state::AccessMode>,
+        merkle_root: Option<[u8; 32]>,
+    ) -> Result<()> {
+        instructions::module_admin::update_access_config(ctx, mode, merkle_root)
     }
 }

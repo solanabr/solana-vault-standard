@@ -13,6 +13,9 @@ use crate::{
     waterfall::check_subordination,
 };
 
+#[cfg(feature = "modules")]
+use svs_module_hooks as module_hooks;
+
 #[derive(Accounts)]
 pub struct Redeem<'info> {
     #[account(mut)]
@@ -81,7 +84,24 @@ pub fn handler(ctx: Context<Redeem>, shares: u64, min_assets_out: u64) -> Result
     let tranche = &ctx.accounts.target_tranche;
     let vault = &ctx.accounts.vault;
 
-    // 1. Compute assets (floor rounding — vault favoring)
+    #[cfg(feature = "modules")]
+    {
+        let remaining = ctx.remaining_accounts;
+        let vault_key = vault.key();
+        let user_key = ctx.accounts.user.key();
+
+        module_hooks::check_deposit_access(remaining, &crate::ID, &vault_key, &user_key, &[])?;
+
+        let current_timestamp = Clock::get()?.unix_timestamp;
+        module_hooks::check_share_lock(
+            remaining,
+            &crate::ID,
+            &vault_key,
+            &user_key,
+            current_timestamp,
+        )?;
+    }
+
     let assets = convert_to_assets(
         shares,
         tranche.total_assets_allocated,
@@ -90,6 +110,14 @@ pub fn handler(ctx: Context<Redeem>, shares: u64, min_assets_out: u64) -> Result
         Rounding::Floor,
     )
     .map_err(|_| TranchedVaultError::MathOverflow)?;
+
+    #[cfg(feature = "modules")]
+    let assets = {
+        let remaining = ctx.remaining_accounts;
+        let vault_key = vault.key();
+        let result = module_hooks::apply_exit_fee(remaining, &crate::ID, &vault_key, assets)?;
+        result.net_assets
+    };
 
     require!(
         assets >= min_assets_out,

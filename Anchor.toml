@@ -10,6 +10,7 @@ svs_2 = "3UrYrxh1HmVgq7WPygZ5x1gNEaWFwqTMs7geNqMnsrtD"
 svs_3 = "EcpnYtaCBrZ4p4uq7dDr55D3fL9nsxbCNqpyUREGpPkh"
 svs_4 = "2WP7LXWqrp1W4CwEJuVt2SxWPNY2n6AYmijh6Z4EeidY"
 svs_5 = "3XQX3ZKGcy618XyWMmQiukYohJNSh3JNWoffq8ZeFdcS"
+svs_6 = "2w7aL5ZrD2i9RpzQBGSPAg7s61wVc8Qs8gtuQUTojEDE"
 svs_12 = "FM3ZfmPSdQzFniZSDXc6FfXKFvXRSNQXeTdPKC8tz5C"
 
 [programs.localnet]
@@ -18,6 +19,7 @@ svs_2 = "3UrYrxh1HmVgq7WPygZ5x1gNEaWFwqTMs7geNqMnsrtD"
 svs_3 = "EcpnYtaCBrZ4p4uq7dDr55D3fL9nsxbCNqpyUREGpPkh"
 svs_4 = "2WP7LXWqrp1W4CwEJuVt2SxWPNY2n6AYmijh6Z4EeidY"
 svs_5 = "3XQX3ZKGcy618XyWMmQiukYohJNSh3JNWoffq8ZeFdcS"
+svs_6 = "2w7aL5ZrD2i9RpzQBGSPAg7s61wVc8Qs8gtuQUTojEDE"
 svs_12 = "FM3ZfmPSdQzFniZSDXc6FfXKFvXRSNQXeTdPKC8tz5C"
 
 [registry]
