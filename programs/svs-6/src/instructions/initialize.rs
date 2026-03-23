@@ -1,7 +1,7 @@
 //! Initialize instruction: create confidential streaming vault with CT-enabled shares mint.
 
 use anchor_lang::prelude::*;
-use anchor_lang::solana_program::program::invoke_signed;
+use anchor_lang::solana_program::program::{invoke, invoke_signed};
 use anchor_spl::{
     associated_token::AssociatedToken,
     token_2022::{
@@ -148,10 +148,9 @@ pub fn handler(
         SHARES_DECIMALS,
     )?;
 
-    invoke_signed(
+    invoke(
         &init_mint_ix,
         &[ctx.accounts.shares_mint.to_account_info()],
-        &[vault_seeds],
     )?;
 
     let clock = Clock::get()?;
@@ -165,7 +164,6 @@ pub fn handler(
     vault.paused = false;
     vault.vault_id = vault_id;
     vault.base_assets = 0;
-    vault.total_shares = 0;
     vault.stream_amount = 0;
     vault.stream_start = 0;
     vault.stream_end = 0;

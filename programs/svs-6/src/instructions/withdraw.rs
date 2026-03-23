@@ -95,7 +95,7 @@ pub fn handler(
     let vault = &mut ctx.accounts.vault;
     vault.checkpoint(now)?;
 
-    let total_shares = vault.total_shares;
+    let total_shares = ctx.accounts.shares_mint.supply;
     let total_assets = vault.base_assets;
 
     // ===== Module Hooks (if enabled) =====
@@ -212,10 +212,6 @@ pub fn handler(
     vault.base_assets = vault
         .base_assets
         .checked_sub(net_assets)
-        .ok_or(VaultError::MathOverflow)?;
-    vault.total_shares = vault
-        .total_shares
-        .checked_sub(shares)
         .ok_or(VaultError::MathOverflow)?;
 
     emit!(WithdrawEvent {

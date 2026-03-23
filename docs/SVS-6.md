@@ -27,12 +27,12 @@ SVS-6 = SVS-5 streaming math + SVS-3 confidential transfer mechanics. Understand
 
 **What is public:**
 - Total vault assets (`asset_vault.amount` — a standard SPL token account)
-- `total_shares` stored in the vault PDA (plaintext aggregate, not individual positions)
-- Share price, calculable from `effective_total_assets(now)` and `total_shares`
+- `shares_mint.supply` (plaintext aggregate, not individual positions)
+- Share price, calculable from `effective_total_assets(now)` and `shares_mint.supply`
 - Streaming state: `base_assets`, `stream_amount`, `stream_start`, `stream_end`
 - Transaction existence (not amounts)
 
-**Why `total_shares` is public**: Token-2022 CT mints do not expose a readable total supply from encrypted balances. SVS-6 maintains a plaintext `total_shares` counter on the vault PDA, updated atomically on every deposit, mint, withdraw, and redeem. This exposes vault-level aggregate metrics but not per-user positions.
+**Why shares supply is public**: Token-2022 CT encrypts individual account balances, not the mint's total supply. `shares_mint.supply` is always accurate and readable on-chain, same as SVS-5.
 
 **Encryption**: ElGamal encryption on each user's shares token account. The user derives their ElGamal keypair from their wallet keypair and the token account address. An optional auditor ElGamal public key can be configured at initialization for regulatory compliance; if set, the auditor can decrypt all user balances.
 
@@ -42,7 +42,7 @@ SVS-6 = SVS-5 streaming math + SVS-3 confidential transfer mechanics. Understand
 |--------|-------------|----------------|-----------------|-------------------|----------------------|
 | **total_assets source** | `asset_vault.amount` | `vault.total_assets` | `asset_vault.amount` | `effective_total_assets(now)` | `effective_total_assets(now)` |
 | **Share balances** | Plaintext | Plaintext | Encrypted (ElGamal) | Plaintext | Encrypted (ElGamal) |
-| **total_shares source** | Mint supply | Mint supply | Vault PDA (cached) | Mint supply | Vault PDA (cached) |
+| **total_shares source** | Mint supply | Mint supply | Mint supply | Mint supply | Mint supply |
 | **Yield distribution** | Instant | Discrete (`sync()`) | Instant | Continuous (linear) | Continuous (linear) |
 | **MEV risk** | None | Front-run `sync()` window | None | None | None |
 | **Withdraw requires ZK proof** | No | No | Yes | No | Yes |
@@ -54,13 +54,13 @@ SVS-6 = SVS-5 streaming math + SVS-3 confidential transfer mechanics. Understand
 
 | Account | Seeds | Purpose |
 |---------|-------|---------|
-| **ConfidentialStreamVault** | `["confidential_stream_vault", asset_mint, vault_id.to_le_bytes()]` | Vault state (326 bytes) |
+| **ConfidentialStreamVault** | `["confidential_stream_vault", asset_mint, vault_id.to_le_bytes()]` | Vault state (318 bytes) |
 | **Shares Mint** | `["shares", vault_pubkey]` | Token-2022 mint with `ConfidentialTransferMint` extension |
 | **Asset Vault** | ATA of (asset_mint, ConfidentialStreamVault PDA) | Holds locked assets + unstreamed yield |
 
 The vault PDA is also set as `confidential_authority` on the shares mint during initialization, enabling it to sign CT operations via CPI.
 
-### State: `ConfidentialStreamVault` Account (326 bytes)
+### State: `ConfidentialStreamVault` Account (318 bytes)
 
 ```rust
 #[account]
@@ -77,7 +77,6 @@ pub struct ConfidentialStreamVault {
 
     // ── Streaming fields (from SVS-5) ──
     pub base_assets: u64,                          // 8 bytes  — assets at last checkpoint
-    pub total_shares: u64,                         // 8 bytes  — cached share count (CT aggregate)
     pub stream_amount: u64,                        // 8 bytes  — yield in current stream period
     pub stream_start: i64,                         // 8 bytes  — unix timestamp: stream begin
     pub stream_end: i64,                           // 8 bytes  — unix timestamp: stream end
@@ -90,11 +89,11 @@ pub struct ConfidentialStreamVault {
     pub _reserved: [u8; 64],                        // 64 bytes — future upgrades
 }
 // Seeds: ["confidential_stream_vault", asset_mint, vault_id.to_le_bytes()]
-// Total: 326 bytes (318 data + 8-byte Anchor discriminator)
+// Total: 318 bytes (318 data + 8-byte Anchor discriminator)
 ```
 
 **Key differences from SVS-5 `StreamVault`:**
-- `total_shares` field added — CT mints cannot expose a readable supply, so the vault tracks it directly
+- Reads `shares_mint.supply` directly (same as SVS-5, CT does not hide mint supply)
 - `auditor_elgamal_pubkey` — optional compliance auditor who can decrypt all share balances
 - `confidential_authority` — set to the vault PDA; authorizes CT inner operations
 - `_reserved` kept at 64 bytes (matching SVS-5) for upgrade headroom
@@ -106,7 +105,7 @@ pub struct ConfidentialStreamVault {
 | SVS-1 `Vault` | 219 bytes | Base |
 | SVS-3 `ConfidentialVault` | 246 bytes | +CT fields |
 | SVS-5 `StreamVault` | 251 bytes | +streaming fields |
-| SVS-6 `ConfidentialStreamVault` | 326 bytes | +CT + streaming + `total_shares` |
+| SVS-6 `ConfidentialStreamVault` | 318 bytes | +CT + streaming |
 
 ## Instructions
 
@@ -132,8 +131,8 @@ pub struct ConfidentialStreamVault {
 | View | Returns | Note |
 |------|---------|------|
 | `total_assets` | `u64` | Returns `effective_total_assets(now)` |
-| `convert_to_shares` | `u64` | Uses `effective_total_assets(now)` and `vault.total_shares` |
-| `convert_to_assets` | `u64` | Uses `effective_total_assets(now)` and `vault.total_shares` |
+| `convert_to_shares` | `u64` | Uses `effective_total_assets(now)` and `shares_mint.supply` |
+| `convert_to_assets` | `u64` | Uses `effective_total_assets(now)` and `shares_mint.supply` |
 | `preview_deposit` | `u64` | Shares for given assets at current stream state |
 | `preview_mint` | `u64` | Assets required for given shares at current stream state |
 | `preview_withdraw` | `u64` | Shares burned for given assets at current stream state |
@@ -178,7 +177,7 @@ The streaming model and CT operate on different layers and do not interfere:
 
 **Streaming math uses public aggregates.** `base_assets`, `stream_amount`, `stream_start`, and `stream_end` are stored in plaintext on the vault PDA. `effective_total_assets(now)` is computed from these fields at transaction time, exactly as in SVS-5.
 
-**Individual balances are encrypted.** The vault knows `total_shares` as a plaintext counter but cannot read any individual user's share count on-chain.
+**Individual balances are encrypted.** The vault reads `shares_mint.supply` for the aggregate but cannot read any individual user's share count on-chain.
 
 **Share conversion is computed in plaintext, applied as CT.** When a user deposits, the program computes `shares = convertToShares(assets, effective_total_assets(now))` using plaintext arithmetic, then mints that integer quantity to the user's CT pending balance. The CT layer encrypts the balance at rest; the conversion math itself is not confidential.
 
@@ -192,7 +191,7 @@ where elapsed = min(now - stream_start, duration)
 
 This matches SVS-5 exactly. No CT involvement in the yield calculation.
 
-**`total_shares` maintenance.** Because CT mints cannot be read for total supply, the vault increments and decrements `total_shares` atomically within each deposit, mint, withdraw, and redeem instruction. This field is used wherever SVS-5 reads `shares_mint.supply`.
+**Total shares.** SVS-6 reads `shares_mint.supply` directly, same as SVS-5. Token-2022 CT encrypts individual account balances but does not hide the mint's total supply.
 
 **`max_withdraw` and `max_redeem` return 0.** The on-chain program cannot decrypt a user's ElGamal-encrypted balance to compute their maximum withdrawal. The SDK resolves this client-side by decrypting the user's available balance using their AES key, then computing the equivalent asset amount using `convertToAssets`.
 
@@ -211,7 +210,7 @@ This matches SVS-5 exactly. No CT involvement in the yield calculation.
    ├─ Mint shares to user's shares account
    ├─ Shares land in PENDING balance (not yet spendable)
    ├─ vault.base_assets += assets
-   └─ vault.total_shares += shares
+   └─ shares_mint.supply updated by mint CPI
 
 3. apply_pending
    ├─ Compute new_decryptable_available_balance client-side
@@ -302,7 +301,7 @@ The withdraw instruction performs three steps in sequence:
 3. Burn shares from non-confidential balance
 4. Transfer assets from asset_vault to user
 5. vault.base_assets -= net_assets
-   vault.total_shares -= shares
+   shares_mint.supply updated by burn CPI
 ```
 
 The program validates that both proof context accounts are owned by `zk_elgamal_proof_program`:
@@ -376,7 +375,7 @@ Deposit and mint do not require ZK proofs. Minting encrypted tokens requires onl
 1. Different account struct: `ConfidentialStreamVault` vs `Vault` or `StreamVault` (different Anchor discriminators)
 2. `withdraw`/`redeem` require `new_decryptable_available_balance` and proof context accounts
 3. View context: `VaultView` only — no `VaultViewWithOwner` (encrypted balances unreadable on-chain)
-4. `total_shares` sourced from vault PDA, not mint supply
+4. `shares_mint.supply` read directly (same as SVS-5)
 
 ```typescript
 import { ConfidentialStreamVault } from '@stbr/svs-privacy-sdk';
@@ -435,14 +434,14 @@ decimals_offset = 9 - asset_decimals  // Ensures 9-decimal precision
 
 ### Conversion
 
-Identical to SVS-5, with `vault.total_shares` in place of `shares_mint.supply`:
+Identical to SVS-5:
 
 ```rust
 // Assets → Shares (floor)
-shares = (assets * (vault.total_shares + offset)) / (effective_total_assets(now) + 1)
+shares = (assets * (shares_mint.supply + offset)) / (effective_total_assets(now) + 1)
 
 // Shares → Assets (floor)
-assets = (shares * (effective_total_assets(now) + 1)) / (vault.total_shares + offset)
+assets = (shares * (effective_total_assets(now) + 1)) / (shares_mint.supply + offset)
 ```
 
 ### Rounding
@@ -487,7 +486,7 @@ Build with `anchor build -- --features modules`. Same caveats as SVS-3: module a
 | Module | SVS-6 Behavior |
 |--------|----------------|
 | **svs-fees** | Entry/exit fees computed on plaintext asset amounts before CT application; fee shares minted to fee_recipient's CT or non-CT balance depending on configuration |
-| **svs-caps** | Global cap checked against `vault.total_shares * share_price` (plaintext). Per-user cap requires user to provide a decrypted balance proof or a plaintext `UserDeposit` tracking PDA |
+| **svs-caps** | Global cap checked against `shares_mint.supply * share_price` (plaintext). Per-user cap requires user to provide a decrypted balance proof or a plaintext `UserDeposit` tracking PDA |
 | **svs-locks** | `ShareLock` PDA stores plaintext lock timestamps; CT does not affect lockup checks |
 | **svs-rewards** | Reward claims are in a separate token; no CT interaction |
 | **svs-access** | Identity-based checks; fully compatible without modification |
@@ -513,9 +512,9 @@ require!(
 );
 ```
 
-### total_shares Integrity
+### Share Supply
 
-`total_shares` is incremented and decremented atomically in every deposit, mint, withdraw, and redeem instruction using checked arithmetic. It is not recomputed from mint supply. Any overflow or underflow returns `MathOverflow` and rolls back the transaction. Consistent maintenance of this field is critical because all share-price conversions depend on it.
+SVS-6 reads `shares_mint.supply` directly from the Token-2022 mint account, same as SVS-5. CT does not hide the mint's total supply — only individual account balances are encrypted.
 
 ### Partial Privacy
 

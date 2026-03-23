@@ -2,7 +2,7 @@
 //!
 //! Combines SVS-5 streaming yield with SVS-3 confidential transfers.
 //! Share balances are encrypted on-chain via Token-2022 Confidential Transfers.
-//! Streaming yield math operates on public aggregate values (base_assets, total_shares).
+//! Streaming yield math operates on public aggregate values (base_assets, shares_mint.supply).
 
 use anchor_lang::prelude::*;
 

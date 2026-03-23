@@ -28,10 +28,6 @@ pub struct ConfidentialStreamVault {
     // ── Streaming fields (from SVS-5) ──
     /// Total assets at last checkpoint (excludes un-accrued stream yield)
     pub base_assets: u64,
-    /// Cached total shares supply. Avoids reload() after mint/burn CPI.
-    /// WARNING: Can desync if shares are burned externally (no freeze authority).
-    /// Callers that need guaranteed accuracy should cross-check shares_mint.supply.
-    pub total_shares: u64,
     /// Yield amount distributing over current stream period
     pub stream_amount: u64,
     /// Unix timestamp when current stream began
@@ -62,7 +58,6 @@ impl ConfidentialStreamVault {
         1 +   // paused
         8 +   // vault_id
         8 +   // base_assets
-        8 +   // total_shares
         8 +   // stream_amount
         8 +   // stream_start
         8 +   // stream_end
@@ -70,7 +65,7 @@ impl ConfidentialStreamVault {
         1 + 32 + // auditor_elgamal_pubkey (Option<[u8; 32]>)
         32 +  // confidential_authority
         64;   // _reserved
-    // Total: 326 bytes (318 + 8 discriminator)
+    // Total: 318 bytes (310 + 8 discriminator)
 
     pub const SEED_PREFIX: &'static [u8] = VAULT_SEED;
 

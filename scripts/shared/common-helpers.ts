@@ -134,14 +134,7 @@ export async function setupTest<T extends Idl = Idl>(
 
   const idl = JSON.parse(fs.readFileSync(idlPath, "utf-8"));
 
-  const programKeypairPath = path.join(__dirname, `../../target/deploy/${svsVariant}-keypair.json`);
-  if (!fs.existsSync(programKeypairPath)) {
-    console.error(`\n  ERROR: Program keypair not found. Run 'anchor build' first.`);
-    process.exit(1);
-  }
-
-  const programKeypair = loadKeypair(programKeypairPath);
-  const programId = programKeypair.publicKey;
+  const programId = new PublicKey(idl.address);
 
   console.log(`  Program ID: ${programId.toBase58()}`);
 

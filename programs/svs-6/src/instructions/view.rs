@@ -19,7 +19,7 @@ pub struct VaultView<'info> {
 
 pub fn preview_deposit(ctx: Context<VaultView>, assets: u64) -> Result<()> {
     let vault = &ctx.accounts.vault;
-    let total_shares = vault.total_shares;
+    let total_shares = ctx.accounts.shares_mint.supply;
     let clock = Clock::get()?;
     let total_assets = vault.effective_total_assets(clock.unix_timestamp)?;
 
@@ -37,7 +37,7 @@ pub fn preview_deposit(ctx: Context<VaultView>, assets: u64) -> Result<()> {
 
 pub fn preview_mint(ctx: Context<VaultView>, shares: u64) -> Result<()> {
     let vault = &ctx.accounts.vault;
-    let total_shares = vault.total_shares;
+    let total_shares = ctx.accounts.shares_mint.supply;
     let clock = Clock::get()?;
     let total_assets = vault.effective_total_assets(clock.unix_timestamp)?;
 
@@ -55,7 +55,7 @@ pub fn preview_mint(ctx: Context<VaultView>, shares: u64) -> Result<()> {
 
 pub fn preview_withdraw(ctx: Context<VaultView>, assets: u64) -> Result<()> {
     let vault = &ctx.accounts.vault;
-    let total_shares = vault.total_shares;
+    let total_shares = ctx.accounts.shares_mint.supply;
     let clock = Clock::get()?;
     let total_assets = vault.effective_total_assets(clock.unix_timestamp)?;
 
@@ -73,7 +73,7 @@ pub fn preview_withdraw(ctx: Context<VaultView>, assets: u64) -> Result<()> {
 
 pub fn preview_redeem(ctx: Context<VaultView>, shares: u64) -> Result<()> {
     let vault = &ctx.accounts.vault;
-    let total_shares = vault.total_shares;
+    let total_shares = ctx.accounts.shares_mint.supply;
     let clock = Clock::get()?;
     let total_assets = vault.effective_total_assets(clock.unix_timestamp)?;
 
@@ -91,7 +91,7 @@ pub fn preview_redeem(ctx: Context<VaultView>, shares: u64) -> Result<()> {
 
 pub fn convert_to_shares_view(ctx: Context<VaultView>, assets: u64) -> Result<()> {
     let vault = &ctx.accounts.vault;
-    let total_shares = vault.total_shares;
+    let total_shares = ctx.accounts.shares_mint.supply;
     let clock = Clock::get()?;
     let total_assets = vault.effective_total_assets(clock.unix_timestamp)?;
 
@@ -109,7 +109,7 @@ pub fn convert_to_shares_view(ctx: Context<VaultView>, assets: u64) -> Result<()
 
 pub fn convert_to_assets_view(ctx: Context<VaultView>, shares: u64) -> Result<()> {
     let vault = &ctx.accounts.vault;
-    let total_shares = vault.total_shares;
+    let total_shares = ctx.accounts.shares_mint.supply;
     let clock = Clock::get()?;
     let total_assets = vault.effective_total_assets(clock.unix_timestamp)?;
 

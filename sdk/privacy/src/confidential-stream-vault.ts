@@ -69,7 +69,7 @@ export interface StreamInfo {
  * via ElGamal, and yield accrues linearly over a configurable stream period.
  *
  * Key differences from SVS-3:
- * - Uses vault.totalShares instead of reading mint supply
+ * - Reads shares_mint.supply for total shares (same as SVS-5)
  * - Uses effectiveTotalAssets(now) for conversions instead of live balance
  * - Supports distributeYield() and checkpoint() for streaming yield
  */
@@ -131,7 +131,6 @@ export class ConfidentialStreamVault {
       vaultId: vault.vaultId,
       auditorElgamalPubkey: vault.auditorElgamalPubkey,
       confidentialAuthority: vault.confidentialAuthority,
-      totalShares: vault.totalShares,
       baseAssets: vault.baseAssets,
       streamAmount: vault.streamAmount,
       streamStart: vault.streamStart,
@@ -552,7 +551,7 @@ export class ConfidentialStreamVault {
    */
   async previewWithdraw(vault: PublicKey, assets: BN): Promise<BN> {
     const vaultState = await this.getVault(vault);
-    const totalShares = vaultState.totalShares;
+    const totalShares = await this.getTotalShares(vaultState.sharesMint);
     const now = new BN(Math.floor(Date.now() / 1000));
     const totalAssets = this.computeEffectiveTotalAssets(vaultState, now);
 
@@ -573,7 +572,7 @@ export class ConfidentialStreamVault {
    */
   async convertToShares(vault: PublicKey, assets: BN): Promise<BN> {
     const vaultState = await this.getVault(vault);
-    const totalShares = vaultState.totalShares;
+    const totalShares = await this.getTotalShares(vaultState.sharesMint);
     const now = new BN(Math.floor(Date.now() / 1000));
     const totalAssets = this.computeEffectiveTotalAssets(vaultState, now);
 
@@ -592,7 +591,7 @@ export class ConfidentialStreamVault {
    */
   async convertToAssets(vault: PublicKey, shares: BN): Promise<BN> {
     const vaultState = await this.getVault(vault);
-    const totalShares = vaultState.totalShares;
+    const totalShares = await this.getTotalShares(vaultState.sharesMint);
     const now = new BN(Math.floor(Date.now() / 1000));
     const totalAssets = this.computeEffectiveTotalAssets(vaultState, now);
 
@@ -607,6 +606,16 @@ export class ConfidentialStreamVault {
   }
 
   // ============ Private Helpers ============
+
+  /**
+   * Get total shares supply from the shares mint account.
+   */
+  private async getTotalShares(sharesMint: PublicKey): Promise<BN> {
+    const mintInfo = await this.connection.getAccountInfo(sharesMint);
+    if (!mintInfo) throw new Error("Shares mint not found");
+    const supply = mintInfo.data.readBigUInt64LE(36);
+    return new BN(supply.toString());
+  }
 
   private computeEffectiveTotalAssets(
     state: ConfidentialStreamVaultState,

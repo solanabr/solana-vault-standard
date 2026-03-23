@@ -75,7 +75,7 @@ pub fn handler(ctx: Context<MintShares>, shares: u64, max_assets_in: u64) -> Res
     let vault = &mut ctx.accounts.vault;
     vault.checkpoint(now)?;
 
-    let total_shares = vault.total_shares;
+    let total_shares = ctx.accounts.shares_mint.supply;
     let total_assets = vault.base_assets;
 
     let assets = convert_to_assets(
@@ -177,10 +177,6 @@ pub fn handler(ctx: Context<MintShares>, shares: u64, max_assets_in: u64) -> Res
     vault.base_assets = vault
         .base_assets
         .checked_add(assets)
-        .ok_or(VaultError::MathOverflow)?;
-    vault.total_shares = vault
-        .total_shares
-        .checked_add(net_shares)
         .ok_or(VaultError::MathOverflow)?;
 
     emit!(DepositEvent {
