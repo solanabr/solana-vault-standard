@@ -5,7 +5,7 @@
 //! The wSOL vault is the vault PDA's associated token account for the native mint.
 
 use anchor_lang::prelude::*;
-use anchor_lang::solana_program::program::invoke_signed;
+use anchor_lang::solana_program::program::{invoke, invoke_signed};
 use anchor_spl::{
     associated_token::AssociatedToken,
     token_2022::{
@@ -125,10 +125,9 @@ pub fn handler(
         SHARES_DECIMALS,
     )?;
 
-    invoke_signed(
+    invoke(
         &init_mint_ix,
         &[ctx.accounts.shares_mint.to_account_info()],
-        &[shares_mint_seeds],
     )?;
 
     // Set vault state
