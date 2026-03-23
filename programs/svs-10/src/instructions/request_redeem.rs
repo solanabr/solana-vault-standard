@@ -42,7 +42,7 @@ pub struct RequestRedeem<'info> {
     #[account(
         mut,
         seeds = [SHARE_ESCROW_SEED, vault.key().as_ref()],
-        bump,
+        bump = vault.share_escrow_bump,
     )]
     pub share_escrow: InterfaceAccount<'info, TokenAccount>,
 

@@ -120,7 +120,7 @@ export async function createAndInitializeVault(
   console.log(`  Vault ID:  ${vaultId.toString()}`);
 
   const initSig = await program.methods
-    .initialize(vaultId, "SVS-10 Test Vault", "SVS10", "")
+    .initialize(vaultId, "SVS-10 Test Vault", "SVS10")
     .accounts({
       authority: payer.publicKey,
       operator: payer.publicKey,

@@ -7,7 +7,7 @@
 use anchor_lang::prelude::*;
 
 use crate::{
-    constants::DEPOSIT_REQUEST_SEED,
+    constants::{DEPOSIT_REQUEST_SEED, OPERATOR_APPROVAL_SEED},
     error::VaultError,
     events::DepositFulfilled,
     state::{AsyncVault, DepositRequest, OperatorApproval, RequestStatus},
@@ -56,6 +56,21 @@ pub fn handler(ctx: Context<FulfillDeposit>, oracle_price: Option<u64>) -> Resul
                 && approval.owner == deposit_request.owner
                 && approval.operator == ctx.accounts.operator.key()
                 && approval.vault == vault.key(),
+            VaultError::OperatorNotApproved
+        );
+        let expected_pda = anchor_lang::solana_program::pubkey::Pubkey::create_program_address(
+            &[
+                OPERATOR_APPROVAL_SEED,
+                vault.key().as_ref(),
+                deposit_request.owner.as_ref(),
+                ctx.accounts.operator.key().as_ref(),
+                &[approval.bump],
+            ],
+            &crate::ID,
+        )
+        .map_err(|_| VaultError::OperatorNotApproved)?;
+        require!(
+            approval.key() == expected_pda,
             VaultError::OperatorNotApproved
         );
     }
@@ -134,18 +149,17 @@ pub fn handler(ctx: Context<FulfillDeposit>, oracle_price: Option<u64>) -> Resul
     deposit_request.status = RequestStatus::Fulfilled;
     deposit_request.fulfilled_at = clock.unix_timestamp;
 
+    // Move assets from pending → fulfilled bucket.
+    // total_assets and total_shares are updated at claim time to avoid
+    // inflating share supply before the mint CPI completes.
     let vault = &mut ctx.accounts.vault;
-    vault.total_assets = vault
-        .total_assets
-        .checked_add(deposit_request.assets_locked)
-        .ok_or(VaultError::MathOverflow)?;
-    vault.total_shares = vault
-        .total_shares
-        .checked_add(net_shares)
-        .ok_or(VaultError::MathOverflow)?;
     vault.total_pending_deposits = vault
         .total_pending_deposits
         .checked_sub(deposit_request.assets_locked)
+        .ok_or(VaultError::MathOverflow)?;
+    vault.total_fulfilled_deposits = vault
+        .total_fulfilled_deposits
+        .checked_add(deposit_request.assets_locked)
         .ok_or(VaultError::MathOverflow)?;
 
     emit!(DepositFulfilled {

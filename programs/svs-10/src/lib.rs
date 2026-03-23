@@ -25,9 +25,8 @@ pub mod svs_10 {
         vault_id: u64,
         name: String,
         symbol: String,
-        uri: String,
     ) -> Result<()> {
-        instructions::initialize::handler(ctx, vault_id, name, symbol, uri)
+        instructions::initialize::handler(ctx, vault_id, name, symbol)
     }
 
     pub fn request_deposit(

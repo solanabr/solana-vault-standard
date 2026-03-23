@@ -13,7 +13,10 @@ use anchor_spl::{
 };
 
 use crate::{
-    constants::{CLAIMABLE_TOKENS_SEED, REDEEM_REQUEST_SEED, SHARE_ESCROW_SEED, VAULT_SEED},
+    constants::{
+        CLAIMABLE_TOKENS_SEED, OPERATOR_APPROVAL_SEED, REDEEM_REQUEST_SEED, SHARE_ESCROW_SEED,
+        VAULT_SEED,
+    },
     error::VaultError,
     events::RedeemFulfilled,
     state::{AsyncVault, OperatorApproval, RedeemRequest, RequestStatus},
@@ -63,7 +66,7 @@ pub struct FulfillRedeem<'info> {
     #[account(
         mut,
         seeds = [SHARE_ESCROW_SEED, vault.key().as_ref()],
-        bump,
+        bump = vault.share_escrow_bump,
     )]
     pub share_escrow: InterfaceAccount<'info, TokenAccount>,
 
@@ -102,6 +105,21 @@ pub fn handler(ctx: Context<FulfillRedeem>, oracle_price: Option<u64>) -> Result
                 && approval.owner == redeem_request.owner
                 && approval.operator == ctx.accounts.operator.key()
                 && approval.vault == vault.key(),
+            VaultError::OperatorNotApproved
+        );
+        let expected_pda = anchor_lang::solana_program::pubkey::Pubkey::create_program_address(
+            &[
+                OPERATOR_APPROVAL_SEED,
+                vault.key().as_ref(),
+                redeem_request.owner.as_ref(),
+                ctx.accounts.operator.key().as_ref(),
+                &[approval.bump],
+            ],
+            &crate::ID,
+        )
+        .map_err(|_| VaultError::OperatorNotApproved)?;
+        require!(
+            approval.key() == expected_pda,
             VaultError::OperatorNotApproved
         );
     }
@@ -175,11 +193,14 @@ pub fn handler(ctx: Context<FulfillRedeem>, oracle_price: Option<u64>) -> Result
     #[cfg(not(feature = "modules"))]
     let net_assets = assets;
 
+    // Exclude both pending deposits (awaiting fulfill) and fulfilled-but-unclaimed
+    // deposits (awaiting claim) — those assets are earmarked for depositors.
     let available = ctx
         .accounts
         .asset_vault
         .amount
         .checked_sub(vault.total_pending_deposits)
+        .and_then(|v| v.checked_sub(vault.total_fulfilled_deposits))
         .ok_or(VaultError::MathOverflow)?;
     require!(available >= net_assets, VaultError::InsufficientLiquidity);
 

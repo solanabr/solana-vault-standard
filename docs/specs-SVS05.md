@@ -1,6 +1,6 @@
 # SVS-5: Streaming Yield Vault
 
-## Status: Draft
+## Status: Implemented (Devnet)
 ## Authors: Superteam Brasil
 ## Date: 2026-03-06
 ## Base: ERC-4626 + Sablier-style continuous yield

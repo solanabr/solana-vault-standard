@@ -24,6 +24,7 @@ pub struct AsyncVault {
     pub bump: u8,
     pub share_escrow_bump: u8,
     pub cancel_after: i64,
+    pub total_fulfilled_deposits: u64,
     pub _reserved: [u8; 64],
 }
 
@@ -45,6 +46,7 @@ impl AsyncVault {
         1 +   // bump
         1 +   // share_escrow_bump
         8 +   // cancel_after
+        8 +   // total_fulfilled_deposits
         64; // _reserved
 
     pub const SEED_PREFIX: &'static [u8] = VAULT_SEED;

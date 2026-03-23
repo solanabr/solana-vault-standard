@@ -207,7 +207,6 @@ describe("SDK Async Vault Module", () => {
         vaultId: 1,
         name: "Async SOL Vault",
         symbol: "aSOL",
-        uri: "https://example.com/vault.json",
       };
 
       expect(params.assetMint).to.be.instanceOf(PublicKey);
@@ -224,26 +223,22 @@ describe("SDK Async Vault Module", () => {
         vaultId: new BN(999),
         name: "BN Vault",
         symbol: "BNV",
-        uri: "https://example.com/bn.json",
       };
 
       expect(params.vaultId).to.be.instanceOf(BN);
       expect((params.vaultId as BN).toNumber()).to.equal(999);
     });
 
-    it("supports metadata strings", () => {
-      const longUri = "https://arweave.net/" + "a".repeat(100);
+    it("supports long name and symbol strings", () => {
       const params: CreateAsyncVaultParams = {
         assetMint: ASSET_MINT,
         operator: OPERATOR,
         vaultId: 1,
         name: "A".repeat(32),
         symbol: "LONG",
-        uri: longUri,
       };
 
       expect(params.name.length).to.equal(32);
-      expect(params.uri.length).to.be.greaterThan(100);
     });
   });
 

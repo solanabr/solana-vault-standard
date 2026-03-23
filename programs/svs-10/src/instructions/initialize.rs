@@ -80,7 +80,6 @@ pub fn handler(
     vault_id: u64,
     name: String,
     symbol: String,
-    _uri: String,
 ) -> Result<()> {
     let asset_decimals = ctx.accounts.asset_mint.decimals;
     require!(
@@ -201,6 +200,7 @@ pub fn handler(
     vault.max_staleness = 0;
     vault.max_deviation_bps = DEFAULT_MAX_DEVIATION_BPS;
     vault.cancel_after = crate::constants::DEFAULT_CANCEL_AFTER;
+    vault.total_fulfilled_deposits = 0;
     vault.bump = vault_bump;
     vault.share_escrow_bump = share_escrow_bump;
     vault._reserved = [0u8; 64];

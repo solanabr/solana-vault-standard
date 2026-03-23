@@ -12,7 +12,7 @@ use anchor_spl::{
 };
 
 use crate::{
-    constants::{DEPOSIT_REQUEST_SEED, VAULT_SEED},
+    constants::{DEPOSIT_REQUEST_SEED, OPERATOR_APPROVAL_SEED, VAULT_SEED},
     error::VaultError,
     events::DepositClaimed,
     state::{AsyncVault, DepositRequest, OperatorApproval, RequestStatus},
@@ -87,6 +87,21 @@ pub fn handler(ctx: Context<ClaimDeposit>) -> Result<()> {
                 && approval.vault == ctx.accounts.vault.key(),
             VaultError::OperatorNotApproved
         );
+        let expected_pda = anchor_lang::solana_program::pubkey::Pubkey::create_program_address(
+            &[
+                OPERATOR_APPROVAL_SEED,
+                ctx.accounts.vault.key().as_ref(),
+                deposit_request.owner.as_ref(),
+                ctx.accounts.claimant.key().as_ref(),
+                &[approval.bump],
+            ],
+            &crate::ID,
+        )
+        .map_err(|_| VaultError::OperatorNotApproved)?;
+        require!(
+            approval.key() == expected_pda,
+            VaultError::OperatorNotApproved
+        );
     }
 
     require!(
@@ -108,6 +123,9 @@ pub fn handler(ctx: Context<ClaimDeposit>) -> Result<()> {
         &[vault.bump],
     ]];
 
+    let assets_locked = deposit_request.assets_locked;
+    let shares_claimable = deposit_request.shares_claimable;
+
     token_2022::mint_to(
         CpiContext::new_with_signer(
             ctx.accounts.token_2022_program.to_account_info(),
@@ -118,8 +136,25 @@ pub fn handler(ctx: Context<ClaimDeposit>) -> Result<()> {
             },
             signer_seeds,
         ),
-        deposit_request.shares_claimable,
+        shares_claimable,
     )?;
+
+    // Shares are now minted — finalize vault accounting.
+    // total_assets and total_shares were intentionally deferred from fulfill_deposit
+    // to prevent share price distortion before the mint is confirmed.
+    let vault = &mut ctx.accounts.vault;
+    vault.total_fulfilled_deposits = vault
+        .total_fulfilled_deposits
+        .checked_sub(assets_locked)
+        .ok_or(VaultError::MathOverflow)?;
+    vault.total_assets = vault
+        .total_assets
+        .checked_add(assets_locked)
+        .ok_or(VaultError::MathOverflow)?;
+    vault.total_shares = vault
+        .total_shares
+        .checked_add(shares_claimable)
+        .ok_or(VaultError::MathOverflow)?;
 
     #[cfg(feature = "modules")]
     {
@@ -133,7 +168,7 @@ pub fn handler(ctx: Context<ClaimDeposit>) -> Result<()> {
         vault: vault.key(),
         owner: deposit_request.owner,
         receiver: deposit_request.receiver,
-        shares: deposit_request.shares_claimable,
+        shares: shares_claimable,
     });
 
     Ok(())

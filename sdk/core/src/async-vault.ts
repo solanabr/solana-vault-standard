@@ -46,7 +46,6 @@ export interface CreateAsyncVaultParams {
   vaultId: BN | number;
   name: string;
   symbol: string;
-  uri: string;
 }
 
 export interface RequestDepositParams {
@@ -219,7 +218,7 @@ export class AsyncVault {
     );
 
     await program.methods
-      .initialize(id, params.name, params.symbol, params.uri)
+      .initialize(id, params.name, params.symbol)
       .accountsStrict({
         authority: provider.wallet.publicKey,
         operator: params.operator,

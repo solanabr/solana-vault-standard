@@ -36,7 +36,7 @@ pub struct CancelRedeem<'info> {
     #[account(
         mut,
         seeds = [SHARE_ESCROW_SEED, vault.key().as_ref()],
-        bump,
+        bump = vault.share_escrow_bump,
     )]
     pub share_escrow: InterfaceAccount<'info, TokenAccount>,
 
@@ -51,25 +51,10 @@ pub struct CancelRedeem<'info> {
     pub redeem_request: Account<'info, RedeemRequest>,
 
     pub token_2022_program: Program<'info, Token2022>,
-    pub clock: Sysvar<'info, Clock>,
     pub system_program: Program<'info, System>,
 }
 
 pub fn handler(ctx: Context<CancelRedeem>) -> Result<()> {
-    let vault = &ctx.accounts.vault;
-    let is_expired = vault.cancel_after > 0
-        && ctx.accounts.clock.unix_timestamp
-            >= ctx
-                .accounts
-                .redeem_request
-                .requested_at
-                .checked_add(vault.cancel_after)
-                .ok_or(VaultError::MathOverflow)?;
-
-    if vault.paused && !is_expired {
-        return Err(VaultError::VaultPaused.into());
-    }
-
     let shares_to_return = ctx.accounts.redeem_request.shares_locked;
 
     let asset_mint_key = ctx.accounts.vault.asset_mint;

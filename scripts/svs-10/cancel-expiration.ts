@@ -75,7 +75,7 @@ async function main() {
   const assetVault = getAssociatedTokenAddressSync(assetMint, vault, true, TOKEN_PROGRAM_ID);
 
   await program.methods
-    .initialize(vaultId, "Cancel Test Vault", "CANCEL", "")
+    .initialize(vaultId, "Cancel Test Vault", "CANCEL")
     .accounts({
       authority: payer.publicKey, operator: payer.publicKey, vault, assetMint,
       sharesMint, assetVault, shareEscrow,

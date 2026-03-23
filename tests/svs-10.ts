@@ -159,7 +159,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
   describe("Initialization", () => {
     it("initializes vault correctly", async () => {
       await program.methods
-        .initialize(vaultId, "Async Vault", "svASYNC", "https://example.com")
+        .initialize(vaultId, "Async Vault", "svASYNC")
         .accountsStrict({
           authority: payer.publicKey,
           operator: operator.publicKey,

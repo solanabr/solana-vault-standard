@@ -103,7 +103,7 @@ async function main() {
   const assetVault = getAssociatedTokenAddressSync(assetMint, vault, true, TOKEN_PROGRAM_ID);
 
   await program.methods
-    .initialize(vaultId, "Inflation Test Vault", "INFLAT", "")
+    .initialize(vaultId, "Inflation Test Vault", "INFLAT")
     .accounts({
       authority: payer.publicKey, operator: payer.publicKey, vault, assetMint,
       sharesMint, assetVault, shareEscrow,

@@ -9,7 +9,7 @@ use anchor_spl::token_interface::{
 };
 
 use crate::{
-    constants::{CLAIMABLE_TOKENS_SEED, REDEEM_REQUEST_SEED, VAULT_SEED},
+    constants::{CLAIMABLE_TOKENS_SEED, OPERATOR_APPROVAL_SEED, REDEEM_REQUEST_SEED, VAULT_SEED},
     error::VaultError,
     events::RedeemClaimed,
     state::{AsyncVault, OperatorApproval, RedeemRequest, RequestStatus},
@@ -82,6 +82,21 @@ pub fn handler(ctx: Context<ClaimRedeem>) -> Result<()> {
                 && approval.owner == redeem_request.owner
                 && approval.operator == ctx.accounts.claimant.key()
                 && approval.vault == ctx.accounts.vault.key(),
+            VaultError::OperatorNotApproved
+        );
+        let expected_pda = anchor_lang::solana_program::pubkey::Pubkey::create_program_address(
+            &[
+                OPERATOR_APPROVAL_SEED,
+                ctx.accounts.vault.key().as_ref(),
+                redeem_request.owner.as_ref(),
+                ctx.accounts.claimant.key().as_ref(),
+                &[approval.bump],
+            ],
+            &crate::ID,
+        )
+        .map_err(|_| VaultError::OperatorNotApproved)?;
+        require!(
+            approval.key() == expected_pda,
             VaultError::OperatorNotApproved
         );
     }
