@@ -18,7 +18,7 @@ impl NavOracleData {
     /// Deserialize from raw account data, skipping the 8-byte Anchor discriminator.
     pub fn try_from_account(account: &AccountInfo) -> Result<Self> {
         let data = account.try_borrow_data()?;
-        require!(data.len() == 8 + Self::LEN, VaultError::OracleInvalidPrice);
+        require!(data.len() >= 8 + Self::LEN, VaultError::OracleInvalidPrice);
         let price_per_share = u64::from_le_bytes(
             data[8..16]
                 .try_into()

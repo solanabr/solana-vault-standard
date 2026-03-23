@@ -76,18 +76,16 @@ pub fn handler(ctx: Context<ApproveDeposit>) -> Result<()> {
     request.shares_claimable = shares;
     request.fulfilled_at = ctx.accounts.clock.unix_timestamp;
 
+    // Move assets from pending → approved bucket.
+    // total_assets and total_shares are updated at claim time after the mint CPI.
     let vault = &mut ctx.accounts.vault;
-    vault.total_assets = vault
-        .total_assets
-        .checked_add(amount_locked)
-        .ok_or(VaultError::MathOverflow)?;
-    vault.total_shares = vault
-        .total_shares
-        .checked_add(shares)
-        .ok_or(VaultError::MathOverflow)?;
     vault.total_pending_deposits = vault
         .total_pending_deposits
         .checked_sub(amount_locked)
+        .ok_or(VaultError::MathOverflow)?;
+    vault.total_approved_deposits = vault
+        .total_approved_deposits
+        .checked_add(amount_locked)
         .ok_or(VaultError::MathOverflow)?;
 
     emit!(InvestmentApproved {

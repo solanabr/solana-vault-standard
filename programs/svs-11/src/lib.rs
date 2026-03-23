@@ -77,6 +77,11 @@ pub mod svs_11 {
         instructions::claim_redeem::handler(ctx)
     }
 
+    /// Manager rejects a pending redemption request.
+    pub fn reject_redeem(ctx: Context<RejectRedeem>, reason_code: u8) -> Result<()> {
+        instructions::reject_redeem::handler(ctx, reason_code)
+    }
+
     /// Investor cancels their pending redemption request.
     pub fn cancel_redeem(ctx: Context<CancelRedeem>) -> Result<()> {
         instructions::cancel_redeem::handler(ctx)

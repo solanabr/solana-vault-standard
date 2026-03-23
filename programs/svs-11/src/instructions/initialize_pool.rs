@@ -100,6 +100,10 @@ pub fn handler(
         ctx.accounts.oracle_program.executable,
         VaultError::OracleInvalidProgram
     );
+    require!(
+        ctx.accounts.attestation_program.executable,
+        VaultError::InvalidAttestationProgram
+    );
 
     let asset_decimals = ctx.accounts.asset_mint.decimals;
     require!(
@@ -233,6 +237,7 @@ pub fn handler(
     vault.bump = vault_bump;
     vault.redemption_escrow_bump = redemption_escrow_bump;
     vault.paused = false;
+    vault.total_approved_deposits = 0;
     vault._reserved = [0u8; 64];
 
     emit!(VaultInitialized {

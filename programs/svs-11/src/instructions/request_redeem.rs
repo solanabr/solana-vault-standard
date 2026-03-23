@@ -1,3 +1,9 @@
+//! Request redeem instruction.
+//!
+//! Intentionally does NOT require investment_window_open — investors should
+//! always be able to signal intent to redeem, regardless of window state.
+//! The manager gates actual execution via approve_redeem.
+
 use anchor_lang::prelude::*;
 use anchor_spl::token_2022::Token2022;
 use anchor_spl::token_interface::{transfer_checked, Mint, TokenAccount, TransferChecked};

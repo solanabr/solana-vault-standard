@@ -15,6 +15,7 @@ pub struct ClaimDeposit<'info> {
     pub investor: Signer<'info>,
 
     #[account(
+        mut,
         seeds = [VAULT_SEED, vault.asset_mint.as_ref(), &vault.vault_id.to_le_bytes()],
         bump = vault.bump,
     )]
@@ -52,6 +53,7 @@ pub struct ClaimDeposit<'info> {
 
 pub fn handler(ctx: Context<ClaimDeposit>) -> Result<()> {
     let shares = ctx.accounts.investment_request.shares_claimable;
+    let amount_locked = ctx.accounts.investment_request.amount_locked;
 
     let asset_mint_key = ctx.accounts.vault.asset_mint;
     let vault_id_bytes = ctx.accounts.vault.vault_id.to_le_bytes();
@@ -75,6 +77,20 @@ pub fn handler(ctx: Context<ClaimDeposit>) -> Result<()> {
         ),
         shares,
     )?;
+
+    let vault = &mut ctx.accounts.vault;
+    vault.total_approved_deposits = vault
+        .total_approved_deposits
+        .checked_sub(amount_locked)
+        .ok_or(VaultError::MathOverflow)?;
+    vault.total_assets = vault
+        .total_assets
+        .checked_add(amount_locked)
+        .ok_or(VaultError::MathOverflow)?;
+    vault.total_shares = vault
+        .total_shares
+        .checked_add(shares)
+        .ok_or(VaultError::MathOverflow)?;
 
     emit!(InvestmentClaimed {
         vault: ctx.accounts.vault.key(),

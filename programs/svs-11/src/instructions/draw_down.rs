@@ -48,6 +48,7 @@ pub fn handler(ctx: Context<DrawDown>, amount: u64) -> Result<()> {
         .deposit_vault
         .amount
         .checked_sub(ctx.accounts.vault.total_pending_deposits)
+        .and_then(|v| v.checked_sub(ctx.accounts.vault.total_approved_deposits))
         .ok_or(VaultError::MathOverflow)?;
     require!(available >= amount, VaultError::InsufficientLiquidity);
 

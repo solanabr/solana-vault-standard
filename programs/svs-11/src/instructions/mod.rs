@@ -10,6 +10,7 @@ pub mod draw_down;
 pub mod initialize_pool;
 pub mod investment_window;
 pub mod reject_deposit;
+pub mod reject_redeem;
 pub mod repay;
 pub mod request_deposit;
 pub mod request_redeem;
@@ -41,6 +42,8 @@ pub use initialize_pool::*;
 pub use investment_window::*;
 #[allow(ambiguous_glob_reexports)]
 pub use reject_deposit::*;
+#[allow(ambiguous_glob_reexports)]
+pub use reject_redeem::*;
 #[allow(ambiguous_glob_reexports)]
 pub use repay::*;
 #[allow(ambiguous_glob_reexports)]

@@ -11,7 +11,10 @@ Pre-audit test suite for SVS-1 (Public Vault) on devnet.
 | **Multi-User** | `multi-user.ts` | Fair share distribution across multiple depositors |
 | **Edge Cases** | `edge-cases.ts` | Error handling: zero amounts, unauthorized access, excess redemption |
 | **Inflation Attack** | `inflation-attack.ts` | Protection against donation-based share manipulation |
-| **Sync Exploit** | `sync.ts` | ⚠️ Tests sync() timing attack vector |
+| **Live Balance** | `live-balance.ts` | Tests live balance behavior: donations, share price, no sync |
+| **Withdraw/Mint** | `withdraw-mint.ts` | Tests withdraw and mint operations with slippage |
+| **View Functions** | `view-functions.ts` | Tests all view functions (empty, funded, paused vault) |
+| **Full Drain** | `full-drain.ts` | Tests complete vault drain and re-deposit scenarios |
 
 ## Quick Start
 
@@ -29,7 +32,10 @@ yarn test-svs1:slippage
 yarn test-svs1:multi-user
 yarn test-svs1:edge-cases
 yarn test-svs1:inflation-attack
-yarn test-svs1:sync-exploit
+yarn test-svs1:live-balance
+yarn test-svs1:withdraw-mint
+yarn test-svs1:view-functions
+yarn test-svs1:full-drain
 ```
 
 ## Test Flow
@@ -68,39 +74,30 @@ yarn test-svs1:sync-exploit
 │     └── Attacker deposits 1 token                               │
 │     └── Attacker donates 1M directly to vault                   │
 │     └── Victim deposits 1000 → gets FAIR shares ✓               │
-│     └── (Protected because sync() not called)                   │
+│     └── Virtual offset protection verified                      │
 │                                                                 │
-│  6. sync.ts ⚠️                                                  │
-│     └── Tests what happens if sync() IS called                  │
-│     └── Donation + sync before victim = EXPLOIT                 │
-│     └── Documents the attack vector for audit                   │
+│  6. live-balance.ts                                             │
+│     └── Donation immediately visible                            │
+│     └── Share price increases after donation                    │
+│     └── New depositor gets fewer shares (fair pricing)          │
+│     └── SVS-1 has no sync() instruction                         │
+│                                                                 │
+│  7. withdraw-mint.ts                                            │
+│     └── mint() happy path + slippage protection                 │
+│     └── withdraw() happy path + slippage protection             │
+│     └── deposit/mint and withdraw/redeem consistency            │
+│                                                                 │
+│  8. view-functions.ts                                           │
+│     └── All view functions on empty vault                       │
+│     └── All view functions on funded vault                      │
+│     └── View functions work when paused                         │
+│                                                                 │
+│  9. full-drain.ts                                               │
+│     └── Single user drain + multi-user drain                    │
+│     └── Re-deposit after drain works                            │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
-
-## Known Issues for Audit
-
-### Sync Timing Attack (sync.ts)
-
-**Severity:** Medium-High (requires authority collusion)
-
-**Attack Flow:**
-1. Attacker deposits minimal amount (1 token)
-2. Attacker donates large amount directly to vault
-3. Authority calls `sync()` (malicious or compromised)
-4. `total_assets` jumps to include donation
-5. Victim deposits → receives almost 0 shares
-6. Attacker's shares now worth entire vault
-
-**Current Mitigations:**
-- `sync()` is admin-only
-- Donations don't affect share price until sync
-
-**Recommended Fixes:**
-- Add timelock to sync()
-- Emit events on significant total_assets changes
-- Consider minimum share output in deposit()
-- Document sync() should only be for legitimate yield
 
 ## File Structure
 
@@ -111,8 +108,11 @@ scripts/svs-1/
 ├── slippage.ts         # Slippage protection test
 ├── multi-user.ts       # Multi-user fairness test
 ├── edge-cases.ts       # Error handling test
-├── inflation-attack.ts # Donation attack test (without sync)
-├── sync.ts             # Sync timing attack test
+├── inflation-attack.ts # Donation attack test (virtual offset protection)
+├── live-balance.ts     # Live balance behavior test
+├── withdraw-mint.ts    # Withdraw and mint operations test
+├── view-functions.ts   # View functions test (empty, funded, paused)
+├── full-drain.ts       # Full drain and re-deposit test
 └── README.md           # This file
 ```
 

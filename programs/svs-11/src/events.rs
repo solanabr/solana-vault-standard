@@ -72,6 +72,14 @@ pub struct RedemptionClaimed {
 }
 
 #[event]
+pub struct RedemptionRejected {
+    pub vault: Pubkey,
+    pub investor: Pubkey,
+    pub shares: u64,
+    pub reason_code: u8,
+}
+
+#[event]
 pub struct RedemptionCancelled {
     pub vault: Pubkey,
     pub investor: Pubkey,

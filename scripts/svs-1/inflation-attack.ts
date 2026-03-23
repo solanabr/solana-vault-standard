@@ -123,8 +123,7 @@ async function main() {
   const vaultBalanceAfterDonation = await getAccount(connection, assetVault);
   const vaultState = await program.account.vault.fetch(vault);
   console.log(`  Asset vault balance: ${Number(vaultBalanceAfterDonation.amount) / 10 ** ASSET_DECIMALS}`);
-  console.log(`  Vault total_assets: ${vaultState.totalAssets.toNumber() / 10 ** ASSET_DECIMALS}`);
-  console.log(`  ⚠️  Mismatch! This is the attack vector.`);
+  console.log(`  ⚠️  Donation bypassed deposit — inflates share price.`);
 
   // Step 3: Victim deposits
   console.log("\n--- Step 3: Victim deposits 1000 tokens ---");
@@ -174,18 +173,11 @@ async function main() {
   Expected fair ratio:           ${expectedRatio}x
   `);
 
-  if (shareRatio < expectedRatio * 0.5) {
-    console.log("  ❌ VULNERABLE: Victim got significantly fewer shares!");
-    console.log("     Donation attack was successful.");
-  } else if (shareRatio >= expectedRatio * 0.9) {
-    console.log("  ✅ PROTECTED: Victim received fair shares!");
-    console.log("     Virtual offset protection is working.");
-  } else {
-    console.log("  ⚠️  PARTIAL: Some impact, but not catastrophic.");
-  }
+  // Note: In SVS-1 live balance, donation inflates share price. Victim gets fewer shares
+  // but each share is worth more. The real test is: does victim lose tokens on redeem?
 
-  // Victim redemption test
-  console.log("\n--- Testing victim redemption ---");
+  // Victim redemption test — the actual protection metric
+  console.log("\n--- Testing victim redemption (the real protection metric) ---");
 
   const victimAssetsBefore = await getAccount(connection, victimAta.address);
 
@@ -209,9 +201,19 @@ async function main() {
   const profitLoss = victimRedeemed - VICTIM_DEPOSIT;
   console.log(`  Result: ${profitLoss >= 0 ? '+' : ''}${profitLoss.toFixed(2)} ${profitLoss >= 0 ? 'profit' : 'loss'}`);
 
+  // Protection threshold: victim loses less than 1% of their deposit
+  const lossPercent = Math.abs(profitLoss) / VICTIM_DEPOSIT * 100;
   console.log("\n" + "=".repeat(70));
-  console.log("  TEST COMPLETE");
+  if (lossPercent < 1) {
+    console.log("  ✅ PROTECTED: Victim redeemed ~full deposit despite donation attack");
+    console.log(`     Loss: ${lossPercent.toFixed(4)}% (virtual offset protection working)`);
+  } else {
+    console.log("  ❌ VULNERABLE: Victim lost significant tokens on redemption");
+    console.log(`     Loss: ${lossPercent.toFixed(2)}%`);
+  }
   console.log("=".repeat(70) + "\n");
+
+  if (lossPercent >= 1) process.exit(1);
 }
 
 main().catch(console.error);
