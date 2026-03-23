@@ -13,7 +13,10 @@ use crate::error::VaultError;
 use crate::events::RedemptionApproved;
 use crate::math;
 use crate::oracle::read_and_validate_oracle;
-use crate::state::{CreditVault, FrozenAccount, RedemptionRequest, RequestStatus};
+use crate::state::{CreditVault, RedemptionRequest, RequestStatus};
+
+#[cfg(feature = "modules")]
+use svs_module_hooks as module_hooks;
 
 #[derive(Accounts)]
 pub struct ApproveRedeem<'info> {
@@ -79,11 +82,12 @@ pub struct ApproveRedeem<'info> {
     /// CHECK: Attestation validated in handler via validate_attestation
     pub attestation: UncheckedAccount<'info>,
 
+    /// CHECK: If data is non-empty, investor is frozen
     #[account(
         seeds = [FROZEN_ACCOUNT_SEED, vault.key().as_ref(), investor.key().as_ref()],
         bump,
     )]
-    pub frozen_check: Option<Account<'info, FrozenAccount>>,
+    pub frozen_check: UncheckedAccount<'info>,
 
     pub asset_token_program: Interface<'info, TokenInterface>,
     pub token_2022_program: Program<'info, Token2022>,
@@ -94,7 +98,7 @@ pub struct ApproveRedeem<'info> {
 pub fn handler(ctx: Context<ApproveRedeem>) -> Result<()> {
     require!(!ctx.accounts.vault.paused, VaultError::VaultPaused);
     require!(
-        ctx.accounts.frozen_check.is_none(),
+        ctx.accounts.frozen_check.data_is_empty(),
         VaultError::AccountFrozen
     );
 
@@ -113,6 +117,14 @@ pub fn handler(ctx: Context<ApproveRedeem>) -> Result<()> {
 
     let shares_locked = ctx.accounts.redemption_request.shares_locked;
     let gross_assets = math::shares_to_assets(shares_locked, price)?;
+
+    #[cfg(feature = "modules")]
+    let gross_assets = {
+        let remaining = ctx.remaining_accounts;
+        let vault_key = ctx.accounts.vault.key();
+        let result = module_hooks::apply_exit_fee(remaining, &crate::ID, &vault_key, gross_assets)?;
+        result.net_assets
+    };
 
     let available = ctx
         .accounts

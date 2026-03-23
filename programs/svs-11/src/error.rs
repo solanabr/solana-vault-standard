@@ -38,6 +38,9 @@ pub enum VaultError {
     #[msg("Investment window is closed")]
     InvestmentWindowClosed,
 
+    #[msg("Investment window is already open")]
+    InvestmentWindowAlreadyOpen,
+
     #[msg("Invalid address: cannot be the zero address")]
     InvalidAddress,
 

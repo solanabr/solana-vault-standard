@@ -7,7 +7,10 @@ use crate::attestation::validate_attestation;
 use crate::constants::{FROZEN_ACCOUNT_SEED, INVESTMENT_REQUEST_SEED, VAULT_SEED};
 use crate::error::VaultError;
 use crate::events::InvestmentRequested;
-use crate::state::{CreditVault, FrozenAccount, InvestmentRequest, RequestStatus};
+use crate::state::{CreditVault, InvestmentRequest, RequestStatus};
+
+#[cfg(feature = "modules")]
+use svs_module_hooks as module_hooks;
 
 #[derive(Accounts)]
 pub struct RequestDeposit<'info> {
@@ -49,11 +52,12 @@ pub struct RequestDeposit<'info> {
     /// CHECK: Validated in handler via validate_attestation
     pub attestation: UncheckedAccount<'info>,
 
+    /// CHECK: If data is non-empty, investor is frozen
     #[account(
         seeds = [FROZEN_ACCOUNT_SEED, vault.key().as_ref(), investor.key().as_ref()],
         bump,
     )]
-    pub frozen_check: Option<Account<'info, FrozenAccount>>,
+    pub frozen_check: UncheckedAccount<'info>,
 
     pub asset_token_program: Interface<'info, TokenInterface>,
     pub system_program: Program<'info, System>,
@@ -63,6 +67,7 @@ pub struct RequestDeposit<'info> {
 pub fn handler(ctx: Context<RequestDeposit>, amount: u64) -> Result<()> {
     let vault = &ctx.accounts.vault;
 
+    require!(!vault.paused, VaultError::VaultPaused);
     require!(
         vault.investment_window_open,
         VaultError::InvestmentWindowClosed
@@ -81,9 +86,31 @@ pub fn handler(ctx: Context<RequestDeposit>, amount: u64) -> Result<()> {
     )?;
 
     require!(
-        ctx.accounts.frozen_check.is_none(),
+        ctx.accounts.frozen_check.data_is_empty(),
         VaultError::AccountFrozen
     );
+
+    #[cfg(feature = "modules")]
+    {
+        let remaining = ctx.remaining_accounts;
+        let vault_key = vault.key();
+        let investor_key = ctx.accounts.investor.key();
+
+        module_hooks::check_deposit_access(remaining, &crate::ID, &vault_key, &investor_key, &[])?;
+
+        let total_assets = vault
+            .total_assets
+            .checked_add(vault.total_pending_deposits)
+            .ok_or(VaultError::MathOverflow)?;
+        module_hooks::check_deposit_caps(
+            remaining,
+            &crate::ID,
+            &vault_key,
+            &investor_key,
+            total_assets,
+            amount,
+        )?;
+    }
 
     transfer_checked(
         CpiContext::new(

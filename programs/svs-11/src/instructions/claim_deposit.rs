@@ -9,6 +9,9 @@ use crate::error::VaultError;
 use crate::events::InvestmentClaimed;
 use crate::state::{CreditVault, InvestmentRequest, RequestStatus};
 
+#[cfg(feature = "modules")]
+use svs_module_hooks as module_hooks;
+
 #[derive(Accounts)]
 pub struct ClaimDeposit<'info> {
     #[account(mut)]
@@ -92,8 +95,16 @@ pub fn handler(ctx: Context<ClaimDeposit>) -> Result<()> {
         .checked_add(shares)
         .ok_or(VaultError::MathOverflow)?;
 
+    #[cfg(feature = "modules")]
+    {
+        let remaining = ctx.remaining_accounts;
+        let vault_key = vault.key();
+        let timestamp = Clock::get()?.unix_timestamp;
+        module_hooks::set_share_lock(remaining, &crate::ID, &vault_key, timestamp)?;
+    }
+
     emit!(InvestmentClaimed {
-        vault: ctx.accounts.vault.key(),
+        vault: vault.key(),
         investor: ctx.accounts.investor.key(),
         shares,
     });

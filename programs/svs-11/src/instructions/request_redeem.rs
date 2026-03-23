@@ -15,7 +15,10 @@ use crate::constants::{
 };
 use crate::error::VaultError;
 use crate::events::RedemptionRequested;
-use crate::state::{CreditVault, FrozenAccount, RedemptionRequest, RequestStatus};
+use crate::state::{CreditVault, RedemptionRequest, RequestStatus};
+
+#[cfg(feature = "modules")]
+use svs_module_hooks as module_hooks;
 
 #[derive(Accounts)]
 pub struct RequestRedeem<'info> {
@@ -57,11 +60,12 @@ pub struct RequestRedeem<'info> {
     /// CHECK: Attestation validated in handler via validate_attestation
     pub attestation: UncheckedAccount<'info>,
 
+    /// CHECK: If data is non-empty, investor is frozen
     #[account(
         seeds = [FROZEN_ACCOUNT_SEED, vault.key().as_ref(), investor.key().as_ref()],
         bump,
     )]
-    pub frozen_check: Option<Account<'info, FrozenAccount>>,
+    pub frozen_check: UncheckedAccount<'info>,
 
     pub token_2022_program: Program<'info, Token2022>,
     pub system_program: Program<'info, System>,
@@ -79,9 +83,27 @@ pub fn handler(ctx: Context<RequestRedeem>, shares: u64) -> Result<()> {
     )?;
 
     require!(
-        ctx.accounts.frozen_check.is_none(),
+        ctx.accounts.frozen_check.data_is_empty(),
         VaultError::AccountFrozen
     );
+
+    #[cfg(feature = "modules")]
+    {
+        let remaining = ctx.remaining_accounts;
+        let vault_key = ctx.accounts.vault.key();
+        let investor_key = ctx.accounts.investor.key();
+
+        module_hooks::check_deposit_access(remaining, &crate::ID, &vault_key, &investor_key, &[])?;
+
+        let current_timestamp = Clock::get()?.unix_timestamp;
+        module_hooks::check_share_lock(
+            remaining,
+            &crate::ID,
+            &vault_key,
+            &investor_key,
+            current_timestamp,
+        )?;
+    }
 
     transfer_checked(
         CpiContext::new(

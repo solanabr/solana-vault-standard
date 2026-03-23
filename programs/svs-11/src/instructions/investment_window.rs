@@ -19,6 +19,10 @@ pub struct InvestmentWindow<'info> {
 
 pub fn open_handler(ctx: Context<InvestmentWindow>) -> Result<()> {
     require!(!ctx.accounts.vault.paused, VaultError::VaultPaused);
+    require!(
+        !ctx.accounts.vault.investment_window_open,
+        VaultError::InvestmentWindowAlreadyOpen
+    );
     ctx.accounts.vault.investment_window_open = true;
     emit!(WindowOpened {
         vault: ctx.accounts.vault.key()
@@ -28,6 +32,10 @@ pub fn open_handler(ctx: Context<InvestmentWindow>) -> Result<()> {
 
 pub fn close_handler(ctx: Context<InvestmentWindow>) -> Result<()> {
     require!(!ctx.accounts.vault.paused, VaultError::VaultPaused);
+    require!(
+        ctx.accounts.vault.investment_window_open,
+        VaultError::InvestmentWindowClosed
+    );
     ctx.accounts.vault.investment_window_open = false;
     emit!(WindowClosed {
         vault: ctx.accounts.vault.key()

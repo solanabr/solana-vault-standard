@@ -79,8 +79,26 @@ pub fn set_manager_handler(ctx: Context<Admin>, new_manager: Pubkey) -> Result<(
     Ok(())
 }
 
+#[derive(Accounts)]
+pub struct UpdateAttester<'info> {
+    #[account(
+        constraint = authority.key() == vault.authority @ VaultError::Unauthorized,
+    )]
+    pub authority: Signer<'info>,
+
+    #[account(
+        mut,
+        seeds = [VAULT_SEED, vault.asset_mint.as_ref(), &vault.vault_id.to_le_bytes()],
+        bump = vault.bump,
+    )]
+    pub vault: Account<'info, CreditVault>,
+
+    /// CHECK: Validated as executable below
+    pub new_attestation_program_account: UncheckedAccount<'info>,
+}
+
 pub fn update_attester_handler(
-    ctx: Context<Admin>,
+    ctx: Context<UpdateAttester>,
     new_attester: Pubkey,
     new_attestation_program: Pubkey,
 ) -> Result<()> {
@@ -91,6 +109,14 @@ pub fn update_attester_handler(
     require!(
         new_attestation_program != Pubkey::default(),
         VaultError::InvalidAddress
+    );
+    require!(
+        ctx.accounts.new_attestation_program_account.key() == new_attestation_program,
+        VaultError::InvalidAttestationProgram
+    );
+    require!(
+        ctx.accounts.new_attestation_program_account.executable,
+        VaultError::InvalidAttestationProgram
     );
 
     let old_attester = ctx.accounts.vault.attester;

@@ -57,6 +57,7 @@ Tokenized vault programs and TypeScript SDK for building yield-bearing vaults on
 | SVS-3 | `EcpnYtaCBrZ4p4uq7dDr55D3fL9nsxbCNqpyUREGpPkh` | Same as devnet |
 | SVS-4 | `2WP7LXWqrp1W4CwEJuVt2SxWPNY2n6AYmijh6Z4EeidY` | Same as devnet |
 | SVS-5 | `3XQX3ZKGcy618XyWMmQiukYohJNSh3JNWoffq8ZeFdcS` | Same as devnet |
+| SVS-6 | `2w7aL5ZrD2i9RpzQBGSPAg7s61wVc8Qs8gtuQUTojEDE` | Same as devnet |
 | SVS-11 | `Bf17gDR2JdKTWdoTWK3Va9YQtkpePRAAVxMCaokj8ZFW` | Same as devnet |
 
 ## Installation
@@ -397,6 +398,7 @@ solana-vault-standard/
 │   ├── svs-3/                    # Private vault, live balance (beta)
 │   ├── svs-4/                    # Private vault, stored balance (beta)
 │   ├── svs-5/                    # Streaming yield vault
+│   ├── svs-6/                    # Streaming private vault
 │   └── svs-11/                   # Credit markets vault (async, oracle NAV, KYC)
 ├── modules/
 │   ├── svs-math/                 # Shared math (mul_div, rounding, conversion)

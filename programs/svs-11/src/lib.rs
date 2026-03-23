@@ -129,7 +129,7 @@ pub mod svs_11 {
 
     /// Update the attestation configuration (attester and attestation program).
     pub fn update_attester(
-        ctx: Context<Admin>,
+        ctx: Context<UpdateAttester>,
         new_attester: Pubkey,
         new_attestation_program: Pubkey,
     ) -> Result<()> {

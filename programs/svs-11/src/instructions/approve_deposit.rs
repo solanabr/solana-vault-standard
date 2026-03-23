@@ -6,7 +6,10 @@ use crate::error::VaultError;
 use crate::events::InvestmentApproved;
 use crate::math;
 use crate::oracle::read_and_validate_oracle;
-use crate::state::{CreditVault, FrozenAccount, InvestmentRequest, RequestStatus};
+use crate::state::{CreditVault, InvestmentRequest, RequestStatus};
+
+#[cfg(feature = "modules")]
+use svs_module_hooks as module_hooks;
 
 #[derive(Accounts)]
 pub struct ApproveDeposit<'info> {
@@ -38,11 +41,12 @@ pub struct ApproveDeposit<'info> {
     /// CHECK: Attestation validated in handler via validate_attestation
     pub attestation: UncheckedAccount<'info>,
 
+    /// CHECK: If data is non-empty, investor is frozen
     #[account(
         seeds = [FROZEN_ACCOUNT_SEED, vault.key().as_ref(), investor.key().as_ref()],
         bump,
     )]
-    pub frozen_check: Option<Account<'info, FrozenAccount>>,
+    pub frozen_check: UncheckedAccount<'info>,
 
     pub clock: Sysvar<'info, Clock>,
 }
@@ -50,7 +54,7 @@ pub struct ApproveDeposit<'info> {
 pub fn handler(ctx: Context<ApproveDeposit>) -> Result<()> {
     require!(!ctx.accounts.vault.paused, VaultError::VaultPaused);
     require!(
-        ctx.accounts.frozen_check.is_none(),
+        ctx.accounts.frozen_check.data_is_empty(),
         VaultError::AccountFrozen
     );
 
@@ -70,6 +74,14 @@ pub fn handler(ctx: Context<ApproveDeposit>) -> Result<()> {
     let amount_locked = ctx.accounts.investment_request.amount_locked;
     let shares = math::assets_to_shares(amount_locked, price)?;
     require!(shares > 0, VaultError::ZeroAmount);
+
+    #[cfg(feature = "modules")]
+    let shares = {
+        let remaining = ctx.remaining_accounts;
+        let vault_key = ctx.accounts.vault.key();
+        let result = module_hooks::apply_entry_fee(remaining, &crate::ID, &vault_key, shares)?;
+        result.net_shares
+    };
 
     let request = &mut ctx.accounts.investment_request;
     request.status = RequestStatus::Approved;
