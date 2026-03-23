@@ -32,7 +32,6 @@ SVS-8 holds a basket of multiple underlying SPL tokens. A single share mint repr
 pub struct MultiAssetVault {
     pub authority: Pubkey,
     pub shares_mint: Pubkey,
-    pub total_shares: u64,
     pub decimals_offset: u8,
     pub bump: u8,
     pub paused: bool,

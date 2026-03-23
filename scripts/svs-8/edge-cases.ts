@@ -44,7 +44,7 @@ async function main() {
   const [oraclePriceA] = getOraclePricePDA(programId, vaultPda, mintA);
   const assetVaultAKeypair = Keypair.generate();
 
-  await program.methods.initialize(vaultId, "Edge Vault", "EDGE", "https://example.com", 6)
+  await program.methods.initialize(vaultId, 6)
     .accountsPartial({ authority: payer.publicKey, sharesMint, tokenProgram: TOKEN_2022_PROGRAM_ID, systemProgram: SystemProgram.programId, rent: SYSVAR_RENT_PUBKEY })
     .rpc();
   console.log("  Vault initialized");
@@ -99,17 +99,17 @@ async function main() {
   await program.methods.depositSingle(new BN(1_000_000), new BN(0)).accountsPartial(depositAccounts).rpc();
   console.log("  Valid deposit done");
 
-  const vault = await program.account.multiAssetVault.fetch(vaultPda);
+  const { getMint } = await import("@solana/spl-token");
+  const mintInfo = await getMint(connection, sharesMintPda, undefined, TOKEN_2022_PROGRAM_ID);
   await expectError(
-    () => program.methods.redeemProportional(vault.totalShares.muln(2), new BN(0))
+    () => program.methods.redeemProportional(new BN(Number(mintInfo.supply) * 2), new BN(0))
       .accountsPartial({ user: payer.publicKey, vault: vaultPda, sharesMint, userSharesAccount: userSharesAta.address, tokenProgram: TOKEN_PROGRAM_ID, sharesTokenProgram: TOKEN_2022_PROGRAM_ID, systemProgram: SystemProgram.programId })
       .remainingAccounts([
+        { pubkey: assetEntryA, isWritable: false, isSigner: false },
         { pubkey: oraclePriceA, isWritable: false, isSigner: false },
         { pubkey: assetVaultAKeypair.publicKey, isWritable: true, isSigner: false },
         { pubkey: userAtaA.address, isWritable: true, isSigner: false },
         { pubkey: mintA, isWritable: false, isSigner: false },
-        { pubkey: vaultPda, isWritable: false, isSigner: false },
-        { pubkey: TOKEN_PROGRAM_ID, isWritable: false, isSigner: false },
       ])
       .rpc(),
     "Redeem more shares than balance"

@@ -69,7 +69,7 @@ async function main() {
   console.log("-".repeat(70));
 
   const initTx = await program.methods
-    .initialize(vaultId, "SVS-8 Test Basket", "BSKT", "https://example.com", 6)
+    .initialize(vaultId, 6)
     .accountsPartial({
       authority: payer.publicKey,
       sharesMint,
@@ -160,14 +160,16 @@ async function main() {
   console.log(`  ✅ Deposit: ${explorerUrl(depositTx)}`);
 
   const vault = await program.account.multiAssetVault.fetch(vaultPda);
-  console.log(`  Total shares: ${vault.totalShares.toString()}`);
+  console.log(`  Vault initialized successfully`);
 
   // Step 8: Redeem proportional
   console.log("\n" + "-".repeat(70));
   console.log("Step 8: Redeeming 50% of shares");
   console.log("-".repeat(70));
 
-  const sharesToRedeem = vault.totalShares.divn(2);
+  const { getMint } = await import("@solana/spl-token");
+  const mintInfo = await getMint(connection, sharesMint, undefined, TOKEN_2022_PROGRAM_ID);
+  const sharesToRedeem = new BN(Number(mintInfo.supply) / 2);
 
   const redeemTx = await program.methods
     .redeemProportional(sharesToRedeem, new BN(0))
@@ -178,18 +180,25 @@ async function main() {
       systemProgram: SystemProgram.programId,
     })
     .remainingAccounts([
+      // Asset A: [AssetEntry, OraclePrice, vault_ata, user_ata, mint]
+      { pubkey: assetEntryA, isWritable: false, isSigner: false },
       { pubkey: oraclePriceA, isWritable: false, isSigner: false },
       { pubkey: assetVaultAKeypair.publicKey, isWritable: true, isSigner: false },
       { pubkey: userAtaA.address, isWritable: true, isSigner: false },
       { pubkey: mintA, isWritable: false, isSigner: false },
-      { pubkey: vaultPda, isWritable: false, isSigner: false },
-      { pubkey: TOKEN_PROGRAM_ID, isWritable: false, isSigner: false },
+      // Asset B: [AssetEntry, OraclePrice, vault_ata, user_ata, mint]
+      { pubkey: assetEntryB, isWritable: false, isSigner: false },
+      { pubkey: oraclePriceB, isWritable: false, isSigner: false },
+      { pubkey: assetVaultBKeypair.publicKey, isWritable: true, isSigner: false },
+      { pubkey: userAtaB.address, isWritable: true, isSigner: false },
+      { pubkey: mintB, isWritable: false, isSigner: false },
     ])
     .rpc();
   console.log(`  ✅ Redeem: ${explorerUrl(redeemTx)}`);
 
   const vaultAfter = await program.account.multiAssetVault.fetch(vaultPda);
-  console.log(`  Shares after redeem: ${vaultAfter.totalShares.toString()}`);
+  const mintAfter = await getMint(connection, sharesMint, undefined, TOKEN_2022_PROGRAM_ID);
+  console.log(`  Shares after redeem: ${mintAfter.supply.toString()}`);
 
   console.log("\n" + "=".repeat(70));
   console.log("  ✅ All steps completed successfully!");
