@@ -18,12 +18,9 @@ pub mod svs_8 {
     pub fn initialize(
         ctx: Context<Initialize>,
         vault_id: u64,
-        name: String,
-        symbol: String,
-        uri: String,
         base_decimals: u8,
     ) -> Result<()> {
-        instructions::initialize::handler(ctx, vault_id, name, symbol, uri, base_decimals)
+        instructions::initialize::handler(ctx, vault_id, base_decimals)
     }
 
     pub fn add_asset(
@@ -52,16 +49,16 @@ pub mod svs_8 {
         instructions::deposit_single::handler(ctx, amount, min_shares_out)
     }
 
-    pub fn deposit_proportional(
-        ctx: Context<DepositProportional>,
+    pub fn deposit_proportional<'info>(
+        ctx: Context<'_, '_, '_, 'info, DepositProportional<'info>>,
         base_amount: u64,
         min_shares_out: u64,
     ) -> Result<()> {
         instructions::deposit_proportional::handler(ctx, base_amount, min_shares_out)
     }
 
-    pub fn redeem_proportional(
-        ctx: Context<RedeemProportional>,
+    pub fn redeem_proportional<'info>(
+        ctx: Context<'_, '_, '_, 'info, RedeemProportional<'info>>,
         shares: u64,
         min_assets_out: u64,
     ) -> Result<()> {

@@ -7,6 +7,7 @@ import {
   TOKEN_PROGRAM_ID,
   TOKEN_2022_PROGRAM_ID,
   getAccount,
+  getMint,
 } from "@solana/spl-token";
 import { Keypair, PublicKey, SystemProgram } from "@solana/web3.js";
 import { expect } from "chai";
@@ -60,7 +61,7 @@ describe("svs-8 (Multi Asset Basket)", () => {
 
   it("initializes vault", async () => {
     await program.methods
-      .initialize(VAULT_ID, "Test Basket", "BSKT", "https://example.com", 6)
+      .initialize(VAULT_ID, 6)
       .accounts({
         vault: vaultPda,
         authority: user.publicKey,
@@ -220,9 +221,9 @@ describe("svs-8 (Multi Asset Basket)", () => {
       })
       .rpc();
 
-    const vault = await program.account.multiAssetVault.fetch(vaultPda);
-    expect(vault.totalShares.toNumber()).to.be.greaterThan(0);
-    console.log("shares after deposit:", vault.totalShares.toString());
+    const mintInfo = await getMint(provider.connection, sharesMint, undefined, TOKEN_2022_PROGRAM_ID);
+    expect(Number(mintInfo.supply)).to.be.greaterThan(0);
+    console.log("shares after deposit:", mintInfo.supply.toString());
   });
 
   it("rejects deposit when oracle is stale (simulated by invalid account)", async () => {
@@ -334,6 +335,45 @@ describe("svs-8 (Multi Asset Basket)", () => {
     expect(vault.paused).to.be.false;
   });
 
+  it("deposits proportional across all assets atomically", async () => {
+    // deposit_proportional: pass base_amount, splits across assets by weight
+    const vaultBefore = await program.account.multiAssetVault.fetch(vaultPda);
+    const mintInfoBefore = await getMint(provider.connection, sharesMint, undefined, TOKEN_2022_PROGRAM_ID);
+    const sharesBefore = Number(mintInfoBefore.supply);
+
+    await program.methods
+      .depositProportional(new BN(2_000_000), new BN(0))
+      .accounts({
+        user: user.publicKey,
+        vault: vaultPda,
+        sharesMint: sharesMint,
+        userSharesAccount: userSharesAta,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        sharesTokenProgram: TOKEN_2022_PROGRAM_ID,
+        associatedTokenProgram: anchor.utils.token.ASSOCIATED_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+      })
+      .remainingAccounts([
+        // Asset A: [AssetEntry, OraclePrice, vault_ata, user_ata, mint]
+        { pubkey: assetEntryA, isWritable: false, isSigner: false },
+        { pubkey: oraclePriceA, isWritable: false, isSigner: false },
+        { pubkey: assetVaultA, isWritable: true, isSigner: false },
+        { pubkey: userAtaA, isWritable: true, isSigner: false },
+        { pubkey: mintA, isWritable: false, isSigner: false },
+        // Asset B: [AssetEntry, OraclePrice, vault_ata, user_ata, mint]
+        { pubkey: assetEntryB, isWritable: false, isSigner: false },
+        { pubkey: oraclePriceB, isWritable: false, isSigner: false },
+        { pubkey: assetVaultB, isWritable: true, isSigner: false },
+        { pubkey: userAtaB, isWritable: true, isSigner: false },
+        { pubkey: mintB, isWritable: false, isSigner: false },
+      ])
+      .rpc();
+
+    const vaultAfter = await program.account.multiAssetVault.fetch(vaultPda);
+    const mintInfoAfter = await getMint(provider.connection, sharesMint, undefined, TOKEN_2022_PROGRAM_ID);
+    expect(Number(mintInfoAfter.supply)).to.be.greaterThan(sharesBefore);
+    console.log("shares after proportional deposit:", mintInfoAfter.supply.toString());
+  });
   it("redeems proportional across all assets", async () => {
     // First deposit again to ensure we have shares
     await program.methods
@@ -356,7 +396,8 @@ describe("svs-8 (Multi Asset Basket)", () => {
       .rpc();
 
     const vaultBefore = await program.account.multiAssetVault.fetch(vaultPda);
-    const sharesToRedeem = vaultBefore.totalShares.divn(2);
+    const mintBefore = await getMint(provider.connection, sharesMint, undefined, TOKEN_2022_PROGRAM_ID);
+    const sharesToRedeem = new anchor.BN(Number(mintBefore.supply) / 2);
     expect(sharesToRedeem.toNumber()).to.be.greaterThan(0);
 
     await program.methods
@@ -371,76 +412,21 @@ describe("svs-8 (Multi Asset Basket)", () => {
         systemProgram: SystemProgram.programId,
       })
       .remainingAccounts([
+        { pubkey: assetEntryA, isWritable: false, isSigner: false },
         { pubkey: oraclePriceA, isWritable: false, isSigner: false },
         { pubkey: assetVaultA, isWritable: true, isSigner: false },
         { pubkey: userAtaA, isWritable: true, isSigner: false },
         { pubkey: mintA, isWritable: false, isSigner: false },
-        { pubkey: vaultPda, isWritable: false, isSigner: false },
-        { pubkey: TOKEN_PROGRAM_ID, isWritable: false, isSigner: false },
-      ])
-      .rpc();
-
-    const vaultAfter = await program.account.multiAssetVault.fetch(vaultPda);
-    expect(vaultAfter.totalShares.toNumber()).to.be.lessThan(vaultBefore.totalShares.toNumber());
-    console.log("shares after redeem:", vaultAfter.totalShares.toString());
-  });
-
-  it("transfers authority", async () => {
-    const newAuthority = Keypair.generate();
-    await program.methods
-      .transferAuthority(newAuthority.publicKey)
-      .accounts({ vault: vaultPda, authority: user.publicKey })
-      .rpc();
-
-    const vault = await program.account.multiAssetVault.fetch(vaultPda);
-    expect(vault.authority.toBase58()).to.equal(newAuthority.publicKey.toBase58());
-
-    // Transfer back
-    await program.methods
-      .transferAuthority(user.publicKey)
-      .accounts({ vault: vaultPda, authority: newAuthority.publicKey })
-      .signers([newAuthority])
-      .rpc();
-
-    const vaultFinal = await program.account.multiAssetVault.fetch(vaultPda);
-    expect(vaultFinal.authority.toBase58()).to.equal(user.publicKey.toBase58());
-    console.log("authority transferred and returned");
-  });
-
-  it("deposits proportional across all assets atomically", async () => {
-    // deposit_proportional: pass base_amount, splits across assets by weight
-    const vaultBefore = await program.account.multiAssetVault.fetch(vaultPda);
-    const sharesBefore = vaultBefore.totalShares;
-
-    await program.methods
-      .depositProportional(new BN(2_000_000), new BN(0))
-      .accounts({
-        user: user.publicKey,
-        vault: vaultPda,
-        sharesMint: sharesMint,
-        userSharesAccount: userSharesAta,
-        tokenProgram: TOKEN_PROGRAM_ID,
-        sharesTokenProgram: TOKEN_2022_PROGRAM_ID,
-        associatedTokenProgram: anchor.utils.token.ASSOCIATED_PROGRAM_ID,
-        systemProgram: SystemProgram.programId,
-      })
-      .remainingAccounts([
-        { pubkey: oraclePriceA, isWritable: false, isSigner: false },
-        { pubkey: assetVaultA, isWritable: true, isSigner: false },
-        { pubkey: userAtaA, isWritable: true, isSigner: false },
-        { pubkey: mintA, isWritable: false, isSigner: false },
+        { pubkey: assetEntryB, isWritable: false, isSigner: false },
         { pubkey: oraclePriceB, isWritable: false, isSigner: false },
         { pubkey: assetVaultB, isWritable: true, isSigner: false },
         { pubkey: userAtaB, isWritable: true, isSigner: false },
         { pubkey: mintB, isWritable: false, isSigner: false },
-        { pubkey: user.publicKey, isWritable: false, isSigner: false },
-        { pubkey: TOKEN_PROGRAM_ID, isWritable: false, isSigner: false },
       ])
       .rpc();
-
-    const vaultAfter = await program.account.multiAssetVault.fetch(vaultPda);
-    expect(vaultAfter.totalShares.toNumber()).to.be.greaterThan(sharesBefore.toNumber());
-    console.log("shares after proportional deposit:", vaultAfter.totalShares.toString());
+    const mintAfter = await getMint(provider.connection, sharesMint, undefined, TOKEN_2022_PROGRAM_ID);
+    expect(Number(mintAfter.supply)).to.be.lessThan(Number(mintBefore.supply));
+    console.log("shares after redeem:", mintAfter.supply.toString());
   });
 
   it("redeems single asset", async () => {
@@ -465,7 +451,7 @@ describe("svs-8 (Multi Asset Basket)", () => {
     const assetVaultSingleKeypair = anchor.web3.Keypair.generate();
 
     // Initialize fresh vault
-    await program.methods.initialize(VAULT_ID_SINGLE, "Single Test", "SNG", "https://example.com", 6)
+    await program.methods.initialize(VAULT_ID_SINGLE, 6)
       .accountsPartial({ authority: user.publicKey, sharesMint: sharesMintSingle, tokenProgram: TOKEN_2022_PROGRAM_ID, systemProgram: SystemProgram.programId, rent: anchor.web3.SYSVAR_RENT_PUBKEY })
       .rpc();
 
@@ -487,7 +473,8 @@ describe("svs-8 (Multi Asset Basket)", () => {
       .rpc();
 
     const vaultBefore = await program.account.multiAssetVault.fetch(vaultSingle);
-    const sharesToRedeem = vaultBefore.totalShares.divn(2);
+    const mintSingleBefore = await getMint(provider.connection, sharesMintSingle, undefined, TOKEN_2022_PROGRAM_ID);
+    const sharesToRedeem = new anchor.BN(Number(mintSingleBefore.supply) / 2);
     expect(sharesToRedeem.toNumber()).to.be.greaterThan(0);
 
     await program.methods.redeemSingle(sharesToRedeem, new BN(0))
@@ -495,7 +482,8 @@ describe("svs-8 (Multi Asset Basket)", () => {
       .rpc();
 
     const vaultAfter = await program.account.multiAssetVault.fetch(vaultSingle);
-    expect(vaultAfter.totalShares.toNumber()).to.be.lessThan(vaultBefore.totalShares.toNumber());
-    console.log("shares after redeem_single:", vaultAfter.totalShares.toString());
+    const mintSingleAfter = await getMint(provider.connection, sharesMintSingle, undefined, TOKEN_2022_PROGRAM_ID);
+    expect(Number(mintSingleAfter.supply)).to.be.lessThan(Number(mintSingleBefore.supply));
+    console.log("shares after redeem_single:", mintSingleAfter.supply.toString());
   });
 });

@@ -4,7 +4,7 @@ use crate::{
     constants::{MAX_ORACLE_STALENESS, MULTI_VAULT_SEED},
     error::VaultError,
     events::RedeemProportional as RedeemSingleEvent,
-    math::{convert_to_assets, oracle_value_for_amount, total_portfolio_value},
+    math::{oracle_value_for_amount, total_portfolio_value},
     state::{AssetEntry, MultiAssetVault, OraclePrice},
 };
 
@@ -18,7 +18,7 @@ pub fn handler(
 ) -> Result<()> {
     require!(!ctx.accounts.vault.paused, VaultError::VaultPaused);
     require!(shares > 0, VaultError::ZeroAmount);
-    require!(shares <= ctx.accounts.vault.total_shares, VaultError::InsufficientShares);
+    require!(shares <= ctx.accounts.shares_mint.supply, VaultError::InsufficientShares);
 
     let clock = Clock::get()?;
     let oracle = &ctx.accounts.oracle_price;
@@ -28,15 +28,14 @@ pub fn handler(
 
     let base_decimals = ctx.accounts.vault.base_decimals;
     let asset_decimals = ctx.accounts.asset_entry.asset_decimals;
-    let total_shares = ctx.accounts.vault.total_shares;
-    let decimals_offset = ctx.accounts.vault.decimals_offset;
+    let total_shares = ctx.accounts.shares_mint.supply;
     let vault_id_bytes = ctx.accounts.vault.vault_id.to_le_bytes();
     let bump = ctx.accounts.vault.bump;
     let vault_key = ctx.accounts.vault.key();
 
     // Compute vault balance value for this asset
     let vault_balance = ctx.accounts.asset_vault_account.amount;
-    let asset_value = oracle_value_for_amount(oracle.price, vault_balance, asset_decimals, base_decimals)?;
+    let _asset_value = oracle_value_for_amount(oracle.price, vault_balance, asset_decimals, base_decimals)?;
 
     // Total portfolio value — use remaining_accounts: [OraclePrice, vault_ata, asset_mint] per other asset
     let mut balances: Vec<u64> = vec![vault_balance];
@@ -61,7 +60,7 @@ pub fn handler(
         decimals_vec.push(dec);
     }
 
-    let total_value = total_portfolio_value(&balances, &prices, &decimals_vec)?;
+    let total_value = total_portfolio_value(&balances, &prices, &decimals_vec, ctx.accounts.vault.base_decimals)?;
 
     // token_amount = vault_balance * shares / total_shares (floor — favors vault)
     // This is equivalent to redeeming the share of this asset proportional to shares burned
@@ -123,8 +122,6 @@ pub fn handler(
         9,
     )?;
 
-    ctx.accounts.vault.total_shares = ctx.accounts.vault.total_shares
-        .checked_sub(shares).ok_or(VaultError::MathOverflow)?;
 
     emit!(RedeemSingleEvent {
         vault: vault_key,

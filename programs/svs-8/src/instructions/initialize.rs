@@ -13,9 +13,6 @@ use crate::{
 pub fn handler(
     ctx: Context<Initialize>,
     vault_id: u64,
-    name: String,
-    symbol: String,
-    _uri: String,
     base_decimals: u8,
 ) -> Result<()> {
     // base_decimals must be <= 9 (same rule as asset decimals)
@@ -24,7 +21,6 @@ pub fn handler(
     let vault = &mut ctx.accounts.vault;
     vault.authority = ctx.accounts.authority.key();
     vault.shares_mint = ctx.accounts.shares_mint.key();
-    vault.total_shares = 0;
     vault.decimals_offset = 9u8.saturating_sub(base_decimals);
     vault.bump = ctx.bumps.vault;
     vault.paused = false;
@@ -41,7 +37,6 @@ pub fn handler(
         base_decimals,
     });
 
-    msg!("SVS-8 vault initialized: {} ({})", name, symbol);
     Ok(())
 }
 

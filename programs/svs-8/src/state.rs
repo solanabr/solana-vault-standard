@@ -9,8 +9,6 @@ pub struct MultiAssetVault {
     pub authority: Pubkey,
     /// LP share token mint (Token-2022)
     pub shares_mint: Pubkey,
-    /// Total shares in circulation
-    pub total_shares: u64,
     /// Virtual offset exponent for inflation attack protection
     pub decimals_offset: u8,
     /// PDA bump seed
@@ -31,7 +29,6 @@ impl MultiAssetVault {
     pub const LEN: usize = 8 +  // discriminator
         32 +  // authority
         32 +  // shares_mint
-        8 +   // total_shares
         1 +   // decimals_offset
         1 +   // bump
         1 +   // paused

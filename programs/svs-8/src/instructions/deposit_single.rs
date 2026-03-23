@@ -10,7 +10,7 @@ use crate::{
     constants::{MIN_DEPOSIT, MULTI_VAULT_SEED, MAX_ORACLE_STALENESS},
     error::VaultError,
     events::DepositSingle as DepositSingleEvent,
-    math::{convert_to_shares, oracle_value_for_amount, total_portfolio_value},
+    math::{convert_to_shares, oracle_value_for_amount, total_portfolio_value, Rounding},
     state::{AssetEntry, MultiAssetVault, OraclePrice},
 };
 
@@ -71,11 +71,10 @@ pub fn handler(
     let total_value = if balances.is_empty() {
         0u64
     } else {
-        total_portfolio_value(&balances, &prices, &decimals)?
+        total_portfolio_value(&balances, &prices, &decimals, ctx.accounts.vault.base_decimals)?
     };
 
-    let offset = 10u64.pow(ctx.accounts.vault.decimals_offset as u32);
-    let shares = convert_to_shares(deposit_value, ctx.accounts.vault.total_shares, total_value, offset)?;
+    let shares = convert_to_shares(deposit_value, total_value, ctx.accounts.shares_mint.supply, ctx.accounts.vault.decimals_offset, Rounding::Floor)?;
     require!(shares >= min_shares_out, VaultError::SlippageExceeded);
     require!(shares > 0, VaultError::ZeroAmount);
 
@@ -112,8 +111,6 @@ pub fn handler(
         9,
     )?;
 
-    ctx.accounts.vault.total_shares = ctx.accounts.vault.total_shares
-        .checked_add(shares).ok_or(VaultError::MathOverflow)?;
 
     emit!(DepositSingleEvent {
         vault: ctx.accounts.vault.key(),
@@ -168,8 +165,7 @@ pub struct DepositSingle<'info> {
     pub user_asset_account: Box<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(
-        init_if_needed,
-        payer = user,
+        mut,
         associated_token::mint = shares_mint,
         associated_token::authority = user,
         associated_token::token_program = shares_token_program,
