@@ -275,6 +275,29 @@ export interface ConfidentialVaultState {
 }
 
 /**
+ * Vault state from SVS-6 (confidential streaming yield)
+ *
+ * Extends ConfidentialVaultState with streaming yield fields.
+ */
+export interface ConfidentialStreamVaultState {
+  authority: PublicKey;
+  assetMint: PublicKey;
+  sharesMint: PublicKey;
+  assetVault: PublicKey;
+  decimalsOffset: number;
+  bump: number;
+  paused: boolean;
+  vaultId: BN;
+  auditorElgamalPubkey: Uint8Array | null;
+  confidentialAuthority: PublicKey;
+  baseAssets: BN;
+  streamAmount: BN;
+  streamStart: BN;
+  streamEnd: BN;
+  lastCheckpoint: BN;
+}
+
+/**
  * User's confidential shares account state
  */
 export interface ConfidentialSharesAccountState {

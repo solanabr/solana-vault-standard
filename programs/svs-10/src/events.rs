@@ -107,3 +107,9 @@ pub struct CancelAfterChanged {
     pub vault: Pubkey,
     pub cancel_after: i64,
 }
+
+#[event]
+pub struct MaxDeviationChanged {
+    pub vault: Pubkey,
+    pub max_deviation_bps: u16,
+}

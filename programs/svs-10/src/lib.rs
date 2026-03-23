@@ -89,6 +89,10 @@ pub mod svs_10 {
         instructions::admin::set_cancel_after(ctx, cancel_after)
     }
 
+    pub fn set_max_deviation_bps(ctx: Context<Admin>, max_deviation_bps: u16) -> Result<()> {
+        instructions::admin::set_max_deviation_bps(ctx, max_deviation_bps)
+    }
+
     pub fn set_operator(
         ctx: Context<SetOperator>,
         operator: Pubkey,
@@ -107,20 +111,20 @@ pub mod svs_10 {
 
     // ============ View Functions ============
 
-    pub fn pending_deposit_request(ctx: Context<VaultView>) -> Result<()> {
-        instructions::view::pending_deposit_request(ctx)
+    pub fn pending_deposit_request(ctx: Context<VaultView>, owner: Pubkey) -> Result<()> {
+        instructions::view::pending_deposit_request(ctx, owner)
     }
 
-    pub fn claimable_deposit_request(ctx: Context<VaultView>) -> Result<()> {
-        instructions::view::claimable_deposit_request(ctx)
+    pub fn claimable_deposit_request(ctx: Context<VaultView>, owner: Pubkey) -> Result<()> {
+        instructions::view::claimable_deposit_request(ctx, owner)
     }
 
-    pub fn pending_redeem_request(ctx: Context<VaultView>) -> Result<()> {
-        instructions::view::pending_redeem_request(ctx)
+    pub fn pending_redeem_request(ctx: Context<VaultView>, owner: Pubkey) -> Result<()> {
+        instructions::view::pending_redeem_request(ctx, owner)
     }
 
-    pub fn claimable_redeem_request(ctx: Context<VaultView>) -> Result<()> {
-        instructions::view::claimable_redeem_request(ctx)
+    pub fn claimable_redeem_request(ctx: Context<VaultView>, owner: Pubkey) -> Result<()> {
+        instructions::view::claimable_redeem_request(ctx, owner)
     }
 
     // ============ Module Admin Instructions (requires "modules" feature) ============

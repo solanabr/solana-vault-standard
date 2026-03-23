@@ -144,6 +144,8 @@ pub fn handler(ctx: Context<FulfillDeposit>, oracle_price: Option<u64>) -> Resul
     #[cfg(not(feature = "modules"))]
     let net_shares = shares;
 
+    require!(net_shares > 0, VaultError::ZeroAmount);
+
     let deposit_request = &mut ctx.accounts.deposit_request;
     deposit_request.shares_claimable = net_shares;
     deposit_request.status = RequestStatus::Fulfilled;

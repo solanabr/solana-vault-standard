@@ -55,7 +55,6 @@ pub struct AsyncVault {
     pub total_pending_deposits: u64,    // 8  — isolated pending deposit liquidity
     pub decimals_offset: u8,            // 1  — 9 - asset_decimals
     pub paused: bool,                   // 1
-    pub max_staleness: i64,             // 8  — max oracle age in seconds
     pub max_deviation_bps: u16,         // 2  — max oracle vs vault price deviation (default 500 = 5%)
     pub bump: u8,                       // 1  — stored vault PDA bump
     pub share_escrow_bump: u8,          // 1  — stored share escrow PDA bump

@@ -19,7 +19,6 @@ pub struct AsyncVault {
     pub total_pending_deposits: u64,
     pub decimals_offset: u8,
     pub paused: bool,
-    pub max_staleness: i64,
     pub max_deviation_bps: u16,
     pub bump: u8,
     pub share_escrow_bump: u8,
@@ -41,7 +40,6 @@ impl AsyncVault {
         8 +   // total_pending_deposits
         1 +   // decimals_offset
         1 +   // paused
-        8 +   // max_staleness
         2 +   // max_deviation_bps
         1 +   // bump
         1 +   // share_escrow_bump

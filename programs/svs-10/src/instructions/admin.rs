@@ -4,7 +4,10 @@ use anchor_lang::prelude::*;
 
 use crate::{
     error::VaultError,
-    events::{AuthorityTransferred, CancelAfterChanged, VaultOperatorChanged, VaultStatusChanged},
+    events::{
+        AuthorityTransferred, CancelAfterChanged, MaxDeviationChanged, VaultOperatorChanged,
+        VaultStatusChanged,
+    },
     state::AsyncVault,
 };
 
@@ -86,6 +89,19 @@ pub fn set_vault_operator(ctx: Context<Admin>, new_operator: Pubkey) -> Result<(
         new_operator,
     });
 
+    Ok(())
+}
+
+pub fn set_max_deviation_bps(ctx: Context<Admin>, max_deviation_bps: u16) -> Result<()> {
+    require!(max_deviation_bps > 0, VaultError::InvalidParameter);
+    require!(max_deviation_bps <= 10_000, VaultError::InvalidParameter);
+
+    ctx.accounts.vault.max_deviation_bps = max_deviation_bps;
+
+    emit!(MaxDeviationChanged {
+        vault: ctx.accounts.vault.key(),
+        max_deviation_bps,
+    });
     Ok(())
 }
 
