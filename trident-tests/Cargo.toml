@@ -33,5 +33,9 @@ name = "fuzz_3"
 path = "fuzz_3/test_fuzz.rs"
 
 [[bin]]
+name = "fuzz_4"
+path = "fuzz_4/test_fuzz.rs"
+
+[[bin]]
 name = "fuzz_svs5"
 path = "fuzz_svs5/test_fuzz.rs"
