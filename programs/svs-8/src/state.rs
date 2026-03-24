@@ -8,6 +8,7 @@ pub struct MultiAssetVault {
     pub shares_mint: Pubkey,
     pub decimals_offset: u8,
     pub bump: u8,
+    pub shares_mint_bump: u8,
     pub paused: bool,
     pub vault_id: u64,
     pub num_assets: u8,
@@ -21,6 +22,7 @@ impl MultiAssetVault {
         32 +  // shares_mint
         1 +   // decimals_offset
         1 +   // bump
+        1 +   // shares_mint_bump
         1 +   // paused
         8 +   // vault_id
         1 +   // num_assets

@@ -6,13 +6,13 @@ use anchor_spl::{
 };
 
 use crate::{
-    constants::{VAULT_SEED, WEIGHT_DENOMINATOR},
+    constants::{MIN_DEPOSIT_AMOUNT, VAULT_SEED, WEIGHT_DENOMINATOR},
     error::VaultError,
     events::ProportionalDeposit,
     math::{
         asset_value_in_base, mul_div, portfolio_convert_to_shares, total_portfolio_value, Rounding,
     },
-    remaining::{read_token_balance, ParsedAssetEntry},
+    remaining::{read_token_balance, validate_token_program, ParsedAssetEntry},
     state::MultiAssetVault,
 };
 
@@ -55,6 +55,7 @@ pub fn handler<'info>(
     min_shares_out: u64,
 ) -> Result<()> {
     require!(base_amount > 0, VaultError::ZeroAmount);
+    require!(base_amount >= MIN_DEPOSIT_AMOUNT, VaultError::DepositTooSmall);
 
     let vault = &ctx.accounts.vault;
     let num_assets = vault.num_assets as usize;
@@ -98,10 +99,7 @@ pub fn handler<'info>(
         balances.push(read_token_balance(&vault_data)?);
 
         let oracle_data = oracle_info.try_borrow_data()?;
-        let price = crate::instructions::deposit_single::read_mock_oracle_price(
-            &oracle_data,
-            clock.unix_timestamp,
-        )?;
+        let price = crate::oracle::read_mock_oracle_price(&oracle_data, clock.unix_timestamp)?;
         prices.push(price);
         asset_decimals_vec.push(entry.asset_decimals);
 
@@ -138,9 +136,19 @@ pub fn handler<'info>(
         Rounding::Floor,
     )?;
 
+    require!(shares > 0, VaultError::ZeroAmount);
     require!(shares >= min_shares_out, VaultError::SlippageExceeded);
 
-    // Execute transfers (need to re-read entry data for decimals)
+    // Collect asset mints from first pass for validation
+    let mut asset_mints = Vec::with_capacity(num_assets);
+    for i in 0..num_assets {
+        let base = i * 6;
+        let entry_info = &ctx.remaining_accounts[base];
+        let entry_data = entry_info.try_borrow_data()?;
+        let entry = ParsedAssetEntry::from_account_data(&entry_data)?;
+        asset_mints.push(entry.asset_mint);
+    }
+
     for i in 0..num_assets {
         if transfer_amounts[i] == 0 {
             continue;
@@ -150,6 +158,12 @@ pub fn handler<'info>(
         let mint_info = &ctx.remaining_accounts[base + 3];
         let user_ata_info = &ctx.remaining_accounts[base + 4];
         let token_program_info = &ctx.remaining_accounts[base + 5];
+
+        require!(
+            *mint_info.key == asset_mints[i],
+            VaultError::InvalidAssetVault
+        );
+        validate_token_program(token_program_info.key)?;
 
         transfer_checked(
             CpiContext::new(

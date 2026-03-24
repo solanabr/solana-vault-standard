@@ -10,6 +10,7 @@ use crate::{
     error::VaultError,
     events::SingleDeposit,
     math::{asset_value_in_base, portfolio_convert_to_shares, total_portfolio_value, Rounding},
+    oracle::read_mock_oracle_price,
     remaining::{read_token_balance, ParsedAssetEntry},
     state::{AssetEntry, MultiAssetVault},
 };
@@ -126,9 +127,12 @@ pub fn handler(ctx: Context<DepositSingle>, amount: u64, min_shares_out: u64) ->
 
     let total_value = total_portfolio_value(&balances, &prices, &decimals)?;
 
+    let deposit_idx = ctx.accounts.deposit_asset_entry.index as usize;
+    require!(deposit_idx < num_assets, VaultError::InvalidAssetEntry);
+
     let deposit_value = asset_value_in_base(
         amount,
-        prices[ctx.accounts.deposit_asset_entry.index as usize],
+        prices[deposit_idx],
         ctx.accounts.deposit_asset_entry.asset_decimals,
     )?;
 
@@ -141,6 +145,7 @@ pub fn handler(ctx: Context<DepositSingle>, amount: u64, min_shares_out: u64) ->
         Rounding::Floor,
     )?;
 
+    require!(shares > 0, VaultError::ZeroAmount);
     require!(shares >= min_shares_out, VaultError::SlippageExceeded);
 
     transfer_checked(
@@ -184,33 +189,4 @@ pub fn handler(ctx: Context<DepositSingle>, amount: u64, min_shares_out: u64) ->
     });
 
     Ok(())
-}
-
-/// Read price from a simple mock oracle account format:
-/// [price: u64 (8 bytes), updated_at: i64 (8 bytes)]
-pub fn read_mock_oracle_price(data: &[u8], current_timestamp: i64) -> Result<u64> {
-    if data.len() < 16 {
-        return Err(error!(VaultError::OracleInvalid));
-    }
-    let price = u64::from_le_bytes(
-        data[0..8]
-            .try_into()
-            .map_err(|_| error!(VaultError::OracleInvalid))?,
-    );
-    let updated_at = i64::from_le_bytes(
-        data[8..16]
-            .try_into()
-            .map_err(|_| error!(VaultError::OracleInvalid))?,
-    );
-
-    require!(price > 0, VaultError::OracleInvalid);
-
-    svs_oracle::validate_freshness(
-        updated_at,
-        current_timestamp,
-        crate::constants::MAX_ORACLE_STALENESS,
-    )
-    .map_err(|_| error!(VaultError::OracleStale))?;
-
-    Ok(price)
 }

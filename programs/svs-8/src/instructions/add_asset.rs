@@ -8,6 +8,7 @@ use crate::{
     constants::{ASSET_ENTRY_SEED, MAX_ASSETS, VAULT_SEED, WEIGHT_DENOMINATOR},
     error::VaultError,
     events::AssetAdded,
+    remaining::ParsedAssetEntry,
     state::{AssetEntry, MultiAssetVault},
 };
 
@@ -57,21 +58,20 @@ pub fn handler(ctx: Context<AddAsset>, target_weight_bps: u16, oracle_type: u8) 
 
     require!(vault.num_assets < MAX_ASSETS, VaultError::MaxAssetsExceeded);
 
-    // Sum existing weights from remaining_accounts
+    require!(
+        ctx.remaining_accounts.len() == vault.num_assets as usize,
+        VaultError::InvalidRemainingAccounts
+    );
+
+    let vault_key = vault.key();
     let mut current_total_weight: u16 = 0;
     for account_info in ctx.remaining_accounts.iter() {
         let data = account_info.try_borrow_data()?;
-        if data.len() < AssetEntry::LEN {
-            return Err(error!(VaultError::InvalidAssetEntry));
-        }
-        // Skip 8-byte discriminator, then skip vault(32) + asset_mint(32) + asset_vault(32) + oracle(32) + oracle_type(1)
-        // target_weight_bps is at offset 8 + 32 + 32 + 32 + 32 + 1 = 137
-        let weight_bytes: [u8; 2] = data[137..139]
-            .try_into()
-            .map_err(|_| error!(VaultError::InvalidAssetEntry))?;
-        let weight = u16::from_le_bytes(weight_bytes);
+        let entry = ParsedAssetEntry::from_account_data(&data)?;
+        entry.validate_pda(account_info.key, &vault_key, &crate::ID)?;
+
         current_total_weight = current_total_weight
-            .checked_add(weight)
+            .checked_add(entry.target_weight_bps)
             .ok_or(error!(VaultError::MathOverflow))?;
     }
 

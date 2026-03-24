@@ -100,6 +100,7 @@ pub fn handler(ctx: Context<Initialize>, vault_id: u64, base_decimals: u8) -> Re
         .checked_sub(base_decimals)
         .ok_or(VaultError::MathOverflow)?;
     vault.bump = vault_bump;
+    vault.shares_mint_bump = shares_mint_bump;
     vault.paused = false;
     vault.vault_id = vault_id;
     vault.num_assets = 0;

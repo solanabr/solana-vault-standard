@@ -2,6 +2,10 @@ use anchor_lang::prelude::*;
 
 use crate::{constants::ASSET_ENTRY_SEED, error::VaultError, state::AssetEntry};
 
+/// Byte offset of `target_weight_bps` in serialized AssetEntry account data.
+/// 8 (discriminator) + 32 (vault) + 32 (asset_mint) + 32 (asset_vault) + 32 (oracle) + 1 (oracle_type) = 137
+pub const TARGET_WEIGHT_BPS_OFFSET: usize = 137;
+
 /// Parsed asset entry data from raw account bytes.
 pub struct ParsedAssetEntry {
     pub vault: Pubkey,
@@ -69,6 +73,16 @@ impl ParsedAssetEntry {
         require!(self.vault == *vault_key, VaultError::InvalidAssetEntry);
         Ok(())
     }
+}
+
+/// Validate that an account is a known token program (SPL Token or Token-2022).
+pub fn validate_token_program(key: &Pubkey) -> Result<()> {
+    use crate::constants::{SPL_TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID};
+    require!(
+        *key == SPL_TOKEN_PROGRAM_ID || *key == TOKEN_2022_PROGRAM_ID,
+        VaultError::InvalidAssetVault
+    );
+    Ok(())
 }
 
 /// Read token account balance from raw account data (SPL Token layout).

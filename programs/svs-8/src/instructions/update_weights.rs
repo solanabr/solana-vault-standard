@@ -4,7 +4,7 @@ use crate::{
     constants::{VAULT_SEED, WEIGHT_DENOMINATOR},
     error::VaultError,
     events::WeightsUpdated,
-    remaining::ParsedAssetEntry,
+    remaining::{ParsedAssetEntry, TARGET_WEIGHT_BPS_OFFSET},
     state::MultiAssetVault,
 };
 
@@ -49,12 +49,10 @@ pub fn handler(ctx: Context<UpdateWeights>, new_weights: Vec<u16>) -> Result<()>
             entry.validate_pda(account_info.key, &vault_key, &crate::ID)?;
         }
 
-        // Write new weight directly into account data
-        // target_weight_bps is at offset 137 (2 bytes LE)
         let mut data = account_info.try_borrow_mut_data()?;
         let weight_bytes = new_weights[i].to_le_bytes();
-        data[137] = weight_bytes[0];
-        data[138] = weight_bytes[1];
+        data[TARGET_WEIGHT_BPS_OFFSET] = weight_bytes[0];
+        data[TARGET_WEIGHT_BPS_OFFSET + 1] = weight_bytes[1];
     }
 
     emit!(WeightsUpdated {

@@ -5,6 +5,7 @@ pub mod error;
 pub mod events;
 pub mod instructions;
 pub mod math;
+pub mod oracle;
 pub mod remaining;
 pub mod state;
 

@@ -9,7 +9,7 @@ use crate::{
     error::VaultError,
     events::ProportionalRedeem,
     math::{mul_div, Rounding},
-    remaining::{read_token_balance, ParsedAssetEntry},
+    remaining::{read_token_balance, validate_token_program, ParsedAssetEntry},
     state::MultiAssetVault,
 };
 
@@ -125,6 +125,8 @@ pub fn handler<'info>(
         let mint_info = &ctx.remaining_accounts[base + 2];
         let user_ata_info = &ctx.remaining_accounts[base + 3];
         let token_program_info = &ctx.remaining_accounts[base + 4];
+
+        validate_token_program(token_program_info.key)?;
 
         transfer_checked(
             CpiContext::new_with_signer(

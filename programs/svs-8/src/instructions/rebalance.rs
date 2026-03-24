@@ -59,6 +59,11 @@ pub fn handler<'info>(
         VaultError::InvalidRemainingAccounts
     );
 
+    require!(
+        ctx.accounts.from_asset_entry.key() != ctx.accounts.to_asset_entry.key(),
+        VaultError::InvalidAssetEntry
+    );
+
     let from_before = ctx.accounts.from_asset_vault.amount;
     let to_before = ctx.accounts.to_asset_vault.amount;
 
