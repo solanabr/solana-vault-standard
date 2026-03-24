@@ -156,6 +156,11 @@ async function main() {
       associatedTokenProgram: anchor.utils.token.ASSOCIATED_PROGRAM_ID,
       systemProgram: SystemProgram.programId,
     })
+    .remainingAccounts([
+      { pubkey: assetEntryB, isWritable: false, isSigner: false },
+      { pubkey: oraclePriceB, isWritable: false, isSigner: false },
+      { pubkey: assetVaultBKeypair.publicKey, isWritable: true, isSigner: false },
+    ])
     .rpc();
   console.log(`  ✅ Deposit: ${explorerUrl(depositTx)}`);
 
