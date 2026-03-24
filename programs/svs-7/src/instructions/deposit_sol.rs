@@ -143,7 +143,10 @@ pub fn handler(ctx: Context<DepositSol>, lamports: u64, min_shares_out: u64) -> 
         ctx.accounts.token_program.key,
         ctx.accounts.wsol_vault.to_account_info().key,
     )?;
-    invoke(&sync_ix, &[ctx.accounts.wsol_vault.to_account_info()])?;
+    invoke(
+        &sync_ix,
+        &[ctx.accounts.wsol_vault.to_account_info()],
+    )?;
 
     // 5c. Reload wSOL account data after sync so subsequent reads are accurate
     ctx.accounts.wsol_vault.reload()?;
@@ -151,7 +154,11 @@ pub fn handler(ctx: Context<DepositSol>, lamports: u64, min_shares_out: u64) -> 
     // Prepare vault PDA signer seeds for mint_to
     let vault_id_bytes = ctx.accounts.vault.vault_id.to_le_bytes();
     let bump = ctx.accounts.vault.bump;
-    let signer_seeds: &[&[&[u8]]] = &[&[SOL_VAULT_SEED, vault_id_bytes.as_ref(), &[bump]]];
+    let signer_seeds: &[&[&[u8]]] = &[&[
+        SOL_VAULT_SEED,
+        vault_id_bytes.as_ref(),
+        &[bump],
+    ]];
 
     // 5d. Mint shares to user
     token_2022::mint_to(

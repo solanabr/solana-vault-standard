@@ -33,7 +33,10 @@ pub mod svs_7 {
 
     /// Initialize a new native SOL vault.
     /// Creates the SolVault PDA, Token-2022 shares mint, and wSOL vault account.
-    pub fn initialize(ctx: Context<Initialize>, vault_id: u64) -> Result<()> {
+    pub fn initialize(
+        ctx: Context<Initialize>,
+        vault_id: u64,
+    ) -> Result<()> {
         instructions::initialize::handler(ctx, vault_id)
     }
 
@@ -42,7 +45,11 @@ pub mod svs_7 {
     /// Deposit native SOL and receive vault shares.
     /// The vault wraps SOL to wSOL internally via sync_native.
     /// Returns shares minted (floor rounding — favors vault).
-    pub fn deposit_sol(ctx: Context<DepositSol>, lamports: u64, min_shares_out: u64) -> Result<()> {
+    pub fn deposit_sol(
+        ctx: Context<DepositSol>,
+        lamports: u64,
+        min_shares_out: u64,
+    ) -> Result<()> {
         instructions::deposit_sol::handler(ctx, lamports, min_shares_out)
     }
 
@@ -64,7 +71,11 @@ pub mod svs_7 {
 
     /// Redeem exact shares for native SOL.
     /// Assets received computed with floor rounding (favors vault).
-    pub fn redeem_sol(ctx: Context<RedeemSol>, shares: u64, min_lamports_out: u64) -> Result<()> {
+    pub fn redeem_sol(
+        ctx: Context<RedeemSol>,
+        shares: u64,
+        min_lamports_out: u64,
+    ) -> Result<()> {
         instructions::redeem_sol::handler(ctx, shares, min_lamports_out)
     }
 
@@ -72,7 +83,11 @@ pub mod svs_7 {
 
     /// Deposit pre-wrapped wSOL and receive vault shares.
     /// No sync_native needed — standard SPL transfer.
-    pub fn deposit_wsol(ctx: Context<DepositWsol>, amount: u64, min_shares_out: u64) -> Result<()> {
+    pub fn deposit_wsol(
+        ctx: Context<DepositWsol>,
+        amount: u64,
+        min_shares_out: u64,
+    ) -> Result<()> {
         instructions::deposit_wsol::handler(ctx, amount, min_shares_out)
     }
 
@@ -92,7 +107,11 @@ pub mod svs_7 {
     }
 
     /// Redeem exact shares for wSOL (no unwrap).
-    pub fn redeem_wsol(ctx: Context<RedeemWsol>, shares: u64, min_assets_out: u64) -> Result<()> {
+    pub fn redeem_wsol(
+        ctx: Context<RedeemWsol>,
+        shares: u64,
+        min_assets_out: u64,
+    ) -> Result<()> {
         instructions::redeem_wsol::handler(ctx, shares, min_assets_out)
     }
 
@@ -233,7 +252,10 @@ pub mod svs_7 {
     }
 
     #[cfg(feature = "modules")]
-    pub fn update_lock_config(ctx: Context<UpdateLockConfig>, lock_duration: i64) -> Result<()> {
+    pub fn update_lock_config(
+        ctx: Context<UpdateLockConfig>,
+        lock_duration: i64,
+    ) -> Result<()> {
         instructions::module_admin::update_lock_config(ctx, lock_duration)
     }
 
