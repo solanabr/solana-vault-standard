@@ -120,6 +120,7 @@ pub fn handler(ctx: Context<Deposit>, assets: u64, min_shares_out: u64) -> Resul
         )?
     };
 
+    require!(net_shares > 0, VaultError::ZeroAmount);
     require!(net_shares >= min_shares_out, VaultError::SlippageExceeded);
 
     transfer_checked(
