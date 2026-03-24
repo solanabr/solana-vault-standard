@@ -93,7 +93,7 @@ pub fn handler(ctx: Context<RequestRedeem>, shares: u64) -> Result<()> {
         let vault_key = ctx.accounts.vault.key();
         let investor_key = ctx.accounts.investor.key();
 
-        module_hooks::check_deposit_access(remaining, &crate::ID, &vault_key, &investor_key, &[])?;
+        module_hooks::check_access(remaining, &crate::ID, &vault_key, &investor_key, &[])?;
 
         let current_timestamp = Clock::get()?.unix_timestamp;
         module_hooks::check_share_lock(
