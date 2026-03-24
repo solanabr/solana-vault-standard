@@ -7,6 +7,5 @@ address = "SVS1VauLt1111111111111111111111111111111111"
 program = "../target/deploy/svs_1.so"
 
 [[fuzz.programs]]
-address = "CpjFjyxRwTGYxR6JWXpfQ1923z5wVwpyBvgPFjm9jamJ"
-program = "../target/deploy/svs_10.so"
- 
+address = "6v6FHxx26oqjJEjZa3S2XiuWSuDbYScd9VB7kLa4yzmE"
+program = "../target/deploy/svs_7.so"

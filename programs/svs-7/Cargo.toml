@@ -1,0 +1,32 @@
+[package]
+name = "svs-7"
+version = "0.1.0"
+description = "SVS-7: Native SOL Vault - accepts/returns native SOL with internal wSOL accounting"
+edition = "2021"
+license = "MIT"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "svs_7"
+
+[features]
+default = []
+cpi = ["no-entrypoint"]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
+modules = ["svs-module-hooks", "svs-fees", "svs-caps", "svs-locks", "svs-access", "constant_time_eq", "blake3"]
+
+[dependencies]
+anchor-lang = "0.31.1"
+anchor-spl = { version = "0.31.1", features = ["token", "associated_token", "metadata"] }
+spl-token-2022 = "6.0.0"
+constant_time_eq = { workspace = true, optional = true }
+blake3 = { workspace = true, optional = true }
+svs-math = { path = "../../modules/svs-math" }
+svs-fees = { path = "../../modules/svs-fees", optional = true }
+svs-caps = { path = "../../modules/svs-caps", optional = true }
+svs-locks = { path = "../../modules/svs-locks", optional = true }
+svs-access = { path = "../../modules/svs-access", optional = true }
+svs-module-hooks = { path = "../../modules/svs-module-hooks", optional = true }
