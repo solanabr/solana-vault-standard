@@ -5,7 +5,7 @@ use anchor_lang::prelude::*;
 use crate::{
     error::VaultError,
     events::{AuthorityTransferred, VaultStatusChanged},
-    state::StreamVault,
+    state::SolVault,
 };
 
 #[derive(Accounts)]
@@ -16,13 +16,12 @@ pub struct Admin<'info> {
     pub authority: Signer<'info>,
 
     #[account(mut)]
-    pub vault: Account<'info, StreamVault>,
+    pub vault: Account<'info, SolVault>,
 }
 
 /// Pause all vault operations (emergency circuit breaker)
 pub fn pause(ctx: Context<Admin>) -> Result<()> {
     let vault = &mut ctx.accounts.vault;
-
     require!(!vault.paused, VaultError::VaultPaused);
 
     vault.paused = true;
@@ -38,7 +37,6 @@ pub fn pause(ctx: Context<Admin>) -> Result<()> {
 /// Unpause vault operations
 pub fn unpause(ctx: Context<Admin>) -> Result<()> {
     let vault = &mut ctx.accounts.vault;
-
     require!(vault.paused, VaultError::VaultNotPaused);
 
     vault.paused = false;
@@ -51,9 +49,13 @@ pub fn unpause(ctx: Context<Admin>) -> Result<()> {
     Ok(())
 }
 
-/// Transfer vault authority to new address
+/// Transfer vault authority to a new address
 pub fn transfer_authority(ctx: Context<Admin>, new_authority: Pubkey) -> Result<()> {
-    require!(new_authority != Pubkey::default(), VaultError::Unauthorized);
+    require!(
+        new_authority != Pubkey::default(),
+        VaultError::InvalidAuthority
+    );
+
     let vault = &mut ctx.accounts.vault;
     let previous_authority = vault.authority;
 
@@ -67,3 +69,4 @@ pub fn transfer_authority(ctx: Context<Admin>, new_authority: Pubkey) -> Result<
 
     Ok(())
 }
+

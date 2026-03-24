@@ -83,6 +83,8 @@ pub fn handler(ctx: Context<ApproveDeposit>) -> Result<()> {
         result.net_shares
     };
 
+    require!(shares > 0, VaultError::ZeroAmount);
+
     let request = &mut ctx.accounts.investment_request;
     request.status = RequestStatus::Approved;
     request.shares_claimable = shares;

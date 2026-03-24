@@ -126,6 +126,8 @@ pub fn handler(ctx: Context<ApproveRedeem>) -> Result<()> {
         result.net_assets
     };
 
+    require!(gross_assets > 0, VaultError::ZeroAmount);
+
     let available = ctx
         .accounts
         .deposit_vault
