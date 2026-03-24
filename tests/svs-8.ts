@@ -219,6 +219,11 @@ describe("svs-8 (Multi Asset Basket)", () => {
         associatedTokenProgram: anchor.utils.token.ASSOCIATED_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
       })
+      .remainingAccounts([
+        { pubkey: assetEntryB, isWritable: false, isSigner: false },
+        { pubkey: oraclePriceB, isWritable: false, isSigner: false },
+        { pubkey: assetVaultB, isWritable: true, isSigner: false },
+      ])
       .rpc();
 
     const mintInfo = await getMint(provider.connection, sharesMint, undefined, TOKEN_2022_PROGRAM_ID);
@@ -393,6 +398,11 @@ describe("svs-8 (Multi Asset Basket)", () => {
         associatedTokenProgram: anchor.utils.token.ASSOCIATED_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
       })
+      .remainingAccounts([
+        { pubkey: assetEntryB, isWritable: false, isSigner: false },
+        { pubkey: oraclePriceB, isWritable: false, isSigner: false },
+        { pubkey: assetVaultB, isWritable: true, isSigner: false },
+      ])
       .rpc();
 
     const vaultBefore = await program.account.multiAssetVault.fetch(vaultPda);

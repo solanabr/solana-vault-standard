@@ -61,6 +61,16 @@ pub struct RedeemProportional {
 }
 
 #[event]
+pub struct RedeemSingle {
+    pub vault: Pubkey,
+    pub caller: Pubkey,
+    pub asset_mint: Pubkey,
+    pub shares: u64,
+    pub assets_out: u64,
+    pub redeem_value: u64,
+}
+
+#[event]
 pub struct VaultStatusChanged {
     pub vault: Pubkey,
     pub paused: bool,

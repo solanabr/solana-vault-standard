@@ -39,6 +39,8 @@ pub fn handler<'info>(
         VaultError::AssetNotFound
     );
     let num_assets = ctx.remaining_accounts.len() / 5;
+    // FIX P1: all basket assets must be provided
+    require!(num_assets == ctx.accounts.vault.num_assets as usize, VaultError::AssetNotFound);
 
     struct AssetSnapshot {
         mint_key: Pubkey,
@@ -47,6 +49,7 @@ pub fn handler<'info>(
         price: u64,
         vault_ta_key: Pubkey,
         user_ta_key: Pubkey,
+        token_program_key: Pubkey,
         idx: usize,
     }
 
@@ -84,6 +87,8 @@ pub fn handler<'info>(
 
         let vault_balance = crate::math::read_token_balance(vault_ta_ai)?;
 
+        let mint_ai = &ctx.remaining_accounts[i * 5 + 4];
+        let token_program_key = *mint_ai.owner;
         snapshots.push(AssetSnapshot {
             mint_key: asset_entry.asset_mint,
             asset_dec: asset_entry.asset_decimals,
@@ -91,6 +96,7 @@ pub fn handler<'info>(
             price: oracle.price,
             vault_ta_key: vault_ta_ai.key(),
             user_ta_key: user_ta_ai.key(),
+            token_program_key,
             idx: i,
         });
     }
@@ -113,7 +119,7 @@ pub fn handler<'info>(
         let vault_key = vault_key;
         let user_key = ctx.accounts.user.key();
         module_hooks::check_deposit_access(remaining, &crate::ID, &vault_key, &user_key, &[])?;
-        module_hooks::check_share_lock(remaining, &crate::ID, &vault_key, &user_key)?;
+        module_hooks::check_share_lock(remaining, &crate::ID, &vault_key, &user_key, clock.unix_timestamp)?;
         let result = module_hooks::apply_exit_fee(remaining, &crate::ID, &vault_key, gross_value)?;
         result.net_assets
     };
@@ -157,6 +163,7 @@ pub fn handler<'info>(
                 ctx.remaining_accounts[idx * 5 + 4].clone(), // mint
                 ctx.remaining_accounts[idx * 5 + 3].clone(), // user_ata (to)
                 ctx.accounts.vault.to_account_info(),         // vault PDA (authority)
+                ctx.remaining_accounts[idx * 5 + 4].clone(),     // token program (per-asset)
             ],
             signer_seeds,
         )?;

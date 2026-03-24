@@ -49,26 +49,54 @@ pub fn handler(
     let mut prices: Vec<u64> = vec![];
     let mut decimals: Vec<u8> = vec![];
 
-    let mut i = 0;
-    while i + 1 < ctx.remaining_accounts.len() {
-        let oracle_info = &ctx.remaining_accounts[i];
-        let vault_ta_info = &ctx.remaining_accounts[i + 1];
+    // FIX P0: layout changed to [AssetEntry, OraclePrice, vault_ata] per other asset
+    // FIX P1: completeness check — all basket assets must be provided (including deposited one)
+    require!(
+        ctx.remaining_accounts.len() % 3 == 0,
+        VaultError::AssetNotFound
+    );
+    let num_other = ctx.remaining_accounts.len() / 3;
+    require!(
+        num_other + 1 == ctx.accounts.vault.num_assets as usize,
+        VaultError::AssetNotFound
+    );
 
-        // Read OraclePrice account
-        // Deserialize OraclePrice using Anchor's AccountDeserialize — no raw offsets
+    let mut i = 0;
+    while i + 2 < ctx.remaining_accounts.len() + 1 && i / 3 < num_other {
+        let asset_entry_info = &ctx.remaining_accounts[i];
+        let oracle_info      = &ctx.remaining_accounts[i + 1];
+        let vault_ta_info    = &ctx.remaining_accounts[i + 2];
+
+        // Owner checks before deserialization
+        let svs8_id = crate::ID;
+        let spl_token = anchor_spl::token::ID;
+        let spl_token_2022 = anchor_spl::token_2022::ID;
+        require!(asset_entry_info.owner == &svs8_id, VaultError::InvalidOracle);
+        require!(oracle_info.owner == &svs8_id, VaultError::InvalidOracle);
+        require!(
+            vault_ta_info.owner == &spl_token || vault_ta_info.owner == &spl_token_2022,
+            VaultError::AssetNotFound
+        );
+        // Validate vault_ta matches asset_entry.asset_vault
+        // Validate AssetEntry belongs to this vault
+        let other_entry = AssetEntry::try_deserialize(&mut &asset_entry_info.try_borrow_data()?[..])?;
+        require!(other_entry.vault == ctx.accounts.vault.key(), VaultError::InvalidOracle);
+        require!(vault_ta_info.key() == other_entry.asset_vault, VaultError::AssetNotFound);
+
         let oracle = OraclePrice::from_account_info(oracle_info)?;
         require!(oracle.vault == ctx.accounts.vault.key(), VaultError::InvalidOracle);
+        require!(oracle.asset_mint == other_entry.asset_mint, VaultError::InvalidOracle);
         let age = clock.unix_timestamp.saturating_sub(oracle.updated_at) as u64;
         require!(age <= MAX_ORACLE_STALENESS, VaultError::OracleStale);
         require!(oracle.price > 0, VaultError::InvalidOracle);
         prices.push(oracle.price);
 
-        // Read token account balance using typed helper
         let balance = crate::math::read_token_balance(vault_ta_info)?;
         balances.push(balance);
-        decimals.push(asset_decimals);
+        // FIX P0: use per-asset decimals from AssetEntry, not deposited asset decimals
+        decimals.push(other_entry.asset_decimals);
 
-        i += 2;
+        i += 3;
     }
 
     let total_value = if balances.is_empty() {

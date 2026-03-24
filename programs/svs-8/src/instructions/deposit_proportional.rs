@@ -38,6 +38,8 @@ pub fn handler<'info>(
         VaultError::AssetNotFound
     );
     let num_assets = ctx.remaining_accounts.len() / 5;
+    // FIX P1: all basket assets must be provided
+    require!(num_assets == ctx.accounts.vault.num_assets as usize, VaultError::AssetNotFound);
 
     struct AssetSnapshot {
         weight_bps: u16,
@@ -49,6 +51,7 @@ pub fn handler<'info>(
         user_ta_key: Pubkey,
         token_amount: u64,
         deposit_value: u64,
+        token_program_key: Pubkey,
         idx: usize,
     }
 
@@ -76,6 +79,8 @@ pub fn handler<'info>(
         // Typed deserialization
         let asset_entry = { let d = asset_entry_ai.try_borrow_data()?; AssetEntry::try_deserialize(&mut &d[..])? };
         require!(asset_entry.vault == vault_key, VaultError::InvalidOracle);
+        // FIX P0: validate vault_ta matches asset_entry.asset_vault
+        require!(vault_ta_ai.key() == asset_entry.asset_vault, VaultError::AssetNotFound);
 
         let oracle = { let d = oracle_ai.try_borrow_data()?; OraclePrice::try_deserialize(&mut &d[..])? };
         require!(oracle.vault == vault_key, VaultError::InvalidOracle);
@@ -111,6 +116,8 @@ pub fn handler<'info>(
         let deposit_value = oracle_value_for_amount(oracle.price, token_amount, asset_dec, base_decimals)?;
         total_deposit_value = total_deposit_value.checked_add(deposit_value).ok_or(VaultError::MathOverflow)?;
 
+        let mint_ai = &ctx.remaining_accounts[i * 5 + 4];
+        let token_program_key = *mint_ai.owner;
         snapshots.push(AssetSnapshot {
             weight_bps,
             asset_dec,
@@ -121,6 +128,7 @@ pub fn handler<'info>(
             user_ta_key: user_ta_ai.key(),
             token_amount,
             deposit_value,
+            token_program_key,
             idx: i,
         });
     }
@@ -158,7 +166,7 @@ pub fn handler<'info>(
     // Execute transfers using remaining_accounts only
     for i in 0..num_assets {
         let idx = snapshots[i].idx;
-        let token_program_key = ctx.accounts.token_program.key();
+        let token_program_key = snapshots[i].token_program_key;
         let ix = anchor_spl::token_interface::spl_token_2022::instruction::transfer_checked(
             &token_program_key,
             &snapshots[i].user_ta_key,
@@ -176,7 +184,7 @@ pub fn handler<'info>(
                 ctx.remaining_accounts[idx * 5 + 4].clone(), // mint
                 ctx.remaining_accounts[idx * 5 + 2].clone(), // vault_ata
                 ctx.accounts.user.to_account_info(),
-                ctx.accounts.token_program.to_account_info(),
+                ctx.remaining_accounts[idx * 5 + 4].clone(), // token_program via mint owner
             ],
         )?;
     }

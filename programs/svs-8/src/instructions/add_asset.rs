@@ -14,24 +14,16 @@ pub fn handler(ctx: Context<AddAsset>, target_weight_bps: u16) -> Result<()> {
     require!(ctx.accounts.vault.num_assets < MAX_ASSETS, VaultError::MaxAssetsExceeded);
 
     // Sum weights from remaining_accounts (existing AssetEntry accounts)
+    // FIX P1: typed deserialization with owner + vault checks instead of raw byte offsets
+    let svs8_id = crate::ID;
     let mut current_total_weight: u16 = 0;
-    for i in 0..ctx.remaining_accounts.len() {
-        let info = ctx.remaining_accounts.get(i).ok_or(VaultError::AssetNotFound)?;
-        let data = info.try_borrow_data()?;
-        // Skip discriminator (8 bytes), read vault pubkey (32), skip asset_mint (32),
-        // skip asset_vault (32), skip oracle (32), then read target_weight_bps (2)
-        if data.len() >= 8 + 32 + 32 + 32 + 32 + 2 {
-            let weight_bytes: [u8; 2] = data[8+32+32+32+32..8+32+32+32+32+2].try_into()
-                .map_err(|_| VaultError::MathOverflow)?;
-            // Verify this entry belongs to our vault
-            let entry_vault_bytes: [u8; 32] = data[8..8+32].try_into()
-                .map_err(|_| VaultError::MathOverflow)?;
-            if entry_vault_bytes == vault_key.to_bytes() {
-                let weight = u16::from_le_bytes(weight_bytes);
-                current_total_weight = current_total_weight
-                    .checked_add(weight)
-                    .ok_or(VaultError::MathOverflow)?;
-            }
+    for info in ctx.remaining_accounts.iter() {
+        require!(info.owner == &svs8_id, VaultError::InvalidOracle);
+        let entry = AssetEntry::try_deserialize(&mut &info.try_borrow_data()?[..])?;
+        if entry.vault == vault_key {
+            current_total_weight = current_total_weight
+                .checked_add(entry.target_weight_bps)
+                .ok_or(VaultError::MathOverflow)?;
         }
     }
 

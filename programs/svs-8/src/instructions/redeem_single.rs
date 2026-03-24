@@ -3,10 +3,13 @@ use anchor_spl::token_interface::{burn_checked, BurnChecked, Mint, TokenAccount,
 use crate::{
     constants::{MAX_ORACLE_STALENESS, MULTI_VAULT_SEED},
     error::VaultError,
-    events::RedeemProportional as RedeemSingleEvent,
+    events::RedeemSingle as RedeemSingleEvent,
     math::{oracle_value_for_amount, total_portfolio_value},
     state::{AssetEntry, MultiAssetVault, OraclePrice},
 };
+
+#[cfg(feature = "modules")]
+use svs_module_hooks as module_hooks;
 
 /// Redeem shares for a single specific asset.
 /// The user burns shares and receives only the chosen asset,
@@ -37,8 +40,6 @@ pub fn handler(
     let vault_balance = ctx.accounts.asset_vault_account.amount;
     let _asset_value = oracle_value_for_amount(oracle.price, vault_balance, asset_decimals, base_decimals)?;
 
-    // Total portfolio value — use remaining_accounts: [OraclePrice, vault_ata, asset_mint] per other asset
-
 #[cfg(feature = "modules")]
 use svs_module_hooks as module_hooks;
     let mut balances: Vec<u64> = vec![vault_balance];
@@ -46,21 +47,47 @@ use svs_module_hooks as module_hooks;
     let mut decimals_vec: Vec<u8> = vec![asset_decimals];
 
     let rem = ctx.remaining_accounts;
+    // FIX P1: layout [AssetEntry, OraclePrice, vault_ata] per other asset
+    // completeness check
+    require!(rem.len() % 3 == 0, VaultError::AssetNotFound);
     let num_other = rem.len() / 3;
+    require!(
+        num_other + 1 == ctx.accounts.vault.num_assets as usize,
+        VaultError::AssetNotFound
+    );
+    let svs8_id = crate::ID;
+    let spl_token = anchor_spl::token::ID;
+    let spl_token_2022 = anchor_spl::token_2022::ID;
     for i in 0..num_other {
-        let other_oracle = OraclePrice::from_account_info(&rem[i * 3])?;
+        let asset_entry_info = &rem[i * 3];
+        let oracle_info      = &rem[i * 3 + 1];
+        let vault_ta_info    = &rem[i * 3 + 2];
+
+        // FIX P1: owner checks before deserialization
+        require!(asset_entry_info.owner == &svs8_id, VaultError::InvalidOracle);
+        require!(oracle_info.owner == &svs8_id, VaultError::InvalidOracle);
+        require!(
+            vault_ta_info.owner == &spl_token || vault_ta_info.owner == &spl_token_2022,
+            VaultError::AssetNotFound
+        );
+
+        let other_entry = AssetEntry::try_deserialize(&mut &asset_entry_info.try_borrow_data()?[..])?;
+        require!(other_entry.vault == ctx.accounts.vault.key(), VaultError::InvalidOracle);
+        // FIX P1: validate vault_ta matches asset_entry.asset_vault
+        require!(vault_ta_info.key() == other_entry.asset_vault, VaultError::AssetNotFound);
+
+        let other_oracle = OraclePrice::from_account_info(oracle_info)?;
+        require!(other_oracle.vault == ctx.accounts.vault.key(), VaultError::InvalidOracle);
+        require!(other_oracle.asset_mint == other_entry.asset_mint, VaultError::InvalidOracle);
         let other_age = clock.unix_timestamp.saturating_sub(other_oracle.updated_at) as u64;
         require!(other_age <= MAX_ORACLE_STALENESS, VaultError::OracleStale);
         require!(other_oracle.price > 0, VaultError::InvalidOracle);
 
-        let bal = crate::math::read_token_balance(&rem[i * 3 + 1])?;
-        let mint_data = rem[i * 3 + 2].try_borrow_data()?;
-        let dec = if mint_data.len() > 44 { mint_data[44] } else { 6u8 };
-        drop(mint_data);
-
+        let bal = crate::math::read_token_balance(vault_ta_info)?;
+        // FIX P1: use per-asset decimals from AssetEntry (no hardcoded fallback)
         balances.push(bal);
         prices.push(other_oracle.price);
-        decimals_vec.push(dec);
+        decimals_vec.push(other_entry.asset_decimals);
     }
 
     let total_value = total_portfolio_value(&balances, &prices, &decimals_vec, ctx.accounts.vault.base_decimals)?;
@@ -75,9 +102,14 @@ use svs_module_hooks as module_hooks;
             .checked_div(total_shares as u128).ok_or(VaultError::DivisionByZero)? as u64
     };
 
-    let redeem_value = total_value
-        .checked_mul(shares as u64).unwrap_or(u64::MAX)
-        .checked_div(total_shares).unwrap_or(0);
+    // FIX P0: no unwrap_or — propagate overflow as error
+    let redeem_value = if total_shares == 0 {
+        0u64
+    } else {
+        (total_value as u128)
+            .checked_mul(shares as u128).ok_or(VaultError::MathOverflow)?
+            .checked_div(total_shares as u128).ok_or(VaultError::DivisionByZero)? as u64
+    };
 
     // ===== Module Hooks (if enabled) =====
     #[cfg(feature = "modules")]
@@ -86,7 +118,7 @@ use svs_module_hooks as module_hooks;
         let vault_key = ctx.accounts.vault.key();
         let user_key = ctx.accounts.user.key();
         module_hooks::check_deposit_access(remaining, &crate::ID, &vault_key, &user_key, &[])?;
-        module_hooks::check_share_lock(remaining, &crate::ID, &vault_key, &user_key)?;
+        module_hooks::check_share_lock(remaining, &crate::ID, &vault_key, &user_key, clock.unix_timestamp)?;
         let result = module_hooks::apply_exit_fee(remaining, &crate::ID, &vault_key, token_amount)?;
         result.net_assets
     };
@@ -110,7 +142,7 @@ use svs_module_hooks as module_hooks;
         &ctx.accounts.user_asset_account.key(),
         &vault_key,
         &[],
-        token_amount,
+        net_token_amount, // FIX P0: use post-fee amount
         asset_decimals,
     )?;
 
@@ -144,8 +176,10 @@ use svs_module_hooks as module_hooks;
     emit!(RedeemSingleEvent {
         vault: vault_key,
         caller: ctx.accounts.user.key(),
+        asset_mint: ctx.accounts.asset_mint.key(),
         shares,
-        total_value: redeem_value,
+        assets_out: net_token_amount,
+        redeem_value,
     });
 
     Ok(())
