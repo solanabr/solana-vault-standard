@@ -25,6 +25,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - shares_mint.supply as source of truth (no redundant total_shares field)
 - 110 tests passing (localnet)
 
+#### SVS-5: Streaming Yield Vault
+- **programs/svs-5**: Time-interpolated yield distribution vault using `distribute_yield(amount, duration)` + `checkpoint()`
+- **sdk/core/streaming-vault.ts**: `StreamingVault` SDK class with `distributeYield()`, `checkpoint()`, `getStreamInfo()`, `effectiveTotalAssets()`
+- **scripts/svs-5/**: 9 devnet test scripts (basic, slippage, multi-user, edge-cases, inflation-attack, live-balance, withdraw-mint, view-functions, full-drain)
+- **trident-tests/fuzz_svs5**: 1,524-line fuzz test with 31 flows and 13 end invariants covering streaming yield, fees, caps, locks, access control, inflation attacks, and timing edge cases
+- SVS-5 uses `svs-module-hooks` crate for module integration (same pattern as SVS-1)
+- Program ID (devnet): `3XQX3ZKGcy618XyWMmQiukYohJNSh3JNWoffq8ZeFdcS`
 
 ## [0.3.0] - 2026-03-06
 

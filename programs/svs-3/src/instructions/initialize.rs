@@ -166,7 +166,6 @@ pub fn handler(
     vault.asset_mint = ctx.accounts.asset_mint.key();
     vault.shares_mint = ctx.accounts.shares_mint.key();
     vault.asset_vault = ctx.accounts.asset_vault.key();
-    vault.total_assets = 0;
     vault.decimals_offset = MAX_DECIMALS - asset_decimals;
     vault.bump = vault_bump;
     vault.paused = false;
