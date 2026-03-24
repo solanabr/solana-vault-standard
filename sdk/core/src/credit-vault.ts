@@ -698,7 +698,7 @@ export class CreditVault {
     decimalsOffset: number,
   ): bigint {
     const offset = BigInt(10 ** decimalsOffset);
-    return (assets * (totalShares + offset)) / (totalAssets + 1n);
+    return (assets * (totalShares + offset)) / (totalAssets + BigInt(1));
   }
 
   convertToAssets(
@@ -708,7 +708,7 @@ export class CreditVault {
     decimalsOffset: number,
   ): bigint {
     const offset = BigInt(10 ** decimalsOffset);
-    return (shares * (totalAssets + 1n)) / (totalShares + offset);
+    return (shares * (totalAssets + BigInt(1))) / (totalShares + offset);
   }
 
   async previewInvestment(assets: BN): Promise<BN> {

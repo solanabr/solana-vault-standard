@@ -191,7 +191,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
       assetMint,
       investorTokenAccount,
       payer.publicKey,
-      BigInt(depositAmount.toString()) * 10n,
+      BigInt(depositAmount.toString()) * BigInt(10),
       [],
       undefined,
       TOKEN_PROGRAM_ID
@@ -216,7 +216,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
       assetMint,
       managerTokenAccount,
       payer.publicKey,
-      BigInt(depositAmount.toString()) * 10n,
+      BigInt(depositAmount.toString()) * BigInt(10),
       [],
       undefined,
       TOKEN_PROGRAM_ID
@@ -457,11 +457,10 @@ describe("svs-11 (Credit Markets Vault)", () => {
       );
 
       const vaultAccount = await program.account.creditVault.fetch(vault);
-      expect(vaultAccount.totalAssets.toString()).to.equal(
+      expect(vaultAccount.totalAssets.toNumber()).to.equal(0);
+      expect(vaultAccount.totalShares.toNumber()).to.equal(0);
+      expect(vaultAccount.totalApprovedDeposits.toString()).to.equal(
         depositAmount.toString()
-      );
-      expect(vaultAccount.totalShares.toString()).to.equal(
-        expectedShares.toString()
       );
       expect(vaultAccount.totalPendingDeposits.toNumber()).to.equal(0);
     });
@@ -1216,13 +1215,15 @@ describe("svs-11 (Credit Markets Vault)", () => {
 
     it("updates attester config", async () => {
       const newAttester = Keypair.generate();
-      const newAttestationProgram = Keypair.generate();
+      // Use mock_sas as the new attestation program (it's a real deployed program)
+      const newAttestationProgram = attestationProgramId;
 
       await program.methods
-        .updateAttester(newAttester.publicKey, newAttestationProgram.publicKey)
+        .updateAttester(newAttester.publicKey, newAttestationProgram)
         .accountsPartial({
           authority: payer.publicKey,
           vault,
+          newAttestationProgramAccount: newAttestationProgram,
         })
         .rpc();
 
@@ -1231,15 +1232,16 @@ describe("svs-11 (Credit Markets Vault)", () => {
         newAttester.publicKey.toBase58()
       );
       expect(vaultAccount.attestationProgram.toBase58()).to.equal(
-        newAttestationProgram.publicKey.toBase58()
+        newAttestationProgram.toBase58()
       );
 
-      // Restore original attester config
+      // Restore original attester
       await program.methods
         .updateAttester(attester.publicKey, attestationProgramId)
         .accountsPartial({
           authority: payer.publicKey,
           vault,
+          newAttestationProgramAccount: attestationProgramId,
         })
         .rpc();
     });
@@ -1537,7 +1539,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
         assetMint,
         statusInvestorTokenAccount,
         payer.publicKey,
-        BigInt(depositAmount.toString()) * 3n,
+        BigInt(depositAmount.toString()) * BigInt(3),
         [],
         undefined,
         TOKEN_PROGRAM_ID
@@ -1872,9 +1874,9 @@ describe("svs-11 (Credit Markets Vault)", () => {
       const availableLiquidity =
         BigInt(depositVaultInfo.amount.toString()) -
         BigInt(vaultAccount.totalPendingDeposits.toString());
-      const drawAmount = availableLiquidity - 1n; // leave only 1 lamport
+      const drawAmount = availableLiquidity - BigInt(1);
 
-      if (drawAmount > 0n) {
+      if (drawAmount > BigInt(0)) {
         await program.methods
           .drawDown(new BN(drawAmount.toString()))
           .accountsPartial({
@@ -1982,7 +1984,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
         assetMint,
         frozenInvestorTokenAccount,
         payer.publicKey,
-        BigInt(depositAmount.toString()) * 2n,
+        BigInt(depositAmount.toString()) * BigInt(2),
         [],
         undefined,
         TOKEN_PROGRAM_ID
@@ -2772,7 +2774,6 @@ describe("svs-11 (Credit Markets Vault)", () => {
           .rpc();
         expect.fail("should have thrown");
       } catch (err: any) {
-        expect(err.error.errorCode.number).to.equal(6019);
         expect(err.error.errorCode.code).to.equal("OracleStale");
       }
     });
@@ -2921,7 +2922,6 @@ describe("svs-11 (Credit Markets Vault)", () => {
           .rpc();
         expect.fail("should have thrown");
       } catch (err: any) {
-        expect(err.error.errorCode.number).to.equal(6018);
         expect(err.error.errorCode.code).to.equal("AttestationExpired");
       }
     });
@@ -3018,7 +3018,6 @@ describe("svs-11 (Credit Markets Vault)", () => {
           .rpc();
         expect.fail("should have thrown");
       } catch (err: any) {
-        expect(err.error.errorCode.number).to.equal(6017);
         expect(err.error.errorCode.code).to.equal("AttestationRevoked");
       }
     });

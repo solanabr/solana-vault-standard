@@ -63,7 +63,7 @@ describe("svs-11-sdk (CreditVault SDK)", () => {
         navOracle,
         oracleProgram: oracleProgram.programId,
         attester: Keypair.generate().publicKey,
-        attestationProgram: Keypair.generate().publicKey,
+        attestationProgram: new PublicKey("4azCqYgLHDRmsiR6kmYu6v5qvzamaYGqZcmx8MrnrKMc"),
         minimumInvestment,
         maxStaleness,
       });
@@ -115,23 +115,23 @@ describe("svs-11-sdk (CreditVault SDK)", () => {
       const state = await cv.refresh();
       const offset = state.decimalsOffset;
 
-      const sharesOut = cv.convertToShares(1_000_000n, 0n, 0n, offset);
-      expect(sharesOut > 0n).to.be.true;
+      const sharesOut = cv.convertToShares(BigInt(1_000_000), BigInt(0), BigInt(0), offset);
+      expect(sharesOut > BigInt(0)).to.be.true;
 
-      const assetsOut = cv.convertToAssets(sharesOut, 0n, 0n, offset);
-      expect(assetsOut > 0n).to.be.true;
+      const assetsOut = cv.convertToAssets(sharesOut, BigInt(0), BigInt(0), offset);
+      expect(assetsOut > BigInt(0)).to.be.true;
     });
 
     it("round-trips at 1:1 with rounding in favor of vault", async () => {
       const state = await cv.refresh();
       const offset = state.decimalsOffset;
-      const ta = 1_000_000_000n;
-      const ts = 1_000_000_000n;
+      const ta = BigInt(1_000_000_000);
+      const ts = BigInt(1_000_000_000);
 
-      const shares = cv.convertToShares(1_000_000n, ta, ts, offset);
+      const shares = cv.convertToShares(BigInt(1_000_000), ta, ts, offset);
       const assets = cv.convertToAssets(shares, ta, ts, offset);
 
-      expect(assets).to.equal(999_999n);
+      expect(assets).to.equal(BigInt(999_999));
     });
   });
 
