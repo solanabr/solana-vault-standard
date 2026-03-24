@@ -21,7 +21,7 @@ export const RPC_URL = process.env.RPC_URL || "https://api.devnet.solana.com";
 export const ASSET_DECIMALS = 6;
 export const SHARE_DECIMALS = 9;
 
-export type SvsVariant = "svs_1" | "svs_2" | "svs_3" | "svs_4";
+export type SvsVariant = "svs_1" | "svs_2" | "svs_3" | "svs_4" | "svs_5" | "svs_6";
 
 export function loadKeypair(keypairPath: string): Keypair {
   const expandedPath = keypairPath.replace("~", process.env.HOME || "");
@@ -134,14 +134,7 @@ export async function setupTest<T extends Idl = Idl>(
 
   const idl = JSON.parse(fs.readFileSync(idlPath, "utf-8"));
 
-  const programKeypairPath = path.join(__dirname, `../../target/deploy/${svsVariant}-keypair.json`);
-  if (!fs.existsSync(programKeypairPath)) {
-    console.error(`\n  ERROR: Program keypair not found. Run 'anchor build' first.`);
-    process.exit(1);
-  }
-
-  const programKeypair = loadKeypair(programKeypairPath);
-  const programId = programKeypair.publicKey;
+  const programId = new PublicKey(idl.address);
 
   console.log(`  Program ID: ${programId.toBase58()}`);
 
