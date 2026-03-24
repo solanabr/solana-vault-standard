@@ -8,6 +8,7 @@ import {
   TOKEN_2022_PROGRAM_ID,
   getAccount,
   getAssociatedTokenAddressSync,
+  createAssociatedTokenAccountIdempotent,
   ASSOCIATED_TOKEN_PROGRAM_ID,
 } from "@solana/spl-token";
 import {
@@ -250,13 +251,15 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
       console.log("  Shares claimable:", req.sharesClaimable.toNumber());
     });
 
-    it("decrements total_pending_deposits on fulfill", async () => {
+    it("moves assets from pending to fulfilled bucket on fulfill", async () => {
       const vaultAccount = await program.account.asyncVault.fetch(vault);
       expect(vaultAccount.totalPendingDeposits.toNumber()).to.equal(0);
-      expect(vaultAccount.totalAssets.toNumber()).to.equal(depositAmount);
+      expect(vaultAccount.totalFulfilledDeposits.toNumber()).to.equal(depositAmount);
+      expect(vaultAccount.totalAssets.toNumber()).to.equal(0);
     });
 
     it("receiver claims deposit (shares minted)", async () => {
+      await createAssociatedTokenAccountIdempotent(connection, payer, sharesMint, payer.publicKey, {}, TOKEN_2022_PROGRAM_ID);
       await program.methods
         .claimDeposit()
         .accountsStrict({
@@ -269,8 +272,6 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
           receiver: payer.publicKey,
           operatorApproval: null,
           token2022Program: TOKEN_2022_PROGRAM_ID,
-          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-          systemProgram: SystemProgram.programId,
         })
         .rpc();
 
@@ -560,8 +561,6 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
           receiver: payer.publicKey,
           operatorApproval: null,
           token2022Program: TOKEN_2022_PROGRAM_ID,
-          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-          systemProgram: SystemProgram.programId,
         })
         .rpc();
     });
@@ -738,7 +737,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
 
     it("user sets operator approval", async () => {
       await program.methods
-        .setOperator(payer.publicKey, true, true, true)
+        .approveOperator(payer.publicKey, true, true, true)
         .accountsStrict({
           owner: user2.publicKey,
           vault,
@@ -786,6 +785,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
         .rpc();
 
       // payer (approved operator) claims on behalf of user2
+      await createAssociatedTokenAccountIdempotent(connection, payer, sharesMint, user2.publicKey, {}, TOKEN_2022_PROGRAM_ID);
       await program.methods
         .claimDeposit()
         .accountsStrict({
@@ -798,8 +798,6 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
           receiver: user2.publicKey,
           operatorApproval: operatorApprovalPDA,
           token2022Program: TOKEN_2022_PROGRAM_ID,
-          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-          systemProgram: SystemProgram.programId,
         })
         .rpc();
 
@@ -856,8 +854,6 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
             receiver: user2.publicKey,
             operatorApproval: null,
             token2022Program: TOKEN_2022_PROGRAM_ID,
-            associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-            systemProgram: SystemProgram.programId,
           })
           .signers([rando])
           .rpc();
@@ -879,8 +875,6 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
           receiver: user2.publicKey,
           operatorApproval: null,
           token2022Program: TOKEN_2022_PROGRAM_ID,
-          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-          systemProgram: SystemProgram.programId,
         })
         .signers([user2])
         .rpc();
@@ -1209,8 +1203,6 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
           receiver: payer.publicKey,
           operatorApproval: null,
           token2022Program: TOKEN_2022_PROGRAM_ID,
-          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-          systemProgram: SystemProgram.programId,
         })
         .rpc();
     });
@@ -1257,7 +1249,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
     it("delegated operator fulfills deposit via OperatorApproval", async () => {
       // user3 grants delegatedOp fulfill permissions
       await program.methods
-        .setOperator(delegatedOp.publicKey, true, true, false)
+        .approveOperator(delegatedOp.publicKey, true, true, false)
         .accountsStrict({
           owner: user3.publicKey,
           vault,
@@ -1307,6 +1299,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
       expect(req.sharesClaimable.toNumber()).to.be.greaterThan(0);
 
       // user3 claims their own deposit
+      await createAssociatedTokenAccountIdempotent(connection, payer, sharesMint, user3.publicKey, {}, TOKEN_2022_PROGRAM_ID);
       await program.methods
         .claimDeposit()
         .accountsStrict({
@@ -1319,8 +1312,6 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
           receiver: user3.publicKey,
           operatorApproval: null,
           token2022Program: TOKEN_2022_PROGRAM_ID,
-          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-          systemProgram: SystemProgram.programId,
         })
         .signers([user3])
         .rpc();
@@ -1400,7 +1391,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
       // user3 grants claim-only approval (no fulfill)
       const [claimOnlyApproval] = getOperatorApprovalPDA(vault, user3.publicKey, noFulfillOp.publicKey);
       await program.methods
-        .setOperator(noFulfillOp.publicKey, false, false, true)
+        .approveOperator(noFulfillOp.publicKey, false, false, true)
         .accountsStrict({
           owner: user3.publicKey,
           vault,
@@ -1572,6 +1563,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
         .rpc();
 
       // receiver claims (receiver is claimant since receiver == deposit_request.receiver)
+      await createAssociatedTokenAccountIdempotent(connection, payer, sharesMint, receiver.publicKey, {}, TOKEN_2022_PROGRAM_ID);
       await program.methods
         .claimDeposit()
         .accountsStrict({
@@ -1584,8 +1576,6 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
           receiver: receiver.publicKey,
           operatorApproval: null,
           token2022Program: TOKEN_2022_PROGRAM_ID,
-          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-          systemProgram: SystemProgram.programId,
         })
         .signers([receiver])
         .rpc();
@@ -1717,6 +1707,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
         .signers([operator])
         .rpc();
 
+      await createAssociatedTokenAccountIdempotent(connection, payer, sharesMint, user4.publicKey, {}, TOKEN_2022_PROGRAM_ID);
       await program.methods
         .claimDeposit()
         .accountsStrict({
@@ -1729,8 +1720,6 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
           receiver: user4.publicKey,
           operatorApproval: null,
           token2022Program: TOKEN_2022_PROGRAM_ID,
-          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-          systemProgram: SystemProgram.programId,
         })
         .signers([user4])
         .rpc();
@@ -1738,7 +1727,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
       // User4 approves payer as claim operator
       const [claimApproval] = getOperatorApprovalPDA(vault, user4.publicKey, payer.publicKey);
       await program.methods
-        .setOperator(payer.publicKey, false, false, true)
+        .approveOperator(payer.publicKey, false, false, true)
         .accountsStrict({
           owner: user4.publicKey,
           vault,

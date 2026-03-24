@@ -71,7 +71,7 @@ pub struct FulfillRedeem<'info> {
     pub share_escrow: InterfaceAccount<'info, TokenAccount>,
 
     #[account(
-        init_if_needed,
+        init,
         payer = operator,
         token::mint = asset_mint,
         token::authority = vault,
@@ -137,7 +137,7 @@ pub fn handler(ctx: Context<FulfillRedeem>, oracle_price: Option<u64>) -> Result
         let remaining = ctx.remaining_accounts;
         let vault_key = vault.key();
         let owner_key = redeem_request.owner;
-        module_hooks::check_deposit_access(remaining, &crate::ID, &vault_key, &owner_key, &[])?;
+        module_hooks::check_access(remaining, &crate::ID, &vault_key, &owner_key, &[])?;
     }
 
     let assets = if let Some(price) = oracle_price {

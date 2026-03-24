@@ -93,20 +93,40 @@ pub mod svs_10 {
         instructions::admin::set_max_deviation_bps(ctx, max_deviation_bps)
     }
 
-    pub fn set_operator(
-        ctx: Context<SetOperator>,
+    pub fn approve_operator(
+        ctx: Context<ApproveOperator>,
         operator: Pubkey,
         can_fulfill_deposit: bool,
         can_fulfill_redeem: bool,
         can_claim: bool,
     ) -> Result<()> {
-        instructions::set_operator::handler(
+        instructions::set_operator::approve_operator(
             ctx,
             operator,
             can_fulfill_deposit,
             can_fulfill_redeem,
             can_claim,
         )
+    }
+
+    pub fn update_operator(
+        ctx: Context<UpdateOperator>,
+        operator: Pubkey,
+        can_fulfill_deposit: bool,
+        can_fulfill_redeem: bool,
+        can_claim: bool,
+    ) -> Result<()> {
+        instructions::set_operator::update_operator(
+            ctx,
+            operator,
+            can_fulfill_deposit,
+            can_fulfill_redeem,
+            can_claim,
+        )
+    }
+
+    pub fn revoke_operator(ctx: Context<RevokeOperator>, operator: Pubkey) -> Result<()> {
+        instructions::set_operator::revoke_operator(ctx, operator)
     }
 
     // ============ View Functions ============

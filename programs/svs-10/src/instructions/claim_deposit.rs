@@ -6,7 +6,6 @@
 
 use anchor_lang::prelude::*;
 use anchor_spl::{
-    associated_token::AssociatedToken,
     token_2022,
     token_interface::{Mint, Token2022, TokenAccount},
 };
@@ -52,11 +51,9 @@ pub struct ClaimDeposit<'info> {
     pub shares_mint: InterfaceAccount<'info, Mint>,
 
     #[account(
-        init_if_needed,
-        payer = claimant,
-        associated_token::mint = shares_mint,
-        associated_token::authority = receiver,
-        associated_token::token_program = token_2022_program,
+        mut,
+        constraint = receiver_shares_account.mint == vault.shares_mint,
+        constraint = receiver_shares_account.owner == receiver.key(),
     )]
     pub receiver_shares_account: InterfaceAccount<'info, TokenAccount>,
 
@@ -66,8 +63,6 @@ pub struct ClaimDeposit<'info> {
     pub operator_approval: Option<Account<'info, OperatorApproval>>,
 
     pub token_2022_program: Program<'info, Token2022>,
-    pub associated_token_program: Program<'info, AssociatedToken>,
-    pub system_program: Program<'info, System>,
 }
 
 pub fn handler(ctx: Context<ClaimDeposit>) -> Result<()> {

@@ -115,10 +115,16 @@ pub fn handler(ctx: Context<MintSol>, shares: u64, max_lamports_in: u64) -> Resu
 
     // 4. MINIMUM DEPOSIT CHECK
     require!(required_lamports > 0, VaultError::ZeroAmount);
-    require!(required_lamports >= MIN_DEPOSIT_AMOUNT, VaultError::DepositTooSmall);
+    require!(
+        required_lamports >= MIN_DEPOSIT_AMOUNT,
+        VaultError::DepositTooSmall
+    );
 
     // 5. SLIPPAGE CHECK — user wants at most max_lamports_in spent
-    require!(required_lamports <= max_lamports_in, VaultError::SlippageExceeded);
+    require!(
+        required_lamports <= max_lamports_in,
+        VaultError::SlippageExceeded
+    );
 
     // 5a. Transfer native SOL from user to vault's wSOL account
     anchor_lang::system_program::transfer(
