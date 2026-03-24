@@ -230,7 +230,12 @@ pub struct DepositProportional<'info> {
     )]
     pub shares_mint: InterfaceAccount<'info, Mint>,
 
-    #[account(mut)]
+    #[account(
+        mut,
+        associated_token::mint = shares_mint,
+        associated_token::authority = user,
+        associated_token::token_program = shares_token_program,
+    )]
     pub user_shares_account: InterfaceAccount<'info, TokenAccount>,
 
     pub token_program: Interface<'info, TokenInterface>,

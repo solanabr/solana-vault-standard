@@ -12,7 +12,20 @@ pub fn handler(ctx: Context<RemoveAsset>) -> Result<()> {
 
     require!(ctx.accounts.asset_vault.amount == 0, VaultError::AssetVaultNotEmpty);
 
-    let index = asset_entry.index;
+    let removed_index = asset_entry.index;
+
+    // FIX P2: re-index remaining AssetEntry accounts to close index gaps
+    // remaining_accounts: all other AssetEntry PDAs in this vault
+    let svs8_id = crate::ID;
+    for info in ctx.remaining_accounts.iter() {
+        require!(info.owner == &svs8_id, VaultError::InvalidOracle);
+        let mut entry = AssetEntry::try_deserialize(&mut &info.try_borrow_data()?[..])?;
+        if entry.vault == vault.key() && entry.index > removed_index {
+            entry.index = entry.index.checked_sub(1).ok_or(VaultError::MathOverflow)?;
+            let mut data = info.try_borrow_mut_data()?;
+            entry.try_serialize(&mut &mut data[..])?;
+        }
+    }
 
     vault.num_assets = vault.num_assets
         .checked_sub(1)
@@ -21,7 +34,7 @@ pub fn handler(ctx: Context<RemoveAsset>) -> Result<()> {
     emit!(AssetRemoved {
         vault: vault.key(),
         asset_mint: asset_entry.asset_mint,
-        index,
+        index: removed_index,
     });
 
     Ok(())
