@@ -92,7 +92,10 @@ pub fn handler(ctx: Context<DistributeYield>, total_yield: u64) -> Result<()> {
     let target_yields: Vec<u16> = tranche_data.iter().map(|&(_, _, y, _)| y).collect();
 
     // Phase 2: Compute waterfall distribution (pure math, no borrows)
-    let total_allocated: u64 = allocations.iter().sum();
+    let total_allocated: u64 = allocations
+        .iter()
+        .try_fold(0u64, |acc, &x| acc.checked_add(x))
+        .ok_or(TranchedVaultError::MathOverflow)?;
     require!(total_allocated > 0, TranchedVaultError::ZeroAmount);
 
     let distribution = match vault.waterfall_mode {

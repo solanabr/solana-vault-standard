@@ -68,6 +68,9 @@ pub enum TranchedVaultError {
     #[msg("Wrong number of tranche accounts provided")]
     WrongTrancheCount,
 
+    #[msg("Duplicate tranche account provided")]
+    DuplicateTranche,
+
     #[msg("Insufficient shares balance")]
     InsufficientShares,
 

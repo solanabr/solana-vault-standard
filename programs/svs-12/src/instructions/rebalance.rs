@@ -59,6 +59,9 @@ pub fn handler(ctx: Context<RebalanceTranches>, amount: u64) -> Result<()> {
     // Subordination check
     let vault = &ctx.accounts.vault;
     let mut all_allocations: Vec<(u8, u64, u16)> = Vec::new();
+    let mut seen_keys: Vec<Pubkey> = Vec::new();
+    seen_keys.push(ctx.accounts.from_tranche.key());
+    seen_keys.push(ctx.accounts.to_tranche.key());
     all_allocations.push((
         ctx.accounts.from_tranche.priority,
         ctx.accounts.from_tranche.total_assets_allocated,
@@ -73,9 +76,14 @@ pub fn handler(ctx: Context<RebalanceTranches>, amount: u64) -> Result<()> {
     for opt_tranche in [&ctx.accounts.other_tranche_0, &ctx.accounts.other_tranche_1] {
         if let Some(t) = opt_tranche {
             require!(
+                !seen_keys.contains(&t.key()),
+                TranchedVaultError::DuplicateTranche
+            );
+            require!(
                 t.vault == vault.key(),
                 TranchedVaultError::TrancheVaultMismatch
             );
+            seen_keys.push(t.key());
             all_allocations.push((t.priority, t.total_assets_allocated, t.subordination_bps));
         }
     }

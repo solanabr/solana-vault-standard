@@ -150,6 +150,9 @@ pub fn handler(ctx: Context<Deposit>, assets: u64, min_shares_out: u64) -> Resul
 
     // 4. Subordination check on post-state (collect all tranches)
     let mut all_allocations: Vec<(u8, u64, u16)> = Vec::new();
+    let mut seen_keys: Vec<Pubkey> = Vec::new();
+    let target_key = ctx.accounts.target_tranche.key();
+    seen_keys.push(target_key);
     all_allocations.push((
         tranche.priority,
         tranche.total_assets_allocated,
@@ -163,9 +166,14 @@ pub fn handler(ctx: Context<Deposit>, assets: u64, min_shares_out: u64) -> Resul
     ] {
         if let Some(t) = opt_tranche {
             require!(
+                !seen_keys.contains(&t.key()),
+                TranchedVaultError::DuplicateTranche
+            );
+            require!(
                 t.vault == vault.key(),
                 TranchedVaultError::TrancheVaultMismatch
             );
+            seen_keys.push(t.key());
             all_allocations.push((t.priority, t.total_assets_allocated, t.subordination_bps));
         }
     }
