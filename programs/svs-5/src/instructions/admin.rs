@@ -53,6 +53,7 @@ pub fn unpause(ctx: Context<Admin>) -> Result<()> {
 
 /// Transfer vault authority to new address
 pub fn transfer_authority(ctx: Context<Admin>, new_authority: Pubkey) -> Result<()> {
+    require!(new_authority != Pubkey::default(), VaultError::Unauthorized);
     let vault = &mut ctx.accounts.vault;
     let previous_authority = vault.authority;
 
