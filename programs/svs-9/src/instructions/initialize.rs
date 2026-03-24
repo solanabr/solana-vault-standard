@@ -1,14 +1,14 @@
-use anchor_lang::prelude::*;
-use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
-use anchor_spl::token_2022::Token2022;
-use anchor_spl::associated_token::AssociatedToken;
-use crate::state::*;
 use crate::constants::*;
-use crate::events::*;
 use crate::error::*;
+use crate::events::*;
+use crate::state::*;
+use anchor_lang::prelude::*;
+use anchor_spl::associated_token::AssociatedToken;
+use anchor_spl::token_2022::Token2022;
+use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
 
 #[derive(Accounts)]
-#[instruction(vault_id: u64, idle_buffer_bps: u16, decimals_offset: u8)]
+#[instruction(vault_id: u64, idle_buffer_bps: u16)]
 pub struct Initialize<'info> {
     #[account(mut)]
     pub authority: Signer<'info>,
@@ -51,29 +51,35 @@ pub struct Initialize<'info> {
 
     /// Token program for asset (can be SPL Token or Token-2022)
     pub token_program: Interface<'info, TokenInterface>,
-    
+
     /// Token program for shares (must be Token-2022)
     pub token_2022_program: Program<'info, Token2022>,
-    
+
     pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
 }
 
-pub fn initialize_handler(ctx: Context<Initialize>, vault_id: u64, idle_buffer_bps: u16, decimals_offset: u8) -> Result<()> {
+pub fn initialize_handler(
+    ctx: Context<Initialize>,
+    vault_id: u64,
+    idle_buffer_bps: u16,
+) -> Result<()> {
     // 1. VALIDATION
     require!(idle_buffer_bps <= 10000, VaultError::MathOverflow);
-    // decimals_offset must be 0–9 (virtual precision can't exceed 9 decimals)
-    require!(decimals_offset <= 9, VaultError::MathOverflow);
-    
+
+    let decimals_offset = svs_math::MAX_DECIMALS
+        .checked_sub(ctx.accounts.asset_mint.decimals)
+        .ok_or(VaultError::InvalidAssetDecimals)?;
+
     // 2. READ STATE
     // (None for initialization)
-    
+
     // 3. COMPUTE
     // (None for initialization)
-    
+
     // 4. SLIPPAGE CHECK
     // (None for initialization)
-    
+
     // 5. EXECUTE CPIs
     // (Handled by Anchor accounts initialization)
 
@@ -90,13 +96,14 @@ pub fn initialize_handler(ctx: Context<Initialize>, vault_id: u64, idle_buffer_b
     vault.bump = ctx.bumps.allocator_vault;
     vault.paused = false;
     vault.vault_id = vault_id;
+    vault.total_shares = 0;
     vault._reserved = [0u8; 64];
 
     // 7. EMIT EVENT
     let virtual_shares = 10u128.pow(decimals_offset as u32);
     let virtual_assets = 1u128; // Protection against inflation attacks
 
-    emit!(VaultInitializedEvent {
+    emit!(VaultInitialized {
         vault: vault.key(),
         asset_mint: vault.asset_mint,
         authority: vault.authority,

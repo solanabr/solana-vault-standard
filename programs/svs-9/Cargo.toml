@@ -5,6 +5,9 @@ description = "SVS-9: Solana Vault Standard - Allocator Vault"
 edition = "2021"
 license = "MIT"
 
+[lints.rust]
+unexpected_cfgs = { level = "allow", check-cfg = ['cfg(feature, values("anchor-debug"))'] }
+
 [lib]
 crate-type = ["cdylib", "lib"]
 name = "svs_9"
@@ -16,11 +19,14 @@ no-entrypoint = []
 no-idl = []
 no-log-ix-name = []
 idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
-modules = ["svs-module-hooks"]
+modules = ["svs-module-hooks", "svs-fees", "svs-caps", "svs-locks", "svs-access"]
 
 [dependencies]
-anchor-lang = { version = "0.32.1", features = ["init-if-needed"] }
-anchor-spl = { version = "0.32.1", features = ["token", "associated_token", "metadata", "token_2022"] }
+anchor-lang = { version = "0.31.1" }
+anchor-spl = { version = "0.31.1", features = ["token", "associated_token", "metadata", "token_2022"] }
 svs-math = { path = "../../modules/svs-math" }
 svs-module-hooks = { path = "../../modules/svs-module-hooks", optional = true }
-
+svs-fees = { path = "../../modules/svs-fees", optional = true }
+svs-caps = { path = "../../modules/svs-caps", optional = true }
+svs-locks = { path = "../../modules/svs-locks", optional = true }
+svs-access = { path = "../../modules/svs-access", optional = true }

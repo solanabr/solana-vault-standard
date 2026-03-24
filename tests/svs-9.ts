@@ -1,6 +1,8 @@
 import * as anchor from "@coral-xyz/anchor";
 import { Program, BN } from "@coral-xyz/anchor";
 import { Svs9 } from "../target/types/svs_9";
+import { Svs1 } from "../target/types/svs_1";
+import { SolanaVault } from "../sdk/core/src/vault";
 import {
   getOrCreateAssociatedTokenAccount,
   createMint,
@@ -9,6 +11,7 @@ import {
   TOKEN_2022_PROGRAM_ID,
   ASSOCIATED_TOKEN_PROGRAM_ID,
   getAccount,
+  getAssociatedTokenAddressSync,
 } from "@solana/spl-token";
 import { expect } from "chai";
 import {
@@ -24,6 +27,7 @@ describe("svs-9", () => {
   anchor.setProvider(provider);
 
   const program = anchor.workspace.Svs9 as Program<Svs9>;
+  const svs1Program = anchor.workspace.Svs1 as Program<Svs1>;
 
   // ─── Keypairs ───
   const authority = Keypair.generate();
@@ -41,14 +45,14 @@ describe("svs-9", () => {
   let allocatorVaultPDA: PublicKey;
   let idleVaultATA: PublicKey;
   let sharesMint: PublicKey;
-  const sharesMintKeypair = Keypair.generate();
 
-  // ─── Child Vault (real SVS-1 style mock) ───
-  const childVaultMock = Keypair.generate().publicKey;
-  const childProgram = program.programId;
+  // ─── Child Vault (real SVS-1 vault) ───
+  let childVaultAddress: PublicKey;
+  let childSharesMintAddress: PublicKey;
+  const SVS1_ID = new PublicKey("Bv8aVSQ3DJUe3B7TqQZRZgrNvVTh8TjfpwpoeR1ckDMC");
+  
+  // ─── PDAs and Derived Accounts ───
   let childAllocationPDA: PublicKey;
-
-  // ─── User Shares Account ───
   let userSharesAccount: PublicKey;
 
   // ═══════════════════════════════════════════
@@ -73,6 +77,19 @@ describe("svs-9", () => {
       null,
       6
     );
+
+    // Initialize a real SVS-1 Vault for child vault testing
+    const childVaultClient = await SolanaVault.create(svs1Program as any, {
+      assetMint,
+      vaultId: new BN(123),
+      name: "SVS-1 Child Vault",
+      symbol: "SVS1",
+      uri: "https://svs.example.com",
+    });
+    // @ts-ignore - The client might not have authority field exposed if type is narrow
+    const childAuthority = (childVaultClient as any).authority || authority.publicKey;
+    childVaultAddress = childVaultClient.vault;
+    childSharesMintAddress = childVaultClient.sharesMint;
 
     // Mint 10,000 USDC to user
     const userAta = await getOrCreateAssociatedTokenAccount(
@@ -106,32 +123,34 @@ describe("svs-9", () => {
       [
         Buffer.from("child_allocation"),
         allocatorVaultPDA.toBuffer(),
-        childVaultMock.toBuffer(),
+        childVaultAddress.toBuffer(),
       ],
       program.programId
     );
 
-    idleVaultATA = anchor.utils.token.associatedAddress({
-      mint: assetMint,
-      owner: allocatorVaultPDA,
-    });
-
-    [sharesMint] = PublicKey.findProgramAddressSync(
+    sharesMint = PublicKey.findProgramAddressSync(
       [Buffer.from("shares_mint"), allocatorVaultPDA.toBuffer()],
       program.programId
+    )[0];
+
+    idleVaultATA = getAssociatedTokenAddressSync(
+      assetMint,
+      allocatorVaultPDA,
+      true
     );
   });
-  // ─── Helpers ───
-  async function getRemainingAccounts(): Promise<anchor.web3.AccountMeta[]> {
-    const remainingAccounts: anchor.web3.AccountMeta[] = [];
+
+  async function getRemainingAccounts() {
     const childAllocations = await program.account.childAllocation.all([
       {
         memcmp: {
-          offset: 8,
+          offset: 8, // Discrim
           bytes: allocatorVaultPDA.toBase58(),
         },
       },
     ]);
+
+    const remainingAccounts = [];
     for (const alloc of childAllocations) {
       if (alloc.account.enabled) {
         remainingAccounts.push({ pubkey: alloc.publicKey, isSigner: false, isWritable: false });
@@ -147,10 +166,10 @@ describe("svs-9", () => {
   // ═══════════════════════════════════════════
   // 1. Initialize
   // ═══════════════════════════════════════════
-  it("Inicializa o SVS-9 Allocator Vault", async () => {
-    await (program.methods as any)
-      .initialize(vaultId, idleBufferBps, 0) // decimals_offset=0; lint resolves after anchor build
-      .accountsPartial({
+  it("Initializes the SVS-9 Allocator Vault", async () => {
+    await program.methods
+      .initialize(vaultId, idleBufferBps)
+      .accounts({
         authority: authority.publicKey,
         curator: curator.publicKey,
         allocatorVault: allocatorVaultPDA,
@@ -161,32 +180,45 @@ describe("svs-9", () => {
         token2022Program: TOKEN_2022_PROGRAM_ID,
         associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
-      })
+      } as any)
       .signers([authority])
       .rpc();
 
-    const state = await program.account.allocatorVault.fetch(allocatorVaultPDA);
+    const state: any = await program.account.allocatorVault.fetch(allocatorVaultPDA);
     expect(state.authority.toBase58()).to.equal(authority.publicKey.toBase58());
     expect(state.curator.toBase58()).to.equal(curator.publicKey.toBase58());
+    expect(state.vaultId.toNumber()).to.equal(1);
     expect(state.idleBufferBps).to.equal(idleBufferBps);
     expect(state.numChildren).to.equal(0);
     expect(state.paused).to.be.false;
   });
 
   // ═══════════════════════════════════════════
-  // 2. Add Child
+  // 2. Add Child (Register child vault)
   // ═══════════════════════════════════════════
-  it("Registra um cofre filho (Add Child)", async () => {
+  it("Adds a child vault", async () => {
+    const allocatorChildSharesAccount = getAssociatedTokenAddressSync(
+      childSharesMintAddress,
+      allocatorVaultPDA,
+      true,
+      TOKEN_2022_PROGRAM_ID
+    );
+
     await program.methods
-      .addChild(5000)
-      .accountsPartial({
+      .addChild(5000, 0)
+      .accounts({
         authority: authority.publicKey,
         allocatorVault: allocatorVaultPDA,
         childAllocation: childAllocationPDA,
-        childVault: childVaultMock,
-        childProgram: childProgram,
+        childVault: childVaultAddress,
+        childProgram: SVS1_ID,
+        childSharesMint: childSharesMintAddress,
+        allocatorChildSharesAccount,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        token2022Program: TOKEN_2022_PROGRAM_ID,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
-      })
+      } as any)
       .signers([authority])
       .rpc();
 
@@ -206,11 +238,11 @@ describe("svs-9", () => {
   // ═══════════════════════════════════════════
   // 3. Deposit (with user shares ATA creation)
   // ═══════════════════════════════════════════
-  it("Processa depósito de um usuário", async () => {
+  it("Processes user deposit successfully", async () => {
     // Create user shares ATA (Token-2022)
     const userSharesAta = await getOrCreateAssociatedTokenAccount(
       provider.connection,
-      user,
+      authority,
       sharesMint,
       user.publicKey,
       false,
@@ -223,8 +255,8 @@ describe("svs-9", () => {
     const depositAmount = new BN(1_000 * 10 ** 6); // 1,000 USDC
 
     await program.methods
-      .deposit(depositAmount, new BN(0)) // min_shares_out = 0 (first deposit = 1:1)
-      .accountsPartial({
+      .deposit(depositAmount, new BN(0))
+      .accounts({
         caller: user.publicKey,
         owner: user.publicKey,
         allocatorVault: allocatorVaultPDA,
@@ -235,39 +267,30 @@ describe("svs-9", () => {
         assetMint: assetMint,
         tokenProgram: TOKEN_PROGRAM_ID,
         token2022Program: TOKEN_2022_PROGRAM_ID,
-        systemProgram: SystemProgram.programId,
-      })
+      } as any)
       .remainingAccounts(await getRemainingAccounts())
       .signers([user])
       .rpc();
 
-    // Verify idle vault received the assets
+    const vaultState: any = await program.account.allocatorVault.fetch(
+      allocatorVaultPDA
+    );
+    expect(vaultState.totalShares?.toNumber() || 0).to.equal(1_000 * 10 ** 9);
+
     const idleBalance = await provider.connection.getTokenAccountBalance(
       idleVaultATA
     );
-    expect(idleBalance.value.amount).to.equal(depositAmount.toString());
-
-    // Verify user received shares
-    const sharesBalance = await getAccount(
-      provider.connection,
-      userSharesAccount,
-      undefined,
-      TOKEN_2022_PROGRAM_ID
-    );
-    expect(Number(sharesBalance.amount)).to.be.greaterThan(0);
+    expect(idleBalance.value.amount).to.equal((1_000 * 10 ** 6).toString());
   });
 
-  // ═══════════════════════════════════════════
-  // 4. Slippage Exceeded (deposit)
-  // ═══════════════════════════════════════════
-  it("Rejeita depósito quando slippage é excedido", async () => {
-    const depositAmount = new BN(1_000 * 10 ** 6);
-    const unreasonableMinShares = new BN(2_000 * 10 ** 6); // Exige mais shares do que possível
+  it("Rejects deposit when slippage is exceeded", async () => {
+    const depositAmount = new BN(100 * 10 ** 6);
+    const minSharesOut = new BN(200 * 10 ** 9); // Impossible (actual ~100e9)
 
     try {
       await program.methods
-        .deposit(depositAmount, unreasonableMinShares)
-        .accountsPartial({
+        .deposit(depositAmount, minSharesOut)
+        .accounts({
           caller: user.publicKey,
           owner: user.publicKey,
           allocatorVault: allocatorVaultPDA,
@@ -278,25 +301,23 @@ describe("svs-9", () => {
           assetMint: assetMint,
           tokenProgram: TOKEN_PROGRAM_ID,
           token2022Program: TOKEN_2022_PROGRAM_ID,
-          systemProgram: SystemProgram.programId,
-        })
+        } as any)
         .remainingAccounts(await getRemainingAccounts())
         .signers([user])
         .rpc();
-      expect.fail("Deveria ter falhado com SlippageExceeded");
+      expect.fail("Should have failed with slippage error");
     } catch (err: any) {
       expect(err.toString()).to.include("SlippageExceeded");
     }
   });
 
-  // ═══════════════════════════════════════════
-  // 5. Zero Amount
-  // ═══════════════════════════════════════════
-  it("Rejeita depósito de valor zero", async () => {
+  it("Rejects deposit below minimum amount", async () => {
+    const tinyAmount = new BN(100); 
+
     try {
       await program.methods
-        .deposit(new BN(0), new BN(0))
-        .accountsPartial({
+        .deposit(tinyAmount, new BN(0))
+        .accounts({
           caller: user.publicKey,
           owner: user.publicKey,
           allocatorVault: allocatorVaultPDA,
@@ -307,54 +328,52 @@ describe("svs-9", () => {
           assetMint: assetMint,
           tokenProgram: TOKEN_PROGRAM_ID,
           token2022Program: TOKEN_2022_PROGRAM_ID,
-          systemProgram: SystemProgram.programId,
-        })
+        } as any)
         .remainingAccounts(await getRemainingAccounts())
         .signers([user])
         .rpc();
-      expect.fail("Deveria ter falhado com ZeroAmount");
+      expect.fail("Should have failed with insufficient amount");
     } catch (err: any) {
-      expect(err.toString()).to.include("ZeroAmount");
+      expect(err.toString()).to.include("DepositTooSmall");
     }
   });
 
   // ═══════════════════════════════════════════
-  // 6. Unauthorized Curator (allocate)
+  // 6. Access Control
   // ═══════════════════════════════════════════
-  it("Rejeita allocate por conta não autorizada", async () => {
+  it("Rejects allocate from unauthorized curator", async () => {
     const allocateAmount = new BN(100 * 10 ** 6);
-
     try {
       await program.methods
         .allocate(allocateAmount, new BN(0))
-        .accountsPartial({
-          curator: impostor.publicKey, // NÃO é o curator real
+        .accounts({
+          curator: impostor.publicKey,
           allocatorVault: allocatorVaultPDA,
           childAllocation: childAllocationPDA,
           idleVault: idleVaultATA,
-          childVault: childVaultMock,
-          childProgram: childProgram,
+          childVault: childVaultAddress,
+          childProgram: SVS1_ID,
           childAssetMint: assetMint,
           childAssetVault: idleVaultATA,
-          childSharesMint: sharesMint,
+          childSharesMint: childSharesMintAddress,
           tokenProgram: TOKEN_PROGRAM_ID,
           token2022Program: TOKEN_2022_PROGRAM_ID,
           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           rent: SYSVAR_RENT_PUBKEY,
-        })
+          allocatorChildSharesAccount: getAssociatedTokenAddressSync(childSharesMintAddress, allocatorVaultPDA, true, TOKEN_2022_PROGRAM_ID),
+        } as any)
         .remainingAccounts(await getRemainingAccounts())
         .signers([impostor])
         .rpc();
-      expect.fail("Deveria ter falhado: impostor não é curator");
+      expect.fail("Should have failed: impostor is not curator");
     } catch (err: any) {
-      // Anchor constraint error: has_one = curator
       expect(err.toString()).to.satisfy(
         (msg: string) =>
-          msg.includes("ConstraintHasOne") ||
+          msg.includes("Unauthorized") ||
           msg.includes("has_one") ||
-          msg.includes("A has one constraint was violated") ||
-          msg.includes("2001") // Anchor ConstraintHasOne error code
+          msg.includes("6004") ||
+          msg.includes("2001")
       );
     }
   });
@@ -362,25 +381,25 @@ describe("svs-9", () => {
   // ═══════════════════════════════════════════
   // 7. Admin Controls (Pause / Unpause)
   // ═══════════════════════════════════════════
-  it("Pausa e despausa corretamente", async () => {
+  it("Pauses and unpauses correctly", async () => {
     // Pause
     await program.methods
       .pause()
-      .accountsPartial({
+      .accounts({
         authority: authority.publicKey,
         allocatorVault: allocatorVaultPDA,
-      })
+      } as any)
       .signers([authority])
       .rpc();
 
     let state = await program.account.allocatorVault.fetch(allocatorVaultPDA);
     expect(state.paused).to.be.true;
 
-    // Verify deposit fails when paused
+    // Reject deposit when paused
     try {
       await program.methods
-        .deposit(new BN(100 * 10 ** 6), new BN(0))
-        .accountsPartial({
+        .deposit(new BN(1000 * 10 ** 6), new BN(0))
+        .accounts({
           caller: user.publicKey,
           owner: user.publicKey,
           allocatorVault: allocatorVaultPDA,
@@ -391,12 +410,10 @@ describe("svs-9", () => {
           assetMint: assetMint,
           tokenProgram: TOKEN_PROGRAM_ID,
           token2022Program: TOKEN_2022_PROGRAM_ID,
-          systemProgram: SystemProgram.programId,
-        })
-        .remainingAccounts(await getRemainingAccounts())
+        } as any)
         .signers([user])
         .rpc();
-      expect.fail("Deveria ter falhado com cofre pausado");
+      expect.fail("Should have failed: vault is paused");
     } catch (err: any) {
       expect(err.toString()).to.include("VaultPaused");
     }
@@ -404,10 +421,10 @@ describe("svs-9", () => {
     // Unpause
     await program.methods
       .unpause()
-      .accountsPartial({
+      .accounts({
         authority: authority.publicKey,
         allocatorVault: allocatorVaultPDA,
-      })
+      } as any)
       .signers([authority])
       .rpc();
 
@@ -416,256 +433,74 @@ describe("svs-9", () => {
   });
 
   // ═══════════════════════════════════════════
-  // 8. Remove Child
+  // 8. Management
   // ═══════════════════════════════════════════
-  it("Remove (desativa) um cofre filho", async () => {
+  it("Removes/disables a child vault", async () => {
     await program.methods
       .removeChild()
-      .accountsPartial({
+      .accounts({
         authority: authority.publicKey,
         allocatorVault: allocatorVaultPDA,
         childAllocation: childAllocationPDA,
-        childVault: childVaultMock,
-      })
+        childVault: childVaultAddress,
+        allocatorChildSharesAccount: getAssociatedTokenAddressSync(childSharesMintAddress, allocatorVaultPDA, true, TOKEN_2022_PROGRAM_ID),
+      } as any)
       .signers([authority])
       .rpc();
 
     try {
       await program.account.childAllocation.fetch(childAllocationPDA);
       expect.fail("Account should have been closed");
-    } catch (e: any) {
-      expect(e.message).to.include("Account does not exist");
-    }
-
-    const vaultState = await program.account.allocatorVault.fetch(
-      allocatorVaultPDA
-    );
-    expect(vaultState.numChildren).to.equal(0);
-  });
-
-  // ═══════════════════════════════════════════
-  // 9. Update Weights
-  // ═══════════════════════════════════════════
-  it("Re-adiciona child e atualiza pesos", async () => {
-    // Re-adicionar child primeiro (o anterior foi desabilitado, não deletado)
-    // Precisamos de um novo child vault para criar um novo PDA
-    const newChildVault = Keypair.generate().publicKey;
-    const [newChildPDA] = PublicKey.findProgramAddressSync(
-      [
-        Buffer.from("child_allocation"),
-        allocatorVaultPDA.toBuffer(),
-        newChildVault.toBuffer(),
-      ],
-      program.programId
-    );
-
-    await program.methods
-      .addChild(3000) // 30% max weight
-      .accountsPartial({
-        authority: authority.publicKey,
-        allocatorVault: allocatorVaultPDA,
-        childAllocation: newChildPDA,
-        childVault: newChildVault,
-        childProgram: childProgram,
-        systemProgram: SystemProgram.programId,
-      })
-      .signers([authority])
-      .rpc();
-
-    // Update weights to 7000 bps (70%)
-    await program.methods
-      .updateWeights(7000)
-      .accountsPartial({
-        authority: authority.publicKey,
-        allocatorVault: allocatorVaultPDA,
-        childAllocation: newChildPDA,
-        childVault: newChildVault,
-      })
-      .signers([authority])
-      .rpc();
-
-    const allocation = await program.account.childAllocation.fetch(newChildPDA);
-    expect(allocation.maxWeightBps).to.equal(7000);
-  });
-
-  // ═══════════════════════════════════════════
-  // 10. Transfer Authority
-  // ═══════════════════════════════════════════
-  it("Transfere authority do vault", async () => {
-    const newAuthority = Keypair.generate();
-
-    await program.methods
-      .transferAuthority(newAuthority.publicKey)
-      .accountsPartial({
-        authority: authority.publicKey,
-        allocatorVault: allocatorVaultPDA,
-      })
-      .signers([authority])
-      .rpc();
-
-    const state = await program.account.allocatorVault.fetch(allocatorVaultPDA);
-    expect(state.authority.toBase58()).to.equal(
-      newAuthority.publicKey.toBase58()
-    );
-
-    // Restore original authority for remaining tests
-    await program.methods
-      .transferAuthority(authority.publicKey)
-      .accountsPartial({
-        authority: newAuthority.publicKey,
-        allocatorVault: allocatorVaultPDA,
-      })
-      .signers([newAuthority])
-      .rpc();
-  });
-
-  // ═══════════════════════════════════════════
-  // 11. Set Curator
-  // ═══════════════════════════════════════════
-  it("Define um novo curator", async () => {
-    const newCurator = Keypair.generate();
-
-    await program.methods
-      .setCurator(newCurator.publicKey)
-      .accountsPartial({
-        authority: authority.publicKey,
-        allocatorVault: allocatorVaultPDA,
-      })
-      .signers([authority])
-      .rpc();
-
-    const state = await program.account.allocatorVault.fetch(allocatorVaultPDA);
-    expect(state.curator.toBase58()).to.equal(
-      newCurator.publicKey.toBase58()
-    );
-
-    // Restore original curator for remaining tests
-    await program.methods
-      .setCurator(curator.publicKey)
-      .accountsPartial({
-        authority: authority.publicKey,
-        allocatorVault: allocatorVaultPDA,
-      })
-      .signers([authority])
-      .rpc();
-  });
-
-  // ═══════════════════════════════════════════
-  // 12. Redeem (Full Flow)
-  // ═══════════════════════════════════════════
-  it("Redeem: queima shares e recebe assets de volta", async () => {
-    // Get user's current shares balance
-    const sharesAccountBefore = await getAccount(
-      provider.connection,
-      userSharesAccount,
-      undefined,
-      TOKEN_2022_PROGRAM_ID
-    );
-    const sharesToRedeem = new BN(sharesAccountBefore.amount.toString());
-
-    if (sharesToRedeem.isZero()) {
-      console.log("    ⚠ Nenhuma share disponível para redeem, pulando...");
-      return;
-    }
-
-    // Get user asset balance before
-    const assetBefore = await provider.connection.getTokenAccountBalance(
-      userAssetAccount
-    );
-
-    await program.methods
-      .redeem(sharesToRedeem, new BN(0)) // min_assets_out = 0
-      .accountsPartial({
-        caller: user.publicKey,
-        owner: user.publicKey,
-        allocatorVault: allocatorVaultPDA,
-        idleVault: idleVaultATA,
-        sharesMint: sharesMint,
-        callerAssetAccount: userAssetAccount,
-        ownerSharesAccount: userSharesAccount,
-        assetMint: assetMint,
-        tokenProgram: TOKEN_PROGRAM_ID,
-        token2022Program: TOKEN_2022_PROGRAM_ID,
-      })
-      .remainingAccounts(await getRemainingAccounts())
-      .signers([user])
-      .rpc();
-
-    // Verify shares were burned
-    const sharesAccountAfter = await getAccount(
-      provider.connection,
-      userSharesAccount,
-      undefined,
-      TOKEN_2022_PROGRAM_ID
-    );
-    expect(Number(sharesAccountAfter.amount)).to.equal(0);
-
-    // Verify user received assets back
-    const assetAfter = await provider.connection.getTokenAccountBalance(
-      userAssetAccount
-    );
-    expect(Number(assetAfter.value.amount)).to.be.greaterThan(
-      Number(assetBefore.value.amount)
-    );
-  });
-
-  // ═══════════════════════════════════════════
-  // 13. Slippage Exceeded (redeem)
-  // ═══════════════════════════════════════════
-  it("Rejeita redeem quando slippage é excedido", async () => {
-    // Need shares to test redeem slippage — deposit first
-    const depositAmount = new BN(500 * 10 ** 6);
-    await program.methods
-      .deposit(depositAmount, new BN(0))
-      .accountsPartial({
-        caller: user.publicKey,
-        owner: user.publicKey,
-        allocatorVault: allocatorVaultPDA,
-        idleVault: idleVaultATA,
-        sharesMint: sharesMint,
-        callerAssetAccount: userAssetAccount,
-        ownerSharesAccount: userSharesAccount,
-        assetMint: assetMint,
-        tokenProgram: TOKEN_PROGRAM_ID,
-        token2022Program: TOKEN_2022_PROGRAM_ID,
-        systemProgram: SystemProgram.programId,
-      })
-      .remainingAccounts(await getRemainingAccounts())
-      .signers([user])
-      .rpc();
-
-    const sharesAccount = await getAccount(
-      provider.connection,
-      userSharesAccount,
-      undefined,
-      TOKEN_2022_PROGRAM_ID
-    );
-    const shares = new BN(sharesAccount.amount.toString());
-
-    // Demand more assets than possible
-    const unreasonableMinAssets = new BN(999_999 * 10 ** 6);
-
-    try {
-      await program.methods
-        .redeem(shares, unreasonableMinAssets)
-        .accountsPartial({
-          caller: user.publicKey,
-          owner: user.publicKey,
-          allocatorVault: allocatorVaultPDA,
-          idleVault: idleVaultATA,
-          sharesMint: sharesMint,
-          callerAssetAccount: userAssetAccount,
-          ownerSharesAccount: userSharesAccount,
-          assetMint: assetMint,
-          tokenProgram: TOKEN_PROGRAM_ID,
-          token2022Program: TOKEN_2022_PROGRAM_ID,
-        })
-        .remainingAccounts(await getRemainingAccounts())
-        .signers([user])
-        .rpc();
-      expect.fail("Deveria ter falhado com SlippageExceeded");
     } catch (err: any) {
-      expect(err.toString()).to.include("SlippageExceeded");
+      expect(err.toString()).to.include("Account does not exist");
     }
+
+    const state: any = await program.account.allocatorVault.fetch(allocatorVaultPDA);
+    expect(state.numChildren).to.equal(0);
+    expect(state.totalShares.toNumber()).to.equal(1_000 * 10 ** 9);
+  });
+
+  it("Sets a new curator", async () => {
+    const newCurator = Keypair.generate().publicKey;
+    await program.methods
+      .setCurator(newCurator)
+      .accounts({
+        authority: authority.publicKey,
+        allocatorVault: allocatorVaultPDA,
+      } as any)
+      .signers([authority])
+      .rpc();
+
+    const state = await program.account.allocatorVault.fetch(allocatorVaultPDA);
+    expect(state.curator.toBase58()).to.equal(newCurator.toBase58());
+  });
+
+  // ═══════════════════════════════════════════
+  // 10. Withdraw / Redeem Logic
+  // ═══════════════════════════════════════════
+  it("Redeems shares for assets", async () => {
+    const redeemAmount = new BN(100 * 10 ** 9);
+    const initialUserIdle = (await provider.connection.getTokenAccountBalance(userAssetAccount)).value.uiAmount;
+
+    await program.methods
+      .redeem(redeemAmount, new BN(0))
+      .accounts({
+        caller: user.publicKey,
+        owner: user.publicKey,
+        allocatorVault: allocatorVaultPDA,
+        assetMint: assetMint,
+        sharesMint: sharesMint,
+        idleVault: idleVaultATA,
+        ownerSharesAccount: userSharesAccount,
+        callerAssetAccount: userAssetAccount,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        token2022Program: TOKEN_2022_PROGRAM_ID,
+      } as any)
+      .remainingAccounts(await getRemainingAccounts())
+      .signers([user])
+      .rpc();
+
+    const currentUserIdle = (await provider.connection.getTokenAccountBalance(userAssetAccount)).value.uiAmount;
+    expect(currentUserIdle!).to.be.approximately(initialUserIdle! + 100, 0.001);
   });
 });

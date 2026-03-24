@@ -1,8 +1,8 @@
-use anchor_lang::prelude::*;
-use crate::state::*;
 use crate::constants::*;
-use crate::events::*;
 use crate::error::*;
+use crate::events::*;
+use crate::state::*;
+use anchor_lang::prelude::*;
 
 #[derive(Accounts)]
 pub struct UpdateWeights<'info> {
@@ -35,7 +35,7 @@ pub fn update_weights_handler(ctx: Context<UpdateWeights>, new_max_weight_bps: u
     child_allocation.max_weight_bps = new_max_weight_bps;
 
     // 7. EMIT EVENT
-    emit!(WeightsUpdatedEvent {
+    emit!(WeightsUpdated {
         allocator_vault: ctx.accounts.allocator_vault.key(),
         child_vault: ctx.accounts.child_vault.key(),
         old_max_weight_bps,

@@ -14,12 +14,13 @@ use anchor_lang::prelude::*;
 /// |    104 |   32 | shares_mint       |
 /// |    136 |   32 | idle_vault        |
 /// |    168 |    8 | vault_id          |
-/// |    176 |    2 | idle_buffer_bps   |
-/// |    178 |    1 | num_children      |
-/// |    179 |    1 | decimals_offset   |
-/// |    180 |    1 | bump              |
-/// |    181 |    1 | paused            |
-/// |    182 |   64 | _reserved         |
+/// |    176 |    8 | total_shares      |
+/// |    184 |    2 | idle_buffer_bps   |
+/// |    186 |    1 | num_children      |
+/// |    187 |    1 | decimals_offset   |
+/// |    188 |    1 | bump              |
+/// |    189 |    1 | paused            |
+/// |    190 |   64 | _reserved         |
 #[account]
 #[derive(InitSpace)]
 pub struct AllocatorVault {
@@ -33,18 +34,20 @@ pub struct AllocatorVault {
     pub shares_mint: Pubkey,
     /// ATA holding unallocated (idle) assets
     pub idle_vault: Pubkey,
+    /// Unique vault identifier
+    pub vault_id: u64,
+    /// Total minted shares — tracked for ERC-4626 compliance
+    pub total_shares: u64,
+    /// Minimum idle ratio in bps
+    pub idle_buffer_bps: u16,
     /// Number of active child vaults
     pub num_children: u8,
-    /// Minimum idle ratio in bps (e.g. 1000 = 10%)
-    pub idle_buffer_bps: u16,
-    /// Virtual offset exponent for inflation-attack protection (0–9)
+    /// Virtual offset exponent
     pub decimals_offset: u8,
     /// PDA bump seed
     pub bump: u8,
     /// Emergency pause flag
     pub paused: bool,
-    /// Unique vault identifier (allows multiple vaults per asset)
-    pub vault_id: u64,
     /// Reserved for future upgrades — must be zeroed on init
     pub _reserved: [u8; 64],
 }
@@ -63,8 +66,9 @@ pub struct AllocatorVault {
 /// |    140 |    8 | deposited_assets     |
 /// |    148 |    1 | index                |
 /// |    149 |    1 | enabled              |
-/// |    150 |    1 | bump                 |
-/// |    151 |   64 | _reserved            |
+/// |    150 |    1 | child_decimals_offset|
+/// |    151 |    1 | bump                 |
+/// |    152 |   63 | _reserved            |
 #[account]
 #[derive(InitSpace)]
 pub struct ChildAllocation {
@@ -76,18 +80,190 @@ pub struct ChildAllocation {
     pub child_program: Pubkey,
     /// ATA where the allocator holds its shares in the child vault
     pub child_shares_account: Pubkey,
-    /// Cost-basis tracking: assets deposited into this child
-    pub deposited_assets: u64,
     /// Target allocation weight in bps (informational, for rebalancing)
     pub target_weight_bps: u16,
     /// Maximum allocation weight in bps — enforced on allocate/rebalance
     pub max_weight_bps: u16,
+    /// Cost-basis tracking: assets deposited into this child
+    pub deposited_assets: u64,
     /// Position index within the allocator (0-based)
     pub index: u8,
     /// Whether this child is active
     pub enabled: bool,
+    /// Inflation protection offset learned from child vault
+    pub child_decimals_offset: u8,
     /// PDA bump seed
     pub bump: u8,
     /// Reserved for future upgrades — must be zeroed on init
-    pub _reserved: [u8; 64],
+    pub _reserved: [u8; 63],
 }
+
+// =============================================================================
+// Access Mode (always available for IDL generation)
+// =============================================================================
+
+/// Access mode enum - always exported for IDL compatibility.
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, Default)]
+pub enum AccessMode {
+    /// Open access - anyone can interact
+    #[default]
+    Open,
+    /// Whitelist - only addresses with valid merkle proofs
+    Whitelist,
+    /// Blacklist - anyone except addresses with valid merkle proofs
+    Blacklist,
+}
+
+// =============================================================================
+// Module State Accounts (conditionally compiled with "modules" feature)
+// =============================================================================
+
+#[cfg(feature = "modules")]
+pub mod module_state {
+    use super::*;
+
+    // Re-export seeds from shared crate
+    pub use svs_module_hooks::{
+        ACCESS_CONFIG_SEED, CAP_CONFIG_SEED, FEE_CONFIG_SEED, FROZEN_ACCOUNT_SEED,
+        LOCK_CONFIG_SEED, REWARD_CONFIG_SEED, SHARE_LOCK_SEED, USER_DEPOSIT_SEED, USER_REWARD_SEED,
+    };
+
+    /// Fee configuration for vault.
+    /// Seeds: ["fee_config", vault_pubkey]
+    #[account]
+    pub struct FeeConfig {
+        pub vault: Pubkey,
+        pub fee_recipient: Pubkey,
+        pub entry_fee_bps: u16,
+        pub exit_fee_bps: u16,
+        pub management_fee_bps: u16,
+        pub performance_fee_bps: u16,
+        pub high_water_mark: u64,
+        pub last_fee_collection: i64,
+        pub bump: u8,
+    }
+
+    impl FeeConfig {
+        pub const LEN: usize = 8 + 32 + 32 + 2 + 2 + 2 + 2 + 8 + 8 + 1;
+    }
+
+    /// Cap configuration for vault.
+    /// Seeds: ["cap_config", vault_pubkey]
+    #[account]
+    pub struct CapConfig {
+        pub vault: Pubkey,
+        pub global_cap: u64,
+        pub per_user_cap: u64,
+        pub bump: u8,
+    }
+
+    impl CapConfig {
+        pub const LEN: usize = 8 + 32 + 8 + 8 + 1;
+    }
+
+    /// User deposit tracking for per-user caps.
+    /// Seeds: ["user_deposit", vault_pubkey, user_pubkey]
+    #[account]
+    pub struct UserDeposit {
+        pub vault: Pubkey,
+        pub user: Pubkey,
+        pub cumulative_assets: u64,
+        pub bump: u8,
+    }
+
+    impl UserDeposit {
+        pub const LEN: usize = 8 + 32 + 32 + 8 + 1;
+    }
+
+    /// Lock configuration for vault.
+    /// Seeds: ["lock_config", vault_pubkey]
+    #[account]
+    pub struct LockConfig {
+        pub vault: Pubkey,
+        pub lock_duration: i64,
+        pub bump: u8,
+    }
+
+    impl LockConfig {
+        pub const LEN: usize = 8 + 32 + 8 + 1;
+    }
+
+    /// Share lock for user.
+    /// Seeds: ["share_lock", vault_pubkey, owner_pubkey]
+    #[account]
+    pub struct ShareLock {
+        pub vault: Pubkey,
+        pub owner: Pubkey,
+        pub locked_until: i64,
+        pub bump: u8,
+    }
+
+    impl ShareLock {
+        pub const LEN: usize = 8 + 32 + 32 + 8 + 1;
+    }
+
+    /// Access configuration for vault.
+    /// Seeds: ["access_config", vault_pubkey]
+    #[account]
+    pub struct AccessConfig {
+        pub vault: Pubkey,
+        pub mode: super::AccessMode,
+        pub merkle_root: [u8; 32],
+        pub bump: u8,
+    }
+
+    impl AccessConfig {
+        pub const LEN: usize = 8 + 32 + 1 + 32 + 1;
+    }
+
+    /// Frozen account marker.
+    /// Seeds: ["frozen", vault_pubkey, user_pubkey]
+    #[account]
+    pub struct FrozenAccount {
+        pub vault: Pubkey,
+        pub user: Pubkey,
+        pub frozen_by: Pubkey,
+        pub frozen_at: i64,
+        pub bump: u8,
+    }
+
+    impl FrozenAccount {
+        pub const LEN: usize = 8 + 32 + 32 + 32 + 8 + 1;
+    }
+
+    /// Reward configuration for vault.
+    /// Seeds: ["reward_config", vault_pubkey, reward_mint_pubkey]
+    #[account]
+    pub struct RewardConfig {
+        pub vault: Pubkey,
+        pub reward_mint: Pubkey,
+        pub reward_vault: Pubkey,
+        pub reward_authority: Pubkey,
+        pub accumulated_per_share: u128,
+        pub last_update: i64,
+        pub bump: u8,
+    }
+
+    impl RewardConfig {
+        pub const LEN: usize = 8 + 32 + 32 + 32 + 32 + 16 + 8 + 1;
+    }
+
+    /// User reward tracking.
+    /// Seeds: ["user_reward", vault_pubkey, reward_mint_pubkey, user_pubkey]
+    #[account]
+    pub struct UserReward {
+        pub vault: Pubkey,
+        pub user: Pubkey,
+        pub reward_mint: Pubkey,
+        pub reward_debt: u128,
+        pub unclaimed: u64,
+        pub bump: u8,
+    }
+
+    impl UserReward {
+        pub const LEN: usize = 8 + 32 + 32 + 32 + 16 + 8 + 1;
+    }
+}
+
+#[cfg(feature = "modules")]
+pub use module_state::*;

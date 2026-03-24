@@ -116,7 +116,7 @@ describe("SVS-9 E2E CPI CPI Test", () => {
     );
 
     await (svs9Program.methods as any)
-      .initialize(allocatorVaultId, 1000, 0) // 10% idle buffer, decimals_offset=0
+      .initialize(allocatorVaultId, 1000) // 10% idle buffer
       .accountsPartial({
         authority: payer.publicKey,
         curator: payer.publicKey,
@@ -155,7 +155,19 @@ describe("SVS-9 E2E CPI CPI Test", () => {
       childVault: childVaultClient.vault,
       childProgram: svs1Program.programId,
       maxWeightBps: 5000, // 50% max weight
+      childDecimalsOffset: 0,
     });
+
+    await getOrCreateAssociatedTokenAccount(
+      connection,
+      payer,
+      childVaultClient.sharesMint,
+      allocatorClient.allocatorVault,
+      true, // allowOwnerOffCurve
+      undefined,
+      undefined,
+      TOKEN_2022_PROGRAM_ID
+    );
 
     const state = await allocatorClient.refresh();
     expect(state.numChildren).to.equal(1);

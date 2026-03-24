@@ -1,11 +1,11 @@
-use anchor_lang::prelude::*;
-use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
-use anchor_spl::token_2022::Token2022;
-use crate::state::*;
 use crate::constants::*;
-use crate::events::*;
+use crate::state::*;
+use anchor_lang::prelude::*;
+use anchor_spl::token_2022::Token2022;
+use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
+// Removed unused events import
 use crate::error::*;
-use crate::math::calculate_assets;
+use crate::math::{convert_to_assets, mul_div, Rounding};
 
 #[derive(Accounts)]
 pub struct Harvest<'info> {
@@ -48,7 +48,6 @@ pub struct Harvest<'info> {
     pub allocator_child_shares_account: Box<InterfaceAccount<'info, TokenAccount>>,
 
     // --- External child vault accounts for CPI ---
-
     pub child_asset_mint: Box<InterfaceAccount<'info, Mint>>,
 
     #[account(mut)]
@@ -66,11 +65,22 @@ pub fn harvest_handler(ctx: Context<Harvest>, min_assets_out: u64) -> Result<()>
     // 1. VALIDATION (via constraints)
 
     // 2. READ STATE — compute current value of our position in the child
-    let child_total_assets = ctx.accounts.child_asset_vault.amount;
-    let child_total_shares = ctx.accounts.child_shares_mint.supply;
+    let (child_total_assets, child_total_shares) = crate::utils::read_child_live_balances(
+        &ctx.accounts.child_asset_vault.to_account_info(),
+        &ctx.accounts.child_shares_mint.to_account_info(),
+    )?;
+
+    // Retrieve child decimals offset statically saved in our PDA allocation wrapper
+    let child_decimals_offset = ctx.accounts.child_allocation.child_decimals_offset;
 
     let our_shares = ctx.accounts.allocator_child_shares_account.amount;
-    let current_value = calculate_assets(our_shares, child_total_assets, child_total_shares, 0)?;
+    let current_value = convert_to_assets(
+        our_shares,
+        child_total_assets,
+        child_total_shares,
+        child_decimals_offset,
+        Rounding::Floor,
+    )?;
 
     let cost_basis = ctx.accounts.child_allocation.deposited_assets;
 
@@ -80,7 +90,8 @@ pub fn harvest_handler(ctx: Context<Harvest>, min_assets_out: u64) -> Result<()>
         return Ok(());
     }
 
-    let yield_amount = current_value.checked_sub(cost_basis)
+    let yield_amount = current_value
+        .checked_sub(cost_basis)
         .ok_or(VaultError::MathOverflow)?;
 
     // Calculate shares to redeem for the yield amount
@@ -89,16 +100,13 @@ pub fn harvest_handler(ctx: Context<Harvest>, min_assets_out: u64) -> Result<()>
         return Ok(());
     }
 
-    let shares_to_redeem_128 = (yield_amount as u128)
-        .checked_mul(child_total_shares as u128)
-        .ok_or(VaultError::MathOverflow)?
-        .checked_div(child_total_assets as u128)
-        .ok_or(VaultError::DivisionByZero)?;
-
-    // Round down to favor the vault (leave any remainder as asset dust to compounding).
-    let shares_to_redeem = u64::try_from(
-        shares_to_redeem_128
-    ).map_err(|_| VaultError::MathOverflow)?;
+    // Round UP to favor the vault (burn enough shares to cover the yield completely).
+    let shares_to_redeem = mul_div(
+        yield_amount,
+        child_total_shares,
+        child_total_assets,
+        Rounding::Ceiling,
+    )?;
 
     // Cap at available shares
     let shares_to_redeem = shares_to_redeem.min(our_shares);
@@ -121,28 +129,24 @@ pub fn harvest_handler(ctx: Context<Harvest>, min_assets_out: u64) -> Result<()>
         &[bump],
     ]];
 
-    let mut data = Vec::with_capacity(8 + 8 + 8);
-    data.extend_from_slice(&[184, 12, 86, 149, 70, 196, 97, 225]);
-    data.extend_from_slice(&shares_to_redeem.to_le_bytes());
-    data.extend_from_slice(&min_assets_out.to_le_bytes()); // min_assets_out
-
     let accounts = vec![
-        AccountMeta::new(ctx.accounts.allocator_vault.key(), true),          // user
-        AccountMeta::new_readonly(ctx.accounts.child_vault.key(), false),    // vault
+        AccountMeta::new(ctx.accounts.allocator_vault.key(), true), // user
+        AccountMeta::new_readonly(ctx.accounts.child_vault.key(), false), // vault
         AccountMeta::new_readonly(ctx.accounts.child_asset_mint.key(), false), // asset_mint
-        AccountMeta::new(ctx.accounts.idle_vault.key(), false),               // user_asset_account
-        AccountMeta::new(ctx.accounts.child_asset_vault.key(), false),       // asset_vault
-        AccountMeta::new(ctx.accounts.child_shares_mint.key(), false),       // shares_mint
+        AccountMeta::new(ctx.accounts.idle_vault.key(), false),     // user_asset_account
+        AccountMeta::new(ctx.accounts.child_asset_vault.key(), false), // asset_vault
+        AccountMeta::new(ctx.accounts.child_shares_mint.key(), false), // shares_mint
         AccountMeta::new(ctx.accounts.allocator_child_shares_account.key(), false), // user_shares_account
-        AccountMeta::new_readonly(ctx.accounts.token_program.key(), false),  // asset_token_program
+        AccountMeta::new_readonly(ctx.accounts.token_program.key(), false), // asset_token_program
         AccountMeta::new_readonly(ctx.accounts.token_2022_program.key(), false), // token_2022_program
     ];
 
-    let ix = anchor_lang::solana_program::instruction::Instruction {
-        program_id: ctx.accounts.child_program.key(),
+    let ix = crate::utils::build_child_redeem_ix(
+        ctx.accounts.child_program.key(),
         accounts,
-        data,
-    };
+        shares_to_redeem,
+        min_assets_out,
+    );
 
     anchor_lang::solana_program::program::invoke_signed(
         &ix,
@@ -153,7 +157,9 @@ pub fn harvest_handler(ctx: Context<Harvest>, min_assets_out: u64) -> Result<()>
             ctx.accounts.idle_vault.to_account_info(),
             ctx.accounts.child_asset_vault.to_account_info(),
             ctx.accounts.child_shares_mint.to_account_info(),
-            ctx.accounts.allocator_child_shares_account.to_account_info(),
+            ctx.accounts
+                .allocator_child_shares_account
+                .to_account_info(),
             ctx.accounts.token_program.to_account_info(),
             ctx.accounts.token_2022_program.to_account_info(),
         ],
@@ -162,7 +168,10 @@ pub fn harvest_handler(ctx: Context<Harvest>, min_assets_out: u64) -> Result<()>
 
     // 6. UPDATE STATE
     ctx.accounts.idle_vault.reload()?;
-    let assets_received = ctx.accounts.idle_vault.amount
+    let assets_received = ctx
+        .accounts
+        .idle_vault
+        .amount
         .checked_sub(idle_before)
         .ok_or(VaultError::MathOverflow)?;
 
@@ -182,7 +191,7 @@ pub fn harvest_handler(ctx: Context<Harvest>, min_assets_out: u64) -> Result<()>
     }
 
     // 7. EMIT EVENT
-    emit!(HarvestEvent {
+    emit!(crate::events::Harvest {
         allocator_vault: ctx.accounts.allocator_vault.key(),
         child_vault: ctx.accounts.child_vault.key(),
         yield_realized: assets_received,

@@ -4,7 +4,6 @@
 //! Share balances are encrypted, and balance uses stored total_assets.
 //! Maximum privacy with external yield strategy support.
 
-#![allow(deprecated, unexpected_cfgs)]
 use anchor_lang::prelude::*;
 
 pub mod constants;

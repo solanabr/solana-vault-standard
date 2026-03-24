@@ -1,8 +1,11 @@
-use anchor_lang::prelude::*;
-use crate::state::*;
 use crate::constants::*;
-use crate::events::*;
 use crate::error::*;
+use crate::events::*;
+use crate::state::*;
+use anchor_lang::prelude::*;
+use anchor_spl::associated_token::AssociatedToken;
+use anchor_spl::token_2022::Token2022;
+use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
 
 #[derive(Accounts)]
 pub struct AddChild<'info> {
@@ -26,48 +29,84 @@ pub struct AddChild<'info> {
     pub child_allocation: Account<'info, ChildAllocation>,
 
     /// CHECK: Public key of the vault being added as a child.
-    /// The owner/program check is deferred to allocate/deallocate CPI time
-    /// (allocate.rs: `child_vault.owner == &child_program.key()`), which is
-    /// the correct enforcement point for live on-chain validation.
+    #[account(
+        constraint = child_vault.owner == &child_program.key() @ VaultError::InvalidChildProgram
+    )]
     pub child_vault: UncheckedAccount<'info>,
 
     /// CHECK: The program that owns the child vault. Stored for CPI verification.
+    #[account(
+        executable,
+        constraint = [SVS1_ID, SVS2_ID, SVS3_ID, SVS4_ID, SVS9_ID].contains(&child_program.key()) @ VaultError::InvalidChildProgram
+    )]
     pub child_program: UncheckedAccount<'info>,
 
+    /// Shares mint of the child vault being added
+    pub child_shares_mint: InterfaceAccount<'info, Mint>,
+
+    /// ATA for the allocator to hold shares in the child vault
+    #[account(
+        init,
+        payer = authority,
+        associated_token::mint = child_shares_mint,
+        associated_token::authority = allocator_vault,
+        associated_token::token_program = token_2022_program,
+    )]
+    pub allocator_child_shares_account: InterfaceAccount<'info, TokenAccount>,
+
+    pub token_program: Interface<'info, TokenInterface>,
+    pub token_2022_program: Program<'info, Token2022>,
+    pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
 }
 
-pub fn add_child_handler(ctx: Context<AddChild>, max_weight_bps: u16) -> Result<()> {
+pub fn add_child_handler(
+    ctx: Context<AddChild>,
+    max_weight_bps: u16,
+    child_decimals_offset: u8,
+) -> Result<()> {
     // 1. VALIDATION
     // Max weight cannot exceed 100% (10,000 bps)
     require!(max_weight_bps <= 10000, VaultError::MathOverflow);
 
-    // (READ STATE/COMPUTE/SLIPPAGE/CPIs - Not applicable for basic setup)
+    // Validate child_vault discriminator
+    let vault_data = ctx.accounts.child_vault.try_borrow_data()?;
+    require!(vault_data.len() >= 8, VaultError::InvalidChildVault);
+    let discriminator = &vault_data[0..8];
+    require!(
+        discriminator == VAULT_DISCRIMINATOR
+            || discriminator == CONFIDENTIAL_VAULT_DISCRIMINATOR
+            || discriminator == ALLOCATOR_VAULT_DISCRIMINATOR,
+        VaultError::InvalidChildVault
+    );
 
     // 6. UPDATE STATE
     // Initialize ChildAllocation
     let child_allocation = &mut ctx.accounts.child_allocation;
     let allocator_vault_key = ctx.accounts.allocator_vault.key();
-    
+
     child_allocation.allocator_vault = allocator_vault_key;
     child_allocation.child_vault = ctx.accounts.child_vault.key();
     child_allocation.child_program = ctx.accounts.child_program.key();
-    child_allocation.child_shares_account = Pubkey::default(); // Set during first allocate
+    child_allocation.child_shares_account = ctx.accounts.allocator_child_shares_account.key();
     child_allocation.target_weight_bps = 0;
     child_allocation.max_weight_bps = max_weight_bps;
     child_allocation.deposited_assets = 0;
     child_allocation.index = ctx.accounts.allocator_vault.num_children; // pre-increment index
     child_allocation.enabled = true;
+    child_allocation.child_decimals_offset = child_decimals_offset;
     child_allocation.bump = ctx.bumps.child_allocation;
-    child_allocation._reserved = [0u8; 64];
+    child_allocation._reserved = [0u8; 63];
 
     // Increment children count in AllocatorVault
     let allocator_vault = &mut ctx.accounts.allocator_vault;
-    allocator_vault.num_children = allocator_vault.num_children.checked_add(1)
+    allocator_vault.num_children = allocator_vault
+        .num_children
+        .checked_add(1)
         .ok_or(VaultError::MathOverflow)?;
 
     // 7. EMIT EVENT
-    emit!(ChildAddedEvent {
+    emit!(ChildAdded {
         allocator_vault: allocator_vault.key(),
         child_vault: ctx.accounts.child_vault.key(),
         child_program: ctx.accounts.child_program.key(),

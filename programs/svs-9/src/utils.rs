@@ -1,9 +1,9 @@
+use crate::error::VaultError;
+use crate::math::{convert_to_assets, Rounding};
+use crate::state::ChildAllocation;
 use anchor_lang::prelude::*;
 use anchor_lang::AccountDeserialize;
 use anchor_spl::token_interface::TokenAccount;
-use crate::state::ChildAllocation;
-use crate::math::calculate_assets;
-use crate::error::VaultError;
 
 // =============================================================================
 // SVS-1 Vault state memory layout constants
@@ -60,7 +60,7 @@ const SVS1_VAULT_VAULT_ID_OFFSET: usize = 139;
 //
 // The original hardcoded values 136 / 144 in the legacy code were placeholders
 // that matched neither SVS-1 nor any released SVS variant. They have been
-// replaced by the live-balance read strategy documented below.
+// replaced by the live-balance read strategy documented below and passing decimals_offset.
 
 /// Computes the total assets managed by the SVS-9 allocator vault.
 ///
@@ -68,14 +68,14 @@ const SVS1_VAULT_VAULT_ID_OFFSET: usize = 139;
 ///
 /// ## remaining_accounts layout
 ///
-/// Accounts must be passed in **triplets** for each enabled child vault:
+/// Accounts must be passed in **groups of 5** for each enabled child vault:
 ///
 /// ```text
-/// [0] ChildAllocation PDA  — validated against discriminator + enabled flag
-/// [1] Child vault state    — used to identify the child; live balances come
-///                            from the token accounts below
-/// [2] Allocator shares ATA — token account where the allocator holds its
-///                            shares in the child vault
+/// [0] ChildAllocation PDA       — validated against discriminator + enabled flag
+/// [1] Child vault state         — used to identify the child
+/// [2] Allocator shares ATA      — token account where the allocator holds child shares
+/// [3] Child asset vault ATA     — token account holding child vault's underlying assets
+/// [4] Child shares mint         — mint for child vault's share token
 /// ```
 ///
 /// The child asset value is computed as:
@@ -88,20 +88,21 @@ const SVS1_VAULT_VAULT_ID_OFFSET: usize = 139;
 pub fn compute_total_assets<'info>(
     idle_amount: u64,
     num_children: u8,
-    remaining_accounts: &[AccountInfo<'info>]
+    remaining_accounts: &[AccountInfo<'info>],
 ) -> Result<u64> {
     if remaining_accounts.len() != (num_children as usize) * 5 {
         return Err(VaultError::InvalidRemainingAccounts.into());
     }
 
     let mut total: u128 = idle_amount as u128;
-    let mut processed_children: std::vec::Vec<Pubkey> = std::vec::Vec::with_capacity(num_children as usize);
+    let mut processed_children: std::vec::Vec<Pubkey> =
+        std::vec::Vec::with_capacity(num_children as usize);
 
     // Iterate through remaining accounts in chunks of 5
     for chunk in remaining_accounts.chunks_exact(5) {
         let allocation_info = &chunk[0];
-        let vault_info    = &chunk[1]; // child vault state
-        let shares_info   = &chunk[2]; // allocator's ATA for child shares
+        let vault_info = &chunk[1]; // child vault state
+        let shares_info = &chunk[2]; // allocator's ATA for child shares
         let child_asset_vault = &chunk[3]; // child's asset token account
         let child_shares_mint = &chunk[4]; // child's shares mint
 
@@ -112,11 +113,19 @@ pub fn compute_total_assets<'info>(
 
         // 1. Deserialize and validate the ChildAllocation PDA
         let allocation = ChildAllocation::try_deserialize(&mut &allocation_info.data.borrow()[..])?;
-        
+
         // --- Authentication Shielding ---
         // Ensure the accounts passed in remaining_accounts match the allocation state
-        require_keys_eq!(allocation.child_vault, vault_info.key(), VaultError::InvalidChildVault);
-        require_keys_eq!(allocation.child_shares_account, shares_info.key(), VaultError::InvalidRemainingAccounts);
+        require_keys_eq!(
+            allocation.child_vault,
+            vault_info.key(),
+            VaultError::InvalidChildVault
+        );
+        require_keys_eq!(
+            allocation.child_shares_account,
+            shares_info.key(),
+            VaultError::InvalidRemainingAccounts
+        );
 
         if !allocation.enabled {
             continue;
@@ -135,30 +144,36 @@ pub fn compute_total_assets<'info>(
             continue;
         }
 
-        // 4. Read child vault total_assets, total_shares, and decimals_offset.
-        let (child_total_assets, child_total_shares, child_decimals_offset) =
-            read_child_live_balances(vault_info, child_asset_vault, child_shares_mint)?;
+        // 4. Read child vault total_assets and total_shares.
+        let (child_total_assets, child_total_shares) =
+            read_child_live_balances(child_asset_vault, child_shares_mint)?;
 
-        // 5. Convert shares to assets using the child vault's NAV ratio
-        let child_assets = calculate_assets(our_shares, child_total_assets, child_total_shares, child_decimals_offset)?;
+        // 5. Convert shares to assets using the child vault's NAV ratio, using stored decimals_offset
+        let child_assets = convert_to_assets(
+            our_shares,
+            child_total_assets,
+            child_total_shares,
+            allocation.child_decimals_offset,
+            Rounding::Floor,
+        )?;
 
-        total = total.checked_add(child_assets as u128)
+        total = total
+            .checked_add(child_assets as u128)
             .ok_or(VaultError::MathOverflow)?;
     }
 
     u64::try_from(total).map_err(|_| VaultError::MathOverflow.into())
 }
 
-fn read_child_live_balances<'info>(
-    vault_info: &AccountInfo<'info>,
+pub fn read_child_live_balances<'info>(
     asset_info: &AccountInfo<'info>,
     mint_info: &AccountInfo<'info>,
-) -> Result<(u64, u64, u8)> {
+) -> Result<(u64, u64)> {
     let mut total_assets = 0;
     let mut total_shares = 0;
-    let mut decimals_offset = 0;
 
-    let is_asset_token = asset_info.owner == &anchor_spl::token::ID || asset_info.owner == &anchor_spl::token_2022::ID;
+    let is_asset_token = asset_info.owner == &anchor_spl::token::ID
+        || asset_info.owner == &anchor_spl::token_2022::ID;
     if is_asset_token {
         let asset_data = asset_info.try_borrow_data()?;
         if asset_data.len() >= 165 {
@@ -166,7 +181,8 @@ fn read_child_live_balances<'info>(
         }
     }
 
-    let is_mint = mint_info.owner == &anchor_spl::token::ID || mint_info.owner == &anchor_spl::token_2022::ID;
+    let is_mint =
+        mint_info.owner == &anchor_spl::token::ID || mint_info.owner == &anchor_spl::token_2022::ID;
     if is_mint {
         let mint_data = mint_info.try_borrow_data()?;
         if mint_data.len() >= 44 {
@@ -174,24 +190,7 @@ fn read_child_live_balances<'info>(
         }
     }
 
-    let vault_data = vault_info.try_borrow_data()?;
-    if vault_data.len() == 211 {
-        // SVS-1
-        decimals_offset = vault_data.get(136).cloned().unwrap_or(0);
-    } else if vault_data.len() == 197 || vault_data.len() == 201 {
-        // SVS-2/3/4
-        decimals_offset = vault_data.get(144).cloned().unwrap_or(0);
-    } else if vault_data.len() == 254 || vault_data.len() == 246 {
-        // SVS-9 (legacy 254, new 246)
-        // With total_shares removed, decimals_offset moved to 179
-        let offset = if vault_data.len() == 246 { 179 } else { 187 };
-        decimals_offset = vault_data.get(offset).cloned().unwrap_or(0);
-    } else if vault_info.owner == &anchor_spl::token::ID || vault_info.owner == &anchor_spl::token_2022::ID {
-        // Bare Token Account child vault
-        decimals_offset = 0;
-    }
-
-    Ok((total_assets, total_shares, decimals_offset))
+    Ok((total_assets, total_shares))
 }
 
 /// Read a little-endian `u64` from `data` at `offset`.
@@ -214,4 +213,40 @@ pub fn read_pubkey(data: &[u8], offset: usize) -> Result<Pubkey> {
         .try_into()
         .map_err(|_| VaultError::MathOverflow)?;
     Ok(Pubkey::from(bytes))
+}
+
+pub fn build_child_deposit_ix(
+    program_id: Pubkey,
+    accounts: Vec<AccountMeta>,
+    assets: u64,
+    min_shares_out: u64,
+) -> anchor_lang::solana_program::instruction::Instruction {
+    let mut data = Vec::with_capacity(8 + 8 + 8);
+    data.extend_from_slice(&crate::constants::DEPOSIT_DISCRIMINATOR);
+    data.extend_from_slice(&assets.to_le_bytes());
+    data.extend_from_slice(&min_shares_out.to_le_bytes());
+
+    anchor_lang::solana_program::instruction::Instruction {
+        program_id,
+        accounts,
+        data,
+    }
+}
+
+pub fn build_child_redeem_ix(
+    program_id: Pubkey,
+    accounts: Vec<AccountMeta>,
+    shares: u64,
+    min_assets_out: u64,
+) -> anchor_lang::solana_program::instruction::Instruction {
+    let mut data = Vec::with_capacity(8 + 8 + 8);
+    data.extend_from_slice(&crate::constants::REDEEM_DISCRIMINATOR);
+    data.extend_from_slice(&shares.to_le_bytes());
+    data.extend_from_slice(&min_assets_out.to_le_bytes());
+
+    anchor_lang::solana_program::instruction::Instruction {
+        program_id,
+        accounts,
+        data,
+    }
 }

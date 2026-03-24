@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 
 #[event]
-pub struct VaultInitializedEvent {
+pub struct VaultInitialized {
     pub vault: Pubkey,
     pub asset_mint: Pubkey,
     pub authority: Pubkey,
@@ -12,7 +12,7 @@ pub struct VaultInitializedEvent {
 }
 
 #[event]
-pub struct ChildAddedEvent {
+pub struct ChildAdded {
     pub allocator_vault: Pubkey,
     pub child_vault: Pubkey,
     pub child_program: Pubkey,
@@ -20,7 +20,7 @@ pub struct ChildAddedEvent {
 }
 
 #[event]
-pub struct DepositEvent {
+pub struct Deposit {
     pub vault: Pubkey,
     pub caller: Pubkey,
     pub owner: Pubkey,
@@ -29,14 +29,14 @@ pub struct DepositEvent {
 }
 
 #[event]
-pub struct AllocateEvent {
+pub struct Allocate {
     pub allocator_vault: Pubkey,
     pub child_vault: Pubkey,
     pub assets: u64,
 }
 
 #[event]
-pub struct RedeemEvent {
+pub struct Withdraw {
     pub vault: Pubkey,
     pub caller: Pubkey,
     pub owner: Pubkey,
@@ -45,14 +45,14 @@ pub struct RedeemEvent {
 }
 
 #[event]
-pub struct HarvestEvent {
+pub struct Harvest {
     pub allocator_vault: Pubkey,
     pub child_vault: Pubkey,
     pub yield_realized: u64,
 }
 
 #[event]
-pub struct DeallocateEvent {
+pub struct Deallocate {
     pub allocator_vault: Pubkey,
     pub child_vault: Pubkey,
     pub shares_burned: u64,
@@ -60,37 +60,33 @@ pub struct DeallocateEvent {
 }
 
 #[event]
-pub struct VaultPausedEvent {
+pub struct VaultStatusChanged {
     pub vault: Pubkey,
+    pub paused: bool,
 }
 
 #[event]
-pub struct VaultUnpausedEvent {
+pub struct AuthorityTransferred {
     pub vault: Pubkey,
-}
-
-#[event]
-pub struct AuthorityTransferredEvent {
-    pub vault: Pubkey,
-    pub old_authority: Pubkey,
+    pub previous_authority: Pubkey,
     pub new_authority: Pubkey,
 }
 
 #[event]
-pub struct CuratorTransferredEvent {
+pub struct CuratorTransferred {
     pub vault: Pubkey,
     pub old_curator: Pubkey,
     pub new_curator: Pubkey,
 }
 
 #[event]
-pub struct ChildRemovedEvent {
+pub struct ChildRemoved {
     pub allocator_vault: Pubkey,
     pub child_vault: Pubkey,
 }
 
 #[event]
-pub struct WeightsUpdatedEvent {
+pub struct WeightsUpdated {
     pub allocator_vault: Pubkey,
     pub child_vault: Pubkey,
     pub old_max_weight_bps: u16,
@@ -104,7 +100,7 @@ pub enum RebalanceAction {
 }
 
 #[event]
-pub struct RebalanceEvent {
+pub struct Rebalance {
     pub allocator_vault: Pubkey,
     pub child_vault: Pubkey,
     pub action: RebalanceAction,

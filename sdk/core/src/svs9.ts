@@ -192,7 +192,6 @@ export interface ChildAllocationState {
 export interface InitializeParams {
   vaultId: BN | number;
   idleBufferBps: number;
-  decimalsOffset: number;
   assetMint: PublicKey;
   sharesMint: PublicKey;
   curator: PublicKey;
@@ -214,8 +213,25 @@ export interface Svs9RedeemParams {
   ownerSharesAccount: PublicKey;
 }
 
+export interface Svs9MintParams {
+  shares: BN;
+  maxAssetsIn: BN;
+  owner: PublicKey;
+  callerAssetAccount: PublicKey;
+  ownerSharesAccount: PublicKey;
+}
+
+export interface Svs9WithdrawParams {
+  assets: BN;
+  maxSharesIn: BN;
+  owner: PublicKey;
+  callerAssetAccount: PublicKey;
+  ownerSharesAccount: PublicKey;
+}
+
 export interface AddChildParams {
   maxWeightBps: number;
+  childDecimalsOffset: number;
   childVault: PublicKey;
   childProgram: PublicKey;
 }
@@ -379,7 +395,7 @@ export class AllocatorVaultClient {
 
     const methodsNs = program.methods as any;
     await methodsNs
-      .initialize(id, params.idleBufferBps, params.decimalsOffset)
+      .initialize(id, params.idleBufferBps)
       .accountsPartial({
         authority: provider.wallet.publicKey,
         curator: params.curator,
@@ -551,6 +567,61 @@ export class AllocatorVaultClient {
       .rpc();
   }
 
+  /**
+   * Mint exact amount of shares by paying assets.
+   * The caller sends tokens and the owner receives minted shares.
+   */
+  async mint(params: Svs9MintParams): Promise<string> {
+    const state = await this.getState();
+    const remainingAccounts = await this.getChildAccountsForComputation();
+    const methodsNs = this.program.methods as any;
+
+    return methodsNs
+      .mint(params.shares, params.maxAssetsIn)
+      .accountsPartial({
+        caller: this.provider.wallet.publicKey,
+        owner: params.owner,
+        allocatorVault: this.allocatorVault,
+        idleVault: this.idleVault,
+        sharesMint: state.sharesMint,
+        callerAssetAccount: params.callerAssetAccount,
+        ownerSharesAccount: params.ownerSharesAccount,
+        assetMint: this.assetMint,
+        tokenProgram: this.assetTokenProgram,
+        token2022Program: TOKEN_2022_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+      })
+      .remainingAccounts(remainingAccounts)
+      .rpc();
+  }
+
+  /**
+   * Withdraw exact amount of assets by burning shares.
+   * Owner burns shares and the caller receives the assets.
+   */
+  async withdraw(params: Svs9WithdrawParams): Promise<string> {
+    const state = await this.getState();
+    const remainingAccounts = await this.getChildAccountsForComputation();
+    const methodsNs = this.program.methods as any;
+
+    return methodsNs
+      .withdraw(params.assets, params.maxSharesIn)
+      .accountsPartial({
+        caller: this.provider.wallet.publicKey,
+        owner: params.owner,
+        allocatorVault: this.allocatorVault,
+        idleVault: this.idleVault,
+        sharesMint: state.sharesMint,
+        callerAssetAccount: params.callerAssetAccount,
+        ownerSharesAccount: params.ownerSharesAccount,
+        assetMint: this.assetMint,
+        tokenProgram: this.assetTokenProgram,
+        token2022Program: TOKEN_2022_PROGRAM_ID,
+      })
+      .remainingAccounts(remainingAccounts)
+      .rpc();
+  }
+
   // ─── Child Vault Management ────────────────────────────────
 
   /**
@@ -563,16 +634,41 @@ export class AllocatorVaultClient {
       this.allocatorVault,
       params.childVault,
     );
+
+    // Fetch child vault to get its shares mint
+    const vaultData = await this.provider.connection.getAccountInfo(params.childVault);
+    if (!vaultData) throw new Error("Child vault not found");
+    
+    // SVS-1/5/2/3/4 all have shares_mint at offset 72 or 104
+    let childSharesMint: PublicKey;
+    if (vaultData.data.length === 211 || vaultData.data.length === 197 || vaultData.data.length === 201) {
+      childSharesMint = new PublicKey(vaultData.data.subarray(72, 104));
+    } else if (vaultData.data.length === 246 || vaultData.data.length === 254) {
+      childSharesMint = new PublicKey(vaultData.data.subarray(104, 136));
+    } else {
+      throw new Error(`Unknown vault data length: ${vaultData.data.length}`);
+    }
+
+    const allocatorChildSharesAccount = getAllocatorChildSharesAddress(
+      this.allocatorVault,
+      childSharesMint,
+    );
+
     const methodsNs = this.program.methods as any;
 
     return methodsNs
-      .addChild(params.maxWeightBps)
-      .accountsPartial({
+      .addChild(params.maxWeightBps, params.childDecimalsOffset)
+      .accounts({
         authority: this.provider.wallet.publicKey,
         allocatorVault: this.allocatorVault,
         childAllocation,
         childVault: params.childVault,
         childProgram: params.childProgram,
+        childSharesMint,
+        allocatorChildSharesAccount,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+        token2022Program: TOKEN_2022_PROGRAM_ID,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
       })
       .rpc();
@@ -841,71 +937,159 @@ export class AllocatorVaultClient {
   // ─── Off-Chain Simulation / Preview ────────────────────────
 
   /**
-   * Preview the result of a deposit (net shares out) via off-chain simulation.
+   * Preview the result of a deposit (net shares out) using on-chain view.
    */
   async previewDeposit(assets: BN): Promise<BN> {
     const remainingAccounts = await this.getChildAccountsForComputation();
     const state = await this.getState();
 
-    // Use simulate to fetch the event
-    const builder = this.program.methods
-      .deposit(assets, new BN(0))
-      .accountsPartial({
-        caller: this.provider.wallet.publicKey,
-        owner: this.provider.wallet.publicKey,
+    const sim: any = await this.program.methods
+      .previewDeposit(assets)
+      .accounts({
         allocatorVault: this.allocatorVault,
-        idleVault: this.idleVault,
         sharesMint: state.sharesMint,
-        callerAssetAccount: this.getUserAssetAccount(this.provider.wallet.publicKey),
-        ownerSharesAccount: this.getUserSharesAccount(this.provider.wallet.publicKey),
-        assetMint: this.assetMint,
-        tokenProgram: this.assetTokenProgram,
-        token2022Program: TOKEN_2022_PROGRAM_ID,
-        systemProgram: SystemProgram.programId,
-      })
-      .remainingAccounts(remainingAccounts);
+        idleVault: this.idleVault,
+      } as any)
+      .remainingAccounts(remainingAccounts)
+      .simulate();
 
-    const simulation = await builder.simulate();
-    
-    // Find DepositEvent in simulation events
-    const event = simulation.events.find((e) => e.name === "DepositEvent");
-    if (!event) {
-      throw new Error("Failed to simulate deposit");
-    }
-    return new BN(event.data.shares.toString());
+    const returnData = sim.returnData || (sim as any).returnValue;
+    if (!returnData) throw new Error("No return data from previewDeposit");
+    return new BN(returnData as any);
   }
 
   /**
-   * Preview the result of a redeem (net assets out) via off-chain simulation.
+   * Preview the result of a redeem (net assets out) using on-chain view.
    */
   async previewRedeem(shares: BN): Promise<BN> {
     const remainingAccounts = await this.getChildAccountsForComputation();
     const state = await this.getState();
 
-    const builder = this.program.methods
-      .redeem(shares, new BN(0))
-      .accountsPartial({
-        caller: this.provider.wallet.publicKey,
-        owner: this.provider.wallet.publicKey,
+    const sim: any = await this.program.methods
+      .previewRedeem(shares)
+      .accounts({
         allocatorVault: this.allocatorVault,
-        idleVault: this.idleVault,
         sharesMint: state.sharesMint,
-        callerAssetAccount: this.getUserAssetAccount(this.provider.wallet.publicKey),
-        ownerSharesAccount: this.getUserSharesAccount(this.provider.wallet.publicKey),
-        assetMint: this.assetMint,
-        tokenProgram: this.assetTokenProgram,
-        token2022Program: TOKEN_2022_PROGRAM_ID,
-      })
-      .remainingAccounts(remainingAccounts);
+        idleVault: this.idleVault,
+      } as any)
+      .remainingAccounts(remainingAccounts)
+      .simulate();
 
-    const simulation = await builder.simulate();
-    
-    // Find RedeemEvent in simulation events
-    const event = simulation.events.find((e) => e.name === "RedeemEvent");
-    if (!event) {
-      throw new Error("Failed to simulate redeem");
-    }
-    return new BN(event.data.assets.toString());
+    const returnData = sim.returnData || (sim as any).returnValue;
+    if (!returnData) throw new Error("No return data from previewRedeem");
+    return new BN(returnData as any);
+  }
+
+  /**
+   * Preview the result of a mint (net assets in) using on-chain view.
+   */
+  async previewMint(shares: BN): Promise<BN> {
+    const remainingAccounts = await this.getChildAccountsForComputation();
+    const state = await this.getState();
+
+    const sim: any = await this.program.methods
+      .previewMint(shares)
+      .accounts({
+        allocatorVault: this.allocatorVault,
+        sharesMint: state.sharesMint,
+        idleVault: this.idleVault,
+      } as any)
+      .remainingAccounts(remainingAccounts)
+      .simulate();
+
+    const returnData = sim.returnData || (sim as any).returnValue;
+    if (!returnData) throw new Error("No return data from previewMint");
+    return new BN(returnData as any);
+  }
+
+  /**
+   * Preview the result of a withdraw (net shares in) using on-chain view.
+   */
+  async previewWithdraw(assets: BN): Promise<BN> {
+    const remainingAccounts = await this.getChildAccountsForComputation();
+    const state = await this.getState();
+
+    const sim: any = await this.program.methods
+      .previewWithdraw(assets)
+      .accounts({
+        allocatorVault: this.allocatorVault,
+        sharesMint: state.sharesMint,
+        idleVault: this.idleVault,
+      } as any)
+      .remainingAccounts(remainingAccounts)
+      .simulate();
+
+    const returnData = sim.returnData || (sim as any).returnValue;
+    if (!returnData) throw new Error("No return data from previewWithdraw");
+    return new BN(returnData as any);
+  }
+
+  async maxDeposit(): Promise<BN> {
+    const remainingAccounts = await this.getChildAccountsForComputation();
+    const state = await this.getState();
+    const sim: any = await this.program.methods.maxDeposit().accounts({
+      allocatorVault: this.allocatorVault,
+      sharesMint: state.sharesMint,
+      idleVault: this.idleVault,
+    } as any).remainingAccounts(remainingAccounts).simulate();
+    return new BN(sim.returnData || sim.returnValue);
+  }
+
+  async maxMint(): Promise<BN> {
+    const remainingAccounts = await this.getChildAccountsForComputation();
+    const state = await this.getState();
+    const sim: any = await this.program.methods.maxMint().accounts({
+      allocatorVault: this.allocatorVault,
+      sharesMint: state.sharesMint,
+      idleVault: this.idleVault,
+    } as any).remainingAccounts(remainingAccounts).simulate();
+    return new BN(sim.returnData || sim.returnValue);
+  }
+
+  async maxWithdraw(owner: PublicKey): Promise<BN> {
+    const remainingAccounts = await this.getChildAccountsForComputation();
+    const state = await this.getState();
+    const sim: any = await this.program.methods.maxWithdraw().accounts({
+      allocatorVault: this.allocatorVault,
+      sharesMint: state.sharesMint,
+      idleVault: this.idleVault,
+      ownerSharesAccount: this.getUserSharesAccount(owner),
+    } as any).remainingAccounts(remainingAccounts).simulate();
+    return new BN(sim.returnData || sim.returnValue);
+  }
+
+  async maxRedeem(owner: PublicKey): Promise<BN> {
+    const remainingAccounts = await this.getChildAccountsForComputation();
+    const state = await this.getState();
+    const sim: any = await this.program.methods.maxRedeem().accounts({
+      allocatorVault: this.allocatorVault,
+      sharesMint: state.sharesMint,
+      idleVault: this.idleVault,
+      ownerSharesAccount: this.getUserSharesAccount(owner),
+    } as any).remainingAccounts(remainingAccounts).simulate();
+    return new BN(sim.returnData || sim.returnValue);
+  }
+
+  async convertToShares(assets: BN): Promise<BN> {
+    const remainingAccounts = await this.getChildAccountsForComputation();
+    const state = await this.getState();
+    const sim: any = await this.program.methods.convertToShares(assets).accounts({
+      allocatorVault: this.allocatorVault,
+      sharesMint: state.sharesMint,
+      idleVault: this.idleVault,
+    } as any).remainingAccounts(remainingAccounts).simulate();
+    return new BN(sim.returnData || sim.returnValue);
+  }
+
+  async convertToAssets(shares: BN): Promise<BN> {
+    const remainingAccounts = await this.getChildAccountsForComputation();
+    const state = await this.getState();
+    const sim: any = await this.program.methods.convertToAssets(shares).accounts({
+      allocatorVault: this.allocatorVault,
+      sharesMint: state.sharesMint,
+      idleVault: this.idleVault,
+    } as any).remainingAccounts(remainingAccounts).simulate();
+    return new BN(sim.returnData || sim.returnValue);
   }
 
   // ─── View / Query Helpers ──────────────────────────────────
@@ -921,6 +1105,27 @@ export class AllocatorVaultClient {
       this.assetTokenProgram,
     );
     return new BN(account.amount.toString());
+  }
+
+  /**
+   * Get total assets (idle + all child vaults).
+   */
+  async totalAssets(): Promise<BN> {
+    const remainingAccounts = await this.getChildAccountsForComputation();
+    const state = await this.getState();
+
+    const sim: any = await (this.program.methods.getTotalAssets() as any)
+      .accounts({
+        allocatorVault: this.allocatorVault,
+        sharesMint: state.sharesMint,
+        idleVault: this.idleVault,
+      })
+      .remainingAccounts(remainingAccounts)
+      .simulate();
+
+    const returnData = sim.returnData || (sim as any).returnValue;
+    if (!returnData) throw new Error("No return data from totalAssets");
+    return new BN(returnData as any);
   }
 
   /**
