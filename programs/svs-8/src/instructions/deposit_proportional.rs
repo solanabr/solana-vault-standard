@@ -8,6 +8,9 @@ use crate::{
     state::{AssetEntry, MultiAssetVault, OraclePrice},
 };
 
+#[cfg(feature = "modules")]
+use svs_module_hooks as module_hooks;
+
 /// Atomic proportional deposit across ALL basket assets.
 ///
 /// remaining_accounts layout per asset (quintuplets):
@@ -128,9 +131,29 @@ pub fn handler<'info>(
     let total_value = total_portfolio_value(&balances, &prices, &decimals_vec, base_decimals)?;
 
     let total_shares = ctx.accounts.shares_mint.supply;
-    let shares = convert_to_shares(total_deposit_value, total_value, total_shares, decimals_offset, Rounding::Floor)?;
-    require!(shares >= min_shares_out, VaultError::SlippageExceeded);
-    require!(shares > 0, VaultError::ZeroAmount);
+    // ===== Module Hooks (if enabled) =====
+    #[cfg(feature = "modules")]
+    let net_shares = {
+        let remaining = ctx.remaining_accounts;
+        let vault_key = vault_key;
+        let user_key = ctx.accounts.user.key();
+
+        module_hooks::check_deposit_access(remaining, &crate::ID, &vault_key, &user_key, &[])?;
+        module_hooks::check_deposit_caps(
+            remaining, &crate::ID, &vault_key, &user_key,
+            total_value, total_deposit_value,
+        )?;
+
+        let shares = convert_to_shares(total_deposit_value, total_value, total_shares, decimals_offset, Rounding::Floor)?;
+        let result = module_hooks::apply_entry_fee(remaining, &crate::ID, &vault_key, shares)?;
+        result.net_shares
+    };
+
+    #[cfg(not(feature = "modules"))]
+    let net_shares = convert_to_shares(total_deposit_value, total_value, total_shares, decimals_offset, Rounding::Floor)?;
+
+    require!(net_shares >= min_shares_out, VaultError::SlippageExceeded);
+    require!(net_shares > 0, VaultError::ZeroAmount);
 
     // Execute transfers using remaining_accounts only
     for i in 0..num_assets {
@@ -170,7 +193,7 @@ pub fn handler<'info>(
             },
             signer_seeds,
         ),
-        shares,
+        net_shares,
         9,
     )?;
 
@@ -178,7 +201,7 @@ pub fn handler<'info>(
         vault: vault_key,
         caller: ctx.accounts.user.key(),
         base_amount,
-        shares,
+        shares: net_shares,
         total_value: total_deposit_value,
     });
 

@@ -321,21 +321,20 @@ export class BasketVault {
 
   /** Deposit proportionally across ALL basket assets (atomic) */
   async depositProportional(user: PublicKey, params: DepositProportionalParams): Promise<string> {
+    // Layout: [AssetEntry, OraclePrice, vault_ata, user_ata, mint] x num_assets
     const remainingAccounts: AccountMeta[] = [];
 
     for (const asset of params.assets) {
+      const [assetEntry] = getAssetEntryAddress(this.programId, this.vault, asset.mint);
       remainingAccounts.push(
+        { pubkey: assetEntry, isWritable: false, isSigner: false },
         { pubkey: asset.oraclePrice, isWritable: false, isSigner: false },
         { pubkey: asset.vaultAta, isWritable: true, isSigner: false },
         { pubkey: asset.userAta, isWritable: true, isSigner: false },
         { pubkey: asset.mint, isWritable: false, isSigner: false },
       );
     }
-    // Last 2: user, token_program
-    remainingAccounts.push(
-      { pubkey: user, isWritable: false, isSigner: false },
-      { pubkey: TOKEN_PROGRAM_ID, isWritable: false, isSigner: false },
-    );
+
 
     return this.program.methods
       .depositProportional(params.baseAmount, params.minSharesOut)
@@ -355,21 +354,20 @@ export class BasketVault {
 
   /** Redeem shares proportionally across ALL basket assets */
   async redeemProportional(user: PublicKey, params: RedeemProportionalParams): Promise<string> {
+    // Layout: [AssetEntry, OraclePrice, vault_ata, user_ata, mint] x num_assets
     const remainingAccounts: AccountMeta[] = [];
 
     for (const asset of params.assets) {
+      const [assetEntry] = getAssetEntryAddress(this.programId, this.vault, asset.mint);
       remainingAccounts.push(
+        { pubkey: assetEntry, isWritable: false, isSigner: false },
         { pubkey: asset.oraclePrice, isWritable: false, isSigner: false },
         { pubkey: asset.vaultAta, isWritable: true, isSigner: false },
         { pubkey: asset.userAta, isWritable: true, isSigner: false },
         { pubkey: asset.mint, isWritable: false, isSigner: false },
       );
     }
-    // Last 2: vault, token_program
-    remainingAccounts.push(
-      { pubkey: this.vault, isWritable: false, isSigner: false },
-      { pubkey: TOKEN_PROGRAM_ID, isWritable: false, isSigner: false },
-    );
+
 
     return this.program.methods
       .redeemProportional(params.shares, params.minAssetsOut)

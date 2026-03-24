@@ -8,6 +8,9 @@ use crate::{
     state::{AssetEntry, MultiAssetVault, OraclePrice},
 };
 
+#[cfg(feature = "modules")]
+use svs_module_hooks as module_hooks;
+
 /// Redeem shares proportionally across ALL basket assets.
 ///
 /// remaining_accounts layout per asset (quintuplets):
@@ -99,9 +102,25 @@ pub fn handler<'info>(
     let total_value = total_portfolio_value(
         &balances, &prices, &decimals_vec, ctx.accounts.vault.base_decimals,
     )?;
-    let redeem_value = convert_to_assets(
+    let gross_value = convert_to_assets(
         shares, total_value, total_shares, ctx.accounts.vault.decimals_offset, Rounding::Floor,
     )?;
+
+    // ===== Module Hooks (if enabled) =====
+    #[cfg(feature = "modules")]
+    let redeem_value = {
+        let remaining = ctx.remaining_accounts;
+        let vault_key = vault_key;
+        let user_key = ctx.accounts.user.key();
+        module_hooks::check_deposit_access(remaining, &crate::ID, &vault_key, &user_key, &[])?;
+        module_hooks::check_share_lock(remaining, &crate::ID, &vault_key, &user_key)?;
+        let result = module_hooks::apply_exit_fee(remaining, &crate::ID, &vault_key, gross_value)?;
+        result.net_assets
+    };
+
+    #[cfg(not(feature = "modules"))]
+    let redeem_value = gross_value;
+
     require!(redeem_value >= min_assets_out, VaultError::SlippageExceeded);
     require!(redeem_value > 0, VaultError::ZeroAmount);
 

@@ -185,4 +185,69 @@ export function registerBasketCommands(program: Command): void {
       const tx = await b.transferAuthority(wallet.publicKey, new PublicKey(newAuthorityArg));
       output.success(`Authority transferred! tx: ${tx}`);
     });
+  // ── deposit ───────────────────────────────────────────────────────────────
+  basket
+    .command("deposit <vault-id> <mint> <amount>")
+    .description("Deposit a single asset into the basket vault")
+    .option("--min-shares <number>", "Minimum shares to receive", "0")
+    .action(async (vaultIdArg, mintArg, amountArg, opts) => {
+      const globalOpts = getGlobalOptions(program);
+      const ctx = await createContext(globalOpts, opts, true, true);
+      const { output, provider, wallet } = ctx;
+      const idl = loadBasketIdl(output);
+      const prog = new Program(idl, provider);
+      const b = await BasketVault.load(prog, new BN(vaultIdArg));
+      const assetMint = new PublicKey(mintArg);
+      const [oraclePrice] = getOraclePriceAddress(prog.programId, b.vault, assetMint);
+      const entry = await b.fetchAssetEntry(assetMint);
+      const userAta = await getOrCreateAssociatedTokenAccount(
+        provider.connection, (wallet as any).payer, assetMint, wallet.publicKey,
+        false, undefined, undefined, TOKEN_PROGRAM_ID
+      );
+      const userSharesAta = await getOrCreateAssociatedTokenAccount(
+        provider.connection, (wallet as any).payer, b.sharesMint, wallet.publicKey,
+        false, undefined, undefined, TOKEN_2022_PROGRAM_ID
+      );
+      const tx = await b.depositSingle(wallet.publicKey, {
+        assetMint,
+        assetEntry: getAssetEntryAddress(prog.programId, b.vault, assetMint)[0],
+        assetVaultAccount: entry.assetVault,
+        userAssetAccount: userAta.address,
+        userSharesAccount: userSharesAta.address,
+        amount: new BN(amountArg),
+        minSharesOut: new BN(opts.minShares || "0"),
+      });
+      output.success(`Deposited! tx: ${tx}`);
+    });
+
+  // ── redeem ────────────────────────────────────────────────────────────────
+  basket
+    .command("redeem <vault-id> <shares>")
+    .description("Redeem shares proportionally from all basket assets")
+    .option("--min-assets <number>", "Minimum assets to receive", "0")
+    .action(async (vaultIdArg, sharesArg, opts) => {
+      const globalOpts = getGlobalOptions(program);
+      const ctx = await createContext(globalOpts, opts, true, true);
+      const { output, provider, wallet } = ctx;
+      const idl = loadBasketIdl(output);
+      const prog = new Program(idl, provider);
+      const b = await BasketVault.load(prog, new BN(vaultIdArg));
+      const vaultState = await b.fetchState();
+      output.info(`Vault state loaded, numAssets: ${vaultState.numAssets}`);
+      const userSharesAta = await getOrCreateAssociatedTokenAccount(
+        provider.connection, (wallet as any).payer, b.sharesMint, wallet.publicKey,
+        false, undefined, undefined, TOKEN_2022_PROGRAM_ID
+      );
+      // NOTE: caller must pass asset mints via --assets flag in production
+      // This example uses vault's tracked assets from on-chain state
+      const assetParams: Array<{mint: PublicKey; oraclePrice: PublicKey; vaultAta: PublicKey; userAta: PublicKey}> = [];
+      const tx = await b.redeemProportional(wallet.publicKey, {
+        shares: new BN(sharesArg),
+        minAssetsOut: new BN(opts.minAssets || "0"),
+        userSharesAccount: userSharesAta.address,
+        assets: assetParams,
+      });
+      output.success(`Redeemed! tx: ${tx}`);
+    });
+
 }

@@ -38,6 +38,9 @@ pub fn handler(
     let _asset_value = oracle_value_for_amount(oracle.price, vault_balance, asset_decimals, base_decimals)?;
 
     // Total portfolio value — use remaining_accounts: [OraclePrice, vault_ata, asset_mint] per other asset
+
+#[cfg(feature = "modules")]
+use svs_module_hooks as module_hooks;
     let mut balances: Vec<u64> = vec![vault_balance];
     let mut prices: Vec<u64> = vec![oracle.price];
     let mut decimals_vec: Vec<u8> = vec![asset_decimals];
@@ -76,9 +79,24 @@ pub fn handler(
         .checked_mul(shares as u64).unwrap_or(u64::MAX)
         .checked_div(total_shares).unwrap_or(0);
 
-    require!(token_amount >= min_assets_out, VaultError::SlippageExceeded);
-    require!(token_amount > 0, VaultError::ZeroAmount);
-    require!(token_amount <= vault_balance, VaultError::InsufficientShares);
+    // ===== Module Hooks (if enabled) =====
+    #[cfg(feature = "modules")]
+    let net_token_amount = {
+        let remaining = ctx.remaining_accounts;
+        let vault_key = ctx.accounts.vault.key();
+        let user_key = ctx.accounts.user.key();
+        module_hooks::check_deposit_access(remaining, &crate::ID, &vault_key, &user_key, &[])?;
+        module_hooks::check_share_lock(remaining, &crate::ID, &vault_key, &user_key)?;
+        let result = module_hooks::apply_exit_fee(remaining, &crate::ID, &vault_key, token_amount)?;
+        result.net_assets
+    };
+
+    #[cfg(not(feature = "modules"))]
+    let net_token_amount = token_amount;
+
+    require!(net_token_amount >= min_assets_out, VaultError::SlippageExceeded);
+    require!(net_token_amount > 0, VaultError::ZeroAmount);
+    require!(net_token_amount <= vault_balance, VaultError::InsufficientShares);
 
     // Transfer asset from vault to user
     let signer_seeds: &[&[&[u8]]] = &[&[MULTI_VAULT_SEED, vault_id_bytes.as_ref(), &[bump]]];

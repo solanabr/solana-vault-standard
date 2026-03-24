@@ -14,6 +14,9 @@ use crate::{
     state::{AssetEntry, MultiAssetVault, OraclePrice},
 };
 
+#[cfg(feature = "modules")]
+use svs_module_hooks as module_hooks;
+
 pub fn handler(
     ctx: Context<DepositSingle>,
     amount: u64,
@@ -74,9 +77,49 @@ pub fn handler(
         total_portfolio_value(&balances, &prices, &decimals, ctx.accounts.vault.base_decimals)?
     };
 
-    let shares = convert_to_shares(deposit_value, total_value, ctx.accounts.shares_mint.supply, ctx.accounts.vault.decimals_offset, Rounding::Floor)?;
-    require!(shares >= min_shares_out, VaultError::SlippageExceeded);
-    require!(shares > 0, VaultError::ZeroAmount);
+    // ===== Module Hooks (if enabled) =====
+    #[cfg(feature = "modules")]
+    let net_shares = {
+        let remaining = ctx.remaining_accounts;
+        let vault_key = ctx.accounts.vault.key();
+        let user_key = ctx.accounts.user.key();
+
+        // 1. Access control
+        module_hooks::check_deposit_access(remaining, &crate::ID, &vault_key, &user_key, &[])?;
+
+        // 2. Cap enforcement
+        module_hooks::check_deposit_caps(
+            remaining,
+            &crate::ID,
+            &vault_key,
+            &user_key,
+            total_value,
+            deposit_value,
+        )?;
+
+        // Calculate shares (floor — favors vault)
+        let shares = convert_to_shares(
+            deposit_value, total_value,
+            ctx.accounts.shares_mint.supply,
+            ctx.accounts.vault.decimals_offset,
+            Rounding::Floor,
+        )?;
+
+        // 3. Apply entry fee
+        let result = module_hooks::apply_entry_fee(remaining, &crate::ID, &vault_key, shares)?;
+        result.net_shares
+    };
+
+    #[cfg(not(feature = "modules"))]
+    let net_shares = convert_to_shares(
+        deposit_value, total_value,
+        ctx.accounts.shares_mint.supply,
+        ctx.accounts.vault.decimals_offset,
+        Rounding::Floor,
+    )?;
+
+    require!(net_shares >= min_shares_out, VaultError::SlippageExceeded);
+    require!(net_shares > 0, VaultError::ZeroAmount);
 
     let vault_id_bytes = ctx.accounts.vault.vault_id.to_le_bytes();
     let bump = ctx.accounts.vault.bump;
@@ -107,17 +150,16 @@ pub fn handler(
             },
             signer_seeds,
         ),
-        shares,
+        net_shares,
         9,
     )?;
-
 
     emit!(DepositSingleEvent {
         vault: ctx.accounts.vault.key(),
         caller: ctx.accounts.user.key(),
         asset_mint: ctx.accounts.asset_mint.key(),
         amount,
-        shares,
+        shares: net_shares,
         deposit_value,
     });
 
