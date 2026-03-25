@@ -214,10 +214,7 @@ pub struct InitializeLockConfig<'info> {
     pub system_program: Program<'info, System>,
 }
 
-pub fn initialize_lock_config(
-    ctx: Context<InitializeLockConfig>,
-    lock_duration: i64,
-) -> Result<()> {
+pub fn initialize_lock_config(ctx: Context<InitializeLockConfig>, lock_duration: i64) -> Result<()> {
     svs_locks::validate_lock_duration(lock_duration)
         .map_err(|_| VaultError::LockDurationExceedsMax)?;
 

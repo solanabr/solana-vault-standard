@@ -69,3 +69,4 @@ pub fn transfer_authority(ctx: Context<Admin>, new_authority: Pubkey) -> Result<
 
     Ok(())
 }
+

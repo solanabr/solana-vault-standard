@@ -73,7 +73,10 @@ pub struct Initialize<'info> {
     pub rent: Sysvar<'info, Rent>,
 }
 
-pub fn handler(ctx: Context<Initialize>, vault_id: u64) -> Result<()> {
+pub fn handler(
+    ctx: Context<Initialize>,
+    vault_id: u64,
+) -> Result<()> {
     // SOL always has 9 decimals; decimals_offset = 9 - 9 = 0
     let decimals_offset: u8 = 0;
 
@@ -122,7 +125,10 @@ pub fn handler(ctx: Context<Initialize>, vault_id: u64) -> Result<()> {
         SHARES_DECIMALS,
     )?;
 
-    invoke(&init_mint_ix, &[ctx.accounts.shares_mint.to_account_info()])?;
+    invoke(
+        &init_mint_ix,
+        &[ctx.accounts.shares_mint.to_account_info()],
+    )?;
 
     // Set vault state
     let vault = &mut ctx.accounts.vault;
