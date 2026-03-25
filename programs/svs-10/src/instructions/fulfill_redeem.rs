@@ -193,6 +193,8 @@ pub fn handler(ctx: Context<FulfillRedeem>, oracle_price: Option<u64>) -> Result
     #[cfg(not(feature = "modules"))]
     let net_assets = assets;
 
+    require!(net_assets > 0, VaultError::ZeroAmount);
+
     // Exclude both pending deposits (awaiting fulfill) and fulfilled-but-unclaimed
     // deposits (awaiting claim) — those assets are earmarked for depositors.
     let available = ctx
