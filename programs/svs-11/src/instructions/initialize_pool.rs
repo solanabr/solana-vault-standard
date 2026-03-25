@@ -233,7 +233,6 @@ pub fn handler(
     vault.total_pending_deposits = 0;
     vault.minimum_investment = minimum_investment;
     vault.investment_window_open = false;
-    vault.decimals_offset = MAX_DECIMALS - asset_decimals;
     vault.bump = vault_bump;
     vault.redemption_escrow_bump = redemption_escrow_bump;
     vault.paused = false;

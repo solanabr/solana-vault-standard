@@ -31,7 +31,6 @@ pub struct CreditVault {
     pub total_pending_deposits: u64,
     pub minimum_investment: u64,
     pub investment_window_open: bool,
-    pub decimals_offset: u8,
     pub bump: u8,
     // Stored because the escrow lives for the vault's lifetime and is used in many CPIs.
     // claimable_tokens has no stored bump — its lifetime is single-instruction-pair
@@ -61,7 +60,6 @@ impl CreditVault {
         8 +   // total_pending_deposits
         8 +   // minimum_investment
         1 +   // investment_window_open
-        1 +   // decimals_offset
         1 +   // bump
         1 +   // redemption_escrow_bump
         1 +   // paused
