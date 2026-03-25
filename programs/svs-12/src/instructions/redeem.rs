@@ -90,7 +90,7 @@ pub fn handler(ctx: Context<Redeem>, shares: u64, min_assets_out: u64) -> Result
         let vault_key = vault.key();
         let user_key = ctx.accounts.user.key();
 
-        module_hooks::check_deposit_access(remaining, &crate::ID, &vault_key, &user_key, &[])?;
+        module_hooks::check_access(remaining, &crate::ID, &vault_key, &user_key, &[])?;
 
         let current_timestamp = Clock::get()?.unix_timestamp;
         module_hooks::check_share_lock(
@@ -118,6 +118,8 @@ pub fn handler(ctx: Context<Redeem>, shares: u64, min_assets_out: u64) -> Result
         let result = module_hooks::apply_exit_fee(remaining, &crate::ID, &vault_key, assets)?;
         result.net_assets
     };
+
+    require!(assets > 0, TranchedVaultError::ZeroAmount);
 
     require!(
         assets >= min_assets_out,

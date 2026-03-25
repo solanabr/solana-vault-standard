@@ -53,6 +53,7 @@ pub fn handler(ctx: Context<RecordLoss>, total_loss: u64) -> Result<()> {
 
     // Phase 1: Read tranche data (immutable borrows)
     let mut tranche_info: Vec<(u8, u64, usize)> = Vec::new();
+    let mut seen_keys: Vec<Pubkey> = Vec::new();
     macro_rules! read_tranche {
         ($field:expr, $slot:expr) => {
             if let Some(ref t) = $field {
@@ -60,6 +61,11 @@ pub fn handler(ctx: Context<RecordLoss>, total_loss: u64) -> Result<()> {
                     t.vault == vault.key(),
                     TranchedVaultError::TrancheVaultMismatch
                 );
+                require!(
+                    !seen_keys.contains(&t.key()),
+                    TranchedVaultError::DuplicateTranche
+                );
+                seen_keys.push(t.key());
                 tranche_info.push((t.priority, t.total_assets_allocated, $slot));
             }
         };

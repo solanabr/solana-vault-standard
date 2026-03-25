@@ -50,6 +50,7 @@ pub fn handler(
     let vault = &ctx.accounts.vault;
     let tranche = &ctx.accounts.target_tranche;
     let mut all_allocations: Vec<(u8, u64, u16)> = Vec::new();
+    let mut seen_keys: Vec<Pubkey> = vec![tranche.key()];
     all_allocations.push((
         tranche.priority,
         tranche.total_assets_allocated,
@@ -66,6 +67,11 @@ pub fn handler(
                 t.vault == vault.key(),
                 TranchedVaultError::TrancheVaultMismatch
             );
+            require!(
+                !seen_keys.contains(&t.key()),
+                TranchedVaultError::DuplicateTranche
+            );
+            seen_keys.push(t.key());
             all_allocations.push((t.priority, t.total_assets_allocated, t.subordination_bps));
         }
     }
