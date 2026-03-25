@@ -6,7 +6,7 @@
  */
 
 import { PublicKey } from "@solana/web3.js";
-import { BN } from "@coral-xyz/anchor";
+import { BN, AnchorProvider, Program } from "@coral-xyz/anchor";
 import * as fs from "fs";
 import * as path from "path";
 import * as yaml from "yaml";
@@ -15,6 +15,8 @@ import {
   resolveVault as resolveVaultAlias,
   isValidPublicKey,
 } from "./config/vault-aliases";
+import { SolanaVault } from "../vault";
+import { AllocatorVaultClient } from "../svs9";
 
 // Re-export for use by command files
 export { isValidPublicKey } from "./config/vault-aliases";
@@ -32,13 +34,24 @@ export function getCluster(
   return "devnet";
 }
 
-/** Base path for IDL files (relative to compiled output) */
-const IDL_BASE_PATH = path.resolve(__dirname, "..", "..", "target", "idl");
+/**
+ * Candidate base paths for IDL files.
+ *
+ * In the workspace, compiled CLI files live under `sdk/core/dist/cli`, while
+ * Anchor emits IDLs to the repo root `target/idl`. We also keep fallbacks for
+ * development-time execution and custom overrides.
+ */
+const IDL_BASE_PATHS = [
+  process.env.SVS_IDL_DIR,
+  path.resolve(process.cwd(), "target", "idl"),
+  path.resolve(__dirname, "..", "..", "..", "..", "target", "idl"),
+  path.resolve(__dirname, "..", "..", "target", "idl"),
+].filter((p): p is string => Boolean(p));
 
 /**
  * Find IDL file path for a given SVS variant.
  *
- * @param variant - Optional SVS variant (svs-1, svs-2, svs-3, svs-4)
+ * @param variant - Optional SVS variant (svs-1, svs-2, svs-3, svs-4, svs-9)
  * @returns Path to IDL file if found, null otherwise
  *
  * @example
@@ -53,18 +66,22 @@ export function findIdlPath(variant?: SvsVariant): string | null {
   // Try variant-specific IDL first
   if (variant) {
     const idlName = variant.replace("-", "_") + ".json";
-    const idlPath = path.join(IDL_BASE_PATH, idlName);
-    if (fs.existsSync(idlPath)) {
-      return idlPath;
+    for (const basePath of IDL_BASE_PATHS) {
+      const idlPath = path.join(basePath, idlName);
+      if (fs.existsSync(idlPath)) {
+        return idlPath;
+      }
     }
   }
 
   // Fall back to first available IDL
-  const idlNames = ["svs_1.json", "svs_2.json", "svs_3.json", "svs_4.json"];
-  for (const name of idlNames) {
-    const idlPath = path.join(IDL_BASE_PATH, name);
-    if (fs.existsSync(idlPath)) {
-      return idlPath;
+  const idlNames = ["svs_1.json", "svs_2.json", "svs_3.json", "svs_4.json", "svs_9.json"];
+  for (const basePath of IDL_BASE_PATHS) {
+    for (const name of idlNames) {
+      const idlPath = path.join(basePath, name);
+      if (fs.existsSync(idlPath)) {
+        return idlPath;
+      }
     }
   }
 
@@ -80,6 +97,35 @@ export function findIdlPath(variant?: SvsVariant): string | null {
  */
 export function loadIdl(idlPath: string): unknown {
   return JSON.parse(fs.readFileSync(idlPath, "utf-8"));
+}
+
+/**
+ * Return true when the variant uses the allocator client.
+ */
+export function isAllocatorVariant(variant: SvsVariant): boolean {
+  return variant === "svs-9";
+}
+
+/**
+ * Load the correct IDL + Anchor program for a variant.
+ */
+export function loadProgramForVariant(
+  provider: AnchorProvider,
+  variant: SvsVariant,
+  programId?: PublicKey,
+): Program {
+  const idlPath = findIdlPath(variant);
+  if (!idlPath) {
+    throw new Error(
+      `IDL not found for ${variant}. Run \`anchor build -p ${variant.replace("-", "_")}\` first.`,
+    );
+  }
+
+  const idl = loadIdl(idlPath) as Record<string, unknown>;
+  if (programId) {
+    idl.address = programId.toBase58();
+  }
+  return new Program(idl as any, provider);
 }
 
 /**
@@ -116,8 +162,34 @@ export interface ResolvedVaultParams {
   assetMint: PublicKey;
   /** Vault ID (for multi-vault deployments) */
   vaultId: BN;
-  /** SVS variant (svs-1, svs-2, svs-3, svs-4) */
+  /** SVS variant (svs-1, svs-2, svs-3, svs-4, svs-9) */
   variant: SvsVariant;
+}
+
+export type SupportedVaultClient = SolanaVault | AllocatorVaultClient;
+
+/**
+ * Load the SDK client that matches the resolved vault variant.
+ */
+export async function loadVaultClient(
+  provider: AnchorProvider,
+  resolved: ResolvedVaultParams,
+): Promise<SupportedVaultClient> {
+  const program = loadProgramForVariant(
+    provider,
+    resolved.variant,
+    resolved.programId,
+  );
+
+  if (isAllocatorVariant(resolved.variant)) {
+    return AllocatorVaultClient.load(
+      program,
+      resolved.assetMint,
+      resolved.vaultId,
+    );
+  }
+
+  return SolanaVault.load(program, resolved.assetMint, resolved.vaultId);
 }
 
 /**
@@ -147,9 +219,29 @@ export interface ResolvedVaultParams {
 export function resolveVaultArg(
   vaultArg: string,
   config: CliConfig,
-  opts: { programId?: string; assetMint?: string; vaultId?: string },
+  opts: {
+    programId?: string;
+    assetMint?: string;
+    vaultId?: string;
+    variant?: string;
+  },
   output: OutputAdapter,
 ): ResolvedVaultParams | null {
+  const validVariants: SvsVariant[] = [
+    "svs-1",
+    "svs-2",
+    "svs-3",
+    "svs-4",
+    "svs-9",
+  ];
+
+  if (opts.variant && !validVariants.includes(opts.variant as SvsVariant)) {
+    output.error(
+      `Invalid variant: ${opts.variant}. Use: ${validVariants.join(", ")}`,
+    );
+    return null;
+  }
+
   // Raw PublicKey address
   if (isValidPublicKey(vaultArg)) {
     if (!opts.programId || !opts.assetMint) {
@@ -162,7 +254,7 @@ export function resolveVaultArg(
       programId: new PublicKey(opts.programId),
       assetMint: new PublicKey(opts.assetMint),
       vaultId: new BN(opts.vaultId || "1"),
-      variant: "svs-1",
+      variant: (opts.variant as SvsVariant) || "svs-1",
     };
   }
 

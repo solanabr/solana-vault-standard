@@ -1,11 +1,16 @@
 /** Redeem Command - Redeem shares for underlying assets */
 
 import { Command } from "commander";
-import { Program, BN } from "@coral-xyz/anchor";
+import { BN } from "@coral-xyz/anchor";
 import { createContext } from "../../middleware";
 import { getGlobalOptions } from "../../index";
+import {
+  isAllocatorVariant,
+  loadVaultClient,
+  resolveVaultArg,
+} from "../../utils";
+import { AllocatorVaultClient } from "../../../svs9";
 import { SolanaVault } from "../../../vault";
-import { findIdlPath, loadIdl, resolveVaultArg } from "../../utils";
 
 export function registerRedeemCommand(program: Command): void {
   program
@@ -18,6 +23,7 @@ export function registerRedeemCommand(program: Command): void {
       "--min-assets <number>",
       "Minimum assets to receive (overrides slippage)",
     )
+    .option("--variant <variant>", "SVS variant (for raw vault addresses)")
     .option("--program-id <pubkey>", "Program ID (if vault not in config)")
     .option("--asset-mint <pubkey>", "Asset mint (if vault not in config)")
     .option("--vault-id <number>", "Vault ID", "1")
@@ -29,23 +35,11 @@ export function registerRedeemCommand(program: Command): void {
       const resolved = resolveVaultArg(vaultArg, config, opts, output);
       if (!resolved) process.exit(1);
 
-      const idlPath = findIdlPath();
-      if (!idlPath) {
-        output.error("IDL not found. Run `anchor build` first.");
-        process.exit(1);
-      }
-
       const shares = new BN(opts.shares);
       const slippageBps = parseInt(opts.slippage);
 
       try {
-        const idl = loadIdl(idlPath);
-        const prog = new Program(idl as any, provider);
-        const vault = await SolanaVault.load(
-          prog,
-          resolved.assetMint,
-          resolved.vaultId,
-        );
+        const vault = await loadVaultClient(provider, resolved);
 
         const previewAssets = await vault.previewRedeem(shares);
         const minAssets = opts.minAssets
@@ -86,10 +80,18 @@ export function registerRedeemCommand(program: Command): void {
         const spinner = output.spinner("Sending transaction...");
         spinner.start();
 
-        const signature = await vault.redeem(wallet.publicKey, {
-          shares,
-          minAssetsOut: minAssets,
-        });
+        const signature = isAllocatorVariant(resolved.variant)
+          ? await (vault as AllocatorVaultClient).redeem({
+              shares,
+              minAssetsOut: minAssets,
+              owner: wallet.publicKey,
+              callerAssetAccount: vault.getUserAssetAccount(wallet.publicKey),
+              ownerSharesAccount: vault.getUserSharesAccount(wallet.publicKey),
+            })
+          : await (vault as SolanaVault).redeem(wallet.publicKey, {
+              shares,
+              minAssetsOut: minAssets,
+            });
 
         spinner.succeed(`Transaction confirmed`);
         output.success(`Redeemed ${shares.toString()} shares`);

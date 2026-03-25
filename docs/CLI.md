@@ -183,6 +183,81 @@ solana-vault permissions my-vault
 
 ---
 
+### SVS-9 Allocator Commands
+
+#### `svs9 init`
+Initialize an allocator vault.
+
+```bash
+solana-vault svs9 init --vault-id 1 --asset-mint <MINT> --curator <PUBKEY> --idle-buffer 1000
+```
+
+#### `svs9 status`
+Inspect allocator state and optional child allocations.
+
+```bash
+solana-vault svs9 status --vault-id 1 --asset-mint <MINT>
+solana-vault svs9 status --vault-id 1 --asset-mint <MINT> --children <CHILD_1> <CHILD_2>
+```
+
+#### `svs9 add-child`
+Register a child vault with weight bounds.
+
+```bash
+solana-vault svs9 add-child --vault-id 1 --asset-mint <MINT> --child-vault <CHILD> --child-program <PROGRAM> --max-weight 5000
+```
+
+#### `svs9 remove-child`
+Disable a child vault in the allocator.
+
+```bash
+solana-vault svs9 remove-child --vault-id 1 --asset-mint <MINT> --child-vault <CHILD>
+```
+
+#### `svs9 update-weights`
+Update a child vault max allocation weight.
+
+```bash
+solana-vault svs9 update-weights --vault-id 1 --asset-mint <MINT> --child-vault <CHILD> --max-weight 6500
+```
+
+#### `svs9 set-curator`
+Assign a new curator for allocator operations.
+
+```bash
+solana-vault svs9 set-curator --vault-id 1 --asset-mint <MINT> --new-curator <PUBKEY>
+```
+
+#### `svs9 allocate`
+Deploy idle capital into a child vault.
+
+```bash
+solana-vault svs9 allocate --vault-id 1 --asset-mint <MINT> --child-vault <CHILD> --child-program <PROGRAM> --amount 1000000
+```
+
+#### `svs9 deallocate`
+Redeem child shares back to idle liquidity.
+
+```bash
+solana-vault svs9 deallocate --vault-id 1 --asset-mint <MINT> --child-vault <CHILD> --child-program <PROGRAM> --shares 500000
+```
+
+#### `svs9 harvest`
+Realize accrued child yield into idle liquidity.
+
+```bash
+solana-vault svs9 harvest --vault-id 1 --asset-mint <MINT> --child-vault <CHILD> --child-program <PROGRAM>
+```
+
+#### `svs9 rebalance`
+Adjust a child position to restore the allocator idle buffer target.
+
+```bash
+solana-vault svs9 rebalance --vault-id 1 --asset-mint <MINT> --child-vault <CHILD> --child-program <PROGRAM>
+```
+
+---
+
 ### Fee Commands
 
 #### `fees show <vault>`

@@ -2,17 +2,17 @@
 
 import { Command } from "commander";
 import { PublicKey } from "@solana/web3.js";
-import { Program } from "@coral-xyz/anchor";
 import { createContext } from "../../middleware";
 import { getGlobalOptions } from "../../index";
-import { SolanaVault } from "../../../vault";
 import { formatAddress } from "../../output";
 import {
-  findIdlPath,
-  loadIdl,
+  isAllocatorVariant,
+  loadVaultClient,
   resolveVaultArg,
   checkAuthority,
 } from "../../utils";
+import { AllocatorVaultClient } from "../../../svs9";
+import { SolanaVault } from "../../../vault";
 
 export function registerTransferAuthorityCommand(program: Command): void {
   program
@@ -20,6 +20,7 @@ export function registerTransferAuthorityCommand(program: Command): void {
     .description("Transfer vault authority to a new address (admin only)")
     .argument("<vault>", "Vault address or alias")
     .requiredOption("--new-authority <pubkey>", "New authority address")
+    .option("--variant <variant>", "SVS variant (for raw vault addresses)")
     .option("--program-id <pubkey>", "Program ID (if vault not in config)")
     .option("--asset-mint <pubkey>", "Asset mint (if vault not in config)")
     .option("--vault-id <number>", "Vault ID", "1")
@@ -39,20 +40,8 @@ export function registerTransferAuthorityCommand(program: Command): void {
       const resolved = resolveVaultArg(vaultArg, config, opts, output);
       if (!resolved) process.exit(1);
 
-      const idlPath = findIdlPath();
-      if (!idlPath) {
-        output.error("IDL not found. Run `anchor build` first.");
-        process.exit(1);
-      }
-
       try {
-        const idl = loadIdl(idlPath);
-        const prog = new Program(idl as any, provider);
-        const vault = await SolanaVault.load(
-          prog,
-          resolved.assetMint,
-          resolved.vaultId,
-        );
+        const vault = await loadVaultClient(provider, resolved);
         const state = await vault.getState();
 
         if (!checkAuthority(wallet.publicKey, state.authority, output)) {
@@ -101,10 +90,14 @@ export function registerTransferAuthorityCommand(program: Command): void {
         const spinner = output.spinner("Transferring authority...");
         spinner.start();
 
-        const signature = await vault.transferAuthority(
-          wallet.publicKey,
-          newAuthority,
-        );
+        const signature = isAllocatorVariant(resolved.variant)
+          ? await (vault as AllocatorVaultClient).transferAuthority(
+              newAuthority,
+            )
+          : await (vault as SolanaVault).transferAuthority(
+              wallet.publicKey,
+              newAuthority,
+            );
 
         spinner.succeed("Authority transferred");
         output.info(`New authority: ${newAuthority.toBase58()}`);

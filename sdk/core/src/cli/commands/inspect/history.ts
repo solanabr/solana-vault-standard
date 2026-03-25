@@ -1,12 +1,16 @@
 /** History Command - Show recent transaction history for a vault */
 
 import { Command } from "commander";
-import { Program, BN } from "@coral-xyz/anchor";
 import { createContext } from "../../middleware";
 import { getGlobalOptions } from "../../index";
-import { SolanaVault } from "../../../vault";
 import { formatAddress, formatTimestamp } from "../../output";
-import { findIdlPath, loadIdl, resolveVaultArg } from "../../utils";
+import {
+  isAllocatorVariant,
+  loadVaultClient,
+  resolveVaultArg,
+} from "../../utils";
+import { AllocatorVaultClient } from "../../../svs9";
+import { SolanaVault } from "../../../vault";
 
 interface ParsedTransaction {
   signature: string;
@@ -24,6 +28,7 @@ export function registerHistoryCommand(program: Command): void {
     .argument("<vault>", "Vault address or alias")
     .option("--limit <number>", "Maximum number of transactions", "20")
     .option("--before <signature>", "Fetch transactions before this signature")
+    .option("--variant <variant>", "SVS variant (for raw vault addresses)")
     .option("--program-id <pubkey>", "Program ID (if vault not in config)")
     .option("--asset-mint <pubkey>", "Asset mint (if vault not in config)")
     .option("--vault-id <number>", "Vault ID", "1")
@@ -35,21 +40,11 @@ export function registerHistoryCommand(program: Command): void {
       const resolved = resolveVaultArg(vaultArg, config, opts, output);
       if (!resolved) process.exit(1);
 
-      const idlPath = findIdlPath();
-      if (!idlPath) {
-        output.error("IDL not found. Run `anchor build` first.");
-        process.exit(1);
-      }
-
       try {
-        const idl = loadIdl(idlPath);
-        const prog = new Program(idl as any, provider);
-        const vault = await SolanaVault.load(
-          prog,
-          resolved.assetMint,
-          resolved.vaultId,
-        );
-        const vaultAddress = vault.vault;
+        const vault = await loadVaultClient(provider, resolved);
+        const vaultAddress = isAllocatorVariant(resolved.variant)
+          ? (vault as AllocatorVaultClient).allocatorVault
+          : (vault as SolanaVault).vault;
 
         const spinner = output.spinner("Fetching transaction history...");
         spinner.start();
@@ -103,6 +98,21 @@ export function registerHistoryCommand(program: Command): void {
                   break;
                 } else if (log.includes("Instruction: Initialize")) {
                   operation = "initialize";
+                  break;
+                } else if (log.includes("Instruction: AddChild")) {
+                  operation = "add-child";
+                  break;
+                } else if (log.includes("Instruction: Allocate")) {
+                  operation = "allocate";
+                  break;
+                } else if (log.includes("Instruction: Deallocate")) {
+                  operation = "deallocate";
+                  break;
+                } else if (log.includes("Instruction: Harvest")) {
+                  operation = "harvest";
+                  break;
+                } else if (log.includes("Instruction: Rebalance")) {
+                  operation = "rebalance";
                   break;
                 } else if (log.includes("Instruction: Sync")) {
                   operation = "sync";

@@ -69,7 +69,7 @@ export function resolveVault(
 
     throw new Error(
       `Vault address "${vaultArg}" not found in config. Add it with:\n` +
-        `  solana-vault config add-vault <alias> ${vaultArg} --variant svs-1`,
+        `  solana-vault config add-vault <alias> ${vaultArg} --variant <svs-variant>`,
     );
   }
 

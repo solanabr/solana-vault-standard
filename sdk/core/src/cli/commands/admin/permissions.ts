@@ -1,11 +1,9 @@
 /** Permissions Command - Display vault access control and role assignments */
 
 import { Command } from "commander";
-import { Program } from "@coral-xyz/anchor";
 import { createContext } from "../../middleware";
 import { getGlobalOptions } from "../../index";
-import { SolanaVault } from "../../../vault";
-import { findIdlPath, loadIdl, resolveVaultArg } from "../../utils";
+import { isAllocatorVariant, loadVaultClient, resolveVaultArg } from "../../utils";
 import { SvsVariant } from "../../types";
 
 export function registerPermissionsCommand(program: Command): void {
@@ -13,6 +11,7 @@ export function registerPermissionsCommand(program: Command): void {
     .command("permissions")
     .description("Show who can do what in a vault")
     .argument("<vault>", "Vault address or alias")
+    .option("--variant <variant>", "SVS variant (for raw vault addresses)")
     .option("--program-id <pubkey>", "Program ID (if vault not in config)")
     .option("--asset-mint <pubkey>", "Asset mint (if vault not in config)")
     .option("--vault-id <number>", "Vault ID", "1")
@@ -24,20 +23,8 @@ export function registerPermissionsCommand(program: Command): void {
       const resolved = resolveVaultArg(vaultArg, config, opts, output);
       if (!resolved) process.exit(1);
 
-      const idlPath = findIdlPath();
-      if (!idlPath) {
-        output.error("IDL not found. Run `anchor build` first.");
-        process.exit(1);
-      }
-
       try {
-        const idl = loadIdl(idlPath);
-        const prog = new Program(idl as any, provider);
-        const vault = await SolanaVault.load(
-          prog,
-          resolved.assetMint,
-          resolved.vaultId,
-        );
+        const vault = await loadVaultClient(provider, resolved);
         const state = await vault.getState();
 
         const totalAssets = await vault.totalAssets();
@@ -52,6 +39,9 @@ export function registerPermissionsCommand(program: Command): void {
               address: state.authority.toBase58(),
               capabilities: getAuthorityCapabilities(variant),
             },
+            ...(isAllocatorVariant(variant) && {
+              curator: (state as any).curator.toBase58(),
+            }),
             accessMode: "OPEN",
             paused: state.paused,
             totalAssets: totalAssets.toString(),
@@ -68,6 +58,17 @@ export function registerPermissionsCommand(program: Command): void {
         output.info("  Can:");
         for (const cap of getAuthorityCapabilities(variant)) {
           output.info(`    • ${cap}`);
+        }
+
+        if (isAllocatorVariant(variant)) {
+          output.info("");
+          output.info("CURATOR");
+          output.info(`  Address: ${(state as any).curator.toBase58()}`);
+          output.info("  Can:");
+          output.info("    • Allocate idle assets to child vaults");
+          output.info("    • Deallocate principal back to idle liquidity");
+          output.info("    • Harvest yield from child vaults");
+          output.info("    • Rebalance idle buffer across child vaults");
         }
         output.info("");
         output.info("ACCESS MODE");
@@ -107,6 +108,11 @@ function getAuthorityCapabilities(variant: SvsVariant): string[] {
 
   if (variant === "svs-2" || variant === "svs-4") {
     base.push("Sync stored balance with actual balance");
+  }
+
+  if (variant === "svs-9") {
+    base.push("Set curator for allocator operations");
+    base.push("Add, remove, and reweight child vaults");
   }
 
   return base;

@@ -34,6 +34,7 @@
 export * from "./vault";
 export * from "./managed-vault";
 export * from "./streaming-vault";
+export * from "./svs9";
 export * from "./pda";
 export * from "./math";
 

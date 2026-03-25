@@ -2,12 +2,11 @@
 
 import { Command } from "commander";
 import { PublicKey } from "@solana/web3.js";
-import { getAssociatedTokenAddress, getAccount } from "@solana/spl-token";
-import { Program, BN } from "@coral-xyz/anchor";
+import { getAccount, TOKEN_2022_PROGRAM_ID } from "@solana/spl-token";
+import { BN } from "@coral-xyz/anchor";
 import { createContext } from "../../middleware";
 import { getGlobalOptions } from "../../index";
-import { SolanaVault } from "../../../vault";
-import { findIdlPath, loadIdl, resolveVaultArg } from "../../utils";
+import { loadVaultClient, resolveVaultArg } from "../../utils";
 
 export function registerBalanceCommand(program: Command): void {
   program
@@ -15,6 +14,7 @@ export function registerBalanceCommand(program: Command): void {
     .description("Show user balances for a vault")
     .argument("<vault>", "Vault address or alias")
     .argument("[user]", "User address (defaults to wallet)")
+    .option("--variant <variant>", "SVS variant (for raw vault addresses)")
     .option("--program-id <pubkey>", "Program ID (if vault not in config)")
     .option("--asset-mint <pubkey>", "Asset mint (if vault not in config)")
     .option("--vault-id <number>", "Vault ID", "1")
@@ -28,39 +28,34 @@ export function registerBalanceCommand(program: Command): void {
 
       const user = userArg ? new PublicKey(userArg) : wallet.publicKey;
 
-      const idlPath = findIdlPath();
-      if (!idlPath) {
-        output.error("IDL not found. Run `anchor build` first.");
-        process.exit(1);
-      }
-
       try {
-        const idl = loadIdl(idlPath);
-        const prog = new Program(idl as any, provider);
-        const vault = await SolanaVault.load(
-          prog,
-          resolved.assetMint,
-          resolved.vaultId,
-        );
+        const vault = await loadVaultClient(provider, resolved);
         const state = await vault.getState();
-
-        const [userAssetAta, userSharesAta] = await Promise.all([
-          getAssociatedTokenAddress(state.assetMint, user),
-          getAssociatedTokenAddress(state.sharesMint, user),
-        ]);
+        const userAssetAta = vault.getUserAssetAccount(user);
+        const userSharesAta = vault.getUserSharesAccount(user);
 
         let assetBalance = new BN(0);
         let sharesBalance = new BN(0);
 
         try {
-          const assetAccount = await getAccount(connection, userAssetAta);
+          const assetAccount = await getAccount(
+            connection,
+            userAssetAta,
+            undefined,
+            vault.assetTokenProgram,
+          );
           assetBalance = new BN(assetAccount.amount.toString());
         } catch {
           // Account doesn't exist
         }
 
         try {
-          const sharesAccount = await getAccount(connection, userSharesAta);
+          const sharesAccount = await getAccount(
+            connection,
+            userSharesAta,
+            undefined,
+            TOKEN_2022_PROGRAM_ID,
+          );
           sharesBalance = new BN(sharesAccount.amount.toString());
         } catch {
           // Account doesn't exist
