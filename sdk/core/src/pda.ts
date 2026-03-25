@@ -22,6 +22,15 @@
 import { PublicKey } from "@solana/web3.js";
 import { BN } from "@coral-xyz/anchor";
 
+// SVS-7 re-exports for convenience
+export {
+  SOL_VAULT_SEED,
+  SOL_SHARES_MINT_SEED,
+  getSolVaultAddress,
+  getSolSharesMintAddress,
+  deriveSolVaultAddresses,
+} from "./sol-vault";
+
 /** Seed for vault PDA derivation */
 export const VAULT_SEED = Buffer.from("vault");
 /** Seed for shares mint PDA derivation */

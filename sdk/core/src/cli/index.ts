@@ -68,6 +68,7 @@ import { registerEmergencyCommands } from "./commands/emergency";
 import { registerTimelockCommands } from "./commands/timelock";
 import { registerStrategyCommands } from "./commands/strategy";
 import { registerPortfolioCommands } from "./commands/portfolio";
+import { registerSolVaultCommands } from "./commands/sol-vault";
 
 /**
  * Create and configure the CLI program.
@@ -102,6 +103,9 @@ export function createCli(): Command {
   registerTimelockCommands(program);
   registerStrategyCommands(program);
   registerPortfolioCommands(program);
+
+  // SVS-7: Native SOL Vault commands
+  registerSolVaultCommands(program);
 
   return program;
 }
