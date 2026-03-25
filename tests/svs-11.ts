@@ -97,9 +97,9 @@ describe("svs-11 (Credit Markets Vault)", () => {
   const getFrozenAccountPDA = (investorKey: PublicKey): [PublicKey, number] =>
     getCreditFrozenAccountAddress(program.programId, vault, investorKey);
 
-  const getOracleDataPDA = (): [PublicKey, number] => {
+  const getOracleDataPDA = (vaultPda: PublicKey): [PublicKey, number] => {
     return PublicKey.findProgramAddressSync(
-      [Buffer.from("oracle")],
+      [Buffer.from("oracle"), vaultPda.toBuffer()],
       oracleProgram.programId
     );
   };
@@ -155,7 +155,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
     [vault] = getVaultPDA();
     [sharesMint] = getSharesMintPDA();
     [redemptionEscrow] = getRedemptionEscrowPDA();
-    [navOracle] = getOracleDataPDA();
+    [navOracle] = getOracleDataPDA(vault);
     [investmentRequest] = getInvestmentRequestPDA(investor.publicKey);
     [redemptionRequest] = getRedemptionRequestPDA(investor.publicKey);
     [claimableTokens] = getClaimableTokensPDA(investor.publicKey);
@@ -228,6 +228,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
       .accountsPartial({
         authority: payer.publicKey,
         oracleData: navOracle,
+        vault: vault,
         systemProgram: SystemProgram.programId,
       })
       .rpc();
@@ -310,7 +311,6 @@ describe("svs-11 (Credit Markets Vault)", () => {
         minimumInvestment.toNumber()
       );
       expect(vaultAccount.investmentWindowOpen).to.equal(false);
-      expect(vaultAccount.decimalsOffset).to.equal(3);
       expect(vaultAccount.paused).to.equal(false);
     });
   });
@@ -2754,6 +2754,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
         .accountsPartial({
           authority: payer.publicKey,
           oracleData: navOracle,
+          vault: vault,
         })
         .rpc();
 
@@ -2785,6 +2786,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
         .accountsPartial({
           authority: payer.publicKey,
           oracleData: navOracle,
+          vault: vault,
           systemProgram: SystemProgram.programId,
         })
         .rpc();

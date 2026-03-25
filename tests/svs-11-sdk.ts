@@ -39,8 +39,14 @@ describe("svs-11-sdk (CreditVault SDK)", () => {
       Keypair.generate(), undefined, TOKEN_PROGRAM_ID,
     );
 
+    // Derive vault PDA for oracle seed (vault account doesn't need to exist yet)
+    const [vaultPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("credit_vault"), assetMint.toBuffer(), new BN(99).toArrayLike(Buffer, "le", 8)],
+      program.programId,
+    );
+
     [navOracle] = PublicKey.findProgramAddressSync(
-      [Buffer.from("oracle")],
+      [Buffer.from("oracle"), vaultPda.toBuffer()],
       oracleProgram.programId,
     );
 
@@ -48,6 +54,7 @@ describe("svs-11-sdk (CreditVault SDK)", () => {
       .setPrice(PRICE_SCALE)
       .accountsPartial({
         authority: payer.publicKey,
+        vault: vaultPda,
         oracleData: navOracle,
         systemProgram: SystemProgram.programId,
       })
@@ -112,26 +119,21 @@ describe("svs-11-sdk (CreditVault SDK)", () => {
 
   describe("convertToShares() / convertToAssets()", () => {
     it("returns correct values with virtual offset at empty vault", async () => {
-      const state = await cv.refresh();
-      const offset = state.decimalsOffset;
-
-      const sharesOut = cv.convertToShares(BigInt(1_000_000), BigInt(0), BigInt(0), offset);
+      const sharesOut = cv.convertToShares(BigInt(1_000_000), BigInt(0), BigInt(0));
       expect(sharesOut > BigInt(0)).to.be.true;
 
-      const assetsOut = cv.convertToAssets(sharesOut, BigInt(0), BigInt(0), offset);
+      const assetsOut = cv.convertToAssets(sharesOut, BigInt(0), BigInt(0));
       expect(assetsOut > BigInt(0)).to.be.true;
     });
 
     it("round-trips at 1:1 with rounding in favor of vault", async () => {
-      const state = await cv.refresh();
-      const offset = state.decimalsOffset;
       const ta = BigInt(1_000_000_000);
       const ts = BigInt(1_000_000_000);
 
-      const shares = cv.convertToShares(BigInt(1_000_000), ta, ts, offset);
-      const assets = cv.convertToAssets(shares, ta, ts, offset);
+      const shares = cv.convertToShares(BigInt(1_000_000), ta, ts);
+      const assets = cv.convertToAssets(shares, ta, ts);
 
-      expect(assets).to.equal(BigInt(999_999));
+      expect(assets).to.equal(BigInt(1_000_000));
     });
   });
 

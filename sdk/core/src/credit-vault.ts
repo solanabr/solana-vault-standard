@@ -38,7 +38,6 @@ export interface CreditVaultState {
   totalPendingDeposits: BN;
   minimumInvestment: BN;
   investmentWindowOpen: boolean;
-  decimalsOffset: number;
   bump: number;
   redemptionEscrowBump: number;
   paused: boolean;
@@ -695,7 +694,7 @@ export class CreditVault {
     assets: bigint,
     totalAssets: bigint,
     totalShares: bigint,
-    decimalsOffset: number,
+    decimalsOffset: number = 0,
   ): bigint {
     const offset = BigInt(10 ** decimalsOffset);
     return (assets * (totalShares + offset)) / (totalAssets + BigInt(1));
@@ -705,7 +704,7 @@ export class CreditVault {
     shares: bigint,
     totalAssets: bigint,
     totalShares: bigint,
-    decimalsOffset: number,
+    decimalsOffset: number = 0,
   ): bigint {
     const offset = BigInt(10 ** decimalsOffset);
     return (shares * (totalAssets + BigInt(1))) / (totalShares + offset);
@@ -717,7 +716,6 @@ export class CreditVault {
       BigInt(assets.toString()),
       BigInt(state.totalAssets.toString()),
       BigInt(state.totalShares.toString()),
-      state.decimalsOffset,
     );
     return new BN(shares.toString());
   }
@@ -728,7 +726,6 @@ export class CreditVault {
       BigInt(shares.toString()),
       BigInt(state.totalAssets.toString()),
       BigInt(state.totalShares.toString()),
-      state.decimalsOffset,
     );
     return new BN(assets.toString());
   }

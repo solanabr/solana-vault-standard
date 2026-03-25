@@ -50,7 +50,7 @@ async function main() {
       depositVault: ctx.depositVault,
       investmentRequest: ctx.investmentRequest,
       attestation: ctx.attestation,
-      frozenCheck: null,
+      frozenCheck: undefined,
       assetTokenProgram: TOKEN_PROGRAM_ID,
       systemProgram: anchor.web3.SystemProgram.programId,
     })
@@ -66,7 +66,7 @@ async function main() {
       investor: ctx.investor.publicKey,
       navOracle: ctx.navOracle,
       attestation: ctx.attestation,
-      frozenCheck: null,
+      frozenCheck: undefined,
       clock: anchor.web3.SYSVAR_CLOCK_PUBKEY,
     })
     .rpc();
@@ -97,6 +97,7 @@ async function main() {
     .setPrice(doublePrice)
     .accountsPartial({
       authority: payer.publicKey,
+      vault: ctx.vault,
       oracleData: ctx.navOracle,
       systemProgram: anchor.web3.SystemProgram.programId,
     })
@@ -119,7 +120,7 @@ async function main() {
       depositVault: ctx.depositVault,
       investmentRequest: ctx.investmentRequest,
       attestation: ctx.attestation,
-      frozenCheck: null,
+      frozenCheck: undefined,
       assetTokenProgram: TOKEN_PROGRAM_ID,
       systemProgram: anchor.web3.SystemProgram.programId,
     })
@@ -135,7 +136,7 @@ async function main() {
       investor: ctx.investor.publicKey,
       navOracle: ctx.navOracle,
       attestation: ctx.attestation,
-      frozenCheck: null,
+      frozenCheck: undefined,
       clock: anchor.web3.SYSVAR_CLOCK_PUBKEY,
     })
     .rpc();
@@ -170,6 +171,7 @@ async function main() {
       .updateTimestamp(staleTs)
       .accountsPartial({
         authority: payer.publicKey,
+        vault: ctx.vault,
         oracleData: ctx.navOracle,
       })
       .rpc();
@@ -187,7 +189,7 @@ async function main() {
         depositVault: ctx.depositVault,
         investmentRequest: ctx.investmentRequest,
         attestation: ctx.attestation,
-        frozenCheck: null,
+        frozenCheck: undefined,
         assetTokenProgram: TOKEN_PROGRAM_ID,
         systemProgram: anchor.web3.SystemProgram.programId,
       })
@@ -204,7 +206,7 @@ async function main() {
           investor: ctx.investor.publicKey,
           navOracle: ctx.navOracle,
           attestation: ctx.attestation,
-          frozenCheck: null,
+          frozenCheck: undefined,
           clock: anchor.web3.SYSVAR_CLOCK_PUBKEY,
         })
         .rpc();
@@ -223,6 +225,7 @@ async function main() {
       .setPrice(PRICE_SCALE)
       .accountsPartial({
         authority: payer.publicKey,
+        vault: ctx.vault,
         oracleData: ctx.navOracle,
         systemProgram: anchor.web3.SystemProgram.programId,
       })

@@ -70,9 +70,9 @@ export const PROGRAM_ID = loadProgramId("svs_11-keypair.json");
 export const MOCK_ORACLE_ID = loadProgramId("mock_oracle-keypair.json");
 export const ATTESTATION_PROGRAM_ID = loadProgramId("mock_sas-keypair.json");
 
-export function getOracleDataPDA(): [PublicKey, number] {
+export function getOracleDataPDA(vaultPda: PublicKey): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
-    [Buffer.from("oracle")],
+    [Buffer.from("oracle"), vaultPda.toBuffer()],
     MOCK_ORACLE_ID,
   );
 }
@@ -210,13 +210,14 @@ export async function createVaultContext(
   const [investmentRequest] = getInvestmentRequestAddress(PROGRAM_ID, vault, investor.publicKey);
   const [redemptionRequest] = getRedemptionRequestAddress(PROGRAM_ID, vault, investor.publicKey);
   const [claimableTokens] = getClaimableTokensAddress(PROGRAM_ID, vault, investor.publicKey);
-  const [navOracle] = getOracleDataPDA();
+  const [navOracle] = getOracleDataPDA(vault);
 
   // Set oracle price
   await oracleProgram.methods
     .setPrice(PRICE_SCALE)
     .accountsPartial({
       authority: payer.publicKey,
+      vault: vault,
       oracleData: navOracle,
       systemProgram: SystemProgram.programId,
     })
