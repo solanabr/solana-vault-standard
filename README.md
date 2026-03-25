@@ -12,6 +12,7 @@ Tokenized vault programs and TypeScript SDK for building yield-bearing vaults on
 | **SVS-4** | Private Vault (Stored) | Stored balance | Encrypted | Requires sync() | ✅ Devnet |
 | **SVS-5** | Streaming Yield Vault | Interpolated balance | None | distribute_yield() + checkpoint() | ✅ Devnet |
 | **SVS-6** | Streaming Private Vault | Interpolated balance | None | distribute_yield() + checkpoint() | ✅ Devnet |
+| **SVS-12** | Tranched Structured Vault | Per-tranche accounting | Token-2022 tranche shares | waterfall / loss absorption | ✅ Local validation |
 
 ### Balance Model Comparison
 
@@ -56,6 +57,7 @@ Tokenized vault programs and TypeScript SDK for building yield-bearing vaults on
 | SVS-3 | `EcpnYtaCBrZ4p4uq7dDr55D3fL9nsxbCNqpyUREGpPkh` | Same as devnet |
 | SVS-4 | `2WP7LXWqrp1W4CwEJuVt2SxWPNY2n6AYmijh6Z4EeidY` | Same as devnet |
 | SVS-5 | `3XQX3ZKGcy618XyWMmQiukYohJNSh3JNWoffq8ZeFdcS` | Same as devnet |
+| SVS-12 | Pending deployment | `6HExmbtZ1WnRC3QyphvtDNFpXgKqUz66UG4YoAi1beT8` |
 
 ## Installation
 
@@ -73,7 +75,7 @@ cd proofs-backend && cargo run
 ## Quick Start
 
 ```typescript
-import { SolanaVault, ManagedVault, StreamingVault } from "@stbr/solana-vault";
+import { SolanaVault, ManagedVault, StreamingVault, TranchedVault } from "@stbr/solana-vault";
 import { BN } from "@coral-xyz/anchor";
 
 // SVS-1: Load live-balance vault
@@ -109,6 +111,10 @@ await streaming.distributeYield(authority, new BN(1_000_000), new BN(3600));
 
 // Permissionless checkpoint
 await streaming.checkpoint();
+
+// SVS-12: Load a tranched vault
+const tranched = await TranchedVault.load(program, assetMint, 1);
+const senior = await tranched.getTrancheState(0);
 ```
 
 ## Features

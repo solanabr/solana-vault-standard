@@ -87,7 +87,7 @@ export function registerHealthCommand(program: Command): void {
         const variant = opts.variant as SvsVariant;
         if (!SVS_PROGRAMS[variant]) {
           output.error(
-            `Invalid variant: ${opts.variant}. Use: svs-1, svs-2, svs-3, svs-4`,
+            `Invalid variant: ${opts.variant}. Use: svs-1, svs-2, svs-3, svs-4, svs-12`,
           );
           process.exit(1);
         }

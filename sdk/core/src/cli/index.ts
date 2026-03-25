@@ -68,6 +68,7 @@ import { registerEmergencyCommands } from "./commands/emergency";
 import { registerTimelockCommands } from "./commands/timelock";
 import { registerStrategyCommands } from "./commands/strategy";
 import { registerPortfolioCommands } from "./commands/portfolio";
+import { registerTranchedCommands } from "./commands/tranched";
 
 /**
  * Create and configure the CLI program.
@@ -102,6 +103,7 @@ export function createCli(): Command {
   registerTimelockCommands(program);
   registerStrategyCommands(program);
   registerPortfolioCommands(program);
+  registerTranchedCommands(program);
 
   return program;
 }

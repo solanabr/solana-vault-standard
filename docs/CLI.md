@@ -534,6 +534,78 @@ solana-vault portfolio rebalance --values '{"usdc-vault":"500000","sol-vault":"6
 
 ---
 
+### Tranched Commands (SVS-12)
+
+Structured vault management for senior, mezzanine, and junior tranches.
+
+#### `tranched initialize`
+Create a new tranched vault.
+
+```bash
+solana-vault tranched initialize --asset-mint <MINT> --vault-id 1 --waterfall 0
+```
+
+#### `tranched add-tranche`
+Add a tranche with priority, subordination, target yield, and cap settings.
+
+```bash
+solana-vault tranched add-tranche --asset-mint <MINT> --priority 0 --sub-bps 2000 --yield-bps 500 --cap-bps 6000
+solana-vault tranched add-tranche --asset-mint <MINT> --priority 1 --sub-bps 0 --yield-bps 0 --cap-bps 10000
+```
+
+#### `tranched deposit`
+Deposit into a specific tranche.
+
+```bash
+solana-vault tranched deposit --asset-mint <MINT> --tranche 1 --amount 1000000
+```
+
+#### `tranched redeem`
+Redeem shares from a specific tranche.
+
+```bash
+solana-vault tranched redeem --asset-mint <MINT> --tranche 1 --shares 1000000000
+```
+
+#### `tranched distribute-yield`
+Distribute manager-supplied yield using the configured waterfall.
+
+```bash
+solana-vault tranched distribute-yield --asset-mint <MINT> --amount 200000
+```
+
+#### `tranched record-loss`
+Record a realized loss, absorbed bottom-up across tranches.
+
+```bash
+solana-vault tranched record-loss --asset-mint <MINT> --amount 500000
+```
+
+#### `tranched rebalance`
+Move allocation between tranches without moving tokens.
+
+```bash
+solana-vault tranched rebalance --asset-mint <MINT> --from 0 --to 1 --amount 100000
+```
+
+#### `tranched admin`
+Pause, unpause, transfer authority, change manager, or update tranche config.
+
+```bash
+solana-vault tranched admin pause --asset-mint <MINT>
+solana-vault tranched admin set-manager --asset-mint <MINT> --new-manager <PUBKEY>
+solana-vault tranched admin update-tranche --asset-mint <MINT> --tranche 0 --yield-bps 750
+```
+
+#### `tranched info`
+Inspect vault and tranche state.
+
+```bash
+solana-vault tranched info --asset-mint <MINT>
+```
+
+---
+
 ### Monitor Commands
 
 #### `dashboard <vault>`

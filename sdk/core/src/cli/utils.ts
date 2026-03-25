@@ -32,13 +32,24 @@ export function getCluster(
   return "devnet";
 }
 
-/** Base path for IDL files (relative to compiled output) */
-const IDL_BASE_PATH = path.resolve(__dirname, "..", "..", "target", "idl");
+/**
+ * Candidate base paths for IDL files.
+ *
+ * In the workspace, compiled CLI files live under `sdk/core/dist/cli`, while
+ * Anchor emits IDLs to the repo root `target/idl`. We also keep fallbacks for
+ * development-time execution and custom overrides.
+ */
+const IDL_BASE_PATHS = [
+  process.env.SVS_IDL_DIR,
+  path.resolve(process.cwd(), "target", "idl"),
+  path.resolve(__dirname, "..", "..", "..", "..", "target", "idl"),
+  path.resolve(__dirname, "..", "..", "target", "idl"),
+].filter((p): p is string => Boolean(p));
 
 /**
  * Find IDL file path for a given SVS variant.
  *
- * @param variant - Optional SVS variant (svs-1, svs-2, svs-3, svs-4)
+ * @param variant - Optional SVS variant (svs-1, svs-2, svs-3, svs-4, svs-12)
  * @returns Path to IDL file if found, null otherwise
  *
  * @example
@@ -53,18 +64,28 @@ export function findIdlPath(variant?: SvsVariant): string | null {
   // Try variant-specific IDL first
   if (variant) {
     const idlName = variant.replace("-", "_") + ".json";
-    const idlPath = path.join(IDL_BASE_PATH, idlName);
-    if (fs.existsSync(idlPath)) {
-      return idlPath;
+    for (const basePath of IDL_BASE_PATHS) {
+      const idlPath = path.join(basePath, idlName);
+      if (fs.existsSync(idlPath)) {
+        return idlPath;
+      }
     }
   }
 
   // Fall back to first available IDL
-  const idlNames = ["svs_1.json", "svs_2.json", "svs_3.json", "svs_4.json"];
-  for (const name of idlNames) {
-    const idlPath = path.join(IDL_BASE_PATH, name);
-    if (fs.existsSync(idlPath)) {
-      return idlPath;
+  const idlNames = [
+    "svs_1.json",
+    "svs_2.json",
+    "svs_3.json",
+    "svs_4.json",
+    "svs_12.json",
+  ];
+  for (const basePath of IDL_BASE_PATHS) {
+    for (const name of idlNames) {
+      const idlPath = path.join(basePath, name);
+      if (fs.existsSync(idlPath)) {
+        return idlPath;
+      }
     }
   }
 
@@ -116,7 +137,7 @@ export interface ResolvedVaultParams {
   assetMint: PublicKey;
   /** Vault ID (for multi-vault deployments) */
   vaultId: BN;
-  /** SVS variant (svs-1, svs-2, svs-3, svs-4) */
+  /** SVS variant (svs-1, svs-2, svs-3, svs-4, svs-12) */
   variant: SvsVariant;
 }
 

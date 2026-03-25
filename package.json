@@ -48,6 +48,13 @@
     "test-svs4:confidential-redeem": "npx ts-node scripts/svs-4/confidential-redeem.ts",
     "test-svs4:edge-cases": "npx ts-node scripts/svs-4/edge-cases.ts",
     "test-svs4:all": "npm run test-svs4:basic && npm run test-svs4:sync-confidential && npm run test-svs4:sync-timing-attack && npm run test-svs4:confidential-redeem && npm run test-svs4:edge-cases",
+    "test-svs12:basic": "npx ts-node scripts/svs-12/basic.ts",
+    "test-svs12:multi-user": "npx ts-node scripts/svs-12/multi-user.ts",
+    "test-svs12:edge-cases": "npx ts-node scripts/svs-12/edge-cases.ts",
+    "test-svs12:admin": "npx ts-node scripts/svs-12/admin.ts",
+    "test-svs12:loss-rebalance": "npx ts-node scripts/svs-12/loss-rebalance.ts",
+    "test-svs12:inflation-attack": "npx ts-node scripts/svs-12/inflation-attack.ts",
+    "test-svs12:all": "npm run test-svs12:basic && npm run test-svs12:multi-user && npm run test-svs12:edge-cases && npm run test-svs12:admin && npm run test-svs12:loss-rebalance && npm run test-svs12:inflation-attack",
     "test-devnet:all": "npm run test-svs1:all && npm run test-svs2:all && npm run test-svs3:all && npm run test-svs4:all"
   },
   "dependencies": {
@@ -62,5 +69,6 @@
     "mocha": "^10.8.2",
     "ts-mocha": "^10.0.0",
     "typescript": "^5.7.3"
-  }
+  },
+  "packageManager": "yarn@1.22.22+sha512.a6b2f7906b721bba3d67d4aff083df04dad64c399707841b7acf00f6b133b7ac24255f2652fa22ae3534329dc6180534e98d17432037ff6fd140556e2bb3137e"
 }
