@@ -73,6 +73,7 @@ pub fn handler(ctx: Context<RequestDeposit>, assets: u64, receiver: Pubkey) -> R
         let total_assets = vault
             .total_assets
             .checked_add(vault.total_pending_deposits)
+            .and_then(|v| v.checked_add(vault.total_fulfilled_deposits))
             .ok_or(VaultError::MathOverflow)?;
         module_hooks::check_deposit_caps(
             remaining,
