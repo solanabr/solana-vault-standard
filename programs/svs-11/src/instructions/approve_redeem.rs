@@ -115,18 +115,30 @@ pub fn handler(ctx: Context<ApproveRedeem>) -> Result<()> {
         &ctx.accounts.clock,
     )?;
 
+    let vault = &ctx.accounts.vault;
+    if vault.total_shares > 0 && vault.total_assets > 0 {
+        let expected_price = (vault.total_assets as u128)
+            .checked_mul(svs_oracle::PRICE_SCALE as u128)
+            .and_then(|v| v.checked_div(vault.total_shares as u128))
+            .ok_or(VaultError::MathOverflow)? as u64;
+        svs_oracle::validate_deviation(price, expected_price, vault.max_deviation_bps)
+            .map_err(|_| VaultError::OracleDeviationExceeded)?;
+    }
+
     let shares_locked = ctx.accounts.redemption_request.shares_locked;
     let gross_assets = math::shares_to_assets(shares_locked, price)?;
 
     #[cfg(feature = "modules")]
-    let gross_assets = {
+    let net_assets = {
         let remaining = ctx.remaining_accounts;
         let vault_key = ctx.accounts.vault.key();
         let result = module_hooks::apply_exit_fee(remaining, &crate::ID, &vault_key, gross_assets)?;
         result.net_assets
     };
+    #[cfg(not(feature = "modules"))]
+    let net_assets = gross_assets;
 
-    require!(gross_assets > 0, VaultError::ZeroAmount);
+    require!(net_assets > 0, VaultError::ZeroAmount);
 
     let available = ctx
         .accounts
@@ -135,7 +147,7 @@ pub fn handler(ctx: Context<ApproveRedeem>) -> Result<()> {
         .checked_sub(ctx.accounts.vault.total_pending_deposits)
         .and_then(|v| v.checked_sub(ctx.accounts.vault.total_approved_deposits))
         .ok_or(VaultError::MathOverflow)?;
-    require!(available >= gross_assets, VaultError::InsufficientLiquidity);
+    require!(available >= net_assets, VaultError::InsufficientLiquidity);
 
     let asset_mint_key = ctx.accounts.vault.asset_mint;
     let vault_id_bytes = ctx.accounts.vault.vault_id.to_le_bytes();
@@ -171,19 +183,19 @@ pub fn handler(ctx: Context<ApproveRedeem>) -> Result<()> {
             },
             &[vault_seeds],
         ),
-        gross_assets,
+        net_assets,
         ctx.accounts.asset_mint.decimals,
     )?;
 
     let request = &mut ctx.accounts.redemption_request;
     request.status = RequestStatus::Approved;
-    request.assets_claimable = gross_assets;
+    request.assets_claimable = net_assets;
     request.fulfilled_at = ctx.accounts.clock.unix_timestamp;
 
     let vault = &mut ctx.accounts.vault;
     vault.total_assets = vault
         .total_assets
-        .checked_sub(gross_assets)
+        .checked_sub(net_assets)
         .ok_or(VaultError::MathOverflow)?;
     vault.total_shares = vault
         .total_shares
@@ -194,7 +206,7 @@ pub fn handler(ctx: Context<ApproveRedeem>) -> Result<()> {
         vault: vault.key(),
         investor: ctx.accounts.investor.key(),
         shares: shares_locked,
-        assets: gross_assets,
+        assets: net_assets,
         nav: price,
     });
 

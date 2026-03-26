@@ -71,6 +71,16 @@ pub fn handler(ctx: Context<ApproveDeposit>) -> Result<()> {
         &ctx.accounts.clock,
     )?;
 
+    let vault = &ctx.accounts.vault;
+    if vault.total_shares > 0 && vault.total_assets > 0 {
+        let expected_price = (vault.total_assets as u128)
+            .checked_mul(svs_oracle::PRICE_SCALE as u128)
+            .and_then(|v| v.checked_div(vault.total_shares as u128))
+            .ok_or(VaultError::MathOverflow)? as u64;
+        svs_oracle::validate_deviation(price, expected_price, vault.max_deviation_bps)
+            .map_err(|_| VaultError::OracleDeviationExceeded)?;
+    }
+
     let amount_locked = ctx.accounts.investment_request.amount_locked;
     let shares = math::assets_to_shares(amount_locked, price)?;
     require!(shares > 0, VaultError::ZeroAmount);

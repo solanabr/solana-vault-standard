@@ -38,6 +38,7 @@ pub struct CreditVault {
     pub redemption_escrow_bump: u8,
     pub paused: bool,
     pub total_approved_deposits: u64,
+    pub max_deviation_bps: u16,
     pub _reserved: [u8; 64],
 }
 
@@ -64,6 +65,7 @@ impl CreditVault {
         1 +   // redemption_escrow_bump
         1 +   // paused
         8 +   // total_approved_deposits
+        2 +   // max_deviation_bps
         64; // _reserved
 
     pub const SEED_PREFIX: &'static [u8] = VAULT_SEED;

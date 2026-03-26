@@ -74,6 +74,7 @@ pub struct RequestRedeem<'info> {
 
 pub fn handler(ctx: Context<RequestRedeem>, shares: u64) -> Result<()> {
     require!(shares > 0, VaultError::ZeroAmount);
+    require!(!ctx.accounts.vault.paused, VaultError::VaultPaused);
 
     validate_attestation(
         &ctx.accounts.attestation.to_account_info(),

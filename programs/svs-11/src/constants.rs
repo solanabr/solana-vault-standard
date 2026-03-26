@@ -8,3 +8,4 @@ pub const FROZEN_ACCOUNT_SEED: &[u8] = b"frozen_account";
 
 pub const MAX_DECIMALS: u8 = 9;
 pub const SHARES_DECIMALS: u8 = 9;
+pub const DEFAULT_MAX_DEVIATION_BPS: u16 = 500;

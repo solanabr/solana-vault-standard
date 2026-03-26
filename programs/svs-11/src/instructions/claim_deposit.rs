@@ -4,7 +4,10 @@ use anchor_spl::{
     token_interface::{mint_to, Mint, MintTo, TokenAccount},
 };
 
-use crate::constants::{INVESTMENT_REQUEST_SEED, SHARES_MINT_SEED, VAULT_SEED};
+use crate::attestation::validate_attestation;
+use crate::constants::{
+    FROZEN_ACCOUNT_SEED, INVESTMENT_REQUEST_SEED, SHARES_MINT_SEED, VAULT_SEED,
+};
 use crate::error::VaultError;
 use crate::events::InvestmentClaimed;
 use crate::state::{CreditVault, InvestmentRequest, RequestStatus};
@@ -51,10 +54,32 @@ pub struct ClaimDeposit<'info> {
     )]
     pub investor_shares_account: InterfaceAccount<'info, TokenAccount>,
 
+    /// CHECK: Validated in handler via validate_attestation
+    pub attestation: UncheckedAccount<'info>,
+
+    /// CHECK: If data is non-empty, investor is frozen
+    #[account(
+        seeds = [FROZEN_ACCOUNT_SEED, vault.key().as_ref(), investor.key().as_ref()],
+        bump,
+    )]
+    pub frozen_check: UncheckedAccount<'info>,
+
     pub token_2022_program: Program<'info, Token2022>,
+    pub clock: Sysvar<'info, Clock>,
 }
 
 pub fn handler(ctx: Context<ClaimDeposit>) -> Result<()> {
+    validate_attestation(
+        &ctx.accounts.attestation.to_account_info(),
+        &ctx.accounts.vault,
+        &ctx.accounts.investor.key(),
+        &ctx.accounts.clock,
+    )?;
+    require!(
+        ctx.accounts.frozen_check.data_is_empty(),
+        VaultError::AccountFrozen
+    );
+
     let shares = ctx.accounts.investment_request.shares_claimable;
     let amount_locked = ctx.accounts.investment_request.amount_locked;
 

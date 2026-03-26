@@ -4,7 +4,10 @@ use anchor_spl::token_interface::{
     TransferChecked,
 };
 
-use crate::constants::{CLAIMABLE_TOKENS_SEED, REDEMPTION_REQUEST_SEED, VAULT_SEED};
+use crate::attestation::validate_attestation;
+use crate::constants::{
+    CLAIMABLE_TOKENS_SEED, FROZEN_ACCOUNT_SEED, REDEMPTION_REQUEST_SEED, VAULT_SEED,
+};
 use crate::error::VaultError;
 use crate::events::RedemptionClaimed;
 use crate::state::{CreditVault, RedemptionRequest, RequestStatus};
@@ -48,11 +51,33 @@ pub struct ClaimRedeem<'info> {
     )]
     pub investor_token_account: InterfaceAccount<'info, TokenAccount>,
 
+    /// CHECK: Validated in handler via validate_attestation
+    pub attestation: UncheckedAccount<'info>,
+
+    /// CHECK: If data is non-empty, investor is frozen
+    #[account(
+        seeds = [FROZEN_ACCOUNT_SEED, vault.key().as_ref(), investor.key().as_ref()],
+        bump,
+    )]
+    pub frozen_check: UncheckedAccount<'info>,
+
     pub asset_token_program: Interface<'info, TokenInterface>,
     pub system_program: Program<'info, System>,
+    pub clock: Sysvar<'info, Clock>,
 }
 
 pub fn handler(ctx: Context<ClaimRedeem>) -> Result<()> {
+    validate_attestation(
+        &ctx.accounts.attestation.to_account_info(),
+        &ctx.accounts.vault,
+        &ctx.accounts.investor.key(),
+        &ctx.accounts.clock,
+    )?;
+    require!(
+        ctx.accounts.frozen_check.data_is_empty(),
+        VaultError::AccountFrozen
+    );
+
     let assets = ctx.accounts.redemption_request.assets_claimable;
 
     let asset_mint_key = ctx.accounts.vault.asset_mint;

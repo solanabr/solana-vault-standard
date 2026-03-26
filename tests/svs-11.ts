@@ -486,6 +486,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
           investmentRequest,
           sharesMint,
           investorSharesAccount,
+          attestation,
           token2022Program: TOKEN_2022_PROGRAM_ID,
         })
         .signers([investor])
@@ -841,6 +842,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
           investorTokenAccount,
           assetTokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
+          attestation,
         })
         .signers([investor])
         .rpc();
@@ -906,6 +908,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
           sharesMint,
           investorSharesAccount,
           token2022Program: TOKEN_2022_PROGRAM_ID,
+          attestation,
         })
         .signers([investor])
         .rpc();
@@ -1647,6 +1650,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
           sharesMint,
           investorSharesAccount: statusInvestorSharesAccount,
           token2022Program: TOKEN_2022_PROGRAM_ID,
+          attestation: statusAttestation,
         })
         .signers([statusInvestor])
         .rpc();
@@ -1684,6 +1688,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
             sharesMint,
             investorSharesAccount: statusInvestorSharesAccount,
             token2022Program: TOKEN_2022_PROGRAM_ID,
+            attestation: statusAttestation,
           })
           .signers([statusInvestor])
           .rpc();
@@ -1739,6 +1744,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
           sharesMint,
           investorSharesAccount: statusInvestorSharesAccount,
           token2022Program: TOKEN_2022_PROGRAM_ID,
+          attestation: statusAttestation,
         })
         .signers([statusInvestor])
         .rpc();
@@ -1864,6 +1870,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
           sharesMint,
           investorSharesAccount: liqInvestorSharesAccount,
           token2022Program: TOKEN_2022_PROGRAM_ID,
+          attestation: liqAttestation,
         })
         .signers([liqInvestor])
         .rpc();
@@ -2171,6 +2178,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
           sharesMint,
           investorSharesAccount: frozenInvestorSharesAccount,
           token2022Program: TOKEN_2022_PROGRAM_ID,
+          attestation: frozenInvAttestation,
         })
         .signers([frozenInvestor])
         .rpc();
@@ -2834,6 +2842,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
           sharesMint,
           investorSharesAccount: staleSharesAta.address,
           token2022Program: TOKEN_2022_PROGRAM_ID,
+          attestation: staleAttestation,
         })
         .signers([staleInvestor])
         .rpc();

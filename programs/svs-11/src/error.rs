@@ -71,6 +71,9 @@ pub enum VaultError {
     #[msg("Oracle account owner does not match vault.oracle_program")]
     OracleInvalidProgram,
 
+    #[msg("Oracle price deviation exceeds max_deviation_bps")]
+    OracleDeviationExceeded,
+
     #[msg("Deposit would exceed global vault cap")]
     GlobalCapExceeded,
 

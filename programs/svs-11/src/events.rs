@@ -90,7 +90,6 @@ pub struct RedemptionCancelled {
 pub struct Repayment {
     pub vault: Pubkey,
     pub amount: u64,
-    pub new_total_assets: u64,
 }
 
 #[event]
@@ -160,4 +159,10 @@ pub struct OracleConfigUpdated {
     pub old_program: Pubkey,
     pub new_program: Pubkey,
     pub new_max_staleness: i64,
+}
+
+#[event]
+pub struct ModuleConfigChanged {
+    pub vault: Pubkey,
+    pub config_type: u8,
 }
