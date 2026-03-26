@@ -113,6 +113,8 @@ pub fn handler(ctx: Context<Deposit>, assets: u64, min_shares_out: u64) -> Resul
         result.net_shares
     };
 
+    require!(shares > 0, TranchedVaultError::ZeroAmount);
+
     require!(
         shares >= min_shares_out,
         TranchedVaultError::SlippageExceeded

@@ -95,3 +95,9 @@ pub struct ManagerChanged {
     pub old_manager: Pubkey,
     pub new_manager: Pubkey,
 }
+
+#[event]
+pub struct ModuleConfigChanged {
+    pub vault: Pubkey,
+    pub config_type: u8,
+}

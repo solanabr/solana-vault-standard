@@ -2,6 +2,7 @@ use anchor_lang::prelude::*;
 
 use crate::constants::TRANCHED_VAULT_SEED;
 use crate::error::TranchedVaultError;
+use crate::events::ModuleConfigChanged;
 use crate::state::{
     AccessConfig, AccessMode, CapConfig, FeeConfig, LockConfig, TranchedVault, ACCESS_CONFIG_SEED,
     CAP_CONFIG_SEED, FEE_CONFIG_SEED, LOCK_CONFIG_SEED,
@@ -60,6 +61,10 @@ pub fn initialize_fee_config(
     fee_config.last_fee_collection = Clock::get()?.unix_timestamp;
     fee_config.bump = ctx.bumps.fee_config;
 
+    emit!(ModuleConfigChanged {
+        vault: ctx.accounts.vault.key(),
+        config_type: 0
+    });
     Ok(())
 }
 
@@ -105,6 +110,10 @@ pub fn update_fee_config(
     fee_config.management_fee_bps = new_mgmt;
     fee_config.performance_fee_bps = new_perf;
 
+    emit!(ModuleConfigChanged {
+        vault: ctx.accounts.vault.key(),
+        config_type: 0
+    });
     Ok(())
 }
 
@@ -146,6 +155,10 @@ pub fn initialize_cap_config(
     cap_config.per_user_cap = per_user_cap;
     cap_config.bump = ctx.bumps.cap_config;
 
+    emit!(ModuleConfigChanged {
+        vault: ctx.accounts.vault.key(),
+        config_type: 1
+    });
     Ok(())
 }
 
@@ -185,6 +198,10 @@ pub fn update_cap_config(
     cap_config.global_cap = new_global;
     cap_config.per_user_cap = new_per_user;
 
+    emit!(ModuleConfigChanged {
+        vault: ctx.accounts.vault.key(),
+        config_type: 1
+    });
     Ok(())
 }
 
@@ -224,6 +241,10 @@ pub fn initialize_lock_config(
     lock_config.lock_duration = lock_duration;
     lock_config.bump = ctx.bumps.lock_config;
 
+    emit!(ModuleConfigChanged {
+        vault: ctx.accounts.vault.key(),
+        config_type: 2
+    });
     Ok(())
 }
 
@@ -253,6 +274,10 @@ pub fn update_lock_config(ctx: Context<UpdateLockConfig>, lock_duration: i64) ->
 
     ctx.accounts.lock_config.lock_duration = lock_duration;
 
+    emit!(ModuleConfigChanged {
+        vault: ctx.accounts.vault.key(),
+        config_type: 2
+    });
     Ok(())
 }
 
@@ -291,6 +316,10 @@ pub fn initialize_access_config(
     access_config.merkle_root = merkle_root;
     access_config.bump = ctx.bumps.access_config;
 
+    emit!(ModuleConfigChanged {
+        vault: ctx.accounts.vault.key(),
+        config_type: 3
+    });
     Ok(())
 }
 
@@ -328,5 +357,9 @@ pub fn update_access_config(
         access_config.merkle_root = root;
     }
 
+    emit!(ModuleConfigChanged {
+        vault: ctx.accounts.vault.key(),
+        config_type: 3
+    });
     Ok(())
 }

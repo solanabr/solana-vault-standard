@@ -36,6 +36,7 @@ pub struct RebalanceTranches<'info> {
 
 pub fn handler(ctx: Context<RebalanceTranches>, amount: u64) -> Result<()> {
     require!(amount > 0, TranchedVaultError::ZeroAmount);
+    require!(!ctx.accounts.vault.wiped, TranchedVaultError::VaultWiped);
     require!(
         ctx.accounts.from_tranche.total_assets_allocated >= amount,
         TranchedVaultError::InsufficientAllocation
@@ -97,6 +98,18 @@ pub fn handler(ctx: Context<RebalanceTranches>, amount: u64) -> Result<()> {
     let sorted_allocs: Vec<u64> = all_allocations.iter().map(|&(_, a, _)| a).collect();
     let sorted_sub_bps: Vec<u16> = all_allocations.iter().map(|&(_, _, s)| s).collect();
     check_subordination(&sorted_allocs, &sorted_sub_bps, vault.total_assets)?;
+
+    let to_tranche = &ctx.accounts.to_tranche;
+    if vault.total_assets > 0 {
+        let cap_limit = (vault.total_assets as u128)
+            .checked_mul(to_tranche.cap_bps as u128)
+            .and_then(|v| v.checked_div(crate::constants::BPS_DENOMINATOR as u128))
+            .ok_or(TranchedVaultError::MathOverflow)? as u64;
+        require!(
+            to_tranche.total_assets_allocated <= cap_limit,
+            TranchedVaultError::CapExceeded
+        );
+    }
 
     let from_index = ctx.accounts.from_tranche.index;
     let to_index = ctx.accounts.to_tranche.index;
