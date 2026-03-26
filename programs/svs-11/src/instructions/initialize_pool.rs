@@ -97,6 +97,10 @@ pub fn handler(
         VaultError::InvalidAddress
     );
     require!(
+        ctx.accounts.attester.key() != Pubkey::default(),
+        VaultError::InvalidAddress
+    );
+    require!(
         ctx.accounts.oracle_program.executable,
         VaultError::OracleInvalidProgram
     );
