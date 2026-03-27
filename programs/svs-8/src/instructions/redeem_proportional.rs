@@ -91,7 +91,16 @@ pub fn handler<'info>(
         let vault_balance = crate::math::read_token_balance(vault_ta_ai)?;
 
         let mint_ai = &asset_accounts[i * 5 + 4];
+        // Validate mint matches asset_entry to ensure token_program_key is trustworthy
+        require!(mint_ai.key() == asset_entry.asset_mint, VaultError::AssetNotFound);
         let token_program_key = *mint_ai.owner;
+        // Validate user_ta mint matches asset_entry.asset_mint
+        {
+            let user_ta_data = user_ta_ai.try_borrow_data()?;
+            require!(user_ta_data.len() >= 32, VaultError::MathOverflow);
+            let user_ta_mint = Pubkey::try_from(&user_ta_data[0..32]).map_err(|_| VaultError::AssetNotFound)?;
+            require!(user_ta_mint == asset_entry.asset_mint, VaultError::AssetNotFound);
+        }
         snapshots.push(AssetSnapshot {
             mint_key: asset_entry.asset_mint,
             asset_dec: asset_entry.asset_decimals,
