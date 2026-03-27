@@ -33,7 +33,7 @@ pub struct UpdateOracle<'info> {
     pub asset_mint: InterfaceAccount<'info, Mint>,
 
     #[account(
-        init,
+        init_if_needed,
         payer = authority,
         space = OraclePrice::LEN,
         seeds = [ORACLE_PRICE_SEED, vault.key().as_ref(), asset_mint.key().as_ref()],

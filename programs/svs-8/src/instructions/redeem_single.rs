@@ -46,15 +46,15 @@ use svs_module_hooks as module_hooks;
     let mut prices: Vec<u64> = vec![oracle.price];
     let mut decimals_vec: Vec<u8> = vec![asset_decimals];
 
-    let rem = ctx.remaining_accounts;
-    // FIX P1: layout [AssetEntry, OraclePrice, vault_ata] per other asset
-    // completeness check
-    require!(rem.len() % 3 == 0, VaultError::AssetNotFound);
-    let num_other = rem.len() / 3;
+    // FIX P1-2: split remaining_accounts into asset accounts and module PDAs
+    let num_other = ctx.accounts.vault.num_assets as usize - 1;
+    let asset_len = num_other * 3;
     require!(
-        num_other + 1 == ctx.accounts.vault.num_assets as usize,
+        ctx.remaining_accounts.len() >= asset_len,
         VaultError::AssetNotFound
     );
+    let (asset_accounts, _module_accounts) = ctx.remaining_accounts.split_at(asset_len);
+    let rem = asset_accounts;
     let svs8_id = crate::ID;
     let spl_token = anchor_spl::token::ID;
     let spl_token_2022 = anchor_spl::token_2022::ID;

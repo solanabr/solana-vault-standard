@@ -44,28 +44,26 @@ pub fn handler(
     )?;
     require!(deposit_value > 0, VaultError::ZeroAmount);
 
-    // Read portfolio from remaining_accounts: pairs of [OraclePrice, vault_token_account]
-    let mut balances: Vec<u64> = vec![];
-    let mut prices: Vec<u64> = vec![];
-    let mut decimals: Vec<u8> = vec![];
+    // Read portfolio from remaining_accounts: [AssetEntry, OraclePrice, vault_ata] per other asset
+    // FIX P0-1: include deposited asset vault balance in total_value calculation
+    let deposited_balance = ctx.accounts.asset_vault_account.amount;
+    let mut balances: Vec<u64> = vec![deposited_balance];
+    let mut prices: Vec<u64> = vec![oracle.price];
+    let mut decimals: Vec<u8> = vec![asset_decimals];
 
-    // FIX P0: layout changed to [AssetEntry, OraclePrice, vault_ata] per other asset
-    // FIX P1: completeness check — all basket assets must be provided (including deposited one)
+    // FIX P1-2: split remaining_accounts into asset accounts and module PDAs
+    let num_other = ctx.accounts.vault.num_assets as usize - 1;
+    let asset_len = num_other * 3;
     require!(
-        ctx.remaining_accounts.len() % 3 == 0,
+        ctx.remaining_accounts.len() >= asset_len,
         VaultError::AssetNotFound
     );
-    let num_other = ctx.remaining_accounts.len() / 3;
-    require!(
-        num_other + 1 == ctx.accounts.vault.num_assets as usize,
-        VaultError::AssetNotFound
-    );
-
+    let (asset_accounts, _module_accounts) = ctx.remaining_accounts.split_at(asset_len);
     let mut i = 0;
-    while i + 2 < ctx.remaining_accounts.len() + 1 && i / 3 < num_other {
-        let asset_entry_info = &ctx.remaining_accounts[i];
-        let oracle_info      = &ctx.remaining_accounts[i + 1];
-        let vault_ta_info    = &ctx.remaining_accounts[i + 2];
+    while i + 2 < asset_accounts.len() + 1 && i / 3 < num_other {
+        let asset_entry_info = &asset_accounts[i];
+        let oracle_info      = &asset_accounts[i + 1];
+        let vault_ta_info    = &asset_accounts[i + 2];
 
         // Owner checks before deserialization
         let svs8_id = crate::ID;

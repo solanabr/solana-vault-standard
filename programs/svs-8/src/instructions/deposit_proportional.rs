@@ -33,13 +33,14 @@ pub fn handler<'info>(
     let vault_id_bytes = ctx.accounts.vault.vault_id.to_le_bytes();
     let bump = ctx.accounts.vault.bump;
 
+    // FIX P1-2: split remaining_accounts into asset accounts and module PDAs
+    let asset_len = ctx.accounts.vault.num_assets as usize * 5;
     require!(
-        ctx.remaining_accounts.len() % 5 == 0 && ctx.remaining_accounts.len() > 0,
+        ctx.remaining_accounts.len() >= asset_len && asset_len > 0,
         VaultError::AssetNotFound
     );
-    let num_assets = ctx.remaining_accounts.len() / 5;
-    // FIX P1: all basket assets must be provided
-    require!(num_assets == ctx.accounts.vault.num_assets as usize, VaultError::AssetNotFound);
+    let (asset_accounts, _module_accounts) = ctx.remaining_accounts.split_at(asset_len);
+    let num_assets = ctx.accounts.vault.num_assets as usize;
 
     struct AssetSnapshot {
         weight_bps: u16,
@@ -59,10 +60,10 @@ pub fn handler<'info>(
     let mut total_deposit_value: u64 = 0;
 
     for i in 0..num_assets {
-        let asset_entry_ai = &ctx.remaining_accounts[i * 5];
-        let oracle_ai     = &ctx.remaining_accounts[i * 5 + 1];
-        let vault_ta_ai   = &ctx.remaining_accounts[i * 5 + 2];
-        let user_ta_ai    = &ctx.remaining_accounts[i * 5 + 3];
+        let asset_entry_ai = &asset_accounts[i * 5];
+        let oracle_ai     = &asset_accounts[i * 5 + 1];
+        let vault_ta_ai   = &asset_accounts[i * 5 + 2];
+        let user_ta_ai    = &asset_accounts[i * 5 + 3];
 
         // Owner checks
         require!(asset_entry_ai.owner == &svs8_program_id, VaultError::InvalidOracle);
@@ -116,7 +117,7 @@ pub fn handler<'info>(
         let deposit_value = oracle_value_for_amount(oracle.price, token_amount, asset_dec, base_decimals)?;
         total_deposit_value = total_deposit_value.checked_add(deposit_value).ok_or(VaultError::MathOverflow)?;
 
-        let mint_ai = &ctx.remaining_accounts[i * 5 + 4];
+        let mint_ai = &asset_accounts[i * 5 + 4];
         let token_program_key = *mint_ai.owner;
         snapshots.push(AssetSnapshot {
             weight_bps,
@@ -180,9 +181,9 @@ pub fn handler<'info>(
         anchor_lang::solana_program::program::invoke(
             &ix,
             &[
-                ctx.remaining_accounts[idx * 5 + 3].clone(), // user_ata
-                ctx.remaining_accounts[idx * 5 + 4].clone(), // mint
-                ctx.remaining_accounts[idx * 5 + 2].clone(), // vault_ata
+                asset_accounts[idx * 5 + 3].clone(), // user_ata
+                asset_accounts[idx * 5 + 4].clone(), // mint
+                asset_accounts[idx * 5 + 2].clone(), // vault_ata
                 ctx.accounts.user.to_account_info(),
                 ctx.remaining_accounts[idx * 5 + 4].clone(), // token_program via mint owner
             ],
