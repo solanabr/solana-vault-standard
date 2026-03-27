@@ -496,4 +496,111 @@ describe("svs-8 (Multi Asset Basket)", () => {
     expect(Number(mintSingleAfter.supply)).to.be.lessThan(Number(mintSingleBefore.supply));
     console.log("shares after redeem_single:", mintSingleAfter.supply.toString());
   });
+
+  it('rejects update_oracle twice (regression: init_if_needed)', async () => {
+    // Second call must succeed — was failing with init (account already exists)
+    await program.methods.updateOracle(new BN(2_000_000_000))
+      .accountsPartial({ vault: vaultPda, assetMint: mintA, systemProgram: SystemProgram.programId })
+      .rpc();
+    const oracle = await program.account.oraclePrice.fetch(oraclePriceA);
+    expect(oracle.price.toNumber()).to.equal(2_000_000_000);
+    // Restore original price
+    await program.methods.updateOracle(new BN(1_000_000_000))
+      .accountsPartial({ vault: vaultPda, assetMint: mintA, systemProgram: SystemProgram.programId })
+      .rpc();
+    console.log("correctly updated oracle twice");
+  });
+
+  it("rejects redeem_proportional with wrong vault_ta (cross-asset drain attempt)", async () => {
+    const mintInfo = await getMint(provider.connection, sharesMint, undefined, TOKEN_2022_PROGRAM_ID);
+    const sharesToRedeem = new anchor.BN(1);
+    try {
+      await program.methods
+        .redeemProportional(sharesToRedeem, new BN(0))
+        .accountsPartial({
+          user: user.publicKey, vault: vaultPda, sharesMint,
+          userSharesAccount: userSharesAta,
+          tokenProgram: TOKEN_PROGRAM_ID, sharesTokenProgram: TOKEN_2022_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .remainingAccounts([
+          // Asset A with vault_ta swapped for vault_ta of asset B (cross-asset drain)
+          { pubkey: assetEntryA, isWritable: false, isSigner: false },
+          { pubkey: oraclePriceA, isWritable: false, isSigner: false },
+          { pubkey: assetVaultB, isWritable: true, isSigner: false }, // wrong vault_ta
+          { pubkey: userAtaA, isWritable: true, isSigner: false },
+          { pubkey: mintA, isWritable: false, isSigner: false },
+          // Asset B
+          { pubkey: assetEntryB, isWritable: false, isSigner: false },
+          { pubkey: oraclePriceB, isWritable: false, isSigner: false },
+          { pubkey: assetVaultB, isWritable: true, isSigner: false },
+          { pubkey: userAtaB, isWritable: true, isSigner: false },
+          { pubkey: mintB, isWritable: false, isSigner: false },
+        ])
+        .rpc();
+      expect.fail("should have thrown");
+    } catch (e) {
+      const msg = e.logs ? e.logs.join(" ") : e.message;
+      expect(msg).to.include("AssetNotFound");
+      console.log("correctly rejected cross-asset drain attempt");
+    }
+  });
+
+  it("rejects deposit_proportional with subset of assets (subset attack)", async () => {
+    try {
+      await program.methods
+        .depositProportional(new BN(1_000_000), new BN(0))
+        .accountsPartial({
+          user: user.publicKey, vault: vaultPda, sharesMint,
+          userSharesAccount: userSharesAta,
+          tokenProgram: TOKEN_PROGRAM_ID, sharesTokenProgram: TOKEN_2022_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .remainingAccounts([
+          // Only asset A — missing asset B (subset attack)
+          { pubkey: assetEntryA, isWritable: false, isSigner: false },
+          { pubkey: oraclePriceA, isWritable: false, isSigner: false },
+          { pubkey: assetVaultA, isWritable: true, isSigner: false },
+          { pubkey: userAtaA, isWritable: true, isSigner: false },
+          { pubkey: mintA, isWritable: false, isSigner: false },
+        ])
+        .rpc();
+      expect.fail("should have thrown");
+    } catch (e) {
+      const msg = e.logs ? e.logs.join(" ") : e.message;
+      expect(msg).to.include("AssetNotFound");
+      console.log("correctly rejected subset deposit attack");
+    }
+  });
+
+  it("rejects deposit_proportional with wrong mint in quintuplet", async () => {
+    try {
+      await program.methods
+        .depositProportional(new BN(1_000_000), new BN(0))
+        .accountsPartial({
+          user: user.publicKey, vault: vaultPda, sharesMint,
+          userSharesAccount: userSharesAta,
+          tokenProgram: TOKEN_PROGRAM_ID, sharesTokenProgram: TOKEN_2022_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .remainingAccounts([
+          { pubkey: assetEntryA, isWritable: false, isSigner: false },
+          { pubkey: oraclePriceA, isWritable: false, isSigner: false },
+          { pubkey: assetVaultA, isWritable: true, isSigner: false },
+          { pubkey: userAtaA, isWritable: true, isSigner: false },
+          { pubkey: mintB, isWritable: false, isSigner: false }, // wrong mint for asset A
+          { pubkey: assetEntryB, isWritable: false, isSigner: false },
+          { pubkey: oraclePriceB, isWritable: false, isSigner: false },
+          { pubkey: assetVaultB, isWritable: true, isSigner: false },
+          { pubkey: userAtaB, isWritable: true, isSigner: false },
+          { pubkey: mintB, isWritable: false, isSigner: false },
+        ])
+        .rpc();
+      expect.fail("should have thrown");
+    } catch (e) {
+      const msg = e.logs ? e.logs.join(" ") : e.message;
+      expect(msg).to.include("AssetNotFound");
+      console.log("correctly rejected wrong mint in quintuplet");
+    }
+  });
 });
