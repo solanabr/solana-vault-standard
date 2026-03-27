@@ -121,7 +121,7 @@ pub fn handler<'info>(
         let remaining = ctx.remaining_accounts;
         let vault_key = vault_key;
         let user_key = ctx.accounts.user.key();
-        module_hooks::check_deposit_access(remaining, &crate::ID, &vault_key, &user_key, &[])?;
+        module_hooks::check_access(remaining, &crate::ID, &vault_key, &user_key, &[])?;
         module_hooks::check_share_lock(remaining, &crate::ID, &vault_key, &user_key, clock.unix_timestamp)?;
         let result = module_hooks::apply_exit_fee(remaining, &crate::ID, &vault_key, gross_value)?;
         result.net_assets

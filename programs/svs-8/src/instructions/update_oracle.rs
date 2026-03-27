@@ -3,6 +3,7 @@ use anchor_spl::token_interface::Mint;
 use crate::{
     constants::ORACLE_PRICE_SEED,
     error::VaultError,
+    events::OraclePriceUpdated,
     state::{MultiAssetVault, OraclePrice},
 };
 
@@ -18,6 +19,13 @@ pub fn handler(ctx: Context<UpdateOracle>, price: u64) -> Result<()> {
     oracle.updated_at = clock.unix_timestamp;
     oracle.authority = ctx.accounts.authority.key();
     oracle.bump = ctx.bumps.oracle_price;
+
+    emit!(OraclePriceUpdated {
+        vault: ctx.accounts.vault.key(),
+        asset_mint: ctx.accounts.asset_mint.key(),
+        price,
+        updated_at: clock.unix_timestamp,
+    });
 
     Ok(())
 }

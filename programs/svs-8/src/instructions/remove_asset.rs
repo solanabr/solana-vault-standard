@@ -14,8 +14,14 @@ pub fn handler(ctx: Context<RemoveAsset>) -> Result<()> {
 
     let removed_index = asset_entry.index;
 
-    // FIX P2: re-index remaining AssetEntry accounts to close index gaps
-    // remaining_accounts: all other AssetEntry PDAs in this vault
+    // FIX P2-3: completeness check — all other AssetEntry PDAs must be provided
+    let expected_others = vault.num_assets as usize - 1;
+    require!(
+        ctx.remaining_accounts.len() == expected_others,
+        VaultError::AssetNotFound
+    );
+
+    // re-index remaining AssetEntry accounts to close index gaps
     let svs8_id = crate::ID;
     for info in ctx.remaining_accounts.iter() {
         require!(info.owner == &svs8_id, VaultError::InvalidOracle);

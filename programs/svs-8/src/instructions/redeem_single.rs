@@ -39,9 +39,6 @@ pub fn handler(
     // Compute vault balance value for this asset
     let vault_balance = ctx.accounts.asset_vault_account.amount;
     let _asset_value = oracle_value_for_amount(oracle.price, vault_balance, asset_decimals, base_decimals)?;
-
-#[cfg(feature = "modules")]
-use svs_module_hooks as module_hooks;
     let mut balances: Vec<u64> = vec![vault_balance];
     let mut prices: Vec<u64> = vec![oracle.price];
     let mut decimals_vec: Vec<u8> = vec![asset_decimals];
@@ -117,7 +114,7 @@ use svs_module_hooks as module_hooks;
         let remaining = ctx.remaining_accounts;
         let vault_key = ctx.accounts.vault.key();
         let user_key = ctx.accounts.user.key();
-        module_hooks::check_deposit_access(remaining, &crate::ID, &vault_key, &user_key, &[])?;
+        module_hooks::check_access(remaining, &crate::ID, &vault_key, &user_key, &[])?;
         module_hooks::check_share_lock(remaining, &crate::ID, &vault_key, &user_key, clock.unix_timestamp)?;
         let result = module_hooks::apply_exit_fee(remaining, &crate::ID, &vault_key, token_amount)?;
         result.net_assets

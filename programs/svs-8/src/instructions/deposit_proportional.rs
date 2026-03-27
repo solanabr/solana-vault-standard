@@ -134,6 +134,10 @@ pub fn handler<'info>(
         });
     }
 
+    // FIX P2-2: validate weights sum to exactly 10,000 bps before accepting deposit
+    let total_weight: u32 = snapshots.iter().map(|s| s.weight_bps as u32).sum();
+    require!(total_weight == 10_000, VaultError::InvalidWeight);
+
     let balances: Vec<u64> = snapshots.iter().map(|s| s.vault_balance).collect();
     let prices: Vec<u64>   = snapshots.iter().map(|s| s.price).collect();
     let decimals_vec: Vec<u8> = snapshots.iter().map(|s| s.asset_dec).collect();

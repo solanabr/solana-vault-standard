@@ -82,3 +82,11 @@ pub struct AuthorityTransferred {
     pub previous_authority: Pubkey,
     pub new_authority: Pubkey,
 }
+
+#[event]
+pub struct OraclePriceUpdated {
+    pub vault: Pubkey,
+    pub asset_mint: Pubkey,
+    pub price: u64,
+    pub updated_at: i64,
+}
