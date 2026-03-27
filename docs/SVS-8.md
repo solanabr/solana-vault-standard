@@ -63,14 +63,16 @@ pub struct AssetEntry {
 | # | Instruction | Signer | Description |
 |---|---|---|---|
 | 1 | `initialize` | Authority | Creates MultiAssetVault PDA and share mint (Token-2022) |
-| 2 | `add_asset` | Authority | Adds an AssetEntry to the basket |
-| 3 | `remove_asset` | Authority | Removes an asset (must have zero balance) |
-| 4 | `update_weights` | Authority | Rebalances target weights (must sum to 10,000 bps) |
-| 5 | `deposit_single` | User | Deposits one asset, mints shares based on its value |
-| 6 | `deposit_proportional` | User | Deposits one asset weighted by its bps allocation |
-| 7 | `redeem_proportional` | User | Burns shares, receives proportional asset amounts |
-| 8 | `pause` / `unpause` | Authority | Emergency controls |
-| 9 | `transfer_authority` | Authority | Transfer admin |
+| 2 | `add_asset` | Authority | Adds an AssetEntry to the basket with target weight (bps) |
+| 3 | `remove_asset` | Authority | Removes an asset (must have zero balance, re-indexes remaining) |
+| 4 | `update_weights` | Authority | Updates target weight for one asset (all weights must sum to 10,000 bps) |
+| 5 | `update_oracle` | Authority | Sets or updates OraclePrice PDA for an asset |
+| 6 | `deposit_single` | User | Deposits one asset, mints shares priced by full portfolio oracle value |
+| 7 | `deposit_proportional` | User | Atomic deposit across ALL basket assets by target weight |
+| 8 | `redeem_single` | User | Burns shares, receives proportional amount of one chosen asset |
+| 9 | `redeem_proportional` | User | Burns shares, receives proportional amounts from ALL assets |
+| 10 | `pause` / `unpause` | Authority | Emergency circuit breaker |
+| 11 | `transfer_authority` | Authority | Transfer vault admin (zero-address guarded) |
 
 ---
 
@@ -87,10 +89,31 @@ shares = deposit_value * (total_shares + offset) / (total_value + 1)
 
 ## Weight Invariant
 ```
-sum(target_weight_bps for all AssetEntry) <= 10_000
+sum(target_weight_bps for all AssetEntry) <= 10_000  // enforced at add_asset
+sum(target_weight_bps for all AssetEntry) == 10_000  // enforced at deposit time
 ```
 
-Checked on `add_asset` and `update_weights`. Full 10,000 bps required only when all assets are added.
+`add_asset` allows partial sums (assets added one by one). `deposit_proportional` and `deposit_single` require the full 10,000 bps to be allocated before accepting deposits.
+
+## remaining_accounts Layout
+
+All multi-asset instructions use a structured `remaining_accounts` layout. Module PDAs (FeeConfig, CapConfig, etc.) can be appended after the asset accounts.
+
+### deposit_proportional / redeem_proportional
+Quintuplets per asset, followed by optional module PDAs:
+```
+[AssetEntry PDA, OraclePrice PDA, vault_ata, user_ata, mint]  x  num_assets
+[module PDAs...]  // optional, appended after asset accounts
+```
+
+### deposit_single / redeem_single
+Triplets per OTHER asset (excluding the primary asset in named accounts), followed by optional module PDAs:
+```
+[AssetEntry PDA, OraclePrice PDA, vault_ata]  x  (num_assets - 1)
+[module PDAs...]  // optional, appended after asset accounts
+```
+
+All accounts are validated with owner checks before deserialization. vault_ata is validated against `asset_entry.asset_vault`.
 
 ---
 
