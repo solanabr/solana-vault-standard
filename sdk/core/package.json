@@ -46,5 +46,11 @@
   },
   "peerDependencies": {
     "@coral-xyz/anchor": ">=0.31.0"
+  },
+  "ts-node": {
+    "transpileOnly": true,
+    "compilerOptions": {
+      "module": "commonjs"
+    }
   }
 }
