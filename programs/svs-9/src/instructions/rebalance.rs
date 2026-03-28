@@ -54,7 +54,10 @@ pub struct Rebalance<'info> {
     pub child_shares_mint: Box<InterfaceAccount<'info, Mint>>,
 
     /// ATA of allocator_vault for shares in the child vault
-    #[account(mut)]
+    #[account(
+        mut,
+        constraint = allocator_child_shares_account.key() == child_allocation.child_shares_account @ VaultError::InvalidRemainingAccounts,
+    )]
     pub allocator_child_shares_account: Box<InterfaceAccount<'info, TokenAccount>>,
 
     pub token_program: Interface<'info, TokenInterface>,
@@ -73,6 +76,7 @@ pub fn rebalance_handler(ctx: Context<Rebalance>, min_out: u64) -> Result<()> {
         idle_amount,
         ctx.accounts.allocator_vault.num_children,
         ctx.remaining_accounts,
+        ctx.accounts.allocator_vault.key(),
     )?;
 
     if total_assets == 0 {

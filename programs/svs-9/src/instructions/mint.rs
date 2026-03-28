@@ -80,6 +80,7 @@ pub fn mint_handler(ctx: Context<MintShares>, shares: u64, max_assets_in: u64) -
         ctx.accounts.idle_vault.amount,
         ctx.accounts.allocator_vault.num_children,
         child_accounts,
+        ctx.accounts.allocator_vault.key(),
     )?;
 
     // Calculate required assets (ceiling rounding - user pays more)
@@ -117,6 +118,8 @@ pub fn mint_handler(ctx: Context<MintShares>, shares: u64, max_assets_in: u64) -
 
     #[cfg(not(feature = "modules"))]
     let net_shares = shares;
+
+    require!(net_shares > 0, VaultError::ZeroAmount);
 
     // 5. EXECUTE CPIs
     // 5.1 Transfer assets from caller to idle_vault

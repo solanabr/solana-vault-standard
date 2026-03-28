@@ -155,7 +155,6 @@ describe("SVS-9 E2E CPI CPI Test", () => {
       childVault: childVaultClient.vault,
       childProgram: svs1Program.programId,
       maxWeightBps: 5000, // 50% max weight
-      childDecimalsOffset: 0,
     });
 
     await getOrCreateAssociatedTokenAccount(
@@ -312,5 +311,109 @@ describe("SVS-9 E2E CPI CPI Test", () => {
     // Because of standard share math and SVS-1 live balance, pulled yield might have tiny rounding,
     // but should be practically equal to profitAmount.
     expect(pulledYield).to.be.closeTo(profitAmount, 10);
+  });
+
+  it("6. Rejects cross-vault ChildAllocation substitution (P1-1)", async () => {
+    // Setup: initialize a second SVS-9 vault (vaultB) that shares the same SVS-1 child vault.
+    // Attack: call deposit on vaultA but supply vaultB's ChildAllocation PDA in remaining_accounts.
+    // Expected: InvalidRemainingAccounts, because allocation.allocator_vault != vaultA.
+
+    const vaultBId = new BN(99);
+    const vaultBPDA = PublicKey.findProgramAddressSync(
+      [Buffer.from("allocator_vault"), assetMint.toBuffer(), vaultBId.toArrayLike(Buffer, "le", 8)],
+      svs9Program.programId
+    )[0];
+    const vaultBSharesMint = PublicKey.findProgramAddressSync(
+      [Buffer.from("shares_mint"), vaultBPDA.toBuffer()],
+      svs9Program.programId
+    )[0];
+    const vaultBIdleVault = getAssociatedTokenAddressSync(
+      assetMint,
+      vaultBPDA,
+      true,
+      TOKEN_PROGRAM_ID,
+      ASSOCIATED_TOKEN_PROGRAM_ID
+    );
+
+    // Initialize vaultB
+    await (svs9Program.methods as any)
+      .initialize(vaultBId, 1000)
+      .accountsPartial({
+        authority: payer.publicKey,
+        curator: payer.publicKey,
+        allocatorVault: vaultBPDA,
+        assetMint,
+        sharesMint: vaultBSharesMint,
+        idleVault: vaultBIdleVault,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        token2022Program: TOKEN_2022_PROGRAM_ID,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+      })
+      .rpc();
+
+    // Add the same SVS-1 child to vaultB so its ChildAllocation PDA exists on-chain
+    const vaultBChildAlloc = getChildAllocationAddress(
+      svs9Program.programId,
+      vaultBPDA,
+      childVaultClient.vault
+    )[0];
+    const vaultBChildSharesAta = getAssociatedTokenAddressSync(
+      childVaultClient.sharesMint,
+      vaultBPDA,
+      true,
+      TOKEN_2022_PROGRAM_ID,
+      ASSOCIATED_TOKEN_PROGRAM_ID
+    );
+
+    await (svs9Program.methods as any)
+      .addChild(5000)
+      .accounts({
+        authority: payer.publicKey,
+        allocatorVault: vaultBPDA,
+        childAllocation: vaultBChildAlloc,
+        childVault: childVaultClient.vault,
+        childProgram: svs1Program.programId,
+        childSharesMint: childVaultClient.sharesMint,
+        allocatorChildSharesAccount: vaultBChildSharesAta,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+        token2022Program: TOKEN_2022_PROGRAM_ID,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+      })
+      .rpc();
+
+    // Build forged remaining_accounts: vaultB's ChildAllocation PDA where vaultA's is expected.
+    // vaultA has num_children=1, so the program expects exactly 5 accounts.
+    const forgedRemainingAccounts = [
+      { pubkey: vaultBChildAlloc, isSigner: false, isWritable: false },
+      { pubkey: childVaultClient.vault, isSigner: false, isWritable: false },
+      { pubkey: vaultBChildSharesAta, isSigner: false, isWritable: false },
+      { pubkey: childVaultClient.assetVault, isSigner: false, isWritable: false },
+      { pubkey: childVaultClient.sharesMint, isSigner: false, isWritable: false },
+    ];
+
+    try {
+      await (svs9Program.methods as any)
+        .deposit(new BN(1_000_000), new BN(0))
+        .accountsPartial({
+          caller: payer.publicKey,
+          owner: payer.publicKey,
+          allocatorVault: allocatorClient.allocatorVault,
+          idleVault: allocatorClient.idleVault,
+          sharesMint: allocatorSharesMint,
+          callerAssetAccount: userAssetAccount,
+          ownerSharesAccount: userAllocatorSharesAccount,
+          assetMint,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .remainingAccounts(forgedRemainingAccounts)
+        .rpc();
+      expect.fail("Should have rejected cross-vault ChildAllocation substitution");
+    } catch (e: any) {
+      expect(e.toString()).to.include("InvalidRemainingAccounts");
+    }
   });
 });

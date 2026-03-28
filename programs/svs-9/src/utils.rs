@@ -89,6 +89,7 @@ pub fn compute_total_assets<'info>(
     idle_amount: u64,
     num_children: u8,
     remaining_accounts: &[AccountInfo<'info>],
+    vault_key: Pubkey,
 ) -> Result<u64> {
     if remaining_accounts.len() != (num_children as usize) * 5 {
         return Err(VaultError::InvalidRemainingAccounts.into());
@@ -113,6 +114,13 @@ pub fn compute_total_assets<'info>(
 
         // 1. Deserialize and validate the ChildAllocation PDA
         let allocation = ChildAllocation::try_deserialize(&mut &allocation_info.data.borrow()[..])?;
+
+        // Verify this ChildAllocation belongs to the vault being computed, not a different vault
+        require_keys_eq!(
+            allocation.allocator_vault,
+            vault_key,
+            VaultError::InvalidRemainingAccounts
+        );
 
         // --- Authentication Shielding ---
         // Ensure the accounts passed in remaining_accounts match the allocation state
@@ -169,26 +177,27 @@ pub fn read_child_live_balances<'info>(
     asset_info: &AccountInfo<'info>,
     mint_info: &AccountInfo<'info>,
 ) -> Result<(u64, u64)> {
-    let mut total_assets = 0;
-    let mut total_shares = 0;
-
     let is_asset_token = asset_info.owner == &anchor_spl::token::ID
         || asset_info.owner == &anchor_spl::token_2022::ID;
-    if is_asset_token {
-        let asset_data = asset_info.try_borrow_data()?;
-        if asset_data.len() >= 165 {
-            total_assets = read_u64(&asset_data, 64).unwrap_or(0);
-        }
+    if !is_asset_token {
+        return Err(VaultError::InvalidRemainingAccounts.into());
     }
+    let asset_data = asset_info.try_borrow_data()?;
+    if asset_data.len() < 165 {
+        return Err(VaultError::InvalidRemainingAccounts.into());
+    }
+    let total_assets = read_u64(&asset_data, 64)?;
 
     let is_mint =
         mint_info.owner == &anchor_spl::token::ID || mint_info.owner == &anchor_spl::token_2022::ID;
-    if is_mint {
-        let mint_data = mint_info.try_borrow_data()?;
-        if mint_data.len() >= 44 {
-            total_shares = read_u64(&mint_data, 36).unwrap_or(0);
-        }
+    if !is_mint {
+        return Err(VaultError::InvalidRemainingAccounts.into());
     }
+    let mint_data = mint_info.try_borrow_data()?;
+    if mint_data.len() < 44 {
+        return Err(VaultError::InvalidRemainingAccounts.into());
+    }
+    let total_shares = read_u64(&mint_data, 36)?;
 
     Ok((total_assets, total_shares))
 }

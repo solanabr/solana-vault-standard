@@ -20,12 +20,8 @@ pub mod svs_9 {
         initialize_handler(ctx, vault_id, idle_buffer_bps)
     }
 
-    pub fn add_child(
-        ctx: Context<AddChild>,
-        max_weight_bps: u16,
-        child_decimals_offset: u8,
-    ) -> Result<()> {
-        add_child_handler(ctx, max_weight_bps, child_decimals_offset)
+    pub fn add_child(ctx: Context<AddChild>, max_weight_bps: u16) -> Result<()> {
+        add_child_handler(ctx, max_weight_bps)
     }
 
     pub fn deposit(ctx: Context<Deposit>, assets: u64, min_shares_out: u64) -> Result<()> {

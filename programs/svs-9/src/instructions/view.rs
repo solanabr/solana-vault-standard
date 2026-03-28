@@ -50,6 +50,7 @@ pub fn preview_deposit(ctx: Context<VaultView>, assets: u64) -> Result<()> {
         ctx.accounts.idle_vault.amount,
         vault.num_children,
         &ctx.remaining_accounts,
+        vault.key(),
     )?;
 
     let shares = convert_to_shares(
@@ -72,6 +73,7 @@ pub fn preview_mint(ctx: Context<VaultView>, shares: u64) -> Result<()> {
         ctx.accounts.idle_vault.amount,
         vault.num_children,
         &ctx.remaining_accounts,
+        vault.key(),
     )?;
 
     let assets = convert_to_assets(
@@ -94,6 +96,7 @@ pub fn preview_withdraw(ctx: Context<VaultView>, assets: u64) -> Result<()> {
         ctx.accounts.idle_vault.amount,
         vault.num_children,
         &ctx.remaining_accounts,
+        vault.key(),
     )?;
 
     let shares = convert_to_shares(
@@ -116,6 +119,7 @@ pub fn preview_redeem(ctx: Context<VaultView>, shares: u64) -> Result<()> {
         ctx.accounts.idle_vault.amount,
         vault.num_children,
         &ctx.remaining_accounts,
+        vault.key(),
     )?;
 
     let assets = convert_to_assets(
@@ -136,6 +140,7 @@ pub fn total_assets(ctx: Context<VaultView>) -> Result<()> {
         ctx.accounts.idle_vault.amount,
         ctx.accounts.allocator_vault.num_children,
         &ctx.remaining_accounts,
+        ctx.accounts.allocator_vault.key(),
     )?;
     set_return_data(&total_assets.to_le_bytes());
     Ok(())
@@ -149,6 +154,7 @@ pub fn convert_to_shares_view(ctx: Context<VaultView>, assets: u64) -> Result<()
         ctx.accounts.idle_vault.amount,
         vault.num_children,
         &ctx.remaining_accounts,
+        vault.key(),
     )?;
 
     let shares = convert_to_shares(
@@ -171,6 +177,7 @@ pub fn convert_to_assets_view(ctx: Context<VaultView>, shares: u64) -> Result<()
         ctx.accounts.idle_vault.amount,
         vault.num_children,
         &ctx.remaining_accounts,
+        vault.key(),
     )?;
 
     let assets = convert_to_assets(
@@ -221,6 +228,7 @@ pub fn max_withdraw(ctx: Context<VaultViewWithOwner>) -> Result<()> {
         ctx.accounts.idle_vault.amount,
         vault.num_children,
         &ctx.remaining_accounts,
+        vault.key(),
     )?;
 
     let max_from_shares = convert_to_assets(
@@ -250,6 +258,7 @@ pub fn max_redeem(ctx: Context<VaultViewWithOwner>) -> Result<()> {
         ctx.accounts.idle_vault.amount,
         vault.num_children,
         &ctx.remaining_accounts,
+        vault.key(),
     )?;
 
     let shares_for_idle = convert_to_shares(

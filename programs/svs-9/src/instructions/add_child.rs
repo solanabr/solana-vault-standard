@@ -35,6 +35,8 @@ pub struct AddChild<'info> {
     pub child_vault: UncheckedAccount<'info>,
 
     /// CHECK: The program that owns the child vault. Stored for CPI verification.
+    // SVS-5 (streaming yield) is currently Status: Draft and has no deployed program ID.
+    // Add SVS5_ID here once the program is deployed.
     #[account(
         executable,
         constraint = [SVS1_ID, SVS2_ID, SVS3_ID, SVS4_ID, SVS9_ID].contains(&child_program.key()) @ VaultError::InvalidChildProgram
@@ -60,16 +62,12 @@ pub struct AddChild<'info> {
     pub system_program: Program<'info, System>,
 }
 
-pub fn add_child_handler(
-    ctx: Context<AddChild>,
-    max_weight_bps: u16,
-    child_decimals_offset: u8,
-) -> Result<()> {
+pub fn add_child_handler(ctx: Context<AddChild>, max_weight_bps: u16) -> Result<()> {
     // 1. VALIDATION
     // Max weight cannot exceed 100% (10,000 bps)
     require!(max_weight_bps <= 10000, VaultError::MathOverflow);
 
-    // Validate child_vault discriminator
+    // Validate child_vault discriminator and compute decimals_offset from vault state
     let vault_data = ctx.accounts.child_vault.try_borrow_data()?;
     require!(vault_data.len() >= 8, VaultError::InvalidChildVault);
     let discriminator = &vault_data[0..8];
@@ -79,6 +77,23 @@ pub fn add_child_handler(
             || discriminator == ALLOCATOR_VAULT_DISCRIMINATOR,
         VaultError::InvalidChildVault
     );
+
+    // Read decimals_offset from the child vault state rather than accepting user input.
+    // SVS-1/2/3/4 (standard + confidential): discriminator(8) + authority(32) + asset_mint(32)
+    //   + shares_mint(32) + asset_vault(32) = byte 136
+    // SVS-9 (allocator): discriminator(8) + authority(32) + curator(32) + asset_mint(32)
+    //   + shares_mint(32) + idle_vault(32) + vault_id(8) + total_shares(8) + idle_buffer_bps(2)
+    //   + num_children(1) = byte 187
+    let decimals_offset_byte = if discriminator == ALLOCATOR_VAULT_DISCRIMINATOR {
+        187usize
+    } else {
+        136usize
+    };
+    let child_decimals_offset = vault_data
+        .get(decimals_offset_byte)
+        .copied()
+        .ok_or(VaultError::InvalidChildVault)?;
+    require!(child_decimals_offset <= 9, VaultError::InvalidChildVault);
 
     // 6. UPDATE STATE
     // Initialize ChildAllocation

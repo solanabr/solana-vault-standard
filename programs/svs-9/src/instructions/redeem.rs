@@ -87,6 +87,7 @@ pub fn redeem_handler(ctx: Context<Redeem>, shares: u64, min_assets_out: u64) ->
         ctx.accounts.idle_vault.amount,
         ctx.accounts.allocator_vault.num_children,
         child_accounts,
+        ctx.accounts.allocator_vault.key(),
     )?;
 
     let assets = convert_to_assets(

@@ -55,7 +55,10 @@ pub struct Allocate<'info> {
     pub child_shares_mint: Box<InterfaceAccount<'info, Mint>>,
 
     /// ATA of allocator_vault for receiving shares from the child vault
-    #[account(mut)]
+    #[account(
+        mut,
+        constraint = allocator_child_shares_account.key() == child_allocation.child_shares_account @ VaultError::InvalidRemainingAccounts,
+    )]
     pub allocator_child_shares_account: Box<InterfaceAccount<'info, TokenAccount>>,
 
     pub token_program: Interface<'info, TokenInterface>,
@@ -84,6 +87,7 @@ pub fn allocate_handler(ctx: Context<Allocate>, assets: u64, min_shares_out: u64
         total_assets_before,
         ctx.accounts.allocator_vault.num_children,
         ctx.remaining_accounts,
+        ctx.accounts.allocator_vault.key(),
     )?;
 
     // Weight enforcement: new weight cannot exceed max_weight_bps

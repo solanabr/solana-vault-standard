@@ -90,6 +90,7 @@ pub fn deposit_handler(ctx: Context<Deposit>, assets: u64, min_shares_out: u64) 
         ctx.accounts.idle_vault.amount,
         ctx.accounts.allocator_vault.num_children,
         child_accounts,
+        ctx.accounts.allocator_vault.key(),
     )?;
 
     // ===== Module Hooks (if enabled) =====

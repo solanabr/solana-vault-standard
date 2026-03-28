@@ -83,6 +83,7 @@ pub fn withdraw_handler(
         ctx.accounts.idle_vault.amount,
         ctx.accounts.allocator_vault.num_children,
         child_accounts,
+        ctx.accounts.allocator_vault.key(),
     )?;
 
     #[cfg(feature = "modules")]
@@ -92,7 +93,6 @@ pub fn withdraw_handler(
         let vault_key = ctx.accounts.allocator_vault.key();
         let user_key = ctx.accounts.caller.key();
 
-        module_hooks::check_deposit_access(modules, &crate::ID, &vault_key, &user_key, &[])?;
         module_hooks::check_share_lock(
             modules,
             &crate::ID,
@@ -102,6 +102,7 @@ pub fn withdraw_handler(
         )?;
 
         let result = module_hooks::apply_exit_fee(modules, &crate::ID, &vault_key, assets)?;
+        require!(result.net_assets > 0, VaultError::ZeroAmount);
         result.net_assets
     };
 

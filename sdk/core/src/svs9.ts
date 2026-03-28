@@ -225,13 +225,13 @@ export interface Svs9WithdrawParams {
   assets: BN;
   maxSharesIn: BN;
   owner: PublicKey;
-  callerAssetAccount: PublicKey;
-  ownerSharesAccount: PublicKey;
+  receiver: PublicKey;
+  callerSharesAccount: PublicKey;
+  receiverAssetAccount: PublicKey;
 }
 
 export interface AddChildParams {
   maxWeightBps: number;
-  childDecimalsOffset: number;
   childVault: PublicKey;
   childProgram: PublicKey;
 }
@@ -609,11 +609,12 @@ export class AllocatorVaultClient {
       .accountsPartial({
         caller: this.provider.wallet.publicKey,
         owner: params.owner,
+        receiver: params.receiver,
         allocatorVault: this.allocatorVault,
         idleVault: this.idleVault,
         sharesMint: state.sharesMint,
-        callerAssetAccount: params.callerAssetAccount,
-        ownerSharesAccount: params.ownerSharesAccount,
+        callerSharesAccount: params.callerSharesAccount,
+        receiverAssetAccount: params.receiverAssetAccount,
         assetMint: this.assetMint,
         tokenProgram: this.assetTokenProgram,
         token2022Program: TOKEN_2022_PROGRAM_ID,
@@ -657,7 +658,7 @@ export class AllocatorVaultClient {
     const methodsNs = this.program.methods as any;
 
     return methodsNs
-      .addChild(params.maxWeightBps, params.childDecimalsOffset)
+      .addChild(params.maxWeightBps)
       .accounts({
         authority: this.provider.wallet.publicKey,
         allocatorVault: this.allocatorVault,
@@ -955,7 +956,8 @@ export class AllocatorVaultClient {
 
     const returnData = sim.returnData || (sim as any).returnValue;
     if (!returnData) throw new Error("No return data from previewDeposit");
-    return new BN(returnData as any);
+    const buf = Buffer.from(returnData, "base64");
+    return new BN(buf, "le");
   }
 
   /**
@@ -977,7 +979,8 @@ export class AllocatorVaultClient {
 
     const returnData = sim.returnData || (sim as any).returnValue;
     if (!returnData) throw new Error("No return data from previewRedeem");
-    return new BN(returnData as any);
+    const buf = Buffer.from(returnData, "base64");
+    return new BN(buf, "le");
   }
 
   /**
@@ -999,7 +1002,8 @@ export class AllocatorVaultClient {
 
     const returnData = sim.returnData || (sim as any).returnValue;
     if (!returnData) throw new Error("No return data from previewMint");
-    return new BN(returnData as any);
+    const buf = Buffer.from(returnData, "base64");
+    return new BN(buf, "le");
   }
 
   /**
@@ -1021,7 +1025,8 @@ export class AllocatorVaultClient {
 
     const returnData = sim.returnData || (sim as any).returnValue;
     if (!returnData) throw new Error("No return data from previewWithdraw");
-    return new BN(returnData as any);
+    const buf = Buffer.from(returnData, "base64");
+    return new BN(buf, "le");
   }
 
   async maxDeposit(): Promise<BN> {
@@ -1032,7 +1037,8 @@ export class AllocatorVaultClient {
       sharesMint: state.sharesMint,
       idleVault: this.idleVault,
     } as any).remainingAccounts(remainingAccounts).simulate();
-    return new BN(sim.returnData || sim.returnValue);
+    const buf = Buffer.from(sim.returnData || sim.returnValue, "base64");
+    return new BN(buf, "le");
   }
 
   async maxMint(): Promise<BN> {
@@ -1043,7 +1049,8 @@ export class AllocatorVaultClient {
       sharesMint: state.sharesMint,
       idleVault: this.idleVault,
     } as any).remainingAccounts(remainingAccounts).simulate();
-    return new BN(sim.returnData || sim.returnValue);
+    const buf = Buffer.from(sim.returnData || sim.returnValue, "base64");
+    return new BN(buf, "le");
   }
 
   async maxWithdraw(owner: PublicKey): Promise<BN> {
@@ -1055,7 +1062,8 @@ export class AllocatorVaultClient {
       idleVault: this.idleVault,
       ownerSharesAccount: this.getUserSharesAccount(owner),
     } as any).remainingAccounts(remainingAccounts).simulate();
-    return new BN(sim.returnData || sim.returnValue);
+    const buf = Buffer.from(sim.returnData || sim.returnValue, "base64");
+    return new BN(buf, "le");
   }
 
   async maxRedeem(owner: PublicKey): Promise<BN> {
@@ -1067,7 +1075,8 @@ export class AllocatorVaultClient {
       idleVault: this.idleVault,
       ownerSharesAccount: this.getUserSharesAccount(owner),
     } as any).remainingAccounts(remainingAccounts).simulate();
-    return new BN(sim.returnData || sim.returnValue);
+    const buf = Buffer.from(sim.returnData || sim.returnValue, "base64");
+    return new BN(buf, "le");
   }
 
   async convertToShares(assets: BN): Promise<BN> {
@@ -1078,7 +1087,8 @@ export class AllocatorVaultClient {
       sharesMint: state.sharesMint,
       idleVault: this.idleVault,
     } as any).remainingAccounts(remainingAccounts).simulate();
-    return new BN(sim.returnData || sim.returnValue);
+    const buf = Buffer.from(sim.returnData || sim.returnValue, "base64");
+    return new BN(buf, "le");
   }
 
   async convertToAssets(shares: BN): Promise<BN> {
@@ -1089,7 +1099,8 @@ export class AllocatorVaultClient {
       sharesMint: state.sharesMint,
       idleVault: this.idleVault,
     } as any).remainingAccounts(remainingAccounts).simulate();
-    return new BN(sim.returnData || sim.returnValue);
+    const buf = Buffer.from(sim.returnData || sim.returnValue, "base64");
+    return new BN(buf, "le");
   }
 
   // ─── View / Query Helpers ──────────────────────────────────
@@ -1125,7 +1136,8 @@ export class AllocatorVaultClient {
 
     const returnData = sim.returnData || (sim as any).returnValue;
     if (!returnData) throw new Error("No return data from totalAssets");
-    return new BN(returnData as any);
+    const buf = Buffer.from(returnData, "base64");
+    return new BN(buf, "le");
   }
 
   /**

@@ -26,11 +26,18 @@ pub struct Deallocate<'info> {
     )]
     pub child_allocation: Box<Account<'info, ChildAllocation>>,
 
-    #[account(mut)]
+    #[account(
+        mut,
+        constraint = idle_vault.key() == allocator_vault.idle_vault @ VaultError::InvalidChildVault,
+    )]
     pub idle_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
-    /// CHECK: The child vault being redeemed from. Checked by program CPI.
-    #[account(mut)]
+    /// CHECK: Validated against child_allocation.child_vault
+    #[account(
+        mut,
+        constraint = child_vault.key() == child_allocation.child_vault
+            @ VaultError::InvalidChildVault,
+    )]
     pub child_vault: UncheckedAccount<'info>,
 
     /// CHECK: Target SVS program ID. Checked to match child_allocation.child_program.
@@ -40,7 +47,10 @@ pub struct Deallocate<'info> {
     pub child_program: UncheckedAccount<'info>,
 
     /// Account holding the shares the SVS-9 vault has in the child vault
-    #[account(mut)]
+    #[account(
+        mut,
+        constraint = allocator_child_shares_account.key() == child_allocation.child_shares_account @ VaultError::InvalidRemainingAccounts,
+    )]
     pub allocator_child_shares_account: Box<InterfaceAccount<'info, TokenAccount>>,
 
     // --- External child vault accounts for CPI ---
