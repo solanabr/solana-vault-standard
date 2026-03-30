@@ -69,6 +69,13 @@ import { registerEmergencyCommands } from "./commands/emergency";
 import { registerTimelockCommands } from "./commands/timelock";
 import { registerStrategyCommands } from "./commands/strategy";
 import { registerPortfolioCommands } from "./commands/portfolio";
+import { registerAsyncCommands } from "./commands/async";
+
+// Tranched vault commands (SVS-12)
+import { registerTranchedCommands } from "./commands/tranched";
+
+// SVS-9 Allocator Vault commands
+import { registerSvs9Commands } from "./commands/svs9";
 
 /**
  * Create and configure the CLI program.
@@ -104,6 +111,13 @@ export function createCli(): Command {
   registerTimelockCommands(program);
   registerStrategyCommands(program);
   registerPortfolioCommands(program);
+
+  // SVS-9 Allocator
+  registerSvs9Commands(program);
+  // SVS-10 async vault commands
+  registerAsyncCommands(program);
+  // SVS-12 Tranched Vault
+  registerTranchedCommands(program);
 
   return program;
 }

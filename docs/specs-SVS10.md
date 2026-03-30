@@ -43,7 +43,7 @@ pub struct AsyncVault {
     pub bump: u8,
     pub paused: bool,
     pub vault_id: u64,
-    pub max_staleness: i64,          // max oracle age in seconds (for oracle-priced fulfillment)
+    pub max_deviation_bps: u16,      // max oracle vs vault price deviation (admin-configurable, default 500 = 5%)
     pub _reserved: [u8; 64],
 }
 // seeds: ["async_vault", asset_mint, vault_id.to_le_bytes()]

@@ -153,14 +153,22 @@ pub fn get_total_assets(ctx: Context<VaultView>) -> Result<()> {
 
 /// Maximum lamports depositable (u64::MAX if not paused, 0 if paused)
 pub fn max_deposit(ctx: Context<VaultView>) -> Result<()> {
-    let max = if ctx.accounts.vault.paused { 0u64 } else { u64::MAX };
+    let max = if ctx.accounts.vault.paused {
+        0u64
+    } else {
+        u64::MAX
+    };
     set_return_data(&max.to_le_bytes());
     Ok(())
 }
 
 /// Maximum shares mintable (u64::MAX if not paused, 0 if paused)
 pub fn max_mint(ctx: Context<VaultView>) -> Result<()> {
-    let max = if ctx.accounts.vault.paused { 0u64 } else { u64::MAX };
+    let max = if ctx.accounts.vault.paused {
+        0u64
+    } else {
+        u64::MAX
+    };
     set_return_data(&max.to_le_bytes());
     Ok(())
 }
