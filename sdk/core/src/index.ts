@@ -34,6 +34,8 @@
 export * from "./vault";
 export * from "./managed-vault";
 export * from "./streaming-vault";
+export * from "./credit-vault";
+export * from "./credit-vault-pda";
 export * from "./pda";
 export * from "./math";
 
@@ -52,6 +54,9 @@ export * from "./access-control";
 export * from "./multi-asset";
 export * from "./timelock";
 export * from "./strategy";
+
+export * from "./async-vault";
+export * from "./async-vault-pda";
 
 // Re-export common types
 export { BN } from "@coral-xyz/anchor";
