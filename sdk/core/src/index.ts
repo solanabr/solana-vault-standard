@@ -49,6 +49,9 @@ export * from "./multi-asset";
 export * from "./timelock";
 export * from "./strategy";
 
+export * from "./async-vault";
+export * from "./async-vault-pda";
+
 // Re-export common types
 export { BN } from "@coral-xyz/anchor";
 export { PublicKey } from "@solana/web3.js";

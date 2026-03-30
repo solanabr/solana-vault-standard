@@ -12,6 +12,7 @@ Tokenized vault programs and TypeScript SDK for building yield-bearing vaults on
 | **SVS-4** | Private Vault (Stored) | Stored balance | Encrypted | Requires sync() | ✅ Devnet |
 | **SVS-5** | Streaming Yield Vault | Interpolated balance | None | distribute_yield() + checkpoint() | ✅ Devnet |
 | **SVS-6** | Streaming Private Vault | Interpolated balance | None | distribute_yield() + checkpoint() | ✅ Devnet |
+| **SVS-10** | Async Vault (ERC-7540) | Stored balance | None | Request→Fulfill→Claim | ✅ Devnet |
 
 ### Balance Model Comparison
 
@@ -33,6 +34,12 @@ Tokenized vault programs and TypeScript SDK for building yield-bearing vaults on
 - `checkpoint()` materializes accrued yield into `base_assets` (permissionless)
 - Eliminates MEV from front-running discrete sync/yield operations
 - Suited for payroll vaults, vesting schedules, DCA strategies
+
+**Async (SVS-10):**
+- Request→Fulfill→Claim lifecycle for deposits and redemptions
+- Operator fulfills requests using vault price or oracle NAV
+- Supports illiquid assets, RWA, and cross-chain strategies
+- ERC-7540 equivalent with synchronous cancellation (ERC-7887)
 
 ### Privacy Model
 
@@ -56,6 +63,7 @@ Tokenized vault programs and TypeScript SDK for building yield-bearing vaults on
 | SVS-3 | `EcpnYtaCBrZ4p4uq7dDr55D3fL9nsxbCNqpyUREGpPkh` | Same as devnet |
 | SVS-4 | `2WP7LXWqrp1W4CwEJuVt2SxWPNY2n6AYmijh6Z4EeidY` | Same as devnet |
 | SVS-5 | `3XQX3ZKGcy618XyWMmQiukYohJNSh3JNWoffq8ZeFdcS` | Same as devnet |
+| SVS-10 | `CpjFjyxRwTGYxR6JWXpfQ1923z5wVwpyBvgPFjm9jamJ` | Same as devnet |
 
 ## Installation
 
@@ -73,7 +81,7 @@ cd proofs-backend && cargo run
 ## Quick Start
 
 ```typescript
-import { SolanaVault, ManagedVault, StreamingVault } from "@stbr/solana-vault";
+import { SolanaVault, ManagedVault, StreamingVault, AsyncVault } from "@stbr/solana-vault";
 import { BN } from "@coral-xyz/anchor";
 
 // SVS-1: Load live-balance vault
@@ -109,6 +117,12 @@ await streaming.distributeYield(authority, new BN(1_000_000), new BN(3600));
 
 // Permissionless checkpoint
 await streaming.checkpoint();
+
+// SVS-10: Async vault (request→fulfill→claim)
+const asyncVault = await AsyncVault.load(program, assetMint, 1);
+await asyncVault.requestDeposit(user, { assets: new BN(1_000_000) });
+await asyncVault.fulfillDeposit(operator, { owner: user.publicKey });
+await asyncVault.claimDeposit(user, { owner: user.publicKey });
 ```
 
 ## Features
@@ -178,6 +192,13 @@ solana-vault dashboard my-vault               # Live monitoring
 # Admin (authority only)
 solana-vault pause my-vault                   # Emergency pause
 solana-vault sync my-vault                    # Sync balance (SVS-2/4)
+
+# Async vault (SVS-10)
+solana-vault async request-deposit my-vault -a 1000000
+solana-vault async fulfill-deposit my-vault --owner <PUBKEY>
+solana-vault async claim-deposit my-vault --owner <PUBKEY>
+solana-vault async request-redeem my-vault -s 500000
+solana-vault async set-operator my-vault --operator <PUBKEY>
 ```
 
 **Global flags:** `--dry-run`, `--yes`, `--output json`, `--keypair <path>`, `--url <rpc>`
@@ -234,6 +255,15 @@ solana-vault sync my-vault                    # Sync balance (SVS-2/4)
 |                                     |  ZK ElGamal      |           |
 |                                     |  Proof Program   |           |
 |                                     +------------------+           |
+|                                                                    |
+|   ASYNC VAULTS                                                     |
+|   +------------------+                                             |
+|   |                  |                                             |
+|   | SVS-10           | Stored                                     |
+|   | (Request→Fulfill | Balance                                    |
+|   |  →Claim)         | + Oracle                                   |
+|   |                  |                                             |
+|   +------------------+                                             |
 +--------------------------------------------------------------------+
 ```
 
@@ -363,7 +393,7 @@ const [sharesMint] = PublicKey.findProgramAddressSync(
 # Build all programs
 anchor build
 
-# Run all tests (165+ tests, requires proof backend for SVS-3/SVS-4)
+# Run all tests (200+ tests, requires proof backend for SVS-3/SVS-4)
 anchor test
 
 # Run with modules feature (includes 16 module tests)
@@ -394,7 +424,8 @@ solana-vault-standard/
 │   ├── svs-2/                    # Public vault, stored balance
 │   ├── svs-3/                    # Private vault, live balance (beta)
 │   ├── svs-4/                    # Private vault, stored balance (beta)
-│   └── svs-5/                    # Streaming yield vault
+│   ├── svs-5/                    # Streaming yield vault
+│   └── svs-10/                   # Async vault (ERC-7540)
 ├── modules/
 │   ├── svs-math/                 # Shared math (mul_div, rounding, conversion)
 │   ├── svs-fees/                 # Entry/exit fee calculation
@@ -417,6 +448,7 @@ solana-vault-standard/
 │   ├── svs-3.ts                  # SVS-3 confidential live balance tests (42)
 │   ├── svs-4.ts                  # SVS-4 confidential stored balance tests (43)
 │   ├── svs-5.ts                  # SVS-5 streaming yield tests (35)
+│   ├── svs-10.ts                 # SVS-10 async vault tests (77)
 │   ├── helpers/
 │   │   └── proof-client.ts       # ZK proof backend client helpers
 │   ├── admin-extended.ts         # Admin function tests
@@ -438,7 +470,8 @@ solana-vault-standard/
     ├── SVS-2.md                 # SVS-2 spec (stored balance + sync)
     ├── SVS-3.md                 # SVS-3 spec (confidential live)
     ├── SVS-4.md                 # SVS-4 spec (confidential stored)
-    └── SVS-5.md                 # SVS-5 spec (streaming yield)
+    ├── SVS-5.md                 # SVS-5 spec (streaming yield)
+    └── SVS-10.md                # SVS-10 spec (async vault)
 ```
 
 ## Resources

@@ -148,10 +148,7 @@ pub fn handler(
         SHARES_DECIMALS,
     )?;
 
-    invoke(
-        &init_mint_ix,
-        &[ctx.accounts.shares_mint.to_account_info()],
-    )?;
+    invoke(&init_mint_ix, &[ctx.accounts.shares_mint.to_account_info()])?;
 
     let clock = Clock::get()?;
     let vault = &mut ctx.accounts.vault;

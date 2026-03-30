@@ -62,6 +62,25 @@ pub struct ConfidentialVault {
 
 The different struct names mean the Anchor IDL generates different account discriminators. The core SDK (`SolanaVault`) fetches `program.account["vault"]` and will not work with SVS-3/4 programs which expose `program.account["confidentialVault"]`.
 
+### SVS-10: Async Vault
+
+SVS-10 adds request/fulfill/claim lifecycle for asynchronous operations:
+
+| Account | Seeds | Purpose |
+|---------|-------|---------|
+| AsyncVault | `["vault", asset_mint, vault_id]` | Main state |
+| Share Escrow | `["share_escrow", vault]` | Holds locked shares during redemption |
+| Deposit Request | `["deposit_request", vault, owner]` | Tracks pending/fulfilled deposits |
+| Redeem Request | `["redeem_request", vault, owner]` | Tracks pending/fulfilled redemptions |
+| Claimable Tokens | `["claimable_tokens", vault, owner]` | Escrowed assets for redeem claims |
+| Operator Approval | `["operator_approval", vault, owner, operator]` | Delegation |
+
+**Key Invariants**:
+- `total_shares` includes reserved-but-unminted shares between fulfill and claim
+- `total_pending_deposits` isolates pending deposit liquidity from vault assets
+- Oracle deviation check skipped on empty vault (no reference price)
+- Shares always minted via Token-2022, assets support SPL Token or Token-2022
+
 ## Balance Models
 
 ### Live Balance (SVS-1, SVS-3)
