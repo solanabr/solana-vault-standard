@@ -39,6 +39,8 @@ export * from "./credit-vault-pda";
 export * from "./pda";
 export * from "./math";
 
+// SVS-9 Allocator Vault
+export * from "./svs9";
 // Tranched Vault (SVS-12)
 export * from "./tranched-vault";
 export * from "./tranched-vault-pda";
