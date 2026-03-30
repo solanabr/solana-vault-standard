@@ -180,7 +180,6 @@ pub mod module_state {
     impl FrozenAccount {
         pub const LEN: usize = 8 + 32 + 32 + 32 + 8 + 1;
     }
-
 }
 
 #[cfg(feature = "modules")]

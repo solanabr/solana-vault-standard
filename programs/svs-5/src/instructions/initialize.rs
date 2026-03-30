@@ -59,10 +59,7 @@ pub struct Initialize<'info> {
     pub rent: Sysvar<'info, Rent>,
 }
 
-pub fn handler(
-    ctx: Context<Initialize>,
-    vault_id: u64,
-) -> Result<()> {
+pub fn handler(ctx: Context<Initialize>, vault_id: u64) -> Result<()> {
     let asset_decimals = ctx.accounts.asset_mint.decimals;
     require!(
         asset_decimals <= MAX_DECIMALS,

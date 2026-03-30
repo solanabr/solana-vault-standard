@@ -311,6 +311,7 @@ bower_components
 .node_repl_history
 *.tgz
 .yarn-integrity
+.yarn/
 .eslintcache
 .stylelintcache
 .cache
@@ -319,3 +320,5 @@ bower_components
 .nuxt
 .docusaurusprograms/svs-8/keypair.json
 programs/svs-8/keypair.json
+.docusaurus
+programs/svs-12/keypair.json

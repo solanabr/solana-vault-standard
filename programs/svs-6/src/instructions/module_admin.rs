@@ -5,7 +5,7 @@ use anchor_lang::prelude::*;
 use crate::error::VaultError;
 use crate::state::AccessMode;
 use crate::state::{
-    AccessConfig, CapConfig, FeeConfig, LockConfig, ConfidentialStreamVault, ACCESS_CONFIG_SEED,
+    AccessConfig, CapConfig, ConfidentialStreamVault, FeeConfig, LockConfig, ACCESS_CONFIG_SEED,
     CAP_CONFIG_SEED, FEE_CONFIG_SEED, LOCK_CONFIG_SEED,
 };
 

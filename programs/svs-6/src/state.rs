@@ -64,8 +64,8 @@ impl ConfidentialStreamVault {
         8 +   // last_checkpoint
         1 + 32 + // auditor_elgamal_pubkey (Option<[u8; 32]>)
         32 +  // confidential_authority
-        64;   // _reserved
-    // Total: 318 bytes (310 + 8 discriminator)
+        64; // _reserved
+            // Total: 318 bytes (310 + 8 discriminator)
 
     pub const SEED_PREFIX: &'static [u8] = VAULT_SEED;
 
