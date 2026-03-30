@@ -39,6 +39,10 @@ export * from "./credit-vault-pda";
 export * from "./pda";
 export * from "./math";
 
+// Tranched Vault (SVS-12)
+export * from "./tranched-vault";
+export * from "./tranched-vault-pda";
+
 // On-chain Module Support (v2)
 export * from "./modules";
 

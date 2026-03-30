@@ -70,6 +70,9 @@ import { registerStrategyCommands } from "./commands/strategy";
 import { registerPortfolioCommands } from "./commands/portfolio";
 import { registerAsyncCommands } from "./commands/async";
 
+// Tranched vault commands (SVS-12)
+import { registerTranchedCommands } from "./commands/tranched";
+
 /**
  * Create and configure the CLI program.
  *
@@ -106,6 +109,9 @@ export function createCli(): Command {
 
   // SVS-10 async vault commands
   registerAsyncCommands(program);
+  
+  // SVS-12 Tranched Vault
+  registerTranchedCommands(program);
 
   return program;
 }

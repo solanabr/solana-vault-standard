@@ -14,6 +14,7 @@ Tokenized vault programs and TypeScript SDK for building yield-bearing vaults on
 | **SVS-6** | Streaming Private Vault | Interpolated balance | None | distribute_yield() + checkpoint() | ✅ Devnet |
 | **SVS-10** | Async Vault (ERC-7540) | Stored balance | None | Request→Fulfill→Claim | ✅ Devnet |
 | **SVS-11** | Credit Markets Vault | Oracle NAV | KYC + Freeze | Async (request→approve→claim) | ✅ Devnet |
+| **SVS-12** | Tranched Vault | Stored balance | None | Manager-driven | ✅ Devnet |
 
 
 ### Balance Model Comparison
@@ -68,6 +69,7 @@ Tokenized vault programs and TypeScript SDK for building yield-bearing vaults on
 | SVS-6 | `2w7aL5ZrD2i9RpzQBGSPAg7s61wVc8Qs8gtuQUTojEDE` | Same as devnet |
 | SVS-10 | `CpjFjyxRwTGYxR6JWXpfQ1923z5wVwpyBvgPFjm9jamJ` | Same as devnet |
 | SVS-11 | `Bf17gDR2JdKTWdoTWK3Va9YQtkpePRAAVxMCaokj8ZFW` | Same as devnet |
+| SVS-12 | `85wwufKdhpHxiBe4kMeFBfidL1Kqo62T65DHb46qNugA` | Same as devnet |
 
 ## Installation
 
@@ -432,6 +434,7 @@ solana-vault-standard/
 │   ├── svs-6/                    # Streaming private vault
 │   └── svs-10/                   # Async vault (ERC-7540)
 │   └── svs-11/                   # Credit markets vault (async, oracle NAV, KYC)
+│   └── svs-12/                   # Tranched vault, waterfall yield/loss
 ├── modules/
 │   ├── svs-math/                 # Shared math (mul_div, rounding, conversion)
 │   ├── svs-fees/                 # Entry/exit fee calculation
@@ -479,6 +482,7 @@ solana-vault-standard/
     ├── SVS-4.md                 # SVS-4 spec (confidential stored)
     ├── SVS-5.md                 # SVS-5 spec (streaming yield)
     └── SVS-10.md                # SVS-10 spec (async vault)
+    └── SVS-12.md                # SVS-12 spec (tranched vault)
 ```
 
 ## Resources

@@ -16,6 +16,7 @@ svs_10 = "CpjFjyxRwTGYxR6JWXpfQ1923z5wVwpyBvgPFjm9jamJ"
 svs_11 = "Bf17gDR2JdKTWdoTWK3Va9YQtkpePRAAVxMCaokj8ZFW"
 mock_oracle = "EbFcZZApkGcX6LqRmzSWVLasnDM457wY4WvhJRnVjdZF"
 mock_sas = "4azCqYgLHDRmsiR6kmYu6v5qvzamaYGqZcmx8MrnrKMc"
+svs_12 = "FM3ZfmPSdQzFniZSDXc6FfXKFvXRSNQXeTdPKC8tz5C"
 
 [programs.localnet]
 svs_1 = "Bv8aVSQ3DJUe3B7TqQZRZgrNvVTh8TjfpwpoeR1ckDMC"
@@ -29,6 +30,7 @@ svs_10 = "CpjFjyxRwTGYxR6JWXpfQ1923z5wVwpyBvgPFjm9jamJ"
 svs_11 = "Bf17gDR2JdKTWdoTWK3Va9YQtkpePRAAVxMCaokj8ZFW"
 mock_oracle = "EbFcZZApkGcX6LqRmzSWVLasnDM457wY4WvhJRnVjdZF"
 mock_sas = "4azCqYgLHDRmsiR6kmYu6v5qvzamaYGqZcmx8MrnrKMc"
+svs_12 = "FM3ZfmPSdQzFniZSDXc6FfXKFvXRSNQXeTdPKC8tz5C"
 
 
 [registry]
