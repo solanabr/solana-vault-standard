@@ -595,6 +595,112 @@ Generate batch file template.
 
 ---
 
+### Async Vault Commands (SVS-10)
+
+Commands for asynchronous deposit/redemption vaults using the request→fulfill→claim lifecycle.
+
+#### `async request-deposit <vault>`
+Request an async deposit into a vault. Assets are locked in the vault until fulfilled or cancelled.
+
+```bash
+solana-vault async request-deposit my-vault --amount 1000000
+solana-vault async request-deposit my-vault --amount 1000000 --receiver <PUBKEY>
+```
+
+| Option | Description |
+|--------|-------------|
+| `-a, --amount <amount>` | Amount of assets to deposit (required) |
+| `--receiver <pubkey>` | Receiver of shares (defaults to signer) |
+| `--program-id <pubkey>` | Program ID override |
+| `--asset-mint <pubkey>` | Asset mint address |
+| `--vault-id <number>` | Vault ID (default: 1) |
+
+#### `async cancel-deposit <vault>`
+Cancel a pending deposit request and recover locked assets.
+
+```bash
+solana-vault async cancel-deposit my-vault
+```
+
+#### `async fulfill-deposit <vault>`
+Fulfill a pending deposit request (operator only). Computes shares at current price.
+
+```bash
+solana-vault async fulfill-deposit my-vault --owner <DEPOSITOR_PUBKEY>
+solana-vault async fulfill-deposit my-vault --owner <PUBKEY> --oracle-price 1050000
+```
+
+| Option | Description |
+|--------|-------------|
+| `--owner <pubkey>` | Deposit request owner (required) |
+| `--oracle-price <number>` | Oracle NAV price (optional, uses vault price if omitted) |
+
+#### `async claim-deposit <vault>`
+Claim shares from a fulfilled deposit request.
+
+```bash
+solana-vault async claim-deposit my-vault --owner <PUBKEY>
+```
+
+| Option | Description |
+|--------|-------------|
+| `--owner <pubkey>` | Deposit request owner (required) |
+
+#### `async request-redeem <vault>`
+Request an async redemption. Shares are locked in escrow until fulfilled or cancelled.
+
+```bash
+solana-vault async request-redeem my-vault --shares 500000
+solana-vault async request-redeem my-vault --shares 500000 --receiver <PUBKEY>
+```
+
+| Option | Description |
+|--------|-------------|
+| `-s, --shares <amount>` | Amount of shares to redeem (required) |
+| `--receiver <pubkey>` | Receiver of assets (defaults to signer) |
+
+#### `async cancel-redeem <vault>`
+Cancel a pending redeem request and recover locked shares.
+
+```bash
+solana-vault async cancel-redeem my-vault
+```
+
+#### `async fulfill-redeem <vault>`
+Fulfill a pending redeem request (operator only). Computes assets at current price.
+
+```bash
+solana-vault async fulfill-redeem my-vault --owner <REDEEMER_PUBKEY>
+solana-vault async fulfill-redeem my-vault --owner <PUBKEY> --oracle-price 1050000
+```
+
+| Option | Description |
+|--------|-------------|
+| `--owner <pubkey>` | Redeem request owner (required) |
+| `--oracle-price <number>` | Oracle NAV price (optional) |
+
+#### `async claim-redeem <vault>`
+Claim assets from a fulfilled redeem request.
+
+```bash
+solana-vault async claim-redeem my-vault --owner <PUBKEY>
+```
+
+#### `async set-operator <vault>`
+Approve or revoke an operator to claim on your behalf.
+
+```bash
+solana-vault async set-operator my-vault --operator <PUBKEY>
+solana-vault async set-operator my-vault --operator <PUBKEY> --approved false
+```
+
+| Option | Description |
+|--------|-------------|
+| `--operator <pubkey>` | Operator address (required) |
+| `--approved <boolean>` | Approve (true) or revoke (false), default: true |
+
+---
+
 ### Confidential Commands (SVS-3/SVS-4)
 
 Commands for vaults with Token-2022 confidential transfers.
@@ -827,6 +933,33 @@ solana-vault portfolio status
 solana-vault portfolio rebalance
 ```
 
+### Async Vault Lifecycle (SVS-10)
+
+```bash
+# 1. Add async vault to config
+solana-vault config add-vault rwa-vault <VAULT_ADDRESS> --variant svs-10
+
+# 2. User requests deposit
+solana-vault async request-deposit rwa-vault --amount 1000000
+
+# 3. Operator fulfills (vault-priced)
+solana-vault async fulfill-deposit rwa-vault --owner <USER_PUBKEY>
+
+# 4. User claims shares
+solana-vault async claim-deposit rwa-vault --owner <USER_PUBKEY>
+
+# 5. User requests redemption
+solana-vault async request-redeem rwa-vault --shares 500000
+
+# 6. Operator fulfills with oracle price
+solana-vault async fulfill-redeem rwa-vault --owner <USER_PUBKEY> --oracle-price 1050000
+
+# 7. User claims assets
+solana-vault async claim-redeem rwa-vault --owner <USER_PUBKEY>
+```
+
+---
+
 ## Troubleshooting
 
 ### Common Issues
@@ -977,3 +1110,4 @@ solana-vault fees show my-vault
 - [SVS-2](./SVS-2.md) - Stored balance vault specification
 - [SVS-3](./SVS-3.md) - Confidential live balance vault
 - [SVS-4](./SVS-4.md) - Confidential stored balance vault
+- [SVS-10](./SVS-10.md) - Async vault (ERC-7540)

@@ -124,10 +124,16 @@ pub fn handler(ctx: Context<MintWsol>, shares: u64, max_amount_in: u64) -> Resul
 
     // 4. MINIMUM DEPOSIT CHECK
     require!(required_amount > 0, VaultError::ZeroAmount);
-    require!(required_amount >= MIN_DEPOSIT_AMOUNT, VaultError::DepositTooSmall);
+    require!(
+        required_amount >= MIN_DEPOSIT_AMOUNT,
+        VaultError::DepositTooSmall
+    );
 
     // 5. SLIPPAGE CHECK — user wants at most max_amount_in spent
-    require!(required_amount <= max_amount_in, VaultError::SlippageExceeded);
+    require!(
+        required_amount <= max_amount_in,
+        VaultError::SlippageExceeded
+    );
 
     // 5a. Transfer wSOL from user to vault (standard SPL transfer — no sync needed)
     transfer_checked(
