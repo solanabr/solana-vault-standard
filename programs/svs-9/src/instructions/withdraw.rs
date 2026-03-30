@@ -93,6 +93,7 @@ pub fn withdraw_handler(
         let vault_key = ctx.accounts.allocator_vault.key();
         let user_key = ctx.accounts.caller.key();
 
+        module_hooks::check_access(modules, &crate::ID, &vault_key, &user_key, &[])?;
         module_hooks::check_share_lock(
             modules,
             &crate::ID,
