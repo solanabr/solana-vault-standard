@@ -172,11 +172,11 @@ pub fn handler<'info>(
         anchor_lang::solana_program::program::invoke_signed(
             &ix,
             &[
-                asset_accounts[idx * 5 + 2].clone(), // vault_ata (from)
-                asset_accounts[idx * 5 + 4].clone(), // mint
-                asset_accounts[idx * 5 + 3].clone(), // user_ata (to)
-                ctx.accounts.vault.to_account_info(),         // vault PDA (authority)
-                ctx.remaining_accounts[idx * 5 + 4].clone(),     // token program (per-asset)
+                asset_accounts[idx * 5 + 2].clone(),  // vault_ata (from)
+                asset_accounts[idx * 5 + 4].clone(),  // mint
+                asset_accounts[idx * 5 + 3].clone(),  // user_ata (to)
+                ctx.accounts.vault.to_account_info(), // vault PDA (authority)
+                asset_accounts[idx * 5 + 4].clone(),  // mint (per-asset)
             ],
             signer_seeds,
         )?;
