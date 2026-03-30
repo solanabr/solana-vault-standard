@@ -91,6 +91,12 @@ export {
   ConfidentialSolanaVault,
 } from "./confidential-vault";
 
+// Confidential Streaming Yield Vault (SVS-6 wrapper)
+export {
+  SVS_6_PROGRAM_ID,
+  ConfidentialStreamVault,
+} from "./confidential-stream-vault";
+
 // Privacy Cash integration
 export {
   PRIVACY_CASH_PROGRAM_ID,

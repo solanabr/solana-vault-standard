@@ -33,11 +33,17 @@
 
 export * from "./vault";
 export * from "./managed-vault";
+export * from "./streaming-vault";
+export * from "./credit-vault";
+export * from "./credit-vault-pda";
 export * from "./pda";
 export * from "./math";
 
 // SVS-9 Allocator Vault
 export * from "./svs9";
+// Tranched Vault (SVS-12)
+export * from "./tranched-vault";
+export * from "./tranched-vault-pda";
 
 // On-chain Module Support (v2)
 export * from "./modules";
@@ -50,6 +56,9 @@ export * from "./access-control";
 export * from "./multi-asset";
 export * from "./timelock";
 export * from "./strategy";
+
+export * from "./async-vault";
+export * from "./async-vault-pda";
 
 // Re-export common types
 export { BN } from "@coral-xyz/anchor";

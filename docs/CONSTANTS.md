@@ -262,6 +262,7 @@ export const SVS_1_PROGRAM_ID = new PublicKey('Bv8aVSQ3DJUe3B7TqQZRZgrNvVTh8Tjfp
 export const SVS_2_PROGRAM_ID = new PublicKey('3UrYrxh1HmVgq7WPygZ5x1gNEaWFwqTMs7geNqMnsrtD');
 export const SVS_3_PROGRAM_ID = new PublicKey('EcpnYtaCBrZ4p4uq7dDr55D3fL9nsxbCNqpyUREGpPkh');
 export const SVS_4_PROGRAM_ID = new PublicKey('2WP7LXWqrp1W4CwEJuVt2SxWPNY2n6AYmijh6Z4EeidY');
+export const SVS_10_PROGRAM_ID = new PublicKey('CpjFjyxRwTGYxR6JWXpfQ1923z5wVwpyBvgPFjm9jamJ');
 ```
 
 ---

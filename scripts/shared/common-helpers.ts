@@ -1,6 +1,6 @@
 /**
  * Shared helpers for all SVS devnet test scripts.
- * Generic utilities that work across SVS-1, SVS-2, SVS-3, SVS-4.
+ * Generic utilities that work across SVS-1, SVS-2, SVS-3, SVS-4, SVS-10.
  */
 
 import * as anchor from "@coral-xyz/anchor";
@@ -21,12 +21,17 @@ export const RPC_URL = process.env.RPC_URL || "https://api.devnet.solana.com";
 export const ASSET_DECIMALS = 6;
 export const SHARE_DECIMALS = 9;
 
-export type SvsVariant = "svs_1" | "svs_2" | "svs_3" | "svs_4";
+export type SvsVariant = "svs_1" | "svs_2" | "svs_3" | "svs_4" | "svs_5" | "svs_6";
 
 export function loadKeypair(keypairPath: string): Keypair {
   const expandedPath = keypairPath.replace("~", process.env.HOME || "");
   const keypairData = JSON.parse(fs.readFileSync(expandedPath, "utf-8"));
   return Keypair.fromSecretKey(Uint8Array.from(keypairData));
+}
+
+export function loadProgramId(programKeypairPath: string): PublicKey {
+  const kp = loadKeypair(programKeypairPath);
+  return kp.publicKey;
 }
 
 export function getVaultPDA(programId: PublicKey, assetMint: PublicKey, vaultId: BN): [PublicKey, number] {
@@ -134,18 +139,72 @@ export async function setupTest<T extends Idl = Idl>(
 
   const idl = JSON.parse(fs.readFileSync(idlPath, "utf-8"));
 
-  const programKeypairPath = path.join(__dirname, `../../target/deploy/${svsVariant}-keypair.json`);
-  if (!fs.existsSync(programKeypairPath)) {
-    console.error(`\n  ERROR: Program keypair not found. Run 'anchor build' first.`);
-    process.exit(1);
-  }
-
-  const programKeypair = loadKeypair(programKeypairPath);
-  const programId = programKeypair.publicKey;
+  const programId = new PublicKey(idl.address);
 
   console.log(`  Program ID: ${programId.toBase58()}`);
 
   const program = new Program(idl, provider) as unknown as Program<T>;
 
   return { connection, payer, provider, program, programId };
+}
+
+export interface BaseSetupResult {
+  connection: Connection;
+  payer: Keypair;
+  provider: anchor.AnchorProvider;
+  programId: PublicKey;
+}
+
+export interface SetupOptions {
+  testName: string;
+  moduleName: string;
+  idlPath: string;
+  programKeypairPath: string;
+  minBalanceSol?: number;
+}
+
+export async function baseSetup(opts: SetupOptions): Promise<BaseSetupResult> {
+  const { testName, moduleName, idlPath, programKeypairPath, minBalanceSol = 0.5 } = opts;
+
+  console.log("\n" + "=".repeat(70));
+  console.log(`  ${moduleName} Test: ${testName}`);
+  console.log("=".repeat(70) + "\n");
+
+  const connection = new Connection(RPC_URL, "confirmed");
+  const walletPath = process.env.ANCHOR_WALLET || "~/.config/solana/id.json";
+  const payer = loadKeypair(walletPath);
+
+  console.log("Configuration:");
+  console.log(`  RPC: ${RPC_URL}`);
+  console.log(`  Wallet: ${payer.publicKey.toBase58()}`);
+
+  const balance = await connection.getBalance(payer.publicKey);
+  console.log(`  Balance: ${balance / LAMPORTS_PER_SOL} SOL`);
+
+  if (balance < minBalanceSol * LAMPORTS_PER_SOL) {
+    console.error(`\n  ERROR: Insufficient balance. Need at least ${minBalanceSol} SOL.`);
+    process.exit(1);
+  }
+
+  if (!fs.existsSync(idlPath)) {
+    console.error("\n  ERROR: IDL not found. Run 'anchor build' first.");
+    process.exit(1);
+  }
+
+  if (!fs.existsSync(programKeypairPath)) {
+    console.error("\n  ERROR: Program keypair not found. Run 'anchor build' first.");
+    process.exit(1);
+  }
+
+  const programId = loadProgramId(programKeypairPath);
+  console.log(`  Program ID: ${programId.toBase58()}`);
+
+  const wallet = new anchor.Wallet(payer);
+  const provider = new anchor.AnchorProvider(connection, wallet, {
+    commitment: "confirmed",
+    preflightCommitment: "confirmed",
+  });
+  anchor.setProvider(provider);
+
+  return { connection, payer, provider, programId };
 }
