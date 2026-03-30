@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+#### SVS-8: Multi-Asset Basket Vault
+- `initialize` — creates MultiAssetVault PDA + Token-2022 shares mint
+- `add_asset` / `remove_asset` — manage basket assets with target weights (bps)
+- `update_weights` — rebalance target weights (must sum to 10,000 bps)
+- `update_oracle` — set/update OraclePrice PDA per asset (authority only)
+- `deposit_single` — deposit one asset, mint shares priced by oracle portfolio value
+- `deposit_proportional` — atomic deposit across all basket assets by target weight
+- `redeem_single` — burn shares, receive proportional amount of one asset
+- `redeem_proportional` — burn shares, receive proportional amounts from all assets
+- `pause` / `unpause` / `transfer_authority` — admin controls
+- OraclePrice PDA per asset with staleness validation (60s) and price > 0 check
+- Owner checks on all remaining_accounts before deserialization
+- svs_math wrapper for share/asset conversion (consistent with SVS-1/5)
+- shares_mint.supply as source of truth (no redundant total_shares field)
+- 110 tests passing (localnet)
 #### SVS-10: Async Vault (ERC-7540)
 - Async request/fulfill/claim lifecycle for deposits and redemptions
 - Dual pricing: vault-priced (svs-math) or oracle-priced with deviation protection

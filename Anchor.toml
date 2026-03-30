@@ -3,6 +3,7 @@ resolution = true
 skip-lint = false
 
 [programs.devnet]
+svs_8 = "E8bGqwitsaFELBtuhbwAKwVBKjAjGzrfcnBPishvvRsA"
 svs_1 = "Bv8aVSQ3DJUe3B7TqQZRZgrNvVTh8TjfpwpoeR1ckDMC"
 svs_2 = "3UrYrxh1HmVgq7WPygZ5x1gNEaWFwqTMs7geNqMnsrtD"
 svs_3 = "EcpnYtaCBrZ4p4uq7dDr55D3fL9nsxbCNqpyUREGpPkh"
@@ -18,6 +19,7 @@ mock_sas = "4azCqYgLHDRmsiR6kmYu6v5qvzamaYGqZcmx8MrnrKMc"
 svs_12 = "FM3ZfmPSdQzFniZSDXc6FfXKFvXRSNQXeTdPKC8tz5C"
 
 [programs.localnet]
+svs_8 = "E8bGqwitsaFELBtuhbwAKwVBKjAjGzrfcnBPishvvRsA"
 svs_1 = "Bv8aVSQ3DJUe3B7TqQZRZgrNvVTh8TjfpwpoeR1ckDMC"
 svs_2 = "3UrYrxh1HmVgq7WPygZ5x1gNEaWFwqTMs7geNqMnsrtD"
 svs_3 = "EcpnYtaCBrZ4p4uq7dDr55D3fL9nsxbCNqpyUREGpPkh"

@@ -57,6 +57,7 @@ import { registerDeriveCommand } from "./commands/offline/derive";
 
 // Config & automation commands
 import { registerConfigCommands } from "./commands/config-cmd";
+import { registerBasketCommands } from "./commands/basket";
 import { registerAutomationCommands } from "./commands/automation";
 
 // New extended commands
@@ -99,6 +100,7 @@ export function createCli(): Command {
   registerAutomationCommands(program);
   registerOfflineCommands(program);
   registerConfigCommands(program);
+  registerBasketCommands(program);
 
   // Extended commands
   registerConfidentialCommands(program);
