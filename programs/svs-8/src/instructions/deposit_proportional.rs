@@ -198,7 +198,7 @@ pub fn handler<'info>(
                 asset_accounts[idx * 5 + 4].clone(), // mint
                 asset_accounts[idx * 5 + 2].clone(), // vault_ata
                 ctx.accounts.user.to_account_info(),
-                ctx.remaining_accounts[idx * 5 + 4].clone(), // token_program via mint owner
+                asset_accounts[idx * 5 + 4].clone(), // mint (per-asset)
             ],
         )?;
     }
