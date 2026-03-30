@@ -13,6 +13,8 @@ Tokenized vault programs and TypeScript SDK for building yield-bearing vaults on
 | **SVS-5** | Streaming Yield Vault | Interpolated balance | None | distribute_yield() + checkpoint() | ✅ Devnet |
 | **SVS-6** | Streaming Private Vault | Interpolated balance | None | distribute_yield() + checkpoint() | ✅ Devnet |
 | **SVS-10** | Async Vault (ERC-7540) | Stored balance | None | Request→Fulfill→Claim | ✅ Devnet |
+| **SVS-11** | Credit Markets Vault | Oracle NAV | KYC + Freeze | Async (request→approve→claim) | ✅ Devnet |
+
 
 ### Balance Model Comparison
 
@@ -63,7 +65,9 @@ Tokenized vault programs and TypeScript SDK for building yield-bearing vaults on
 | SVS-3 | `EcpnYtaCBrZ4p4uq7dDr55D3fL9nsxbCNqpyUREGpPkh` | Same as devnet |
 | SVS-4 | `2WP7LXWqrp1W4CwEJuVt2SxWPNY2n6AYmijh6Z4EeidY` | Same as devnet |
 | SVS-5 | `3XQX3ZKGcy618XyWMmQiukYohJNSh3JNWoffq8ZeFdcS` | Same as devnet |
+| SVS-6 | `2w7aL5ZrD2i9RpzQBGSPAg7s61wVc8Qs8gtuQUTojEDE` | Same as devnet |
 | SVS-10 | `CpjFjyxRwTGYxR6JWXpfQ1923z5wVwpyBvgPFjm9jamJ` | Same as devnet |
+| SVS-11 | `Bf17gDR2JdKTWdoTWK3Va9YQtkpePRAAVxMCaokj8ZFW` | Same as devnet |
 
 ## Installation
 
@@ -425,7 +429,9 @@ solana-vault-standard/
 │   ├── svs-3/                    # Private vault, live balance (beta)
 │   ├── svs-4/                    # Private vault, stored balance (beta)
 │   ├── svs-5/                    # Streaming yield vault
+│   ├── svs-6/                    # Streaming private vault
 │   └── svs-10/                   # Async vault (ERC-7540)
+│   └── svs-11/                   # Credit markets vault (async, oracle NAV, KYC)
 ├── modules/
 │   ├── svs-math/                 # Shared math (mul_div, rounding, conversion)
 │   ├── svs-fees/                 # Entry/exit fee calculation
@@ -449,6 +455,7 @@ solana-vault-standard/
 │   ├── svs-4.ts                  # SVS-4 confidential stored balance tests (43)
 │   ├── svs-5.ts                  # SVS-5 streaming yield tests (35)
 │   ├── svs-10.ts                 # SVS-10 async vault tests (77)
+│   ├── svs-11.ts                 # SVS-11 credit markets vault tests (145)
 │   ├── helpers/
 │   │   └── proof-client.ts       # ZK proof backend client helpers
 │   ├── admin-extended.ts         # Admin function tests

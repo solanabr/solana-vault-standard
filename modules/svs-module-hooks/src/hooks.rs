@@ -100,7 +100,24 @@ pub struct WithdrawModuleResult {
 // Hook Functions
 // =============================================================================
 
-/// Check access control for deposit.
+/// Check access control (whitelist/blacklist + freeze).
+pub fn check_access(
+    remaining_accounts: &[AccountInfo],
+    program_id: &Pubkey,
+    vault_key: &Pubkey,
+    user_key: &Pubkey,
+    merkle_proof: &[[u8; 32]],
+) -> Result<()> {
+    check_deposit_access(
+        remaining_accounts,
+        program_id,
+        vault_key,
+        user_key,
+        merkle_proof,
+    )
+}
+
+/// Check access control for deposit (legacy name — prefer `check_access`).
 pub fn check_deposit_access(
     remaining_accounts: &[AccountInfo],
     program_id: &Pubkey,
