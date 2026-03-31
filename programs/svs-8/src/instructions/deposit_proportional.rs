@@ -1,11 +1,13 @@
-use anchor_lang::prelude::*;
-use anchor_spl::token_interface::{mint_to_checked, Mint, MintToChecked, TokenAccount, TokenInterface};
 use crate::{
     constants::{MAX_ORACLE_STALENESS, MIN_DEPOSIT, MULTI_VAULT_SEED, PRICE_SCALE},
     error::VaultError,
     events::DepositProportional as DepositProportionalEvent,
     math::{convert_to_shares, oracle_value_for_amount, total_portfolio_value, Rounding},
     state::{AssetEntry, MultiAssetVault, OraclePrice},
+};
+use anchor_lang::prelude::*;
+use anchor_spl::token_interface::{
+    mint_to_checked, Mint, MintToChecked, TokenAccount, TokenInterface,
 };
 
 #[cfg(feature = "modules")]
@@ -61,13 +63,19 @@ pub fn handler<'info>(
 
     for i in 0..num_assets {
         let asset_entry_ai = &asset_accounts[i * 5];
-        let oracle_ai     = &asset_accounts[i * 5 + 1];
-        let vault_ta_ai   = &asset_accounts[i * 5 + 2];
-        let user_ta_ai    = &asset_accounts[i * 5 + 3];
+        let oracle_ai = &asset_accounts[i * 5 + 1];
+        let vault_ta_ai = &asset_accounts[i * 5 + 2];
+        let user_ta_ai = &asset_accounts[i * 5 + 3];
 
         // Owner checks
-        require!(asset_entry_ai.owner == &svs8_program_id, VaultError::InvalidOracle);
-        require!(oracle_ai.owner == &svs8_program_id, VaultError::InvalidOracle);
+        require!(
+            asset_entry_ai.owner == &svs8_program_id,
+            VaultError::InvalidOracle
+        );
+        require!(
+            oracle_ai.owner == &svs8_program_id,
+            VaultError::InvalidOracle
+        );
         require!(
             vault_ta_ai.owner == &spl_token || vault_ta_ai.owner == &spl_token_2022,
             VaultError::AssetNotFound
@@ -78,14 +86,26 @@ pub fn handler<'info>(
         );
 
         // Typed deserialization
-        let asset_entry = { let d = asset_entry_ai.try_borrow_data()?; AssetEntry::try_deserialize(&mut &d[..])? };
+        let asset_entry = {
+            let d = asset_entry_ai.try_borrow_data()?;
+            AssetEntry::try_deserialize(&mut &d[..])?
+        };
         require!(asset_entry.vault == vault_key, VaultError::InvalidOracle);
         // FIX P0: validate vault_ta matches asset_entry.asset_vault
-        require!(vault_ta_ai.key() == asset_entry.asset_vault, VaultError::AssetNotFound);
+        require!(
+            vault_ta_ai.key() == asset_entry.asset_vault,
+            VaultError::AssetNotFound
+        );
 
-        let oracle = { let d = oracle_ai.try_borrow_data()?; OraclePrice::try_deserialize(&mut &d[..])? };
+        let oracle = {
+            let d = oracle_ai.try_borrow_data()?;
+            OraclePrice::try_deserialize(&mut &d[..])?
+        };
         require!(oracle.vault == vault_key, VaultError::InvalidOracle);
-        require!(oracle.asset_mint == asset_entry.asset_mint, VaultError::InvalidOracle);
+        require!(
+            oracle.asset_mint == asset_entry.asset_mint,
+            VaultError::InvalidOracle
+        );
 
         let age = clock.unix_timestamp.saturating_sub(oracle.updated_at) as u64;
         require!(age <= MAX_ORACLE_STALENESS, VaultError::OracleStale);
@@ -97,36 +117,56 @@ pub fn handler<'info>(
         let vault_balance = {
             let data = vault_ta_ai.try_borrow_data()?;
             require!(data.len() >= 72, VaultError::MathOverflow);
-            u64::from_le_bytes(data[64..72].try_into().map_err(|_| VaultError::MathOverflow)?)
+            u64::from_le_bytes(
+                data[64..72]
+                    .try_into()
+                    .map_err(|_| VaultError::MathOverflow)?,
+            )
         };
 
         // weighted_value = base_amount * weight_bps / 10000
         let weighted_value = (base_amount as u128)
-            .checked_mul(weight_bps as u128).ok_or(VaultError::MathOverflow)?
-            .checked_div(10_000u128).ok_or(VaultError::DivisionByZero)? as u64;
+            .checked_mul(weight_bps as u128)
+            .ok_or(VaultError::MathOverflow)?
+            .checked_div(10_000u128)
+            .ok_or(VaultError::DivisionByZero)? as u64;
 
         // token_amount = weighted_value * PRICE_SCALE * 10^asset_dec / (price * 10^base_dec)
         let token_amount = (weighted_value as u128)
-            .checked_mul(PRICE_SCALE as u128).ok_or(VaultError::MathOverflow)?
-            .checked_mul(10u128.pow(asset_dec as u32)).ok_or(VaultError::MathOverflow)?
-            .checked_div(oracle.price as u128).ok_or(VaultError::DivisionByZero)?
-            .checked_div(10u128.pow(base_decimals as u32)).ok_or(VaultError::DivisionByZero)? as u64;
+            .checked_mul(PRICE_SCALE as u128)
+            .ok_or(VaultError::MathOverflow)?
+            .checked_mul(10u128.pow(asset_dec as u32))
+            .ok_or(VaultError::MathOverflow)?
+            .checked_div(oracle.price as u128)
+            .ok_or(VaultError::DivisionByZero)?
+            .checked_div(10u128.pow(base_decimals as u32))
+            .ok_or(VaultError::DivisionByZero)? as u64;
 
         require!(token_amount > 0, VaultError::ZeroAmount);
 
-        let deposit_value = oracle_value_for_amount(oracle.price, token_amount, asset_dec, base_decimals)?;
-        total_deposit_value = total_deposit_value.checked_add(deposit_value).ok_or(VaultError::MathOverflow)?;
+        let deposit_value =
+            oracle_value_for_amount(oracle.price, token_amount, asset_dec, base_decimals)?;
+        total_deposit_value = total_deposit_value
+            .checked_add(deposit_value)
+            .ok_or(VaultError::MathOverflow)?;
 
         let mint_ai = &asset_accounts[i * 5 + 4];
         // Validate mint matches asset_entry to ensure token_program_key is trustworthy
-        require!(mint_ai.key() == asset_entry.asset_mint, VaultError::AssetNotFound);
+        require!(
+            mint_ai.key() == asset_entry.asset_mint,
+            VaultError::AssetNotFound
+        );
         let token_program_key = *mint_ai.owner;
         // Validate user_ta mint matches asset_entry.asset_mint
         {
             let user_ta_data = user_ta_ai.try_borrow_data()?;
             require!(user_ta_data.len() >= 32, VaultError::MathOverflow);
-            let user_ta_mint = Pubkey::try_from(&user_ta_data[0..32]).map_err(|_| VaultError::AssetNotFound)?;
-            require!(user_ta_mint == asset_entry.asset_mint, VaultError::AssetNotFound);
+            let user_ta_mint =
+                Pubkey::try_from(&user_ta_data[0..32]).map_err(|_| VaultError::AssetNotFound)?;
+            require!(
+                user_ta_mint == asset_entry.asset_mint,
+                VaultError::AssetNotFound
+            );
         }
         snapshots.push(AssetSnapshot {
             weight_bps,
@@ -148,7 +188,7 @@ pub fn handler<'info>(
     require!(total_weight == 10_000, VaultError::InvalidWeight);
 
     let balances: Vec<u64> = snapshots.iter().map(|s| s.vault_balance).collect();
-    let prices: Vec<u64>   = snapshots.iter().map(|s| s.price).collect();
+    let prices: Vec<u64> = snapshots.iter().map(|s| s.price).collect();
     let decimals_vec: Vec<u8> = snapshots.iter().map(|s| s.asset_dec).collect();
     let total_value = total_portfolio_value(&balances, &prices, &decimals_vec, base_decimals)?;
 
@@ -162,17 +202,33 @@ pub fn handler<'info>(
 
         module_hooks::check_deposit_access(remaining, &crate::ID, &vault_key, &user_key, &[])?;
         module_hooks::check_deposit_caps(
-            remaining, &crate::ID, &vault_key, &user_key,
-            total_value, total_deposit_value,
+            remaining,
+            &crate::ID,
+            &vault_key,
+            &user_key,
+            total_value,
+            total_deposit_value,
         )?;
 
-        let shares = convert_to_shares(total_deposit_value, total_value, total_shares, decimals_offset, Rounding::Floor)?;
+        let shares = convert_to_shares(
+            total_deposit_value,
+            total_value,
+            total_shares,
+            decimals_offset,
+            Rounding::Floor,
+        )?;
         let result = module_hooks::apply_entry_fee(remaining, &crate::ID, &vault_key, shares)?;
         result.net_shares
     };
 
     #[cfg(not(feature = "modules"))]
-    let net_shares = convert_to_shares(total_deposit_value, total_value, total_shares, decimals_offset, Rounding::Floor)?;
+    let net_shares = convert_to_shares(
+        total_deposit_value,
+        total_value,
+        total_shares,
+        decimals_offset,
+        Rounding::Floor,
+    )?;
 
     require!(net_shares >= min_shares_out, VaultError::SlippageExceeded);
     require!(net_shares > 0, VaultError::ZeroAmount);

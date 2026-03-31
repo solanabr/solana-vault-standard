@@ -1,11 +1,5 @@
 # SVS-8: Multi-Asset Basket Vault
 
-**Status:** Implemented  
-**Program ID (Devnet):** `E8bGqwitsaFELBtuhbwAKwVBKjAjGzrfcnBPishvvRsA`  
-**Base:** ERC-7575 adapted — Multi-token basket vault
-
----
-
 ## Overview
 
 SVS-8 holds a basket of multiple underlying SPL tokens. A single share mint represents proportional ownership of the entire portfolio. Deposits and redemptions can be made in any of the accepted assets or all at once in proportion.
@@ -180,3 +174,10 @@ await client.redeemProportional(vaultPda, shares, 0);
 | `deposit_single` | ~50,000 |
 | `deposit_proportional` | ~80,000 |
 | `redeem_proportional` | ~90,000 |
+
+## See Also
+
+- [SVS-1.md](./SVS-1.md) — Single-asset vault (base pattern)
+- [SVS-9.md](./SVS-9.md) — Allocator vault (vault-of-vaults)
+- [ARCHITECTURE.md](./ARCHITECTURE.md) — Cross-variant design
+- [MODULES.md](./MODULES.md) — Module integration

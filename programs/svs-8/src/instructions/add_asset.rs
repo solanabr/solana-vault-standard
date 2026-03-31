@@ -1,17 +1,20 @@
-use anchor_lang::prelude::*;
-use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
 use crate::{
     constants::{ASSET_ENTRY_SEED, MAX_ASSETS},
     error::VaultError,
     events::AssetAdded,
     state::{AssetEntry, MultiAssetVault},
 };
+use anchor_lang::prelude::*;
+use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
 
 pub fn handler(ctx: Context<AddAsset>, target_weight_bps: u16) -> Result<()> {
     let vault_key = ctx.accounts.vault.key();
 
     require!(!ctx.accounts.vault.paused, VaultError::VaultPaused);
-    require!(ctx.accounts.vault.num_assets < MAX_ASSETS, VaultError::MaxAssetsExceeded);
+    require!(
+        ctx.accounts.vault.num_assets < MAX_ASSETS,
+        VaultError::MaxAssetsExceeded
+    );
 
     // Sum weights from remaining_accounts (existing AssetEntry accounts)
     // FIX P1: typed deserialization with owner + vault checks instead of raw byte offsets
@@ -49,7 +52,10 @@ pub fn handler(ctx: Context<AddAsset>, target_weight_bps: u16) -> Result<()> {
     asset_entry.index = index;
     asset_entry.bump = bump;
 
-    ctx.accounts.vault.num_assets = ctx.accounts.vault.num_assets
+    ctx.accounts.vault.num_assets = ctx
+        .accounts
+        .vault
+        .num_assets
         .checked_add(1)
         .ok_or(VaultError::MathOverflow)?;
 

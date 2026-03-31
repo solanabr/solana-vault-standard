@@ -1,13 +1,6 @@
 # SVS-9: Allocator Vault (Vault-of-Vaults)
 
-## Status: Draft
-## Authors: Superteam Brasil
-## Date: 2026-03-06
-## Base: MetaMorpho pattern — Allocator depositing into child vaults
-
----
-
-## 1. Overview
+## Overview
 
 SVS-9 is an allocator vault that deposits into multiple underlying SVS-compatible vaults. It holds shares of child vaults, and a curator rebalances allocations across them. Users interact with a single share token that represents a diversified position across strategies.
 
@@ -15,7 +8,7 @@ This vault type targets yield aggregation, risk-diversified lending, and multi-s
 
 ---
 
-## 2. Architecture
+## Architecture
 
 ```
 ┌─────────────────────────────────────────────────┐
@@ -39,7 +32,7 @@ This vault type targets yield aggregation, risk-diversified lending, and multi-s
 
 ---
 
-## 3. State
+## State
 
 ```rust
 #[account]
@@ -78,7 +71,7 @@ pub struct ChildAllocation {
 
 ---
 
-## 4. Total Assets Computation
+## Total Assets Computation
 
 ```rust
 /// Total assets = idle balance + sum of child vault positions
@@ -108,7 +101,7 @@ pub fn total_assets(
 
 ---
 
-## 5. Instruction Set
+## Instruction Set
 
 | # | Instruction | Signer | Description |
 |---|------------|--------|-------------|
@@ -126,7 +119,7 @@ pub fn total_assets(
 | 12 | `pause` / `unpause` | Authority | Emergency controls |
 | 13 | `transfer_authority` | Authority | Transfer admin |
 
-### 5.1 `deposit`
+### `deposit`
 
 User deposits go to the idle vault. The curator allocates later.
 
@@ -141,7 +134,7 @@ deposit(assets: u64, min_shares_out: u64):
   → emit Deposit { vault, caller, assets, shares }
 ```
 
-### 5.2 `redeem`
+### `redeem`
 
 User redeems from idle buffer. If idle is insufficient, curator must deallocate first.
 
@@ -157,7 +150,7 @@ redeem(shares: u64, min_assets_out: u64):
   → emit Redeem { vault, caller, shares, assets }
 ```
 
-### 5.3 `allocate`
+### `allocate`
 
 Curator deploys idle assets to a child vault via CPI.
 
@@ -172,7 +165,7 @@ allocate(child_vault: Pubkey, amount: u64):
   → emit Allocate { child_vault, amount, child_shares_received }
 ```
 
-### 5.4 `deallocate`
+### `deallocate`
 
 Curator recalls assets from a child vault via CPI redeem.
 
@@ -187,7 +180,7 @@ deallocate(child_vault: Pubkey, shares: u64):
 
 ---
 
-## 6. Curator Role
+## Curator Role
 
 The curator is separated from the authority to enable specialized allocation management:
 
@@ -198,7 +191,7 @@ This separation allows a DAO (authority) to set strategy parameters while a keep
 
 ---
 
-## 7. Idle Buffer
+## Idle Buffer
 
 The `idle_buffer_bps` ensures a minimum percentage of total assets remains in the idle vault for instant withdrawals. The curator cannot allocate below this threshold.
 
@@ -218,7 +211,7 @@ If a large redemption depletes the idle buffer below threshold, the curator is e
 
 ---
 
-## 8. Child Vault Compatibility
+## Child Vault Compatibility
 
 SVS-9 can allocate to ANY vault program that implements the standard SVS deposit/redeem interface:
 
@@ -234,7 +227,7 @@ This includes SVS-1, SVS-2, SVS-5, SVS-7, and even other SVS-9 vaults (recursive
 
 ---
 
-## 9. Weight Enforcement
+## Weight Enforcement
 
 Unlike SVS-8 (multi-asset) where weights must sum to 10000, the allocator uses weights as targets with tolerance:
 
@@ -247,7 +240,7 @@ sum(target_weight_bps) + idle_buffer_bps == 10_000
 
 ---
 
-## 10. Module Compatibility
+## Module Compatibility
 
 **Implementation:** Build with `--features modules`. Module config PDAs passed via `remaining_accounts`.
 
@@ -259,7 +252,7 @@ sum(target_weight_bps) + idle_buffer_bps == 10_000
 
 ---
 
-## 11. Compute Budget Considerations
+## Compute Budget Considerations
 
 `total_assets()` reads state from all child vaults. With 10 children, that's 10 account reads + 10 mul_div operations. Estimated ~5,000 CU for the computation alone, plus account deserialization overhead (~1,000 CU per account).
 
@@ -267,7 +260,7 @@ Total compute for a deposit with 10 children: ~30-40k CU. Well within budget. Th
 
 ---
 
-## 12. Child Vault Compatibility Matrix
+## Child Vault Compatibility Matrix
 
 | Child Variant | Compatible | Reason |
 |---------------|------------|--------|
@@ -291,7 +284,7 @@ Total compute for a deposit with 10 children: ~30-40k CU. Well within budget. Th
 
 ---
 
-## 13. Child CPI Validation
+## Child CPI Validation
 
 Before executing CPI to a child vault, the allocator validates the child program to prevent program substitution attacks:
 
@@ -363,7 +356,7 @@ pub fn read_child_total_assets(
 
 ---
 
-## 14. harvest() Implementation
+## harvest() Implementation
 
 The `harvest` instruction collects yield from all child vaults by redeeming the profit portion of shares:
 
@@ -479,7 +472,7 @@ pub fn harvest(ctx: Context<Harvest>) -> Result<()> {
 
 ---
 
-## 15. Compute Unit Estimates
+## Compute Unit Estimates
 
 | Instruction | Approximate CU | Notes |
 |-------------|---------------|-------|
@@ -500,5 +493,5 @@ pub fn harvest(ctx: Context<Harvest>) -> Result<()> {
 
 - [SVS-1](./SVS-1.md) — Base synchronous vault (compatible child)
 - [SVS-2](./SVS-2.md) — Stored balance vault (compatible child)
-- [specs-modules.md](./specs-modules.md) — Module integration
+- [MODULES.md](./MODULES.md) — Module integration
 - [ARCHITECTURE.md](./ARCHITECTURE.md) — Cross-variant design

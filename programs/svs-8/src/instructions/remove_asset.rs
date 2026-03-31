@@ -1,16 +1,19 @@
-use anchor_lang::prelude::*;
-use anchor_spl::token_interface::{TokenAccount, TokenInterface};
 use crate::{
     error::VaultError,
     events::AssetRemoved,
     state::{AssetEntry, MultiAssetVault},
 };
+use anchor_lang::prelude::*;
+use anchor_spl::token_interface::{TokenAccount, TokenInterface};
 
 pub fn handler(ctx: Context<RemoveAsset>) -> Result<()> {
     let vault = &mut ctx.accounts.vault;
     let asset_entry = &ctx.accounts.asset_entry;
 
-    require!(ctx.accounts.asset_vault.amount == 0, VaultError::AssetVaultNotEmpty);
+    require!(
+        ctx.accounts.asset_vault.amount == 0,
+        VaultError::AssetVaultNotEmpty
+    );
 
     let removed_index = asset_entry.index;
 
@@ -33,7 +36,8 @@ pub fn handler(ctx: Context<RemoveAsset>) -> Result<()> {
         }
     }
 
-    vault.num_assets = vault.num_assets
+    vault.num_assets = vault
+        .num_assets
         .checked_sub(1)
         .ok_or(VaultError::MathOverflow)?;
 

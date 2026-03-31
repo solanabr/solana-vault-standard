@@ -566,7 +566,7 @@ Module hooks integrate at the same call sites as other variants, with one SVS-5-
 | **svs-rewards** | Secondary rewards run independently of streaming yield; both can be active simultaneously |
 | **svs-access** | Whitelist/blacklist/freeze checks on every financial instruction — unchanged |
 
-See [SVS-1.md#module-integration](SVS-1.md#module-integration) for hook architecture and [specs-modules.md](specs-modules.md) for full module specification.
+See [SVS-1.md#module-integration](SVS-1.md#module-integration) for hook architecture and [MODULES.md](MODULES.md) for full module specification.
 
 ---
 
@@ -589,10 +589,10 @@ See [SVS-1.md#module-integration](SVS-1.md#module-integration) for hook architec
 
 ---
 
-**See Also**:
+## See Also
 - [SVS-1.md](./SVS-1.md) — Live balance model
 - [SVS-2.md](./SVS-2.md) — Stored balance with sync()
-- [SVS-6.md](./specs-SVS06.md) — Streaming + Confidential variant
+- [SVS-6.md](./SVS-6.md) — Streaming + Confidential variant
 - [ARCHITECTURE.md](./ARCHITECTURE.md) — Cross-variant design
 - [PATTERNS.md](./PATTERNS.md) — Implementation patterns
 - [ERRORS.md](./ERRORS.md) — Full error code reference

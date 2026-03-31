@@ -39,6 +39,8 @@ export * from "./credit-vault-pda";
 export * from "./pda";
 export * from "./math";
 
+// SVS-7 Native SOL Vault
+export * from "./svs-7";
 // SVS-9 Allocator Vault
 export * from "./svs9";
 // Tranched Vault (SVS-12)
@@ -58,10 +60,46 @@ export * from "./timelock";
 export * from "./strategy";
 
 export * from "./async-vault";
-export * from "./async-vault-pda";
+export {
+  ASYNC_VAULT_SEED,
+  ASYNC_SHARES_MINT_SEED,
+  SHARE_ESCROW_SEED,
+  DEPOSIT_REQUEST_SEED,
+  REDEEM_REQUEST_SEED,
+  CLAIMABLE_TOKENS_SEED as ASYNC_CLAIMABLE_TOKENS_SEED,
+  OPERATOR_APPROVAL_SEED,
+  getAsyncVaultAddress,
+  getAsyncSharesMintAddress,
+  getShareEscrowAddress,
+  getDepositRequestAddress,
+  getRedeemRequestAddress,
+  getClaimableTokensAddress as getAsyncClaimableTokensAddress,
+  getOperatorApprovalAddress,
+  deriveAsyncVaultAddresses,
+} from "./async-vault-pda";
 
 // Re-export common types
 export { BN } from "@coral-xyz/anchor";
 export { PublicKey } from "@solana/web3.js";
 
-export * from "./svs-8";
+export {
+  MULTI_VAULT_SEED,
+  ASSET_ENTRY_SEED,
+  SHARES_SEED,
+  ORACLE_PRICE_SEED,
+  PRICE_SCALE,
+  getBasketVaultAddress,
+  getBasketSharesMintAddress,
+  getAssetEntryAddress,
+  getOraclePriceAddress,
+  InitializeParams as Svs8InitializeParams,
+  AddAssetParams,
+  UpdateOracleParams,
+  DepositSingleParams,
+  DepositProportionalParams,
+  RedeemProportionalParams,
+  BasketVaultState,
+  AssetEntryState,
+  OraclePriceState,
+  BasketVault,
+} from "./svs-8";

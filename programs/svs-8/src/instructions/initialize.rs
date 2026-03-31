@@ -1,20 +1,16 @@
-use anchor_lang::prelude::*;
-use anchor_spl::{
-    associated_token::AssociatedToken,
-    token_interface::{Mint, Token2022},
-};
 use crate::{
     constants::{MULTI_VAULT_SEED, SHARES_SEED},
     error::VaultError,
     events::VaultInitialized,
     state::MultiAssetVault,
 };
+use anchor_lang::prelude::*;
+use anchor_spl::{
+    associated_token::AssociatedToken,
+    token_interface::{Mint, Token2022},
+};
 
-pub fn handler(
-    ctx: Context<Initialize>,
-    vault_id: u64,
-    base_decimals: u8,
-) -> Result<()> {
+pub fn handler(ctx: Context<Initialize>, vault_id: u64, base_decimals: u8) -> Result<()> {
     // base_decimals must be <= 9 (same rule as asset decimals)
     require!(base_decimals <= 9, VaultError::InvalidAssetDecimals);
 

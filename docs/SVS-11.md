@@ -446,8 +446,8 @@ const repayTx = await vault.repay(500_000_000);
 | `tests/svs-11.ts` | Anchor test suite |
 | `scripts/svs-11/` | Modular devnet E2E scripts |
 
----
+## See Also
 
-**Specification**: [specs-SVS11.md](specs-SVS11.md)
-**Last Updated**: 2026-03-12
-**Program Version**: 0.1.0
+- [SVS-10.md](./SVS-10.md) — Base async vault
+- [ARCHITECTURE.md](./ARCHITECTURE.md) — Cross-variant design
+- [MODULES.md](./MODULES.md) — Module integration

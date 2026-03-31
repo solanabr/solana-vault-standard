@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 
-use crate::error::TranchedVaultError;
+use crate::error::VaultError;
 
 /// Distribute yield sequentially: senior gets target yield first, residual flows to junior.
 ///
@@ -25,21 +25,21 @@ pub fn distribute_yield_sequential(
         }
         let entitled = (allocations[i] as u128)
             .checked_mul(target_yield_bps[i] as u128)
-            .ok_or(TranchedVaultError::MathOverflow)?
+            .ok_or(VaultError::MathOverflow)?
             .checked_div(10_000)
-            .ok_or(TranchedVaultError::MathOverflow)? as u64;
+            .ok_or(VaultError::MathOverflow)? as u64;
         let actual = remaining.min(entitled);
         distribution[i] = actual;
         remaining = remaining
             .checked_sub(actual)
-            .ok_or(TranchedVaultError::MathOverflow)?;
+            .ok_or(VaultError::MathOverflow)?;
     }
 
     // Residual to last tranche (equity)
     if remaining > 0 {
         distribution[n - 1] = distribution[n - 1]
             .checked_add(remaining)
-            .ok_or(TranchedVaultError::MathOverflow)?;
+            .ok_or(VaultError::MathOverflow)?;
     }
 
     Ok(distribution)
@@ -52,7 +52,7 @@ pub fn distribute_yield_prorata(total_yield: u64, allocations: &[u64]) -> Result
     let total_principal: u64 = allocations
         .iter()
         .try_fold(0u64, |acc, &a| acc.checked_add(a))
-        .ok_or(TranchedVaultError::MathOverflow)?;
+        .ok_or(VaultError::MathOverflow)?;
 
     if total_principal == 0 {
         return Ok(distribution);
@@ -62,23 +62,23 @@ pub fn distribute_yield_prorata(total_yield: u64, allocations: &[u64]) -> Result
     for i in 0..n {
         let share = (total_yield as u128)
             .checked_mul(allocations[i] as u128)
-            .ok_or(TranchedVaultError::MathOverflow)?
+            .ok_or(VaultError::MathOverflow)?
             .checked_div(total_principal as u128)
-            .ok_or(TranchedVaultError::MathOverflow)? as u64;
+            .ok_or(VaultError::MathOverflow)? as u64;
         distribution[i] = share;
         distributed = distributed
             .checked_add(share)
-            .ok_or(TranchedVaultError::MathOverflow)?;
+            .ok_or(VaultError::MathOverflow)?;
     }
 
     // Rounding dust to last tranche
     let dust = total_yield
         .checked_sub(distributed)
-        .ok_or(TranchedVaultError::MathOverflow)?;
+        .ok_or(VaultError::MathOverflow)?;
     if dust > 0 {
         distribution[n - 1] = distribution[n - 1]
             .checked_add(dust)
-            .ok_or(TranchedVaultError::MathOverflow)?;
+            .ok_or(VaultError::MathOverflow)?;
     }
 
     Ok(distribution)
@@ -102,13 +102,13 @@ pub fn absorb_losses(total_loss: u64, allocations: &mut [u64]) -> Result<Vec<u64
         absorbed[i] = loss;
         allocations[i] = allocations[i]
             .checked_sub(loss)
-            .ok_or(TranchedVaultError::MathOverflow)?;
+            .ok_or(VaultError::MathOverflow)?;
         remaining = remaining
             .checked_sub(loss)
-            .ok_or(TranchedVaultError::MathOverflow)?;
+            .ok_or(VaultError::MathOverflow)?;
     }
 
-    require!(remaining == 0, TranchedVaultError::TotalLoss);
+    require!(remaining == 0, VaultError::TotalLoss);
 
     Ok(absorbed)
 }
@@ -135,22 +135,19 @@ pub fn check_subordination(
         let junior_assets: u64 = allocations[i + 1..]
             .iter()
             .try_fold(0u64, |acc, &a| acc.checked_add(a))
-            .ok_or(TranchedVaultError::MathOverflow)?;
+            .ok_or(VaultError::MathOverflow)?;
 
         // Required subordination (ceiling division)
         let numerator = (total_assets as u128)
             .checked_mul(subordination_bps[i] as u128)
-            .ok_or(TranchedVaultError::MathOverflow)?;
+            .ok_or(VaultError::MathOverflow)?;
         let required = numerator
             .checked_add(9_999)
-            .ok_or(TranchedVaultError::MathOverflow)?
+            .ok_or(VaultError::MathOverflow)?
             .checked_div(10_000)
-            .ok_or(TranchedVaultError::MathOverflow)? as u64;
+            .ok_or(VaultError::MathOverflow)? as u64;
 
-        require!(
-            junior_assets >= required,
-            TranchedVaultError::SubordinationBreach
-        );
+        require!(junior_assets >= required, VaultError::SubordinationBreach);
     }
 
     Ok(())

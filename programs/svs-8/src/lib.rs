@@ -15,18 +15,11 @@ declare_id!("E8bGqwitsaFELBtuhbwAKwVBKjAjGzrfcnBPishvvRsA");
 pub mod svs_8 {
     use super::*;
 
-    pub fn initialize(
-        ctx: Context<Initialize>,
-        vault_id: u64,
-        base_decimals: u8,
-    ) -> Result<()> {
+    pub fn initialize(ctx: Context<Initialize>, vault_id: u64, base_decimals: u8) -> Result<()> {
         instructions::initialize::handler(ctx, vault_id, base_decimals)
     }
 
-    pub fn add_asset(
-        ctx: Context<AddAsset>,
-        target_weight_bps: u16,
-    ) -> Result<()> {
+    pub fn add_asset(ctx: Context<AddAsset>, target_weight_bps: u16) -> Result<()> {
         instructions::add_asset::handler(ctx, target_weight_bps)
     }
 
@@ -34,10 +27,7 @@ pub mod svs_8 {
         instructions::remove_asset::handler(ctx)
     }
 
-    pub fn update_weights(
-        ctx: Context<UpdateWeights>,
-        new_weight_bps: u16,
-    ) -> Result<()> {
+    pub fn update_weights(ctx: Context<UpdateWeights>, new_weight_bps: u16) -> Result<()> {
         instructions::update_weights::handler(ctx, new_weight_bps)
     }
 
@@ -73,10 +63,11 @@ pub mod svs_8 {
         instructions::admin::unpause(ctx)
     }
 
-    pub fn update_oracle(
-        ctx: Context<UpdateOracle>,
-        price: u64,
-    ) -> Result<()> {
+    pub fn initialize_oracle(ctx: Context<InitializeOracle>, price: u64) -> Result<()> {
+        instructions::update_oracle::initialize_oracle_handler(ctx, price)
+    }
+
+    pub fn update_oracle(ctx: Context<UpdateOracle>, price: u64) -> Result<()> {
         instructions::update_oracle::handler(ctx, price)
     }
 

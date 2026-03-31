@@ -13,12 +13,7 @@ import { AnchorProvider, BN } from "@coral-xyz/anchor";
 // ============================================================================
 
 /** SVS program variant identifier */
-export type SvsVariant =
-  | "svs-1"
-  | "svs-2"
-  | "svs-3"
-  | "svs-4"
-  | "svs-12";
+export type SvsVariant = "svs-1" | "svs-2" | "svs-3" | "svs-4" | "svs-12";
 
 /** CLI output format */
 export type OutputFormat = "table" | "json" | "csv";

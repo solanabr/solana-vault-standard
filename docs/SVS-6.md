@@ -497,7 +497,7 @@ Available module admin instructions (with `--features modules`):
 - `initialize_lock_config`, `update_lock_config`
 - `initialize_access_config`, `update_access_config`
 
-See [specs-modules.md](specs-modules.md) for full specification.
+See [MODULES.md](MODULES.md) for full specification.
 
 ## Security Considerations
 
@@ -607,7 +607,7 @@ In addition to [core errors](ERRORS.md):
 
 ---
 
-**See Also:**
+## See Also
 - [SVS-5.md](./SVS-5.md) — Base streaming yield vault
 - [SVS-3.md](./SVS-3.md) — Confidential transfer implementation (live balance)
 - [PRIVACY.md](./PRIVACY.md) — Privacy model details

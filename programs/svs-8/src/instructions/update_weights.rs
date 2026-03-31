@@ -1,9 +1,9 @@
-use anchor_lang::prelude::*;
 use crate::{
     error::VaultError,
     events::WeightsUpdated,
     state::{AssetEntry, MultiAssetVault},
 };
+use anchor_lang::prelude::*;
 
 pub fn handler(ctx: Context<UpdateWeights>, new_weight_bps: u16) -> Result<()> {
     let vault_key = ctx.accounts.vault.key();

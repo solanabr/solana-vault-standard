@@ -21,7 +21,10 @@ export function registerSvs9StatusCommand(parent: Command): void {
     .command("status")
     .description("Display SVS-9 allocator vault status and children")
     .requiredOption("--vault-id <number>", "Allocator vault ID")
-    .requiredOption("--asset-mint <pubkey>", "Asset mint of the allocator vault")
+    .requiredOption(
+      "--asset-mint <pubkey>",
+      "Asset mint of the allocator vault",
+    )
     .option("--children <pubkeys...>", "Child vault public keys to inspect")
     .action(async (opts) => {
       const globalOpts = getGlobalOptions(parent.parent!);
@@ -46,8 +49,16 @@ export function registerSvs9StatusCommand(parent: Command): void {
           assetMint,
         );
 
-        const [allocatorVault] = getAllocatorVaultAddress(programId, assetMint, vaultId);
-        const idleVault = getIdleVaultAddress(allocatorVault, assetMint, assetTokenProgram);
+        const [allocatorVault] = getAllocatorVaultAddress(
+          programId,
+          assetMint,
+          vaultId,
+        );
+        const idleVault = getIdleVaultAddress(
+          allocatorVault,
+          assetMint,
+          assetTokenProgram,
+        );
 
         // Fetch vault state
         const accountNs = prog.account as Record<
@@ -61,7 +72,12 @@ export function registerSvs9StatusCommand(parent: Command): void {
         // Fetch idle balance
         let idleBalance: BN;
         try {
-          const idleAccount = await getAccount(connection, idleVault, undefined, assetTokenProgram);
+          const idleAccount = await getAccount(
+            connection,
+            idleVault,
+            undefined,
+            assetTokenProgram,
+          );
           idleBalance = new BN(idleAccount.amount.toString());
         } catch {
           idleBalance = new BN(0);
@@ -96,7 +112,8 @@ export function registerSvs9StatusCommand(parent: Command): void {
                   allocatorVault,
                   childVault,
                 );
-                const childState = await accountNs["childAllocation"].fetch(childAllocationPda);
+                const childState =
+                  await accountNs["childAllocation"].fetch(childAllocationPda);
                 (jsonResult.children as Record<string, unknown>[]).push({
                   childVault: childKey,
                   ...(childState as Record<string, unknown>),
@@ -123,7 +140,10 @@ export function registerSvs9StatusCommand(parent: Command): void {
               ["Shares Mint", formatAddress(state.sharesMint.toBase58())],
               ["Idle Vault", formatAddress(idleVault.toBase58())],
               ["Idle Balance", formatNumber(idleBalance)],
-              ["Idle Buffer", `${state.idleBufferBps} bps (${(state.idleBufferBps / 100).toFixed(1)}%)`],
+              [
+                "Idle Buffer",
+                `${state.idleBufferBps} bps (${(state.idleBufferBps / 100).toFixed(1)}%)`,
+              ],
               ["Children", state.numChildren.toString()],
               ["Paused", state.paused ? "⛔ Yes" : "✅ No"],
               ["Vault ID", state.vaultId.toString()],
@@ -170,7 +190,14 @@ export function registerSvs9StatusCommand(parent: Command): void {
             }
 
             output.table(
-              ["Child Vault", "Enabled", "Max Weight", "Target Weight", "Deposited", "Program"],
+              [
+                "Child Vault",
+                "Enabled",
+                "Max Weight",
+                "Target Weight",
+                "Deposited",
+                "Program",
+              ],
               childRows,
             );
           } else if (state.numChildren > 0) {

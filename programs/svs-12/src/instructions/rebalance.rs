@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 
 use crate::{
-    error::TranchedVaultError,
+    error::VaultError,
     events::TrancheRebalanced,
     state::{Tranche, TranchedVault},
     waterfall::check_subordination,
@@ -12,20 +12,20 @@ pub struct RebalanceTranches<'info> {
     pub manager: Signer<'info>,
 
     #[account(
-        has_one = manager @ TranchedVaultError::Unauthorized,
-        constraint = !vault.paused @ TranchedVaultError::VaultPaused,
+        has_one = manager @ VaultError::Unauthorized,
+        constraint = !vault.paused @ VaultError::VaultPaused,
     )]
     pub vault: Account<'info, TranchedVault>,
 
     #[account(
         mut,
-        constraint = from_tranche.vault == vault.key() @ TranchedVaultError::TrancheVaultMismatch,
+        constraint = from_tranche.vault == vault.key() @ VaultError::TrancheVaultMismatch,
     )]
     pub from_tranche: Account<'info, Tranche>,
 
     #[account(
         mut,
-        constraint = to_tranche.vault == vault.key() @ TranchedVaultError::TrancheVaultMismatch,
+        constraint = to_tranche.vault == vault.key() @ VaultError::TrancheVaultMismatch,
     )]
     pub to_tranche: Account<'info, Tranche>,
 
@@ -35,11 +35,11 @@ pub struct RebalanceTranches<'info> {
 }
 
 pub fn handler(ctx: Context<RebalanceTranches>, amount: u64) -> Result<()> {
-    require!(amount > 0, TranchedVaultError::ZeroAmount);
-    require!(!ctx.accounts.vault.wiped, TranchedVaultError::VaultWiped);
+    require!(amount > 0, VaultError::ZeroAmount);
+    require!(!ctx.accounts.vault.wiped, VaultError::VaultWiped);
     require!(
         ctx.accounts.from_tranche.total_assets_allocated >= amount,
-        TranchedVaultError::InsufficientAllocation
+        VaultError::InsufficientAllocation
     );
 
     // Update accounting
@@ -48,14 +48,14 @@ pub fn handler(ctx: Context<RebalanceTranches>, amount: u64) -> Result<()> {
         .from_tranche
         .total_assets_allocated
         .checked_sub(amount)
-        .ok_or(TranchedVaultError::MathOverflow)?;
+        .ok_or(VaultError::MathOverflow)?;
 
     ctx.accounts.to_tranche.total_assets_allocated = ctx
         .accounts
         .to_tranche
         .total_assets_allocated
         .checked_add(amount)
-        .ok_or(TranchedVaultError::MathOverflow)?;
+        .ok_or(VaultError::MathOverflow)?;
 
     // Subordination check
     let vault = &ctx.accounts.vault;
@@ -76,14 +76,8 @@ pub fn handler(ctx: Context<RebalanceTranches>, amount: u64) -> Result<()> {
 
     for opt_tranche in [&ctx.accounts.other_tranche_0, &ctx.accounts.other_tranche_1] {
         if let Some(t) = opt_tranche {
-            require!(
-                !seen_keys.contains(&t.key()),
-                TranchedVaultError::DuplicateTranche
-            );
-            require!(
-                t.vault == vault.key(),
-                TranchedVaultError::TrancheVaultMismatch
-            );
+            require!(!seen_keys.contains(&t.key()), VaultError::DuplicateTranche);
+            require!(t.vault == vault.key(), VaultError::TrancheVaultMismatch);
             seen_keys.push(t.key());
             all_allocations.push((t.priority, t.total_assets_allocated, t.subordination_bps));
         }
@@ -91,7 +85,7 @@ pub fn handler(ctx: Context<RebalanceTranches>, amount: u64) -> Result<()> {
 
     require!(
         all_allocations.len() == vault.num_tranches as usize,
-        TranchedVaultError::WrongTrancheCount
+        VaultError::WrongTrancheCount
     );
 
     all_allocations.sort_by_key(|&(p, _, _)| p);
@@ -104,10 +98,10 @@ pub fn handler(ctx: Context<RebalanceTranches>, amount: u64) -> Result<()> {
         let cap_limit = (vault.total_assets as u128)
             .checked_mul(to_tranche.cap_bps as u128)
             .and_then(|v| v.checked_div(crate::constants::BPS_DENOMINATOR as u128))
-            .ok_or(TranchedVaultError::MathOverflow)? as u64;
+            .ok_or(VaultError::MathOverflow)? as u64;
         require!(
             to_tranche.total_assets_allocated <= cap_limit,
-            TranchedVaultError::CapExceeded
+            VaultError::CapExceeded
         );
     }
 

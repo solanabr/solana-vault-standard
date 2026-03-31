@@ -230,7 +230,7 @@ SVS-10 supports all four optional modules. Hooks are called at different lifecyc
 
 Module config PDAs are passed via `remaining_accounts`. If not provided, checks are skipped (pure async vault behavior).
 
-See [specs-modules.md](specs-modules.md) for full module specifications.
+See [MODULES.md](MODULES.md) for full module specifications.
 
 ## SDK Usage
 
@@ -426,9 +426,9 @@ npx ts-node scripts/e2e-svs10-devnet.ts
 | **Escrow** | No | Share Escrow, ClaimableTokens PDAs |
 | **Use Case** | Liquid assets in vault | Illiquid or externally managed assets |
 
----
+## See Also
 
-**Specification Version**: 1.0.0
-**Last Updated**: 2026-03-10
-**Program Version**: 0.1.0
-**ERC Reference**: [ERC-7540](https://eips.ethereum.org/EIPS/eip-7540), [ERC-7887](https://eips.ethereum.org/EIPS/eip-7887)
+- [SVS-1.md](./SVS-1.md) — Synchronous vault comparison
+- [SVS-11.md](./SVS-11.md) — Credit Markets (extends SVS-10)
+- [ARCHITECTURE.md](./ARCHITECTURE.md) — Cross-variant design
+- [MODULES.md](./MODULES.md) — Module integration

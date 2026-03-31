@@ -1,6 +1,6 @@
 [package]
 name = "svs-6"
-version = "0.1.0"
+version = "0.2.0"
 description = "SVS-6: Confidential Streaming Yield Vault - streaming yield with encrypted share balances"
 edition = "2021"
 license = "MIT"

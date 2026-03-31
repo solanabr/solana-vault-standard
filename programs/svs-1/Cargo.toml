@@ -1,6 +1,6 @@
 [package]
 name = "svs-1"
-version = "0.1.0"
+version = "0.2.0"
 description = "SVS-1: Solana Vault Standard - Live balance (no sync), ERC-4626 equivalent for Solana"
 edition = "2021"
 license = "MIT"

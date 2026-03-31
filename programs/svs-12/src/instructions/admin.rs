@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 
 use crate::{
-    error::TranchedVaultError,
+    error::VaultError,
     events::{AuthorityTransferred, ManagerChanged, VaultPaused, VaultUnpaused},
     state::TranchedVault,
 };
@@ -12,13 +12,13 @@ pub struct Admin<'info> {
 
     #[account(
         mut,
-        has_one = authority @ TranchedVaultError::Unauthorized,
+        has_one = authority @ VaultError::Unauthorized,
     )]
     pub vault: Account<'info, TranchedVault>,
 }
 
 pub fn pause(ctx: Context<Admin>) -> Result<()> {
-    require!(!ctx.accounts.vault.paused, TranchedVaultError::VaultPaused);
+    require!(!ctx.accounts.vault.paused, VaultError::VaultPaused);
     ctx.accounts.vault.paused = true;
     emit!(VaultPaused {
         vault: ctx.accounts.vault.key()
@@ -27,10 +27,7 @@ pub fn pause(ctx: Context<Admin>) -> Result<()> {
 }
 
 pub fn unpause(ctx: Context<Admin>) -> Result<()> {
-    require!(
-        ctx.accounts.vault.paused,
-        TranchedVaultError::VaultNotPaused
-    );
+    require!(ctx.accounts.vault.paused, VaultError::VaultNotPaused);
     ctx.accounts.vault.paused = false;
     emit!(VaultUnpaused {
         vault: ctx.accounts.vault.key()
@@ -41,7 +38,7 @@ pub fn unpause(ctx: Context<Admin>) -> Result<()> {
 pub fn transfer_authority(ctx: Context<Admin>, new_authority: Pubkey) -> Result<()> {
     require!(
         new_authority != Pubkey::default(),
-        TranchedVaultError::InvalidAddress
+        VaultError::InvalidAddress
     );
     let old_authority = ctx.accounts.vault.authority;
     ctx.accounts.vault.authority = new_authority;
@@ -54,10 +51,7 @@ pub fn transfer_authority(ctx: Context<Admin>, new_authority: Pubkey) -> Result<
 }
 
 pub fn set_manager(ctx: Context<Admin>, new_manager: Pubkey) -> Result<()> {
-    require!(
-        new_manager != Pubkey::default(),
-        TranchedVaultError::InvalidAddress
-    );
+    require!(new_manager != Pubkey::default(), VaultError::InvalidAddress);
     let old_manager = ctx.accounts.vault.manager;
     ctx.accounts.vault.manager = new_manager;
     emit!(ManagerChanged {

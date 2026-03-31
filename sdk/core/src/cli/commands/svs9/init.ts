@@ -2,7 +2,12 @@
 
 import { Command } from "commander";
 import { Program, BN } from "@coral-xyz/anchor";
-import { Keypair, PublicKey, SystemProgram, SYSVAR_RENT_PUBKEY } from "@solana/web3.js";
+import {
+  Keypair,
+  PublicKey,
+  SystemProgram,
+  SYSVAR_RENT_PUBKEY,
+} from "@solana/web3.js";
 import {
   TOKEN_2022_PROGRAM_ID,
   ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -22,11 +27,21 @@ export function registerSvs9InitCommand(parent: Command): void {
     .command("init")
     .description("Initialize a new SVS-9 allocator vault")
     .requiredOption("--vault-id <number>", "Unique vault ID (u64)")
-    .requiredOption("--idle-buffer <bps>", "Idle buffer in basis points (e.g. 1000 = 10%)")
+    .requiredOption(
+      "--idle-buffer <bps>",
+      "Idle buffer in basis points (e.g. 1000 = 10%)",
+    )
     .requiredOption("--asset-mint <pubkey>", "Asset mint address")
     .requiredOption("--curator <pubkey>", "Curator public key")
-    .option("--decimals-offset <number>", "Decimals offset for inflation protection (0-9)", "0")
-    .option("--shares-mint <keypair-path>", "Path to shares mint keypair (generated if omitted)")
+    .option(
+      "--decimals-offset <number>",
+      "Decimals offset for inflation protection (0-9)",
+      "0",
+    )
+    .option(
+      "--shares-mint <keypair-path>",
+      "Path to shares mint keypair (generated if omitted)",
+    )
     .action(async (opts) => {
       const globalOpts = getGlobalOptions(parent.parent!);
       const ctx = await createContext(globalOpts, opts, true, true);
@@ -55,26 +70,36 @@ export function registerSvs9InitCommand(parent: Command): void {
           assetMint,
           vaultId,
         );
-        const idleVault = getIdleVaultAddress(allocatorVault, assetMint, assetTokenProgram);
+        const idleVault = getIdleVaultAddress(
+          allocatorVault,
+          assetMint,
+          assetTokenProgram,
+        );
 
         // Shares mint keypair
         const sharesMintKeypair = opts.sharesMint
           ? Keypair.fromSecretKey(
               Uint8Array.from(
-                JSON.parse(require("fs").readFileSync(opts.sharesMint, "utf-8")),
+                JSON.parse(
+                  require("fs").readFileSync(opts.sharesMint, "utf-8"),
+                ),
               ),
             )
           : Keypair.generate();
 
         output.info("═══ SVS-9 Allocator Vault Initialization ═══");
         output.info(`  Vault ID:        ${vaultId.toString()}`);
-        output.info(`  Idle Buffer:     ${idleBufferBps} bps (${(idleBufferBps / 100).toFixed(1)}%)`);
+        output.info(
+          `  Idle Buffer:     ${idleBufferBps} bps (${(idleBufferBps / 100).toFixed(1)}%)`,
+        );
         output.info(`  Asset Mint:      ${assetMint.toBase58()}`);
         output.info(`  Curator:         ${curator.toBase58()}`);
         output.info(`  Decimals Offset: ${decimalsOffset}`);
         output.info(`  Allocator PDA:   ${allocatorVault.toBase58()}`);
         output.info(`  Idle Vault ATA:  ${idleVault.toBase58()}`);
-        output.info(`  Shares Mint:     ${sharesMintKeypair.publicKey.toBase58()}`);
+        output.info(
+          `  Shares Mint:     ${sharesMintKeypair.publicKey.toBase58()}`,
+        );
 
         if (globalOpts.dryRun) {
           output.success("Dry run complete. No transaction sent.");
@@ -82,7 +107,9 @@ export function registerSvs9InitCommand(parent: Command): void {
         }
 
         if (!globalOpts.yes) {
-          const confirmed = await output.confirm("Proceed with initialization?");
+          const confirmed = await output.confirm(
+            "Proceed with initialization?",
+          );
           if (!confirmed) {
             output.warn("Aborted.");
             return;

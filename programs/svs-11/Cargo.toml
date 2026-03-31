@@ -1,6 +1,6 @@
 [package]
 name = "svs-11"
-version = "0.1.0"
+version = "0.2.0"
 description = "SVS-11: Solana Vault Standard - Credit Markets Vault with KYC attestation and oracle-only NAV pricing"
 edition = "2021"
 license = "MIT"

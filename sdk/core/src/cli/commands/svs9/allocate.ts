@@ -23,11 +23,17 @@ export function registerSvs9AllocateCommand(parent: Command): void {
     .command("allocate")
     .description("Allocate idle funds to a child vault (curator-only)")
     .requiredOption("--vault-id <number>", "Allocator vault ID")
-    .requiredOption("--asset-mint <pubkey>", "Asset mint of the allocator vault")
+    .requiredOption(
+      "--asset-mint <pubkey>",
+      "Asset mint of the allocator vault",
+    )
     .requiredOption("--child-vault <pubkey>", "Child vault to allocate into")
     .requiredOption("--child-program <pubkey>", "Child vault's SVS program ID")
     .requiredOption("--child-asset-mint <pubkey>", "Child vault's asset mint")
-    .requiredOption("--child-asset-vault <pubkey>", "Child vault's asset token account")
+    .requiredOption(
+      "--child-asset-vault <pubkey>",
+      "Child vault's asset token account",
+    )
     .requiredOption("--child-shares-mint <pubkey>", "Child vault's shares mint")
     .requiredOption("-a, --amount <number>", "Amount of assets to allocate")
     .action(async (opts) => {
@@ -58,9 +64,21 @@ export function registerSvs9AllocateCommand(parent: Command): void {
           assetMint,
         );
 
-        const [allocatorVault] = getAllocatorVaultAddress(programId, assetMint, vaultId);
-        const [childAllocation] = getChildAllocationAddress(programId, allocatorVault, childVault);
-        const idleVault = getIdleVaultAddress(allocatorVault, assetMint, assetTokenProgram);
+        const [allocatorVault] = getAllocatorVaultAddress(
+          programId,
+          assetMint,
+          vaultId,
+        );
+        const [childAllocation] = getChildAllocationAddress(
+          programId,
+          allocatorVault,
+          childVault,
+        );
+        const idleVault = getIdleVaultAddress(
+          allocatorVault,
+          assetMint,
+          assetTokenProgram,
+        );
         const allocatorChildSharesAccount = getAllocatorChildSharesAddress(
           allocatorVault,
           childSharesMint,
@@ -113,7 +131,9 @@ export function registerSvs9AllocateCommand(parent: Command): void {
           .rpc();
 
         spinner.succeed("Allocation complete!");
-        output.success(`Allocated ${formatNumber(amount)} assets to child vault`);
+        output.success(
+          `Allocated ${formatNumber(amount)} assets to child vault`,
+        );
         output.info(`Signature: ${signature}`);
 
         if (globalOpts.output === "json") {

@@ -333,7 +333,7 @@ seeds = [MODULE_SEED, vault.key().as_ref()]
 seeds = [USER_SEED, vault.key().as_ref(), user.key().as_ref()]
 ```
 
-See [specs-modules.md](specs-modules.md) for complete module specifications.
+See [MODULES.md](MODULES.md) for complete module specifications.
 
 ---
 
@@ -352,7 +352,7 @@ Beyond the core 4 variants, SVS defines additional specialized vaults:
 | SVS-11 | Credit Markets | Async + KYC + Oracle NAV |
 | SVS-12 | Tranched | Multiple share classes with waterfall |
 
-See individual spec files (`specs-SVS{N}.md`) for details.
+See individual spec files (`SVS-N.md`) for details.
 
 ---
 

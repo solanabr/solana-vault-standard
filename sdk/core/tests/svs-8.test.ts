@@ -15,12 +15,13 @@ import {
   PRICE_SCALE,
 } from "../src/svs-8";
 
-const PROGRAM_ID = new PublicKey("E8bGqwitsaFELBtuhbwAKwVBKjAjGzrfcnBPishvvRsA");
+const PROGRAM_ID = new PublicKey(
+  "E8bGqwitsaFELBtuhbwAKwVBKjAjGzrfcnBPishvvRsA",
+);
 const MINT_A = new PublicKey("So11111111111111111111111111111111111111112");
 const MINT_B = new PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
 
 describe("SVS-8 SDK — PDA Derivation", () => {
-
   describe("getBasketVaultAddress", () => {
     it("derives deterministic vault address", () => {
       const [vault1, bump1] = getBasketVaultAddress(PROGRAM_ID, 1);
@@ -48,7 +49,10 @@ describe("SVS-8 SDK — PDA Derivation", () => {
     });
 
     it("handles u64::MAX vault_id", () => {
-      const [vault, bump] = getBasketVaultAddress(PROGRAM_ID, new BN("18446744073709551615"));
+      const [vault, bump] = getBasketVaultAddress(
+        PROGRAM_ID,
+        new BN("18446744073709551615"),
+      );
       expect(vault).to.be.instanceOf(PublicKey);
       expect(bump).to.be.lessThanOrEqual(255);
     });
@@ -163,7 +167,7 @@ describe("SVS-8 SDK — PDA Derivation", () => {
       const [oracle] = getOraclePriceAddress(PROGRAM_ID, vault, MINT_A);
 
       const addresses = [vault, sharesMint, assetEntry, oracle];
-      const unique = new Set(addresses.map(a => a.toBase58()));
+      const unique = new Set(addresses.map((a) => a.toBase58()));
       expect(unique.size).to.equal(4);
     });
 

@@ -16,10 +16,16 @@ export function registerSvs9AddChildCommand(parent: Command): void {
     .command("add-child")
     .description("Add a child vault to the SVS-9 allocator")
     .requiredOption("--vault-id <number>", "Allocator vault ID")
-    .requiredOption("--asset-mint <pubkey>", "Asset mint of the allocator vault")
+    .requiredOption(
+      "--asset-mint <pubkey>",
+      "Asset mint of the allocator vault",
+    )
     .requiredOption("--child-vault <pubkey>", "Child vault public key")
     .requiredOption("--child-program <pubkey>", "Child vault's program ID")
-    .requiredOption("--max-weight <bps>", "Maximum weight in basis points (0-10000)")
+    .requiredOption(
+      "--max-weight <bps>",
+      "Maximum weight in basis points (0-10000)",
+    )
     .action(async (opts) => {
       const globalOpts = getGlobalOptions(parent.parent!);
       const ctx = await createContext(globalOpts, opts, true, true);
@@ -45,14 +51,24 @@ export function registerSvs9AddChildCommand(parent: Command): void {
           process.exit(1);
         }
 
-        const [allocatorVault] = getAllocatorVaultAddress(programId, assetMint, vaultId);
-        const [childAllocation] = getChildAllocationAddress(programId, allocatorVault, childVault);
+        const [allocatorVault] = getAllocatorVaultAddress(
+          programId,
+          assetMint,
+          vaultId,
+        );
+        const [childAllocation] = getChildAllocationAddress(
+          programId,
+          allocatorVault,
+          childVault,
+        );
 
         output.info("═══ SVS-9 Add Child Vault ═══");
         output.info(`  Allocator:       ${allocatorVault.toBase58()}`);
         output.info(`  Child Vault:     ${childVault.toBase58()}`);
         output.info(`  Child Program:   ${childProgram.toBase58()}`);
-        output.info(`  Max Weight:      ${maxWeightBps} bps (${(maxWeightBps / 100).toFixed(1)}%)`);
+        output.info(
+          `  Max Weight:      ${maxWeightBps} bps (${(maxWeightBps / 100).toFixed(1)}%)`,
+        );
         output.info(`  Child PDA:       ${childAllocation.toBase58()}`);
 
         if (globalOpts.dryRun) {
@@ -61,7 +77,9 @@ export function registerSvs9AddChildCommand(parent: Command): void {
         }
 
         if (!globalOpts.yes) {
-          const confirmed = await output.confirm("Proceed with adding child vault?");
+          const confirmed = await output.confirm(
+            "Proceed with adding child vault?",
+          );
           if (!confirmed) {
             output.warn("Aborted.");
             return;

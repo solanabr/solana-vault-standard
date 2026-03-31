@@ -27,6 +27,7 @@ Details in `.claude/commands/`, `.claude/agents/`, `.claude/skills/`
 - Skip account validation (owner, signer, PDA derivation)
 - Deploy mainnet without explicit user confirmation
 - Trust CPI return data without validating target program ID
+- Use `init_if_needed` on PDA data accounts (reinit attack). Exception: ATAs with `associated_token` constraint (idempotent by design)
 
 **Code Quality - NEVER:**
 - Comments stating the obvious (`// increment counter` before `counter += 1`)

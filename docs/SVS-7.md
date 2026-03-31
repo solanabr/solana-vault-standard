@@ -1,13 +1,6 @@
 # SVS-7: Native SOL Vault
 
-## Status: Draft
-## Authors: Superteam Brasil
-## Date: 2026-03-06
-## Base: ERC-7535 adapted — Native asset vault for Solana
-
----
-
-## 1. Overview
+## Overview
 
 SVS-7 accepts and returns native SOL instead of SPL tokens. It handles SOL ↔ wSOL wrapping internally so users interact with native lamports while the vault's internal accounting uses a wSOL token account. Shares are still Token-2022 SPL tokens.
 
@@ -15,7 +8,7 @@ This vault type targets liquid staking, SOL yield strategies, and any product wh
 
 ---
 
-## 2. How It Differs from SVS-1
+## How It Differs from SVS-1
 
 | Aspect | SVS-1 | SVS-7 |
 |--------|-------|-------|
@@ -27,7 +20,7 @@ This vault type targets liquid staking, SOL yield strategies, and any product wh
 
 ---
 
-## 3. State
+## State
 
 ```rust
 #[account]
@@ -54,7 +47,7 @@ pub enum BalanceModel {
 
 ---
 
-## 4. Instruction Set
+## Instruction Set
 
 | # | Instruction | Signer | Description |
 |---|------------|--------|-------------|
@@ -70,7 +63,7 @@ pub enum BalanceModel {
 | 10 | `pause` / `unpause` | Authority | Emergency controls |
 | 11 | `transfer_authority` | Authority | Transfer admin |
 
-### 4.1 `deposit_sol` Flow
+### `deposit_sol` Flow
 
 ```
 deposit_sol(lamports: u64, min_shares_out: u64):
@@ -85,7 +78,7 @@ deposit_sol(lamports: u64, min_shares_out: u64):
   → emit Deposit { vault, caller, owner, assets: lamports, shares }
 ```
 
-### 4.2 `withdraw_sol` Flow
+### `withdraw_sol` Flow
 
 ```
 withdraw_sol(lamports: u64, max_shares_in: u64):
@@ -103,7 +96,7 @@ withdraw_sol(lamports: u64, max_shares_in: u64):
 
 ---
 
-## 5. SOL Wrapping Mechanics
+## SOL Wrapping Mechanics
 
 Solana's native mint (`So11111111111111111111111111111111`) requires special handling:
 
@@ -120,7 +113,7 @@ Solana's native mint (`So11111111111111111111111111111111`) requires special han
 
 ---
 
-## 6. Rent Handling
+## Rent Handling
 
 The vault PDA must maintain rent-exempt minimum balance. This must be excluded from `total_assets`:
 
@@ -135,13 +128,13 @@ If using the wSOL approach, rent is on the wSOL token account and is handled by 
 
 ---
 
-## 7. Decimals
+## Decimals
 
 SOL has 9 decimals. The virtual offset exponent is `9 - 9 = 0`, so `offset = 10^0 = 1`. This provides minimal inflation attack protection. Consider using a higher fixed offset (e.g., `offset = 1_000`) for SOL vaults, or requiring a minimum initial deposit.
 
 ---
 
-## 8. Dual Interface
+## Dual Interface
 
 SVS-7 exposes both `_sol` and `_wsol` variants for each operation. This allows:
 - End users to interact with native SOL (better UX)
@@ -150,11 +143,11 @@ SVS-7 exposes both `_sol` and `_wsol` variants for each operation. This allows:
 
 ---
 
-## 9. Module Compatibility
+## Module Compatibility
 
 **Implementation:** Build with `--features modules`. Module config PDAs passed via `remaining_accounts`.
 
-All modules from `specs-modules.md` are compatible:
+All modules from `MODULES.md` are compatible:
 
 - **svs-fees:** Fees computed on lamport amounts. Fee assets sent as native SOL to fee_recipient.
 - **svs-caps:** Caps denominated in lamports.
@@ -164,7 +157,7 @@ All modules from `specs-modules.md` are compatible:
 
 ---
 
-## 10. Use Cases
+## Use Cases
 
 - **Liquid staking vaults:** Accept SOL, stake across validators, issue liquid staking shares. Yield distributed via Stored model + `sync()`.
 - **SOL savings vaults:** Accept SOL, deploy to lending protocols (Kamino, MarginFi), auto-compound. Live model reads returns directly.
@@ -172,7 +165,7 @@ All modules from `specs-modules.md` are compatible:
 
 ---
 
-## 11. sync_native CPI Pattern
+## sync_native CPI Pattern
 
 The key to SOL handling is the `sync_native` instruction from SPL Token, which updates a wSOL token account's balance to match its underlying lamport balance:
 
@@ -251,7 +244,7 @@ pub fn deposit_sol(ctx: Context<DepositSol>, lamports: u64, min_shares_out: u64)
 
 ---
 
-## 12. deposit_sol vs deposit_wsol Comparison
+## deposit_sol vs deposit_wsol Comparison
 
 | Aspect | `deposit_sol` | `deposit_wsol` |
 |--------|--------------|----------------|
@@ -280,7 +273,7 @@ User wSOL → spl_token::transfer_checked → vault_wsol_ata → mint_shares
 
 ---
 
-## 13. Concrete Example: Deposit 5 SOL
+## Concrete Example: Deposit 5 SOL
 
 ### Initial State
 - User balance: 10 SOL
@@ -318,7 +311,7 @@ User wSOL → spl_token::transfer_checked → vault_wsol_ata → mint_shares
 
 ---
 
-## 14. Compute Unit Estimates
+## Compute Unit Estimates
 
 | Instruction | Approximate CU | Notes |
 |-------------|---------------|-------|
@@ -336,4 +329,4 @@ User wSOL → spl_token::transfer_checked → vault_wsol_ata → mint_shares
 - [SVS-1](./SVS-1.md) — Base SPL token vault
 - [SVS-2](./SVS-2.md) — Stored balance model
 - [ARCHITECTURE.md](./ARCHITECTURE.md) — Cross-variant design
-- [specs-modules.md](./specs-modules.md) — Module integration
+- [MODULES.md](./MODULES.md) — Module integration

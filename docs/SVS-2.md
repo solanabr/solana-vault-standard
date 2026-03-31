@@ -394,7 +394,7 @@ In addition to [core errors](ERRORS.md):
 
 SVS-2 supports the same module system as SVS-1. Build with `anchor build -- --features modules`.
 
-Module hooks are fully integrated into deposit/mint/withdraw/redeem handlers. See [SVS-1.md#module-integration](SVS-1.md#module-integration) for details and [specs-modules.md](specs-modules.md) for full specification.
+Module hooks are fully integrated into deposit/mint/withdraw/redeem handlers. See [SVS-1.md#module-integration](SVS-1.md#module-integration) for details and [MODULES.md](MODULES.md) for full specification.
 
 ---
 
@@ -410,7 +410,7 @@ Module hooks are fully integrated into deposit/mint/withdraw/redeem handlers. Se
 
 ---
 
-**See Also**:
+## See Also
 - [SVS-1.md](./SVS-1.md) — Live balance comparison
 - [SVS-4.md](./SVS-4.md) — Stored balance + confidential
 - [ARCHITECTURE.md](./ARCHITECTURE.md) — Cross-variant design

@@ -1,5 +1,3 @@
-use anchor_lang::prelude::*;
-use anchor_spl::token_interface::{burn_checked, BurnChecked, Mint, TokenAccount, TokenInterface};
 use crate::{
     constants::{MAX_ORACLE_STALENESS, MULTI_VAULT_SEED},
     error::VaultError,
@@ -7,6 +5,8 @@ use crate::{
     math::{convert_to_assets, total_portfolio_value, Rounding},
     state::{AssetEntry, MultiAssetVault, OraclePrice},
 };
+use anchor_lang::prelude::*;
+use anchor_spl::token_interface::{burn_checked, BurnChecked, Mint, TokenAccount, TokenInterface};
 
 #[cfg(feature = "modules")]
 use svs_module_hooks as module_hooks;
@@ -58,13 +58,19 @@ pub fn handler<'info>(
 
     for i in 0..num_assets {
         let asset_entry_ai = &asset_accounts[i * 5];
-        let oracle_ai     = &asset_accounts[i * 5 + 1];
-        let vault_ta_ai   = &asset_accounts[i * 5 + 2];
-        let user_ta_ai    = &asset_accounts[i * 5 + 3];
+        let oracle_ai = &asset_accounts[i * 5 + 1];
+        let vault_ta_ai = &asset_accounts[i * 5 + 2];
+        let user_ta_ai = &asset_accounts[i * 5 + 3];
 
         // --- Owner checks ---
-        require!(asset_entry_ai.owner == &svs8_program_id, VaultError::InvalidOracle);
-        require!(oracle_ai.owner == &svs8_program_id, VaultError::InvalidOracle);
+        require!(
+            asset_entry_ai.owner == &svs8_program_id,
+            VaultError::InvalidOracle
+        );
+        require!(
+            oracle_ai.owner == &svs8_program_id,
+            VaultError::InvalidOracle
+        );
         require!(
             vault_ta_ai.owner == &spl_token || vault_ta_ai.owner == &spl_token_2022,
             VaultError::AssetNotFound
@@ -80,26 +86,39 @@ pub fn handler<'info>(
 
         let oracle = OraclePrice::try_deserialize(&mut &oracle_ai.try_borrow_data()?[..])?;
         require!(oracle.vault == vault_key, VaultError::InvalidOracle);
-        require!(oracle.asset_mint == asset_entry.asset_mint, VaultError::InvalidOracle);
+        require!(
+            oracle.asset_mint == asset_entry.asset_mint,
+            VaultError::InvalidOracle
+        );
 
         let age = clock.unix_timestamp.saturating_sub(oracle.updated_at) as u64;
         require!(age <= MAX_ORACLE_STALENESS, VaultError::OracleStale);
         require!(oracle.price > 0, VaultError::InvalidOracle);
 
         // FIX P1-1: validate vault_ta matches asset_entry.asset_vault
-        require!(vault_ta_ai.key() == asset_entry.asset_vault, VaultError::AssetNotFound);
+        require!(
+            vault_ta_ai.key() == asset_entry.asset_vault,
+            VaultError::AssetNotFound
+        );
         let vault_balance = crate::math::read_token_balance(vault_ta_ai)?;
 
         let mint_ai = &asset_accounts[i * 5 + 4];
         // Validate mint matches asset_entry to ensure token_program_key is trustworthy
-        require!(mint_ai.key() == asset_entry.asset_mint, VaultError::AssetNotFound);
+        require!(
+            mint_ai.key() == asset_entry.asset_mint,
+            VaultError::AssetNotFound
+        );
         let token_program_key = *mint_ai.owner;
         // Validate user_ta mint matches asset_entry.asset_mint
         {
             let user_ta_data = user_ta_ai.try_borrow_data()?;
             require!(user_ta_data.len() >= 32, VaultError::MathOverflow);
-            let user_ta_mint = Pubkey::try_from(&user_ta_data[0..32]).map_err(|_| VaultError::AssetNotFound)?;
-            require!(user_ta_mint == asset_entry.asset_mint, VaultError::AssetNotFound);
+            let user_ta_mint =
+                Pubkey::try_from(&user_ta_data[0..32]).map_err(|_| VaultError::AssetNotFound)?;
+            require!(
+                user_ta_mint == asset_entry.asset_mint,
+                VaultError::AssetNotFound
+            );
         }
         snapshots.push(AssetSnapshot {
             mint_key: asset_entry.asset_mint,
@@ -114,14 +133,21 @@ pub fn handler<'info>(
     }
 
     let balances: Vec<u64> = snapshots.iter().map(|s| s.vault_balance).collect();
-    let prices: Vec<u64>   = snapshots.iter().map(|s| s.price).collect();
+    let prices: Vec<u64> = snapshots.iter().map(|s| s.price).collect();
     let decimals_vec: Vec<u8> = snapshots.iter().map(|s| s.asset_dec).collect();
 
     let total_value = total_portfolio_value(
-        &balances, &prices, &decimals_vec, ctx.accounts.vault.base_decimals,
+        &balances,
+        &prices,
+        &decimals_vec,
+        ctx.accounts.vault.base_decimals,
     )?;
     let gross_value = convert_to_assets(
-        shares, total_value, total_shares, ctx.accounts.vault.decimals_offset, Rounding::Floor,
+        shares,
+        total_value,
+        total_shares,
+        ctx.accounts.vault.decimals_offset,
+        Rounding::Floor,
     )?;
 
     // ===== Module Hooks (if enabled) =====
@@ -131,7 +157,13 @@ pub fn handler<'info>(
         let vault_key = vault_key;
         let user_key = ctx.accounts.user.key();
         module_hooks::check_access(remaining, &crate::ID, &vault_key, &user_key, &[])?;
-        module_hooks::check_share_lock(remaining, &crate::ID, &vault_key, &user_key, clock.unix_timestamp)?;
+        module_hooks::check_share_lock(
+            remaining,
+            &crate::ID,
+            &vault_key,
+            &user_key,
+            clock.unix_timestamp,
+        )?;
         let result = module_hooks::apply_exit_fee(remaining, &crate::ID, &vault_key, gross_value)?;
         result.net_assets
     };
@@ -148,9 +180,13 @@ pub fn handler<'info>(
     for i in 0..num_assets {
         // asset_out = vault_balance * shares / total_shares (floor — favors vault)
         let asset_out = (snapshots[i].vault_balance as u128)
-            .checked_mul(shares as u128).ok_or(VaultError::MathOverflow)?
-            .checked_div(total_shares as u128).ok_or(VaultError::DivisionByZero)? as u64;
-        if asset_out == 0 { continue; }
+            .checked_mul(shares as u128)
+            .ok_or(VaultError::MathOverflow)?
+            .checked_div(total_shares as u128)
+            .ok_or(VaultError::DivisionByZero)? as u64;
+        if asset_out == 0 {
+            continue;
+        }
         // FIX P0-2: use per-asset token_program_key from snapshot
         let token_program_key = snapshots[i].token_program_key;
 

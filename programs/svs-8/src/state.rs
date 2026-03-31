@@ -1,5 +1,5 @@
+use crate::constants::{ASSET_ENTRY_SEED, MULTI_VAULT_SEED};
 use anchor_lang::prelude::*;
-use crate::constants::{MULTI_VAULT_SEED, ASSET_ENTRY_SEED};
 
 /// Main vault account holding basket metadata
 /// Seeds: ["multi_vault", vault_id.to_le_bytes()]
@@ -35,7 +35,7 @@ impl MultiAssetVault {
         8 +   // vault_id
         1 +   // num_assets
         1 +   // base_decimals
-        64;   // _reserved
+        64; // _reserved
 
     pub const SEED_PREFIX: &'static [u8] = MULTI_VAULT_SEED;
 }
@@ -71,7 +71,7 @@ impl AssetEntry {
         2 +   // target_weight_bps
         1 +   // asset_decimals
         1 +   // index
-        1;    // bump
+        1; // bump
 
     pub const SEED_PREFIX: &'static [u8] = ASSET_ENTRY_SEED;
 }
@@ -102,7 +102,7 @@ impl OraclePrice {
         8 +  // price
         8 +  // updated_at
         32 + // authority
-        1;   // bump
+        1; // bump
 
     pub const SEED_PREFIX: &'static [u8] = b"oracle_price";
 }

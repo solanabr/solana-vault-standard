@@ -1,9 +1,9 @@
-use anchor_lang::prelude::*;
 use crate::{
     error::VaultError,
     events::{AuthorityTransferred, VaultStatusChanged},
     state::MultiAssetVault,
 };
+use anchor_lang::prelude::*;
 
 pub fn pause(ctx: Context<Admin>) -> Result<()> {
     require!(!ctx.accounts.vault.paused, VaultError::VaultPaused);
