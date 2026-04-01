@@ -53,4 +53,12 @@ pub enum VaultError {
     InvalidRemainingAccounts,
     #[msg("Duplicate child vault found in remaining accounts")]
     DuplicateChildVault,
+
+    // --- Allowlist errors ---
+    #[msg("Allowed programs list is full")]
+    AllowlistFull,
+    #[msg("Program already exists in the allowlist")]
+    ProgramAlreadyAllowed,
+    #[msg("Program not found in the allowlist")]
+    ProgramNotInAllowlist,
 }

@@ -4,7 +4,7 @@ import { PublicKey } from "@solana/web3.js";
 import { createContext } from "../../middleware";
 import { getGlobalOptions } from "../../index";
 import { TranchedVault } from "../../../tranched-vault";
-import { findIdlPath, loadIdl } from "../../utils";
+import { findIdlPath, loadIdl, validateAmountInput } from "../../utils";
 
 export function registerTranchedRedeemCommand(parent: Command): void {
   parent
@@ -37,8 +37,9 @@ export function registerTranchedRedeemCommand(parent: Command): void {
         );
 
         const trancheIndex = parseInt(opts.tranche);
+        validateAmountInput(opts.shares, "shares");
         const shares = new BN(opts.shares);
-        const minAssetsOut = new BN(opts.minAssets);
+        const minAssetsOut = new BN(validateAmountInput(opts.minAssets, "min-assets"));
 
         output.info(
           `Redeeming ${shares.toString()} shares from tranche ${trancheIndex}`,

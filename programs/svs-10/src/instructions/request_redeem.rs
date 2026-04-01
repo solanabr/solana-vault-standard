@@ -106,8 +106,14 @@ pub fn handler(ctx: Context<RequestRedeem>, shares: u64, receiver: Pubkey) -> Re
     redeem_request.fulfilled_at = 0;
     redeem_request.bump = ctx.bumps.redeem_request;
 
+    let vault = &mut ctx.accounts.vault;
+    vault.total_pending_redeems = vault
+        .total_pending_redeems
+        .checked_add(shares)
+        .ok_or(VaultError::MathOverflow)?;
+
     emit!(RedeemRequested {
-        vault: ctx.accounts.vault.key(),
+        vault: vault.key(),
         owner: ctx.accounts.user.key(),
         receiver,
         shares,

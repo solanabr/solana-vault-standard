@@ -135,7 +135,9 @@ pub fn handler(
     vault.bump = vault_bump;
     vault.paused = false;
     vault.vault_id = vault_id;
-    vault._reserved = [0u8; 64];
+    vault.cumulative_exit_fees = 0;
+    vault.pending_authority = Pubkey::default();
+    vault._reserved = [0u8; 24];
 
     emit!(VaultInitialized {
         vault: vault.key(),

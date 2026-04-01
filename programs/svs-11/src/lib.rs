@@ -142,13 +142,41 @@ pub mod svs_11 {
         new_nav_oracle: Pubkey,
         new_oracle_program: Pubkey,
         new_max_staleness: i64,
+        new_max_deviation_bps: Option<u16>,
     ) -> Result<()> {
         instructions::admin::update_oracle_config_handler(
             ctx,
             new_nav_oracle,
             new_oracle_program,
             new_max_staleness,
+            new_max_deviation_bps,
         )
+    }
+
+    /// Initialize the vault config PDA for oracle timelock.
+    pub fn initialize_vault_config(ctx: Context<InitializeVaultConfig>) -> Result<()> {
+        instructions::admin::initialize_vault_config_handler(ctx)
+    }
+
+    /// Request an oracle change (starts 24h timelock).
+    pub fn request_oracle_change(
+        ctx: Context<RequestOracleChange>,
+        new_oracle: Pubkey,
+    ) -> Result<()> {
+        instructions::admin::request_oracle_change_handler(ctx, new_oracle)
+    }
+
+    /// Apply a pending oracle change after timelock expires.
+    pub fn apply_oracle_change(ctx: Context<ApplyOracleChange>) -> Result<()> {
+        instructions::admin::apply_oracle_change_handler(ctx)
+    }
+
+    /// Set or update the compliance officer for freeze/unfreeze operations.
+    pub fn set_compliance_officer(
+        ctx: Context<SetComplianceOfficer>,
+        new_officer: Pubkey,
+    ) -> Result<()> {
+        instructions::admin::set_compliance_officer_handler(ctx, new_officer)
     }
 
     // =========================================================================

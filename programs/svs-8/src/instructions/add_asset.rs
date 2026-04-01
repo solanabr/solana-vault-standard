@@ -11,6 +11,7 @@ pub fn handler(ctx: Context<AddAsset>, target_weight_bps: u16) -> Result<()> {
     let vault_key = ctx.accounts.vault.key();
 
     require!(!ctx.accounts.vault.paused, VaultError::VaultPaused);
+    require!(target_weight_bps > 0, VaultError::InvalidWeight);
     require!(
         ctx.accounts.vault.num_assets < MAX_ASSETS,
         VaultError::MaxAssetsExceeded

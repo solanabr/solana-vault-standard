@@ -35,6 +35,8 @@ pub fn unpause(ctx: Context<Admin>) -> Result<()> {
     Ok(())
 }
 
+// TODO(M-8): Implement two-step authority transfer (request_transfer_authority + accept_authority)
+//            matching the pattern in SVS-1 and SVS-2.
 pub fn transfer_authority(ctx: Context<Admin>, new_authority: Pubkey) -> Result<()> {
     require!(
         new_authority != Pubkey::default(),

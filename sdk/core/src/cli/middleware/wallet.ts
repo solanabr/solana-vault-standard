@@ -20,6 +20,22 @@ export function loadWallet(keypairPath: string): Keypair {
     );
   }
 
+  // Warn if keypair file has overly permissive permissions (Unix only)
+  if (process.platform !== "win32") {
+    try {
+      const stat = fs.statSync(resolved);
+      const mode = stat.mode & 0o777;
+      if (mode & 0o077) {
+        console.warn(
+          `WARNING: Keypair file ${resolved} has permissions ${mode.toString(8)}. ` +
+            `Expected 0600. Fix with: chmod 600 ${resolved}`,
+        );
+      }
+    } catch {
+      // Non-fatal: skip permission check if stat fails
+    }
+  }
+
   try {
     const content = fs.readFileSync(resolved, "utf-8");
     const secretKey = JSON.parse(content);

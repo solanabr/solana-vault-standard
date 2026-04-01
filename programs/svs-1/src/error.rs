@@ -46,4 +46,13 @@ pub enum VaultError {
 
     #[msg("Lock duration exceeds maximum")]
     LockDurationExceedsMax,
+
+    #[msg("Invalid address: cannot be default/zero")]
+    InvalidAddress,
+
+    #[msg("No pending authority transfer to accept")]
+    NoPendingTransfer,
+
+    #[msg("Caller is not the pending authority")]
+    InvalidPendingAuthority,
 }

@@ -48,7 +48,15 @@ function loadBasketIdl(output: any): any {
     output.error("SVS-8 IDL not found. Run `anchor build` first.");
     process.exit(1);
   }
-  return JSON.parse(fs.readFileSync(idlPath, "utf-8"));
+  try {
+    return JSON.parse(fs.readFileSync(idlPath, "utf-8"));
+  } catch {
+    output.error(
+      `Failed to parse SVS-8 IDL at ${idlPath}: file contains invalid JSON. ` +
+        `Re-run \`anchor build\` to regenerate it.`,
+    );
+    process.exit(1);
+  }
 }
 
 export function registerBasketCommands(program: Command): void {

@@ -2,7 +2,6 @@
 
 use anchor_lang::prelude::*;
 use anchor_spl::{
-    associated_token::AssociatedToken,
     token_2022::{self, MintTo, Token2022},
     token_interface::{transfer_checked, Mint, TokenAccount, TokenInterface, TransferChecked},
 };
@@ -53,8 +52,7 @@ pub struct Deposit<'info> {
     pub shares_mint: InterfaceAccount<'info, Mint>,
 
     #[account(
-        init_if_needed,
-        payer = user,
+        mut,
         associated_token::mint = shares_mint,
         associated_token::authority = user,
         associated_token::token_program = token_2022_program,
@@ -63,8 +61,6 @@ pub struct Deposit<'info> {
 
     pub asset_token_program: Interface<'info, TokenInterface>,
     pub token_2022_program: Program<'info, Token2022>,
-    pub associated_token_program: Program<'info, AssociatedToken>,
-    pub system_program: Program<'info, System>,
 }
 
 /// Deposit assets and receive shares.

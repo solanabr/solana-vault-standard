@@ -90,7 +90,10 @@ pub fn rebalance_handler(ctx: Context<Rebalance>, min_out: u64) -> Result<()> {
         .checked_mul(idle_buffer_bps)
         .ok_or(VaultError::MathOverflow)?
         .checked_div(10000)
-        .ok_or(VaultError::DivisionByZero)? as u64;
+        .ok_or(VaultError::DivisionByZero)?;
+    let ideal_idle: u64 = ideal_idle
+        .try_into()
+        .map_err(|_| VaultError::MathOverflow)?;
 
     // 3. COMPUTE — decide if we need to deposit or withdraw
     let asset_mint_key = ctx.accounts.allocator_vault.asset_mint;
@@ -137,18 +140,23 @@ pub fn rebalance_handler(ctx: Context<Rebalance>, min_out: u64) -> Result<()> {
         let child_assets_after = current_market_value
             .checked_add(surplus)
             .ok_or(VaultError::MathOverflow)?;
-        let _child_weight_after = (child_assets_after as u128)
+        let _child_weight_after: u16 = (child_assets_after as u128)
             .checked_mul(10000)
             .ok_or(VaultError::MathOverflow)?
             .checked_div(total_assets as u128)
-            .ok_or(VaultError::DivisionByZero)? as u16;
+            .ok_or(VaultError::DivisionByZero)?
+            .try_into()
+            .map_err(|_| VaultError::MathOverflow)?;
 
         // Compute max deposit allowed by the weight cap
         let max_allowed = (total_assets as u128)
             .checked_mul(child_allocation.max_weight_bps as u128)
             .ok_or(VaultError::MathOverflow)?
             .checked_div(10000)
-            .ok_or(VaultError::DivisionByZero)? as u64;
+            .ok_or(VaultError::DivisionByZero)?;
+        let max_allowed: u64 = max_allowed
+            .try_into()
+            .map_err(|_| VaultError::MathOverflow)?;
 
         // Respect both the weight cap and the available capacity
         let available_capacity = max_allowed.saturating_sub(current_market_value);
@@ -292,14 +300,19 @@ pub fn rebalance_handler(ctx: Context<Rebalance>, min_out: u64) -> Result<()> {
             .ok_or(VaultError::MathOverflow)?;
 
         let child_allocation = &mut ctx.accounts.child_allocation;
-        let shares_after = shares_held.checked_sub(shares_to_redeem).unwrap_or(0);
+        let shares_after = shares_held
+            .checked_sub(shares_to_redeem)
+            .ok_or(VaultError::MathOverflow)?;
 
         if shares_held > 0 {
             let new_deposited = (child_allocation.deposited_assets as u128)
                 .checked_mul(shares_after as u128)
                 .ok_or(VaultError::MathOverflow)?
                 .checked_div(shares_held as u128)
-                .ok_or(VaultError::DivisionByZero)? as u64;
+                .ok_or(VaultError::DivisionByZero)?;
+            let new_deposited: u64 = new_deposited
+                .try_into()
+                .map_err(|_| VaultError::MathOverflow)?;
             child_allocation.deposited_assets = new_deposited;
         }
 

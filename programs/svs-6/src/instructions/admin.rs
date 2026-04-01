@@ -3,6 +3,7 @@
 use anchor_lang::prelude::*;
 
 use crate::{
+    constants::VAULT_SEED,
     error::VaultError,
     events::{AuthorityTransferred, VaultStatusChanged},
     state::ConfidentialStreamVault,
@@ -15,7 +16,11 @@ pub struct Admin<'info> {
     )]
     pub authority: Signer<'info>,
 
-    #[account(mut)]
+    #[account(
+        mut,
+        seeds = [VAULT_SEED, vault.asset_mint.as_ref(), &vault.vault_id.to_le_bytes()],
+        bump = vault.bump,
+    )]
     pub vault: Account<'info, ConfidentialStreamVault>,
 }
 
@@ -49,6 +54,8 @@ pub fn unpause(ctx: Context<Admin>) -> Result<()> {
     Ok(())
 }
 
+// TODO(M-8): Implement two-step authority transfer (request_transfer_authority + accept_authority)
+//            matching the pattern in SVS-1 and SVS-2.
 pub fn transfer_authority(ctx: Context<Admin>, new_authority: Pubkey) -> Result<()> {
     let vault = &mut ctx.accounts.vault;
     require!(new_authority != Pubkey::default(), VaultError::Unauthorized);

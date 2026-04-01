@@ -64,6 +64,24 @@ pub mod svs_9 {
         admin::set_curator(ctx, new_curator)
     }
 
+    pub fn initialize_allowed_programs(
+        ctx: Context<InitializeAllowedPrograms>,
+        initial_programs: Vec<Pubkey>,
+    ) -> Result<()> {
+        initialize_allowed_programs_handler(ctx, initial_programs)
+    }
+
+    pub fn add_allowed_program(ctx: Context<AddAllowedProgram>, program_id: Pubkey) -> Result<()> {
+        add_allowed_program_handler(ctx, program_id)
+    }
+
+    pub fn remove_allowed_program(
+        ctx: Context<RemoveAllowedProgram>,
+        program_id: Pubkey,
+    ) -> Result<()> {
+        remove_allowed_program_handler(ctx, program_id)
+    }
+
     pub fn remove_child(ctx: Context<RemoveChild>) -> Result<()> {
         remove_child_handler(ctx)
     }

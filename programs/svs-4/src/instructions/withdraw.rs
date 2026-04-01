@@ -71,10 +71,18 @@ pub struct Withdraw<'info> {
     )]
     pub user_shares_account: InterfaceAccount<'info, TokenAccount>,
 
-    /// CHECK: Pre-verified CiphertextCommitmentEqualityProof context state account
+    /// CHECK: Pre-verified CiphertextCommitmentEqualityProof context state account.
+    /// Must be owned by the ZK ElGamal proof program.
+    #[account(
+        constraint = equality_proof_context.owner == &solana_zk_sdk::zk_elgamal_proof_program::id() @ VaultError::InvalidProof
+    )]
     pub equality_proof_context: UncheckedAccount<'info>,
 
-    /// CHECK: Pre-verified BatchedRangeProofU64 context state account
+    /// CHECK: Pre-verified BatchedRangeProofU64 context state account.
+    /// Must be owned by the ZK ElGamal proof program.
+    #[account(
+        constraint = range_proof_context.owner == &solana_zk_sdk::zk_elgamal_proof_program::id() @ VaultError::InvalidProof
+    )]
     pub range_proof_context: UncheckedAccount<'info>,
 
     pub asset_token_program: Interface<'info, TokenInterface>,

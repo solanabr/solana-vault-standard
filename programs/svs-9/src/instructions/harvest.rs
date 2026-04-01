@@ -185,7 +185,9 @@ pub fn harvest_handler(ctx: Context<Harvest>, min_assets_out: u64) -> Result<()>
     // After harvesting yield, the cost basis remains the same (we only took profit).
     // The shares decreased proportionally, so we update deposited_assets to reflect
     // that the remaining shares still track the original cost basis minus the redeemed portion.
-    let shares_after = our_shares.checked_sub(shares_to_redeem).unwrap_or(0);
+    let shares_after = our_shares
+        .checked_sub(shares_to_redeem)
+        .ok_or(VaultError::MathOverflow)?;
     let child_allocation = &mut ctx.accounts.child_allocation;
 
     if our_shares > 0 {
@@ -193,7 +195,10 @@ pub fn harvest_handler(ctx: Context<Harvest>, min_assets_out: u64) -> Result<()>
             .checked_mul(shares_after as u128)
             .ok_or(VaultError::MathOverflow)?
             .checked_div(our_shares as u128)
-            .ok_or(VaultError::DivisionByZero)? as u64;
+            .ok_or(VaultError::DivisionByZero)?;
+        let new_deposited: u64 = new_deposited
+            .try_into()
+            .map_err(|_| VaultError::MathOverflow)?;
         child_allocation.deposited_assets = new_deposited;
     }
 

@@ -1,6 +1,7 @@
 pub mod add_child;
 pub mod admin;
 pub mod allocate;
+pub mod allowlist;
 pub mod deallocate;
 pub mod deposit;
 pub mod harvest;
@@ -18,6 +19,7 @@ pub mod withdraw;
 pub use add_child::*;
 pub use admin::*;
 pub use allocate::*;
+pub use allowlist::*;
 pub use deallocate::*;
 pub use deposit::*;
 pub use harvest::*;

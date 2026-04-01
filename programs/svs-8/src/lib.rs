@@ -15,8 +15,13 @@ declare_id!("E8bGqwitsaFELBtuhbwAKwVBKjAjGzrfcnBPishvvRsA");
 pub mod svs_8 {
     use super::*;
 
-    pub fn initialize(ctx: Context<Initialize>, vault_id: u64, base_decimals: u8) -> Result<()> {
-        instructions::initialize::handler(ctx, vault_id, base_decimals)
+    pub fn initialize(
+        ctx: Context<Initialize>,
+        vault_id: u64,
+        base_decimals: u8,
+        shares_decimals: u8,
+    ) -> Result<()> {
+        instructions::initialize::handler(ctx, vault_id, base_decimals, shares_decimals)
     }
 
     pub fn add_asset(ctx: Context<AddAsset>, target_weight_bps: u16) -> Result<()> {

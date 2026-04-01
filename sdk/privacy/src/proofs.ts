@@ -416,8 +416,9 @@ function createVerifyProofInstruction(
 }
 
 // ============ Internal Proof Generation Functions ============
-// NOTE: These are placeholder implementations.
-// For production, use solana-zk-sdk WASM bindings.
+// These functions throw at runtime. Client-side ZK proof generation requires
+// solana-zk-sdk WASM bindings (not yet available). Use backend proof generation
+// via configureProofBackend() instead.
 
 /**
  * Generate Schnorr sigma proof for pubkey validity
@@ -431,18 +432,11 @@ function createVerifyProofInstruction(
  * 3. Response z = r + c * s
  * 4. Proof = (R, z)
  */
-function generateSchnorrProof(elgamalKeypair: ElGamalKeypair): Uint8Array {
-  // NOTE: In production, use solana-zk-sdk:
-  // let proof = PubkeyValidityProof::new(elgamal_keypair);
-
-  // Placeholder: deterministic based on keypair for testing
-  const proof = new Uint8Array(32);
-  for (let i = 0; i < 32; i++) {
-    proof[i] =
-      (elgamalKeypair.publicKey[i] ^ elgamalKeypair.secretKey[i] ^ (i * 7)) &
-      0xff;
-  }
-  return proof;
+function generateSchnorrProof(_elgamalKeypair: ElGamalKeypair): Uint8Array {
+  throw new Error(
+    "Client-side proof generation requires solana-zk-sdk WASM bindings (not yet available). " +
+      "Use backend proof generation via configureProofBackend().",
+  );
 }
 
 /**
@@ -455,78 +449,40 @@ function generateSchnorrProof(elgamalKeypair: ElGamalKeypair): Uint8Array {
  * - G is the blinding basepoint
  */
 function computePedersenCommitment(
-  amount: BN,
-  blinding?: Uint8Array,
+  _amount: BN,
+  _blinding?: Uint8Array,
 ): Uint8Array {
-  // NOTE: In production, use solana-zk-sdk:
-  // let commitment = PedersenCommitment::new(amount, blinding);
-
-  const commitment = new Uint8Array(32);
-  const amountBytes = amount.toArrayLike(Buffer, "le", 8);
-
-  // Placeholder: hash of amount + blinding
-  commitment.set(amountBytes, 0);
-  if (blinding) {
-    for (let i = 0; i < Math.min(blinding.length, 24); i++) {
-      commitment[8 + i] = blinding[i];
-    }
-  }
-
-  return commitment;
+  throw new Error(
+    "Client-side proof generation requires solana-zk-sdk WASM bindings (not yet available). " +
+      "Use backend proof generation via configureProofBackend().",
+  );
 }
 
 /**
  * Generate equality proof for ciphertext-commitment equality
  */
 function generateEqualityProof(
-  elgamalKeypair: ElGamalKeypair,
-  amount: BN,
-  currentBalance: Uint8Array,
+  _elgamalKeypair: ElGamalKeypair,
+  _amount: BN,
+  _currentBalance: Uint8Array,
 ): Uint8Array {
-  // NOTE: In production, use solana-zk-sdk:
-  // let proof = CiphertextCommitmentEqualityProof::new(...);
-
-  // Placeholder: deterministic output for testing
-  const proof = new Uint8Array(64);
-  const amountBytes = amount.toArrayLike(Buffer, "le", 8);
-
-  for (let i = 0; i < 64; i++) {
-    proof[i] =
-      (elgamalKeypair.secretKey[i % 32] ^
-        (currentBalance[i % currentBalance.length] || 0) ^
-        (amountBytes[i % 8] || 0)) &
-      0xff;
-  }
-
-  return proof;
+  throw new Error(
+    "Client-side proof generation requires solana-zk-sdk WASM bindings (not yet available). " +
+      "Use backend proof generation via configureProofBackend().",
+  );
 }
 
 /**
  * Generate Bulletproof for range verification
  */
 function generateBulletproof(
-  amounts: BN[],
-  blindingFactors: Uint8Array[],
+  _amounts: BN[],
+  _blindingFactors: Uint8Array[],
 ): Uint8Array {
-  // NOTE: In production, use solana-zk-sdk:
-  // let proof = BatchedRangeProof::new(amounts, blindings, bit_length);
-
-  // Base Bulletproof size without commitments
-  const proofSize = 640 - amounts.length * 32;
-  const proof = new Uint8Array(Math.max(proofSize, 64));
-
-  // Placeholder: deterministic output
-  for (let i = 0; i < proof.length; i++) {
-    let byte = 0;
-    for (let j = 0; j < amounts.length; j++) {
-      const amountBytes = amounts[j].toArrayLike(Buffer, "le", 8);
-      byte ^= amountBytes[i % 8] || 0;
-      byte ^= blindingFactors[j]?.[i % 32] || 0;
-    }
-    proof[i] = byte & 0xff;
-  }
-
-  return proof;
+  throw new Error(
+    "Client-side proof generation requires solana-zk-sdk WASM bindings (not yet available). " +
+      "Use backend proof generation via configureProofBackend().",
+  );
 }
 
 /**
@@ -571,16 +527,54 @@ let PROOF_BACKEND_URL =
     : "http://localhost:3001";
 
 let PROOF_BACKEND_API_KEY: string | undefined;
+let PROOF_BACKEND_TRUST_ACKNOWLEDGED = false;
 
 /**
- * Configure the proof backend URL and API key
+ * Configure the proof backend URL, API key, and trust acknowledgment.
+ *
+ * **SECURITY WARNING — Backend Trust Model:**
+ * Backend proof generation sends secret key material (wallet signatures used to
+ * derive ElGamal secret keys) to the configured backend server. The backend can
+ * reconstruct the user's ElGamal keypair and decrypt all confidential balances.
+ *
+ * You MUST explicitly acknowledge this trust model by setting
+ * `acknowledgeBackendTrust: true`. Without this, all backend proof generation
+ * functions will throw.
+ *
+ * Consider these mitigations:
+ * - Run the proof backend in a trusted execution environment (TEE/SGX)
+ * - Use TLS certificate pinning for the backend connection
+ * - Audit the backend source code and deploy from verified builds
+ * - Prefer client-side WASM proof generation when available
  *
  * @param url - Backend URL (e.g., "https://proofs.example.com")
  * @param apiKey - Optional API key for authentication
+ * @param acknowledgeBackendTrust - Must be `true` to confirm you accept that the
+ *   backend receives secret key material and must be fully trusted
  */
-export function configureProofBackend(url: string, apiKey?: string): void {
+export function configureProofBackend(
+  url: string,
+  apiKey?: string,
+  acknowledgeBackendTrust = false,
+): void {
   PROOF_BACKEND_URL = url;
   PROOF_BACKEND_API_KEY = apiKey;
+  PROOF_BACKEND_TRUST_ACKNOWLEDGED = acknowledgeBackendTrust;
+}
+
+/**
+ * Assert that backend trust has been explicitly acknowledged via configureProofBackend().
+ * @internal
+ */
+function assertBackendTrustAcknowledged(): void {
+  if (!PROOF_BACKEND_TRUST_ACKNOWLEDGED) {
+    throw new Error(
+      "Backend proof generation sends secret key material to a remote server. " +
+        "The backend can reconstruct ElGamal keypairs and decrypt confidential balances. " +
+        'Call configureProofBackend(url, apiKey, true) with acknowledgeBackendTrust=true ' +
+        "to confirm you accept this trust model.",
+    );
+  }
 }
 
 /**
@@ -590,14 +584,26 @@ export function configureProofBackend(url: string, apiKey?: string): void {
  * proof using the solana-zk-sdk. The backend verifies wallet ownership
  * via signature verification.
  *
+ * **SECURITY WARNING — Secret Key Material Sent to Backend:**
+ * This function sends wallet signatures (`requestSignature`, `elgamalSignature`)
+ * to the backend server. The `elgamalSignature` is used by the backend to derive
+ * the user's ElGamal secret key — meaning the backend can decrypt all confidential
+ * balances for this token account. The backend MUST be trusted.
+ *
+ * You must call `configureProofBackend(url, apiKey, true)` with
+ * `acknowledgeBackendTrust=true` before using this function.
+ *
  * @param wallet - The wallet keypair (for signing the request)
  * @param tokenAccount - The token account being configured
  * @returns Object containing proof data and derived ElGamal public key
+ * @throws If backend trust has not been acknowledged via configureProofBackend()
  */
 export async function createPubkeyValidityProofViaBackend(
   wallet: Keypair,
   tokenAccount: PublicKey,
 ): Promise<{ proofData: Uint8Array; elgamalPubkey: Uint8Array }> {
+  assertBackendTrustAcknowledged();
+
   const timestamp = Math.floor(Date.now() / 1000);
 
   // Sign the request message using nacl
@@ -605,6 +611,7 @@ export async function createPubkeyValidityProofViaBackend(
   const requestSignature = nacl.sign.detached(requestMessage, wallet.secretKey);
 
   // Sign the ElGamal derivation message
+  // WARNING: The backend uses this signature to derive the ElGamal secret key
   const elgamalMessage = buildElGamalDerivationMessage(tokenAccount);
   const elgamalSignature = nacl.sign.detached(elgamalMessage, wallet.secretKey);
 
@@ -639,11 +646,21 @@ export async function createPubkeyValidityProofViaBackend(
 /**
  * Generate CiphertextCommitmentEqualityProof via backend
  *
+ * **SECURITY WARNING — Secret Key Material Sent to Backend:**
+ * This function sends wallet signatures to the backend server. The
+ * `elgamalSignature` allows the backend to derive the user's ElGamal secret key,
+ * granting it the ability to decrypt all confidential balances for this token
+ * account. The backend MUST be trusted.
+ *
+ * You must call `configureProofBackend(url, apiKey, true)` with
+ * `acknowledgeBackendTrust=true` before using this function.
+ *
  * @param wallet - The wallet keypair
  * @param tokenAccount - The token account
  * @param currentCiphertext - Current encrypted balance (64 bytes)
  * @param amount - Amount to prove
  * @returns Proof data bytes
+ * @throws If backend trust has not been acknowledged via configureProofBackend()
  */
 export async function createEqualityProofViaBackend(
   wallet: Keypair,
@@ -651,6 +668,8 @@ export async function createEqualityProofViaBackend(
   currentCiphertext: Uint8Array,
   amount: BN,
 ): Promise<Uint8Array> {
+  assertBackendTrustAcknowledged();
+
   const timestamp = Math.floor(Date.now() / 1000);
 
   // Sign the request message using nacl
@@ -658,6 +677,7 @@ export async function createEqualityProofViaBackend(
   const requestSignature = nacl.sign.detached(requestMessage, wallet.secretKey);
 
   // Sign the ElGamal derivation message
+  // WARNING: The backend uses this signature to derive the ElGamal secret key
   const elgamalMessage = buildElGamalDerivationMessage(tokenAccount);
   const elgamalSignature = nacl.sign.detached(elgamalMessage, wallet.secretKey);
 
@@ -687,16 +707,28 @@ export async function createEqualityProofViaBackend(
 /**
  * Generate BatchedRangeProofU64 via backend
  *
+ * **SECURITY WARNING — Secret Key Material Sent to Backend:**
+ * This function sends wallet signatures and commitment blinding factors to the
+ * backend server. The blinding factors are secret values; if compromised, an
+ * attacker can break the hiding property of the Pedersen commitments and learn
+ * the committed amounts. The backend MUST be trusted.
+ *
+ * You must call `configureProofBackend(url, apiKey, true)` with
+ * `acknowledgeBackendTrust=true` before using this function.
+ *
  * @param wallet - The wallet keypair
  * @param amounts - Amounts to prove range for
  * @param commitmentBlindings - Blinding factors for Pedersen commitments
  * @returns Proof data bytes
+ * @throws If backend trust has not been acknowledged via configureProofBackend()
  */
 export async function createRangeProofViaBackend(
   wallet: Keypair,
   amounts: BN[],
   commitmentBlindings: Uint8Array[],
 ): Promise<Uint8Array> {
+  assertBackendTrustAcknowledged();
+
   const timestamp = Math.floor(Date.now() / 1000);
 
   // Sign the range request message using nacl

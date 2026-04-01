@@ -35,13 +35,19 @@ pub struct AddChild<'info> {
     pub child_vault: UncheckedAccount<'info>,
 
     /// CHECK: The program that owns the child vault. Stored for CPI verification.
-    // SVS-5 (streaming yield) is currently Status: Draft and has no deployed program ID.
-    // Add SVS5_ID here once the program is deployed.
-    #[account(
-        executable,
-        constraint = [SVS1_ID, SVS2_ID, SVS3_ID, SVS4_ID, SVS9_ID].contains(&child_program.key()) @ VaultError::InvalidChildProgram
-    )]
+    /// Validated against the AllowedPrograms PDA if present, otherwise falls back
+    /// to the hardcoded default list.
+    #[account(executable)]
     pub child_program: UncheckedAccount<'info>,
+
+    /// Optional AllowedPrograms PDA. When present, the child_program must be in
+    /// this configurable list. When absent, the hardcoded default list is used.
+    #[account(
+        seeds = [ALLOWED_PROGRAMS_SEED, allocator_vault.key().as_ref()],
+        bump = allowed_programs.bump,
+        has_one = allocator_vault @ VaultError::Unauthorized,
+    )]
+    pub allowed_programs: Option<Account<'info, AllowedPrograms>>,
 
     /// Shares mint of the child vault being added
     pub child_shares_mint: InterfaceAccount<'info, Mint>,
@@ -66,6 +72,16 @@ pub fn add_child_handler(ctx: Context<AddChild>, max_weight_bps: u16) -> Result<
     // 1. VALIDATION
     // Max weight cannot exceed 100% (10,000 bps)
     require!(max_weight_bps <= 10000, VaultError::MathOverflow);
+
+    // Validate child_program against the allowlist (configurable PDA or hardcoded fallback)
+    let child_program_key = ctx.accounts.child_program.key();
+    let is_allowed = if let Some(ref allowed_programs) = ctx.accounts.allowed_programs {
+        let count = allowed_programs.num_programs as usize;
+        allowed_programs.programs[..count].contains(&child_program_key)
+    } else {
+        DEFAULT_ALLOWED_PROGRAMS.contains(&child_program_key)
+    };
+    require!(is_allowed, VaultError::InvalidChildProgram);
 
     // Validate child_vault discriminator and compute decimals_offset from vault state
     let vault_data = ctx.accounts.child_vault.try_borrow_data()?;

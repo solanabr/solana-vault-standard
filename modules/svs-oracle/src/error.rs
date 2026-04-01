@@ -13,6 +13,8 @@ pub enum OracleError {
     PriceDeviationExceeded,
     /// Arithmetic overflow in price calculation.
     MathOverflow,
+    /// Staleness configuration is out of allowed range.
+    InvalidStalenessConfig,
 }
 
 impl core::fmt::Display for OracleError {
@@ -23,6 +25,9 @@ impl core::fmt::Display for OracleError {
             OracleError::UnauthorizedUpdate => write!(f, "unauthorized oracle update"),
             OracleError::PriceDeviationExceeded => write!(f, "price deviation exceeds maximum"),
             OracleError::MathOverflow => write!(f, "arithmetic overflow in price calculation"),
+            OracleError::InvalidStalenessConfig => {
+                write!(f, "staleness config out of allowed range")
+            }
         }
     }
 }

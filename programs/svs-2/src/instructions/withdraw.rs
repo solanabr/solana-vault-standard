@@ -74,7 +74,7 @@ pub fn handler(ctx: Context<Withdraw>, assets: u64, max_shares_in: u64) -> Resul
 
     // ===== Module Hooks (if enabled) =====
     #[cfg(feature = "modules")]
-    let (net_assets, _fee_assets) = {
+    let (net_assets, fee_assets) = {
         let remaining = ctx.remaining_accounts;
         let clock = Clock::get()?;
         let vault_key = vault.key();
@@ -98,7 +98,7 @@ pub fn handler(ctx: Context<Withdraw>, assets: u64, max_shares_in: u64) -> Resul
     };
 
     #[cfg(not(feature = "modules"))]
-    let net_assets = assets;
+    let (net_assets, fee_assets) = (assets, 0u64);
 
     // Total assets to withdraw from vault (user gets net, fee stays in vault)
     let total_assets_needed = assets; // User requested this much
@@ -170,6 +170,12 @@ pub fn handler(ctx: Context<Withdraw>, assets: u64, max_shares_in: u64) -> Resul
     vault.total_assets = vault
         .total_assets
         .checked_sub(net_assets)
+        .ok_or(VaultError::MathOverflow)?;
+
+    // Track cumulative exit fees for transparency
+    vault.cumulative_exit_fees = vault
+        .cumulative_exit_fees
+        .checked_add(fee_assets)
         .ok_or(VaultError::MathOverflow)?;
 
     emit!(WithdrawEvent {

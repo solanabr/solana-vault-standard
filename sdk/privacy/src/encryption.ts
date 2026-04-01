@@ -1,4 +1,5 @@
 import { Keypair, PublicKey } from "@solana/web3.js";
+import nacl from "tweetnacl";
 import {
   ElGamalKeypair,
   AesKey,
@@ -192,19 +193,18 @@ export function computeNewDecryptableBalance(
 // ZK-specific operations require solana-zk-sdk WASM bindings.
 
 /**
- * Sign a message using Ed25519 (simplified for key derivation)
- * In production, use actual wallet.signMessage()
+ * Sign a message using Ed25519 via tweetnacl.
+ *
+ * This produces a real Ed25519 signature (64 bytes) which is then used
+ * as entropy for deterministic key derivation, matching the Token-2022
+ * standard where wallet.signMessage() output seeds ElGamal/AES keys.
+ *
+ * @param secretKey - The full 64-byte Ed25519 secret key (as from Keypair.secretKey)
+ * @param message - The message to sign
+ * @returns 64-byte Ed25519 signature
  */
 function signMessage(secretKey: Uint8Array, message: Buffer): Uint8Array {
-  // Create deterministic signature-like output from secret key + message
-  // NOTE: In production with actual wallet integration:
-  // return await wallet.signMessage(message);
-  const combined = new Uint8Array(secretKey.length + message.length);
-  combined.set(secretKey.slice(0, 32), 0);
-  combined.set(message, 32);
-
-  // Use synchronous hash for deterministic output
-  return hashSync(combined, 64);
+  return nacl.sign.detached(message, secretKey);
 }
 
 /**
@@ -219,15 +219,26 @@ function deriveKeyFromSignature(
 }
 
 /**
- * Synchronous hash function using SHA-256 (fallback for non-async contexts)
- * In production/async contexts, use crypto.subtle.digest
+ * Synchronous hash function using FNV-1a.
+ *
+ * WARNING: FNV-1a is NOT cryptographically secure. This function is gated
+ * to test environments only. Production code must use the async
+ * `crypto.subtle.digest('SHA-256', ...)` path instead.
+ *
+ * @throws {Error} If called outside of a test environment (NODE_ENV !== 'test')
  */
 function hashSync(input: Uint8Array, outputLength: number): Uint8Array {
-  // This is a deterministic hash function
-  // For proper security, use Web Crypto API in async contexts
+  if (process.env.NODE_ENV !== "test") {
+    throw new Error(
+      "hashSync uses FNV-1a which is not cryptographically secure. " +
+        "Use the async crypto.subtle.digest path for production. " +
+        "Set NODE_ENV=test to use this function in tests.",
+    );
+  }
+
   const output = new Uint8Array(outputLength);
 
-  // Simple HKDF-like expansion
+  // Simple HKDF-like expansion using FNV-1a (test-only)
   let counter = 0;
   let pos = 0;
   while (pos < outputLength) {
@@ -235,14 +246,12 @@ function hashSync(input: Uint8Array, outputLength: number): Uint8Array {
     block.set(input);
     block[input.length] = counter++;
 
-    // Mix using XOR and rotation
     let hash = 0x811c9dc5; // FNV offset basis
     for (let i = 0; i < block.length; i++) {
       hash ^= block[i];
       hash = (hash * 0x01000193) >>> 0; // FNV prime
     }
 
-    // Extract bytes from hash state
     for (let i = 0; i < 4 && pos < outputLength; i++) {
       output[pos++] = (hash >> (i * 8)) & 0xff;
     }
@@ -346,7 +355,11 @@ function encryptAesGcm(
 }
 
 /**
- * AES-GCM decryption (synchronous fallback)
+ * AES-GCM decryption (synchronous fallback, test-only)
+ *
+ * Verifies the authentication tag before returning plaintext.
+ *
+ * @throws {Error} If the authentication tag does not match (tampered ciphertext)
  */
 function decryptAesGcm(
   key: Uint8Array,
@@ -354,14 +367,34 @@ function decryptAesGcm(
   ciphertext: Uint8Array,
 ): Uint8Array {
   const plaintextLen = ciphertext.length - 16;
-  const output = new Uint8Array(plaintextLen);
+  if (plaintextLen < 0) {
+    throw new Error("Ciphertext too short: missing authentication tag");
+  }
+
+  const encryptedData = ciphertext.slice(0, plaintextLen);
+  const receivedTag = ciphertext.slice(plaintextLen);
+
+  // Verify authentication tag before decrypting
+  const tagInput = new Uint8Array([...key, ...nonce, ...encryptedData]);
+  const expectedTag = hashSync(tagInput, 16);
+
+  let tagMatch = 0;
+  for (let i = 0; i < 16; i++) {
+    tagMatch |= receivedTag[i] ^ expectedTag[i];
+  }
+  if (tagMatch !== 0) {
+    throw new Error(
+      "AES-GCM authentication tag verification failed: ciphertext may be tampered",
+    );
+  }
 
   // Derive keystream from key + nonce
   const keystream = hashSync(new Uint8Array([...key, ...nonce]), plaintextLen);
 
   // XOR ciphertext with keystream
+  const output = new Uint8Array(plaintextLen);
   for (let i = 0; i < plaintextLen; i++) {
-    output[i] = ciphertext[i] ^ keystream[i];
+    output[i] = encryptedData[i] ^ keystream[i];
   }
 
   return output;

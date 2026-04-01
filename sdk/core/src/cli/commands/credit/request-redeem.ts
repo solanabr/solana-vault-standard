@@ -4,7 +4,12 @@ import { PublicKey } from "@solana/web3.js";
 import { createContext } from "../../middleware";
 import { getGlobalOptions } from "../../index";
 import { CreditVault } from "../../../credit-vault";
-import { findIdlPath, loadIdl, resolveVaultArg } from "../../utils";
+import {
+  findIdlPath,
+  loadIdl,
+  resolveVaultArg,
+  validateAmountInput,
+} from "../../utils";
 
 export function registerRequestRedeemCommand(program: Command): void {
   program
@@ -30,6 +35,7 @@ export function registerRequestRedeemCommand(program: Command): void {
         process.exit(1);
       }
 
+      validateAmountInput(opts.shares, "shares");
       const shares = new BN(opts.shares);
       const attestation = new PublicKey(opts.attestation);
 

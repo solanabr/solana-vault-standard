@@ -93,6 +93,24 @@ pub struct WeightsUpdated {
     pub new_max_weight_bps: u16,
 }
 
+#[event]
+pub struct AllowedProgramsInitialized {
+    pub allocator_vault: Pubkey,
+    pub num_programs: u8,
+}
+
+#[event]
+pub struct AllowedProgramAdded {
+    pub allocator_vault: Pubkey,
+    pub program_id: Pubkey,
+}
+
+#[event]
+pub struct AllowedProgramRemoved {
+    pub allocator_vault: Pubkey,
+    pub program_id: Pubkey,
+}
+
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, PartialEq, Eq)]
 pub enum RebalanceAction {
     Deposit,

@@ -114,11 +114,13 @@ pub fn allocate_handler(ctx: Context<Allocate>, assets: u64, min_shares_out: u64
     let child_assets_after = current_market_value
         .checked_add(assets)
         .ok_or(VaultError::MathOverflow)?;
-    let child_weight = (child_assets_after as u128)
+    let child_weight: u16 = (child_assets_after as u128)
         .checked_mul(10000)
         .ok_or(VaultError::MathOverflow)?
         .checked_div(total_assets as u128)
-        .ok_or(VaultError::DivisionByZero)? as u16;
+        .ok_or(VaultError::DivisionByZero)?
+        .try_into()
+        .map_err(|_| VaultError::MathOverflow)?;
     require!(
         child_weight <= child_allocation.max_weight_bps,
         VaultError::MaxWeightExceeded
@@ -132,7 +134,8 @@ pub fn allocate_handler(ctx: Context<Allocate>, assets: u64, min_shares_out: u64
         .checked_mul(ctx.accounts.allocator_vault.idle_buffer_bps as u128)
         .ok_or(VaultError::MathOverflow)?
         .checked_div(10000)
-        .ok_or(VaultError::DivisionByZero)? as u64;
+        .ok_or(VaultError::DivisionByZero)?;
+    let min_idle: u64 = min_idle.try_into().map_err(|_| VaultError::MathOverflow)?;
 
     require!(idle_after >= min_idle, VaultError::InsufficientBuffer);
 

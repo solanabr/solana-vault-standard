@@ -18,7 +18,7 @@ pub struct UpdateTrancheConfig<'info> {
 
     #[account(
         mut,
-        constraint = target_tranche.vault == vault.key() @ VaultError::TrancheVaultMismatch,
+        has_one = vault @ VaultError::TrancheVaultMismatch,
     )]
     pub target_tranche: Account<'info, Tranche>,
 

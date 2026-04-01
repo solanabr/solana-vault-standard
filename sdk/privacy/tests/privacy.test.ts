@@ -266,127 +266,43 @@ describe("Privacy SDK", () => {
   });
 
   describe("PubkeyValidityProof Generation", () => {
-    it("creates proof data with correct size", () => {
+    it("throws because client-side proof generation is not available", () => {
       const keypair = deriveElGamalKeypair(testWallet, testTokenAccount);
-      const proofData = createPubkeyValidityProofData(keypair);
 
-      expect(proofData.length).to.equal(
-        PROOF_DATA_SIZES.PubkeyValidityProofData,
+      expect(() => createPubkeyValidityProofData(keypair)).to.throw(
+        "Client-side proof generation requires solana-zk-sdk WASM bindings",
       );
-    });
-
-    it("embeds public key in proof data", () => {
-      const keypair = deriveElGamalKeypair(testWallet, testTokenAccount);
-      const proofData = createPubkeyValidityProofData(keypair);
-
-      // First 32 bytes should be the public key
-      const embeddedPubkey = proofData.slice(0, 32);
-      expect(embeddedPubkey).to.deep.equal(keypair.publicKey);
-    });
-
-    it("generates deterministic proof for same keypair", () => {
-      const keypair = deriveElGamalKeypair(testWallet, testTokenAccount);
-      const proof1 = createPubkeyValidityProofData(keypair);
-      const proof2 = createPubkeyValidityProofData(keypair);
-
-      expect(proof1).to.deep.equal(proof2);
     });
   });
 
   describe("EqualityProof Generation", () => {
-    it("creates proof data with correct size", () => {
+    it("throws because client-side proof generation is not available", () => {
       const keypair = deriveElGamalKeypair(testWallet, testTokenAccount);
       const amount = new BN(1_000_000);
       const currentBalance = new Uint8Array(64).fill(0);
 
-      const proofData = createEqualityProofData(
-        keypair,
-        amount,
-        currentBalance,
+      expect(() =>
+        createEqualityProofData(keypair, amount, currentBalance),
+      ).to.throw(
+        "Client-side proof generation requires solana-zk-sdk WASM bindings",
       );
-
-      expect(proofData.length).to.equal(
-        PROOF_DATA_SIZES.CiphertextCommitmentEqualityProofData,
-      );
-    });
-
-    it("embeds public key in proof data", () => {
-      const keypair = deriveElGamalKeypair(testWallet, testTokenAccount);
-      const amount = new BN(1_000_000);
-      const currentBalance = new Uint8Array(64).fill(0);
-
-      const proofData = createEqualityProofData(
-        keypair,
-        amount,
-        currentBalance,
-      );
-
-      // First 32 bytes should be the public key
-      const embeddedPubkey = proofData.slice(0, 32);
-      expect(embeddedPubkey).to.deep.equal(keypair.publicKey);
-    });
-
-    it("embeds ciphertext in proof data", () => {
-      const keypair = deriveElGamalKeypair(testWallet, testTokenAccount);
-      const amount = new BN(1_000_000);
-      const currentBalance = new Uint8Array(64);
-      for (let i = 0; i < 64; i++) currentBalance[i] = i;
-
-      const proofData = createEqualityProofData(
-        keypair,
-        amount,
-        currentBalance,
-      );
-
-      // Bytes 32-96 should be the ciphertext
-      const embeddedCiphertext = proofData.slice(32, 96);
-      expect(embeddedCiphertext).to.deep.equal(currentBalance);
     });
   });
 
   describe("RangeProof Generation", () => {
-    it("creates proof data for single amount", () => {
+    it("throws because client-side proof generation is not available", () => {
       const amounts = [new BN(1_000_000)];
       const blindings = [new Uint8Array(32).fill(1)];
 
-      const proofData = createRangeProofData(amounts, blindings);
-
-      // Base size for single amount
-      expect(proofData.length).to.equal(
-        PROOF_DATA_SIZES.BatchedRangeProofU64Data,
+      expect(() => createRangeProofData(amounts, blindings)).to.throw(
+        "Client-side proof generation requires solana-zk-sdk WASM bindings",
       );
-    });
-
-    it("creates larger proof for multiple amounts", () => {
-      const amounts = [new BN(1_000_000), new BN(500_000)];
-      const blindings = [
-        new Uint8Array(32).fill(1),
-        new Uint8Array(32).fill(2),
-      ];
-
-      const proofData = createRangeProofData(amounts, blindings);
-
-      // Should be larger than single amount
-      expect(proofData.length).to.be.greaterThan(
-        PROOF_DATA_SIZES.BatchedRangeProofU64Data,
-      );
-    });
-
-    it("generates deterministic proof for same inputs", () => {
-      const amounts = [new BN(1_000_000)];
-      const blindings = [new Uint8Array(32).fill(42)];
-
-      const proof1 = createRangeProofData(amounts, blindings);
-      const proof2 = createRangeProofData(amounts, blindings);
-
-      expect(proof1).to.deep.equal(proof2);
     });
   });
 
   describe("Proof Verification Instructions", () => {
-    it("creates VerifyPubkeyValidity instruction", () => {
-      const keypair = deriveElGamalKeypair(testWallet, testTokenAccount);
-      const proofData = createPubkeyValidityProofData(keypair);
+    it("creates VerifyPubkeyValidity instruction with raw proof data", () => {
+      const proofData = new Uint8Array(64).fill(0xab);
 
       const ix = createVerifyPubkeyValidityInstruction(proofData);
 
@@ -395,8 +311,7 @@ describe("Privacy SDK", () => {
     });
 
     it("creates VerifyPubkeyValidity with context account", () => {
-      const keypair = deriveElGamalKeypair(testWallet, testTokenAccount);
-      const proofData = createPubkeyValidityProofData(keypair);
+      const proofData = new Uint8Array(64).fill(0xab);
       const contextAccount = Keypair.generate().publicKey;
 
       const ix = createVerifyPubkeyValidityInstruction(
@@ -409,13 +324,8 @@ describe("Privacy SDK", () => {
       expect(ix.keys[0].isWritable).to.be.true;
     });
 
-    it("creates VerifyEqualityProof instruction", () => {
-      const keypair = deriveElGamalKeypair(testWallet, testTokenAccount);
-      const proofData = createEqualityProofData(
-        keypair,
-        new BN(1000),
-        new Uint8Array(64),
-      );
+    it("creates VerifyEqualityProof instruction with raw proof data", () => {
+      const proofData = new Uint8Array(192).fill(0xcd);
 
       const ix = createVerifyEqualityProofInstruction(proofData);
 
@@ -423,11 +333,8 @@ describe("Privacy SDK", () => {
       expect(ix.data[0]).to.equal(3); // VerifyCiphertextCommitmentEquality discriminator
     });
 
-    it("creates VerifyRangeProof instruction", () => {
-      const proofData = createRangeProofData(
-        [new BN(1000)],
-        [new Uint8Array(32)],
-      );
+    it("creates VerifyRangeProof instruction with raw proof data", () => {
+      const proofData = new Uint8Array(672).fill(0xef);
 
       const ix = createVerifyRangeProofInstruction(proofData);
 
@@ -436,8 +343,7 @@ describe("Privacy SDK", () => {
     });
 
     it("embeds proof data in instruction", () => {
-      const keypair = deriveElGamalKeypair(testWallet, testTokenAccount);
-      const proofData = createPubkeyValidityProofData(keypair);
+      const proofData = new Uint8Array(64).fill(0xab);
 
       const ix = createVerifyPubkeyValidityInstruction(proofData);
 
@@ -456,6 +362,15 @@ describe("Privacy SDK", () => {
     it("configures backend with API key", () => {
       // Should not throw
       configureProofBackend("https://proofs.example.com", "test-api-key");
+    });
+
+    it("configures backend with trust acknowledgment", () => {
+      // Should not throw
+      configureProofBackend(
+        "https://proofs.example.com",
+        "test-api-key",
+        true,
+      );
     });
 
     it("checks backend availability (offline)", async () => {
@@ -521,24 +436,24 @@ describe("Privacy SDK", () => {
       expect(balance.ciphertext.length).to.equal(36);
     });
 
-    it("handles proof data with all zeros", () => {
+    it("throws for client-side proof generation with all-zero keypair", () => {
       const keypair: ElGamalKeypair = {
         publicKey: new Uint8Array(32).fill(0),
         secretKey: new Uint8Array(32).fill(0),
       };
 
-      const proofData = createPubkeyValidityProofData(keypair);
-
-      expect(proofData.length).to.equal(64);
+      expect(() => createPubkeyValidityProofData(keypair)).to.throw(
+        "Client-side proof generation requires solana-zk-sdk WASM bindings",
+      );
     });
 
-    it("handles empty blinding factors in range proof", () => {
+    it("throws for client-side range proof generation", () => {
       const amounts = [new BN(1000)];
       const blindings = [new Uint8Array(0)]; // Empty blinding
 
-      const proofData = createRangeProofData(amounts, blindings);
-
-      expect(proofData.length).to.be.greaterThan(0);
+      expect(() => createRangeProofData(amounts, blindings)).to.throw(
+        "Client-side proof generation requires solana-zk-sdk WASM bindings",
+      );
     });
   });
 
@@ -552,28 +467,16 @@ describe("Privacy SDK", () => {
       expect(elgamalPrefix).to.not.deep.equal(aesKey.key);
     });
 
-    it("proof data contains expected sections", () => {
+    it("client-side equality proof generation throws", () => {
       const keypair = deriveElGamalKeypair(testWallet, testTokenAccount);
       const amount = new BN(1_000_000);
       const ciphertext = new Uint8Array(64).fill(0xab);
 
-      const equalityProof = createEqualityProofData(
-        keypair,
-        amount,
-        ciphertext,
+      expect(() =>
+        createEqualityProofData(keypair, amount, ciphertext),
+      ).to.throw(
+        "Client-side proof generation requires solana-zk-sdk WASM bindings",
       );
-
-      // Section 1: Public key (0-32)
-      expect(equalityProof.slice(0, 32)).to.deep.equal(keypair.publicKey);
-
-      // Section 2: Ciphertext (32-96)
-      expect(equalityProof.slice(32, 96)).to.deep.equal(ciphertext);
-
-      // Section 3: Commitment (96-128) - should be 32 bytes
-      expect(equalityProof.slice(96, 128).length).to.equal(32);
-
-      // Section 4: Proof (128-192) - should be 64 bytes
-      expect(equalityProof.slice(128, 192).length).to.equal(64);
     });
   });
 });

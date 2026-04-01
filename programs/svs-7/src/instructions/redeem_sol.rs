@@ -162,15 +162,20 @@ pub fn handler(ctx: Context<RedeemSol>, shares: u64, min_lamports_out: u64) -> R
         ctx.accounts.native_mint.decimals,
     )?;
 
-    // 7. Close user's wSOL account — unwraps wSOL → native SOL sent to user
-    token_2022::close_account(CpiContext::new(
-        ctx.accounts.token_program.to_account_info(),
-        CloseAccount {
-            account: ctx.accounts.user_wsol_account.to_account_info(),
-            destination: ctx.accounts.user.to_account_info(),
-            authority: ctx.accounts.user.to_account_info(),
-        },
-    ))?;
+    // 7. Close user's wSOL account — unwraps wSOL → native SOL sent to user.
+    // Reload to get post-transfer balance; only close if no remaining wSOL balance
+    // (user may have pre-existing wSOL they don't want closed).
+    ctx.accounts.user_wsol_account.reload()?;
+    if ctx.accounts.user_wsol_account.amount == 0 {
+        token_2022::close_account(CpiContext::new(
+            ctx.accounts.token_program.to_account_info(),
+            CloseAccount {
+                account: ctx.accounts.user_wsol_account.to_account_info(),
+                destination: ctx.accounts.user.to_account_info(),
+                authority: ctx.accounts.user.to_account_info(),
+            },
+        ))?;
+    }
 
     // 8. EMIT EVENT
     emit!(WithdrawEvent {

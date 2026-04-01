@@ -152,7 +152,10 @@ pub fn deallocate_handler(
         .checked_mul(shares_after as u128)
         .ok_or(VaultError::MathOverflow)?
         .checked_div(shares_before as u128)
-        .ok_or(VaultError::DivisionByZero)? as u64;
+        .ok_or(VaultError::DivisionByZero)?;
+    let new_deposited: u64 = new_deposited
+        .try_into()
+        .map_err(|_| VaultError::MathOverflow)?;
 
     child_allocation.deposited_assets = new_deposited;
 

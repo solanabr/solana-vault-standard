@@ -6,7 +6,7 @@ use anchor_spl::token_interface::{
 };
 
 use crate::{
-    constants::MIN_STREAM_DURATION,
+    constants::{MIN_STREAM_DURATION, VAULT_SEED},
     error::VaultError,
     events::{Checkpointed, YieldStreamStarted},
     state::ConfidentialStreamVault,
@@ -19,6 +19,8 @@ pub struct DistributeYield<'info> {
 
     #[account(
         mut,
+        seeds = [VAULT_SEED, vault.asset_mint.as_ref(), &vault.vault_id.to_le_bytes()],
+        bump = vault.bump,
         constraint = authority.key() == vault.authority @ VaultError::Unauthorized,
         constraint = !vault.paused @ VaultError::VaultPaused,
     )]
@@ -63,14 +65,20 @@ pub fn handler(ctx: Context<DistributeYield>, yield_amount: u64, duration: i64) 
         });
     }
 
-    // Recognize any remaining un-accrued yield from previous stream
-    if vault.stream_amount > 0 {
+    // Finalize any remaining un-distributed yield from the previous stream.
+    // After checkpoint, stream_amount - stream_distributed = un-accrued remainder.
+    let remaining = vault
+        .stream_amount
+        .checked_sub(vault.stream_distributed)
+        .ok_or(VaultError::MathOverflow)?;
+    if remaining > 0 {
         vault.base_assets = vault
             .base_assets
-            .checked_add(vault.stream_amount)
+            .checked_add(remaining)
             .ok_or(VaultError::MathOverflow)?;
-        vault.stream_amount = 0;
     }
+    vault.stream_amount = 0;
+    vault.stream_distributed = 0;
 
     transfer_checked(
         CpiContext::new(

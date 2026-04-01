@@ -77,15 +77,24 @@ export function registerSvs9InitCommand(parent: Command): void {
         );
 
         // Shares mint keypair
-        const sharesMintKeypair = opts.sharesMint
-          ? Keypair.fromSecretKey(
-              Uint8Array.from(
-                JSON.parse(
-                  require("fs").readFileSync(opts.sharesMint, "utf-8"),
-                ),
-              ),
-            )
-          : Keypair.generate();
+        let sharesMintKeypair: Keypair;
+        if (opts.sharesMint) {
+          try {
+            const keyData = JSON.parse(
+              require("fs").readFileSync(opts.sharesMint, "utf-8"),
+            );
+            sharesMintKeypair = Keypair.fromSecretKey(Uint8Array.from(keyData));
+          } catch (err) {
+            output.error(
+              `Failed to load shares mint keypair from ${opts.sharesMint}: ` +
+                `${err instanceof Error ? err.message : String(err)}. ` +
+                `Expected a JSON file containing a byte array.`,
+            );
+            process.exit(1);
+          }
+        } else {
+          sharesMintKeypair = Keypair.generate();
+        }
 
         output.info("═══ SVS-9 Allocator Vault Initialization ═══");
         output.info(`  Vault ID:        ${vaultId.toString()}`);

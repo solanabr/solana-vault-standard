@@ -11,6 +11,7 @@
 //! via distribute_yield, but the vault does not reopen for new capital.
 
 use anchor_lang::prelude::*;
+use anchor_spl::token_interface::TokenAccount;
 
 use crate::{
     error::VaultError,
@@ -30,6 +31,11 @@ pub struct RecordLoss<'info> {
     )]
     pub vault: Account<'info, TranchedVault>,
 
+    #[account(
+        constraint = asset_vault.key() == vault.asset_vault,
+    )]
+    pub asset_vault: InterfaceAccount<'info, TokenAccount>,
+
     #[account(mut)]
     pub tranche_0: Option<Account<'info, Tranche>>,
     #[account(mut)]
@@ -45,6 +51,12 @@ pub fn handler(ctx: Context<RecordLoss>, total_loss: u64) -> Result<()> {
 
     let vault = &ctx.accounts.vault;
     require!(total_loss <= vault.total_assets, VaultError::TotalLoss);
+
+    // Verify recorded loss does not exceed actual token balance
+    require!(
+        total_loss <= ctx.accounts.asset_vault.amount,
+        VaultError::InsufficientLiquidity
+    );
 
     let num_tranches = vault.num_tranches as usize;
 

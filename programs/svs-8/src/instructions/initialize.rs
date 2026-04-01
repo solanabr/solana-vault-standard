@@ -10,9 +10,15 @@ use anchor_spl::{
     token_interface::{Mint, Token2022},
 };
 
-pub fn handler(ctx: Context<Initialize>, vault_id: u64, base_decimals: u8) -> Result<()> {
+pub fn handler(
+    ctx: Context<Initialize>,
+    vault_id: u64,
+    base_decimals: u8,
+    shares_decimals: u8,
+) -> Result<()> {
     // base_decimals must be <= 9 (same rule as asset decimals)
     require!(base_decimals <= 9, VaultError::InvalidAssetDecimals);
+    require!(shares_decimals <= 9, VaultError::InvalidAssetDecimals);
 
     let vault = &mut ctx.accounts.vault;
     vault.authority = ctx.accounts.authority.key();
@@ -37,7 +43,7 @@ pub fn handler(ctx: Context<Initialize>, vault_id: u64, base_decimals: u8) -> Re
 }
 
 #[derive(Accounts)]
-#[instruction(vault_id: u64)]
+#[instruction(vault_id: u64, base_decimals: u8, shares_decimals: u8)]
 pub struct Initialize<'info> {
     #[account(mut)]
     pub authority: Signer<'info>,
@@ -56,7 +62,7 @@ pub struct Initialize<'info> {
         payer = authority,
         seeds = [SHARES_SEED, vault.key().as_ref()],
         bump,
-        mint::decimals = 9,
+        mint::decimals = shares_decimals,
         mint::authority = vault,
         mint::freeze_authority = vault,
         mint::token_program = token_program,

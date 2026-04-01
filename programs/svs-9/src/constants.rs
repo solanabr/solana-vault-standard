@@ -24,3 +24,12 @@ pub const SVS2_ID: Pubkey = pubkey!("3UrYrxh1HmVgq7WPygZ5x1gNEaWFwqTMs7geNqMnsrt
 pub const SVS3_ID: Pubkey = pubkey!("EcpnYtaCBrZ4p4uq7dDr55D3fL9nsxbCNqpyUREGpPkh");
 pub const SVS4_ID: Pubkey = pubkey!("2WP7LXWqrp1W4CwEJuVt2SxWPNY2n6AYmijh6Z4EeidY");
 pub const SVS9_ID: Pubkey = pubkey!("CZweMiLWPPgKMiQXVNSuuwaoiHUyKWZzoBhhFg2D1VaU");
+
+#[constant]
+pub const ALLOWED_PROGRAMS_SEED: &[u8] = b"allowed_programs";
+
+/// Maximum number of programs in the configurable allowlist
+pub const MAX_ALLOWED_PROGRAMS: usize = 10;
+
+/// Default allowed SVS program IDs (hardcoded fallback)
+pub const DEFAULT_ALLOWED_PROGRAMS: [Pubkey; 5] = [SVS1_ID, SVS2_ID, SVS3_ID, SVS4_ID, SVS9_ID];

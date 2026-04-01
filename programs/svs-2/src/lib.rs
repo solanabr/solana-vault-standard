@@ -66,9 +66,19 @@ pub mod svs_2 {
         instructions::admin::unpause(ctx)
     }
 
-    /// Transfer vault authority
+    /// Transfer vault authority (deprecated — prefer request + accept)
     pub fn transfer_authority(ctx: Context<Admin>, new_authority: Pubkey) -> Result<()> {
         instructions::admin::transfer_authority(ctx, new_authority)
+    }
+
+    /// Step 1: Request authority transfer (two-step pattern)
+    pub fn request_transfer_authority(ctx: Context<Admin>, new_authority: Pubkey) -> Result<()> {
+        instructions::admin::request_transfer_authority(ctx, new_authority)
+    }
+
+    /// Step 2: Accept authority transfer (must be signed by pending authority)
+    pub fn accept_authority(ctx: Context<AcceptAuthority>) -> Result<()> {
+        instructions::admin::accept_authority(ctx)
     }
 
     /// Sync total_assets with actual vault balance

@@ -165,9 +165,10 @@ pub fn handler(
     vault.stream_start = 0;
     vault.stream_end = 0;
     vault.last_checkpoint = clock.unix_timestamp;
+    vault.stream_distributed = 0;
     vault.auditor_elgamal_pubkey = auditor_elgamal_pubkey;
     vault.confidential_authority = vault_key;
-    vault._reserved = [0u8; 64];
+    vault._reserved = [0u8; 56];
 
     emit!(VaultInitialized {
         vault: vault.key(),

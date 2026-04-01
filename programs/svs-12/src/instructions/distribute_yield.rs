@@ -1,6 +1,7 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token_interface::{
-    transfer_checked, Mint, TokenAccount, TokenInterface, TransferChecked,
+use anchor_spl::{
+    associated_token::AssociatedToken,
+    token_interface::{transfer_checked, Mint, TokenAccount, TokenInterface, TransferChecked},
 };
 
 use crate::{
@@ -29,8 +30,9 @@ pub struct DistributeYield<'info> {
 
     #[account(
         mut,
-        constraint = manager_asset_account.mint == vault.asset_mint,
-        constraint = manager_asset_account.owner == manager.key(),
+        associated_token::mint = asset_mint,
+        associated_token::authority = manager,
+        associated_token::token_program = asset_token_program,
     )]
     pub manager_asset_account: InterfaceAccount<'info, TokenAccount>,
 
@@ -50,6 +52,7 @@ pub struct DistributeYield<'info> {
     pub tranche_3: Option<Account<'info, Tranche>>,
 
     pub asset_token_program: Interface<'info, TokenInterface>,
+    pub associated_token_program: Program<'info, AssociatedToken>,
 }
 
 pub fn handler(ctx: Context<DistributeYield>, total_yield: u64) -> Result<()> {

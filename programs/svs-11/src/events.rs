@@ -166,3 +166,30 @@ pub struct ModuleConfigChanged {
     pub vault: Pubkey,
     pub config_type: u8,
 }
+
+#[event]
+pub struct OracleChangeRequested {
+    pub vault: Pubkey,
+    pub pending_oracle: Pubkey,
+    pub oracle_change_at: i64,
+}
+
+#[event]
+pub struct OracleChangeApplied {
+    pub vault: Pubkey,
+    pub old_oracle: Pubkey,
+    pub new_oracle: Pubkey,
+}
+
+#[event]
+pub struct VaultConfigInitialized {
+    pub vault: Pubkey,
+    pub vault_config: Pubkey,
+}
+
+#[event]
+pub struct ComplianceOfficerUpdated {
+    pub vault: Pubkey,
+    pub old_officer: Pubkey,
+    pub new_officer: Pubkey,
+}

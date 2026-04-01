@@ -19,13 +19,13 @@ pub struct RebalanceTranches<'info> {
 
     #[account(
         mut,
-        constraint = from_tranche.vault == vault.key() @ VaultError::TrancheVaultMismatch,
+        has_one = vault @ VaultError::TrancheVaultMismatch,
     )]
     pub from_tranche: Account<'info, Tranche>,
 
     #[account(
         mut,
-        constraint = to_tranche.vault == vault.key() @ VaultError::TrancheVaultMismatch,
+        has_one = vault @ VaultError::TrancheVaultMismatch,
     )]
     pub to_tranche: Account<'info, Tranche>,
 

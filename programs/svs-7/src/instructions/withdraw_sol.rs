@@ -174,16 +174,20 @@ pub fn handler(ctx: Context<WithdrawSol>, lamports: u64, max_shares_in: u64) -> 
         ctx.accounts.native_mint.decimals,
     )?;
 
-    // 5c. Close user's wSOL account — unwraps wSOL to native SOL, lamports go to user
-    // User is authority on their wSOL account and is a signer on this tx.
-    token_2022::close_account(CpiContext::new(
-        ctx.accounts.token_program.to_account_info(),
-        CloseAccount {
-            account: ctx.accounts.user_wsol_account.to_account_info(),
-            destination: ctx.accounts.user.to_account_info(),
-            authority: ctx.accounts.user.to_account_info(),
-        },
-    ))?;
+    // 5c. Close user's wSOL account — unwraps wSOL to native SOL, lamports go to user.
+    // Reload to get post-transfer balance; only close if no remaining wSOL balance
+    // (user may have pre-existing wSOL they don't want closed).
+    ctx.accounts.user_wsol_account.reload()?;
+    if ctx.accounts.user_wsol_account.amount == 0 {
+        token_2022::close_account(CpiContext::new(
+            ctx.accounts.token_program.to_account_info(),
+            CloseAccount {
+                account: ctx.accounts.user_wsol_account.to_account_info(),
+                destination: ctx.accounts.user.to_account_info(),
+                authority: ctx.accounts.user.to_account_info(),
+            },
+        ))?;
+    }
 
     // 6. EMIT EVENT
     emit!(WithdrawEvent {

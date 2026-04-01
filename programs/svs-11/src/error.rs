@@ -106,4 +106,21 @@ pub enum VaultError {
 
     #[msg("Invalid staleness configuration")]
     InvalidStalenessConfig,
+
+    #[msg("Oracle change timelock not expired")]
+    OracleChangeTooEarly,
+
+    #[msg("No pending oracle change")]
+    OracleChangeNotRequested,
+
+    #[msg("Max deviation exceeds 2000 bps")]
+    MaxDeviationTooHigh,
+
+    #[msg("Oracle program is not a known oracle (Pyth or Switchboard)")]
+    InvalidOracleProgram,
+
+    #[msg(
+        "Unauthorized compliance action: caller is not authority, manager, or compliance officer"
+    )]
+    UnauthorizedComplianceAction,
 }

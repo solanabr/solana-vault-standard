@@ -89,7 +89,7 @@ pub fn handler(ctx: Context<Redeem>, shares: u64, min_assets_out: u64) -> Result
 
     // ===== Module Hooks (if enabled) =====
     #[cfg(feature = "modules")]
-    let net_assets = {
+    let (net_assets, fee_assets) = {
         let remaining = ctx.remaining_accounts;
         let clock = Clock::get()?;
         let vault_key = vault.key();
@@ -109,11 +109,11 @@ pub fn handler(ctx: Context<Redeem>, shares: u64, min_assets_out: u64) -> Result
 
         // 3. Apply exit fee
         let result = module_hooks::apply_exit_fee(remaining, &crate::ID, &vault_key, assets)?;
-        result.net_assets
+        (result.net_assets, result.fee_assets)
     };
 
     #[cfg(not(feature = "modules"))]
-    let net_assets = assets;
+    let (net_assets, fee_assets) = (assets, 0u64);
 
     // Slippage check (on net assets after fee)
     require!(net_assets >= min_assets_out, VaultError::SlippageExceeded);
@@ -165,6 +165,12 @@ pub fn handler(ctx: Context<Redeem>, shares: u64, min_assets_out: u64) -> Result
     vault.total_assets = vault
         .total_assets
         .checked_sub(net_assets)
+        .ok_or(VaultError::MathOverflow)?;
+
+    // Track cumulative exit fees for transparency
+    vault.cumulative_exit_fees = vault
+        .cumulative_exit_fees
+        .checked_add(fee_assets)
         .ok_or(VaultError::MathOverflow)?;
 
     emit!(WithdrawEvent {

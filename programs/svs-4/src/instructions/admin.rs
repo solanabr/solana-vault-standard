@@ -56,7 +56,7 @@ pub fn pause(ctx: Context<Admin>) -> Result<()> {
 pub fn unpause(ctx: Context<Admin>) -> Result<()> {
     let vault = &mut ctx.accounts.vault;
 
-    require!(vault.paused, VaultError::VaultPaused);
+    require!(vault.paused, VaultError::VaultNotPaused);
 
     vault.paused = false;
 
@@ -69,7 +69,15 @@ pub fn unpause(ctx: Context<Admin>) -> Result<()> {
 }
 
 /// Transfer vault authority to new address
+// TODO(M-8): Implement two-step authority transfer (request_transfer_authority + accept_authority)
+//            matching the pattern in SVS-1 and SVS-2. Requires adding pending_authority: Pubkey
+//            to ConfidentialVault state (consume 32 bytes from _reserved).
 pub fn transfer_authority(ctx: Context<Admin>, new_authority: Pubkey) -> Result<()> {
+    require!(
+        new_authority != Pubkey::default(),
+        VaultError::InvalidAddress
+    );
+
     let vault = &mut ctx.accounts.vault;
     let previous_authority = vault.authority;
 

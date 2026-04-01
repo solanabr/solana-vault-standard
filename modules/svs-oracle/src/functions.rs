@@ -28,6 +28,11 @@ pub fn validate_freshness(
     current_timestamp: i64,
     max_staleness: i64,
 ) -> Result<(), OracleError> {
+    // Reject future timestamps — oracle updated_at must not be ahead of clock
+    if updated_at > current_timestamp {
+        return Err(OracleError::StalePrice);
+    }
+
     let age = current_timestamp.saturating_sub(updated_at);
 
     if age > max_staleness {
@@ -136,7 +141,7 @@ pub fn validate_oracle(
 /// Ok(()) if valid
 pub fn validate_staleness_config(max_staleness: i64) -> Result<(), OracleError> {
     if max_staleness < MIN_STALENESS || max_staleness > MAX_STALENESS {
-        return Err(OracleError::InvalidPrice);
+        return Err(OracleError::InvalidStalenessConfig);
     }
     Ok(())
 }
@@ -228,6 +233,15 @@ mod tests {
     fn test_validate_freshness_exact() {
         // Exactly at max staleness - still valid
         assert!(validate_freshness(1000, 4600, 3600).is_ok());
+    }
+
+    #[test]
+    fn test_validate_freshness_future_timestamp() {
+        // updated_at is in the future relative to current_timestamp
+        assert_eq!(
+            validate_freshness(2000, 1000, 3600),
+            Err(OracleError::StalePrice)
+        );
     }
 
     #[test]

@@ -98,6 +98,30 @@ pub struct ChildAllocation {
     pub _reserved: [u8; 63],
 }
 
+/// Configurable allowlist of child vault programs for an allocator vault.
+///
+/// Seeds: ["allowed_programs", allocator_vault.key()]
+///
+/// Memory layout (after 8-byte Anchor discriminator):
+/// | offset | size | field            |
+/// |--------|------|------------------|
+/// |      8 |   32 | allocator_vault  |
+/// |     40 |    1 | num_programs     |
+/// |     41 |  320 | programs         |
+/// |    361 |    1 | bump             |
+#[account]
+#[derive(InitSpace)]
+pub struct AllowedPrograms {
+    /// The allocator vault this allowlist belongs to
+    pub allocator_vault: Pubkey,
+    /// Number of active programs in the list
+    pub num_programs: u8,
+    /// Allowed program IDs (fixed-size array, use num_programs for active count)
+    pub programs: [Pubkey; 10],
+    /// PDA bump seed
+    pub bump: u8,
+}
+
 // =============================================================================
 // Access Mode (always available for IDL generation)
 // =============================================================================

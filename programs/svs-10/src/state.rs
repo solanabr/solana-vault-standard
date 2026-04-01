@@ -24,7 +24,10 @@ pub struct AsyncVault {
     pub share_escrow_bump: u8,
     pub cancel_after: i64,
     pub total_fulfilled_deposits: u64,
-    pub _reserved: [u8; 64],
+    pub total_pending_redeems: u64,
+    /// Total exit fees collected during redeem fulfillment (for transparency)
+    pub cumulative_redeem_fees: u64,
+    pub _reserved: [u8; 48],
 }
 
 impl AsyncVault {
@@ -45,7 +48,9 @@ impl AsyncVault {
         1 +   // share_escrow_bump
         8 +   // cancel_after
         8 +   // total_fulfilled_deposits
-        64; // _reserved
+        8 +   // total_pending_redeems
+        8 +   // cumulative_redeem_fees
+        48; // _reserved
 
     pub const SEED_PREFIX: &'static [u8] = VAULT_SEED;
 }

@@ -45,3 +45,10 @@ pub struct AuthorityTransferred {
     pub previous_authority: Pubkey,
     pub new_authority: Pubkey,
 }
+
+#[event]
+pub struct AuthorityTransferRequested {
+    pub vault: Pubkey,
+    pub current_authority: Pubkey,
+    pub pending_authority: Pubkey,
+}

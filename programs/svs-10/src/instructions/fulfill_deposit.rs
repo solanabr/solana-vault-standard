@@ -100,24 +100,29 @@ pub fn handler(ctx: Context<FulfillDeposit>, oracle_price: Option<u64>) -> Resul
             _ => VaultError::MathOverflow,
         })?;
 
-        if vault.total_assets > 0 || vault.total_shares > 0 {
-            let vault_price = crate::math::convert_to_assets(
+        // Deviation check: compare oracle price against vault-derived price when
+        // shares exist, or against PRICE_SCALE (1:1) on the first deposit to prevent
+        // an operator from setting an extreme initial price.
+        let expected_price = if vault.total_assets > 0 || vault.total_shares > 0 {
+            crate::math::convert_to_assets(
                 svs_oracle::PRICE_SCALE,
                 vault.total_assets,
                 vault.total_shares,
                 vault.decimals_offset,
                 crate::math::Rounding::Floor,
-            )?;
-            svs_oracle::validate_deviation(price, vault_price, vault.max_deviation_bps).map_err(
-                |e| match e {
-                    svs_oracle::OracleError::PriceDeviationExceeded => {
-                        VaultError::OracleDeviationExceeded
-                    }
-                    svs_oracle::OracleError::MathOverflow => VaultError::MathOverflow,
-                    _ => VaultError::MathOverflow,
-                },
-            )?;
-        }
+            )?
+        } else {
+            svs_oracle::PRICE_SCALE
+        };
+        svs_oracle::validate_deviation(price, expected_price, vault.max_deviation_bps).map_err(
+            |e| match e {
+                svs_oracle::OracleError::PriceDeviationExceeded => {
+                    VaultError::OracleDeviationExceeded
+                }
+                svs_oracle::OracleError::MathOverflow => VaultError::MathOverflow,
+                _ => VaultError::MathOverflow,
+            },
+        )?;
 
         svs_oracle::assets_to_shares(deposit_request.assets_locked, price).map_err(|e| match e {
             svs_oracle::OracleError::InvalidPrice => VaultError::ZeroAmount,

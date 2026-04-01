@@ -17,7 +17,10 @@ pub struct CancelRedeem<'info> {
     #[account(mut)]
     pub user: Signer<'info>,
 
-    #[account(mut)]
+    #[account(
+        mut,
+        constraint = !vault.paused @ VaultError::VaultPaused,
+    )]
     pub vault: Account<'info, AsyncVault>,
 
     #[account(
@@ -82,8 +85,14 @@ pub fn handler(ctx: Context<CancelRedeem>) -> Result<()> {
         SHARES_DECIMALS,
     )?;
 
+    let vault = &mut ctx.accounts.vault;
+    vault.total_pending_redeems = vault
+        .total_pending_redeems
+        .checked_sub(shares_to_return)
+        .ok_or(VaultError::MathOverflow)?;
+
     emit!(RedeemCancelled {
-        vault: ctx.accounts.vault.key(),
+        vault: vault.key(),
         owner: ctx.accounts.user.key(),
         shares_returned: shares_to_return,
     });

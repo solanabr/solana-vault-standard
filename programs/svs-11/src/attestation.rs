@@ -51,12 +51,11 @@ pub fn validate_attestation(
 
     require!(!attestation.revoked, VaultError::AttestationRevoked);
 
-    if attestation.expires_at > 0 {
-        require!(
-            attestation.expires_at > clock.unix_timestamp,
-            VaultError::AttestationExpired
-        );
-    }
+    require!(attestation.expires_at > 0, VaultError::InvalidAttestation);
+    require!(
+        attestation.expires_at > clock.unix_timestamp,
+        VaultError::AttestationExpired
+    );
 
     Ok(())
 }
