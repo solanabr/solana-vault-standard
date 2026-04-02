@@ -399,7 +399,7 @@ const [sharesMint] = PublicKey.findProgramAddressSync(
 - PDA bumps stored (not recalculated)
 - SVS-1/SVS-3 use live balance (no sync timing attack)
 
-**Audit Status:** 10 internal audit rounds completed (v2–v10), all findings resolved. No external audit yet.
+**Audit Status:** 10 internal audit rounds completed (v1–v10), all findings resolved. No external audit yet.
 
 ## Testing
 
@@ -466,37 +466,35 @@ solana-vault-standard/
 │   ├── Dockerfile
 │   └── README.md
 ├── tests/
-│   ├── svs-1.ts                  # SVS-1 public vault tests (26)
-│   ├── svs-2.ts                  # SVS-2 stored balance + sync tests (35)
-│   ├── svs-3.ts                  # SVS-3 confidential live balance tests (42)
-│   ├── svs-4.ts                  # SVS-4 confidential stored balance tests (43)
-│   ├── svs-5.ts                  # SVS-5 streaming yield tests (35)
-│   ├── svs-10.ts                 # SVS-10 async vault tests (77)
-│   ├── svs-11.ts                 # SVS-11 credit markets vault tests (145)
+│   ├── svs-{1..12}.ts           # Per-program integration tests
+│   ├── svs-11-sdk.ts            # SVS-11 SDK tests
+│   ├── svs-12-sdk.ts            # SVS-12 SDK tests
+│   ├── svs-9-e2e.ts             # SVS-9 end-to-end tests
+│   ├── modules.ts               # Module integration tests
 │   ├── helpers/
-│   │   └── proof-client.ts       # ZK proof backend client helpers
-│   ├── admin-extended.ts         # Admin function tests
-│   ├── decimals.ts               # Multi-decimal tests
-│   ├── edge-cases.ts             # Edge case tests
-│   ├── full-lifecycle.ts         # Full lifecycle tests
-│   ├── invariants.ts             # Invariant tests
-│   ├── multi-user.ts             # Multi-user tests
-│   └── yield-sync.ts             # Yield/live balance tests
+│   │   └── proof-client.ts      # ZK proof backend client helpers
+│   ├── admin-extended.ts        # Admin function tests
+│   ├── decimals.ts              # Multi-decimal tests
+│   ├── edge-cases.ts            # Edge case tests
+│   ├── full-lifecycle.ts        # Full lifecycle tests
+│   ├── invariants.ts            # Invariant tests
+│   ├── multi-user.ts            # Multi-user tests
+│   └── yield-sync.ts            # Yield/live balance tests
 └── docs/
     ├── ARCHITECTURE.md          # Technical architecture
     ├── CLI.md                   # CLI reference
+    ├── CONSTANTS.md             # Constants reference
     ├── DEPLOYMENT.md            # Deployment guide
+    ├── ERC-4626-REFERENCE.md    # Original ERC-4626 spec
+    ├── ERRORS.md                # Error codes
+    ├── EVENTS.md                # Event definitions
+    ├── MODULES.md               # Module system
+    ├── PATTERNS.md              # Design patterns
     ├── PRIVACY.md               # Privacy model & proof backend
     ├── SDK.md                   # SDK usage guide
     ├── SECURITY.md              # Attack vectors & mitigations
     ├── TESTING.md               # Test guide & coverage
-    ├── SVS-1.md                 # SVS-1 spec (live balance)
-    ├── SVS-2.md                 # SVS-2 spec (stored balance + sync)
-    ├── SVS-3.md                 # SVS-3 spec (confidential live)
-    ├── SVS-4.md                 # SVS-4 spec (confidential stored)
-    ├── SVS-5.md                 # SVS-5 spec (streaming yield)
-    └── SVS-10.md                # SVS-10 spec (async vault)
-    └── SVS-12.md                # SVS-12 spec (tranched vault)
+    └── SVS-{1..12}.md           # Per-program specifications
 ```
 
 ## AI Development

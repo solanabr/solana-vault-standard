@@ -13,7 +13,7 @@ import { AnchorProvider, BN } from "@coral-xyz/anchor";
 // ============================================================================
 
 /** SVS program variant identifier */
-export type SvsVariant = "svs-1" | "svs-2" | "svs-3" | "svs-4" | "svs-12";
+export type SvsVariant = "svs-1" | "svs-2" | "svs-3" | "svs-4" | "svs-5" | "svs-6" | "svs-7" | "svs-8" | "svs-9" | "svs-10" | "svs-11" | "svs-12";
 
 /** CLI output format */
 export type OutputFormat = "table" | "json" | "csv";
@@ -379,6 +379,27 @@ export const SVS_PROGRAMS: Record<
   },
   "svs-4": {
     devnet: "EqRNvMTwczQjUhQL8wwrxJGALgz5VWsYne3d67e6ruCv",
+  },
+  "svs-5": {
+    devnet: "HCp23XHzV4HJHXwLWwQj8aSTU1yjyzj8FCNLe6NybwXt",
+  },
+  "svs-6": {
+    devnet: "oaT6wgNiwCqd7EGvB6Wb5ZFYUJXckk6LEhB7MWqXbyC",
+  },
+  "svs-7": {
+    devnet: "CR2ccVacmbQ2DaXvR66W7gnmH7KuDCqbVW5VwnTczQUC",
+  },
+  "svs-8": {
+    devnet: "HnZ9N8Y1v6jMhwDqo4Y76GfqjRArdinadgK67yLVFZbe",
+  },
+  "svs-9": {
+    devnet: "AaADS3DCGkjhDEDbGkygbG9bNaziR9TPK2X7SMBYedws",
+  },
+  "svs-10": {
+    devnet: "4G5d6KutMpUaDPTVcv7FJBpPTGZej8rx3GyGnfiRdD6M",
+  },
+  "svs-11": {
+    devnet: "CMeQ5Lx7AvjuW3DrzNvEkPZSdqKZjjhaTrAmgqBvPKHD",
   },
   "svs-12": {
     devnet: "EPwH58e5V1UXYkkD8JZ4bq7Wr2iRiC9fLj1S6BRRz2R",
