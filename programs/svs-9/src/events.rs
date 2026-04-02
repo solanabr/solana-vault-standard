@@ -66,6 +66,13 @@ pub struct VaultStatusChanged {
 }
 
 #[event]
+pub struct AuthorityTransferRequested {
+    pub vault: Pubkey,
+    pub current_authority: Pubkey,
+    pub pending_authority: Pubkey,
+}
+
+#[event]
 pub struct AuthorityTransferred {
     pub vault: Pubkey,
     pub previous_authority: Pubkey,
@@ -91,6 +98,24 @@ pub struct WeightsUpdated {
     pub child_vault: Pubkey,
     pub old_max_weight_bps: u16,
     pub new_max_weight_bps: u16,
+}
+
+#[event]
+pub struct AllowedProgramsInitialized {
+    pub allocator_vault: Pubkey,
+    pub num_programs: u8,
+}
+
+#[event]
+pub struct AllowedProgramAdded {
+    pub allocator_vault: Pubkey,
+    pub program_id: Pubkey,
+}
+
+#[event]
+pub struct AllowedProgramRemoved {
+    pub allocator_vault: Pubkey,
+    pub program_id: Pubkey,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, PartialEq, Eq)]

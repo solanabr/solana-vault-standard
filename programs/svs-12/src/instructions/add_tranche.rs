@@ -7,7 +7,7 @@ use anchor_spl::token_2022::{
 
 use crate::{
     constants::{MAX_TRANCHES, SHARES_DECIMALS, SHARES_MINT_SEED, TRANCHE_SEED},
-    error::TranchedVaultError,
+    error::VaultError,
     events::TrancheAdded,
     state::{Tranche, TranchedVault},
 };
@@ -19,10 +19,10 @@ pub struct AddTranche<'info> {
 
     #[account(
         mut,
-        has_one = authority @ TranchedVaultError::Unauthorized,
-        constraint = !vault.paused @ TranchedVaultError::VaultPaused,
-        constraint = !vault.wiped @ TranchedVaultError::VaultWiped,
-        constraint = vault.num_tranches < MAX_TRANCHES @ TranchedVaultError::MaxTranchesReached,
+        has_one = authority @ VaultError::Unauthorized,
+        constraint = !vault.paused @ VaultError::VaultPaused,
+        constraint = !vault.wiped @ VaultError::VaultWiped,
+        constraint = vault.num_tranches < MAX_TRANCHES @ VaultError::MaxTranchesReached,
     )]
     pub vault: Account<'info, TranchedVault>,
 
@@ -57,23 +57,20 @@ pub fn handler(
 ) -> Result<()> {
     require!(
         subordination_bps <= 10_000,
-        TranchedVaultError::InvalidSubordinationConfig
+        VaultError::InvalidSubordinationConfig
     );
     require!(
         cap_bps > 0 && cap_bps <= 10_000,
-        TranchedVaultError::InvalidCapConfig
+        VaultError::InvalidCapConfig
     );
-    require!(
-        target_yield_bps <= 10_000,
-        TranchedVaultError::InvalidYieldConfig
-    );
+    require!(target_yield_bps <= 10_000, VaultError::InvalidYieldConfig);
 
     // Priority uniqueness via bitmap
-    require!(priority < 8, TranchedVaultError::DuplicatePriority);
+    require!(priority < 8, VaultError::DuplicatePriority);
     let mask = 1u8 << priority;
     require!(
         ctx.accounts.vault.priority_bitmap & mask == 0,
-        TranchedVaultError::DuplicatePriority
+        VaultError::DuplicatePriority
     );
 
     let vault = &ctx.accounts.vault;
@@ -83,7 +80,7 @@ pub fn handler(
 
     // Create shares mint (Token-2022)
     let mint_size = ExtensionType::try_calculate_account_len::<spl_token_2022::state::Mint>(&[])
-        .map_err(|_| TranchedVaultError::MathOverflow)?;
+        .map_err(|_| VaultError::MathOverflow)?;
     let lamports = ctx.accounts.rent.minimum_balance(mint_size);
 
     let shares_mint_seeds: &[&[u8]] = &[
@@ -144,7 +141,7 @@ pub fn handler(
     vault.num_tranches = vault
         .num_tranches
         .checked_add(1)
-        .ok_or(TranchedVaultError::MathOverflow)?;
+        .ok_or(VaultError::MathOverflow)?;
     vault.priority_bitmap |= mask;
 
     emit!(TrancheAdded {

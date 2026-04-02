@@ -44,7 +44,7 @@ async function main() {
   const [oraclePriceA] = getOraclePricePDA(programId, vaultPda, mintA);
   const assetVaultAKeypair = Keypair.generate();
 
-  await program.methods.initialize(vaultId, 6)
+  await program.methods.initialize(vaultId, 6, 9)
     .accountsPartial({ authority: payer.publicKey, sharesMint, tokenProgram: TOKEN_2022_PROGRAM_ID, systemProgram: SystemProgram.programId, rent: SYSVAR_RENT_PUBKEY })
     .rpc();
   console.log("  Vault initialized");

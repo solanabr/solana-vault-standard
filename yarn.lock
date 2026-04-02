@@ -478,6 +478,11 @@ bl@^4.1.0:
     inherits "^2.0.4"
     readable-stream "^3.4.0"
 
+blake3@2.1.7:
+  version "2.1.7"
+  resolved "https://registry.yarnpkg.com/blake3/-/blake3-2.1.7.tgz#449a1359448b582a650e854f193880d3861bca7a"
+  integrity sha512-5d+TdKJvju96IyEaGJ0eO6CHbckWi+NBrCezGYM/WsnI3R03aLL2TWfsuZSh1rs0fTv/L3ps/r0vykjYurcIwA==
+
 blessed@^0.1.81:
   version "0.1.81"
   resolved "https://registry.yarnpkg.com/blessed/-/blessed-0.1.81.tgz#f962d687ec2c369570ae71af843256e6d0ca1129"

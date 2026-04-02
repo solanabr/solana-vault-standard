@@ -16,10 +16,10 @@
 import { Connection, PublicKey, clusterApiUrl } from "@solana/web3.js";
 
 const SVS_PROGRAMS: Record<string, string> = {
-  "svs-1": "Bv8aVSQ3DJUe3B7TqQZRZgrNvVTh8TjfpwpoeR1ckDMC",
-  "svs-2": "3UrYrxh1HmVgq7WPygZ5x1gNEaWFwqTMs7geNqMnsrtD",
-  "svs-3": "EcpnYtaCBrZ4p4uq7dDr55D3fL9nsxbCNqpyUREGpPkh",
-  "svs-4": "2WP7LXWqrp1W4CwEJuVt2SxWPNY2n6AYmijh6Z4EeidY",
+  "svs-1": "CzZyssz2PdLccWpbVi6a3wFKMmMqdf28U2RapNNRJSPX",
+  "svs-2": "7vnZM4aCsRapH9ft7Bo5ibTXNH2dvoxkj96c7JonLhoe",
+  "svs-3": "CC4xQGxmwKusLW3ToqUzRAFjh7cL2iKsgfkz6qJSasYs",
+  "svs-4": "EqRNvMTwczQjUhQL8wwrxJGALgz5VWsYne3d67e6ruCv",
 };
 
 function parseArgs(): {

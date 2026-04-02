@@ -11,9 +11,10 @@
 //! via distribute_yield, but the vault does not reopen for new capital.
 
 use anchor_lang::prelude::*;
+use anchor_spl::token_interface::TokenAccount;
 
 use crate::{
-    error::TranchedVaultError,
+    error::VaultError,
     events::LossRecorded,
     state::{Tranche, TranchedVault},
     waterfall::absorb_losses,
@@ -25,10 +26,15 @@ pub struct RecordLoss<'info> {
 
     #[account(
         mut,
-        has_one = manager @ TranchedVaultError::Unauthorized,
-        constraint = !vault.paused @ TranchedVaultError::VaultPaused,
+        has_one = manager @ VaultError::Unauthorized,
+        constraint = !vault.paused @ VaultError::VaultPaused,
     )]
     pub vault: Account<'info, TranchedVault>,
+
+    #[account(
+        constraint = asset_vault.key() == vault.asset_vault,
+    )]
+    pub asset_vault: InterfaceAccount<'info, TokenAccount>,
 
     #[account(mut)]
     pub tranche_0: Option<Account<'info, Tranche>>,
@@ -41,13 +47,15 @@ pub struct RecordLoss<'info> {
 }
 
 pub fn handler(ctx: Context<RecordLoss>, total_loss: u64) -> Result<()> {
-    require!(total_loss > 0, TranchedVaultError::ZeroAmount);
+    require!(total_loss > 0, VaultError::ZeroAmount);
 
     let vault = &ctx.accounts.vault;
-    require!(
-        total_loss <= vault.total_assets,
-        TranchedVaultError::TotalLoss
-    );
+    require!(total_loss <= vault.total_assets, VaultError::TotalLoss);
+
+    // V4-P28: The previous check against asset_vault.amount was redundant and misleading.
+    // record_loss is an accounting write-down — no tokens leave the vault. The "stranded"
+    // tokens (asset_vault.amount > vault.total_assets after loss) are intentional and may
+    // recover later via distribute_yield. The only meaningful bound is total_assets above.
 
     let num_tranches = vault.num_tranches as usize;
 
@@ -57,14 +65,8 @@ pub fn handler(ctx: Context<RecordLoss>, total_loss: u64) -> Result<()> {
     macro_rules! read_tranche {
         ($field:expr, $slot:expr) => {
             if let Some(ref t) = $field {
-                require!(
-                    t.vault == vault.key(),
-                    TranchedVaultError::TrancheVaultMismatch
-                );
-                require!(
-                    !seen_keys.contains(&t.key()),
-                    TranchedVaultError::DuplicateTranche
-                );
+                require!(t.vault == vault.key(), VaultError::TrancheVaultMismatch);
+                require!(!seen_keys.contains(&t.key()), VaultError::DuplicateTranche);
                 seen_keys.push(t.key());
                 tranche_info.push((t.priority, t.total_assets_allocated, $slot));
             }
@@ -76,7 +78,7 @@ pub fn handler(ctx: Context<RecordLoss>, total_loss: u64) -> Result<()> {
     read_tranche!(ctx.accounts.tranche_3, 3);
     require!(
         tranche_info.len() == num_tranches,
-        TranchedVaultError::WrongTrancheCount
+        VaultError::WrongTrancheCount
     );
 
     // Sort by priority ascending (senior first — absorb_losses iterates in reverse)
@@ -110,7 +112,7 @@ pub fn handler(ctx: Context<RecordLoss>, total_loss: u64) -> Result<()> {
     vault.total_assets = vault
         .total_assets
         .checked_sub(total_loss)
-        .ok_or(TranchedVaultError::MathOverflow)?;
+        .ok_or(VaultError::MathOverflow)?;
 
     if vault.total_assets == 0 {
         vault.wiped = true;

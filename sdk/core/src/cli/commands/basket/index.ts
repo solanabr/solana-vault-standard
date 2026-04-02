@@ -18,7 +18,12 @@
  */
 import { Command } from "commander";
 import { Program, BN } from "@coral-xyz/anchor";
-import { PublicKey, Keypair, SystemProgram, SYSVAR_RENT_PUBKEY } from "@solana/web3.js";
+import {
+  PublicKey,
+  Keypair,
+  SystemProgram,
+  SYSVAR_RENT_PUBKEY,
+} from "@solana/web3.js";
 import {
   TOKEN_PROGRAM_ID,
   TOKEN_2022_PROGRAM_ID,
@@ -43,7 +48,15 @@ function loadBasketIdl(output: any): any {
     output.error("SVS-8 IDL not found. Run `anchor build` first.");
     process.exit(1);
   }
-  return JSON.parse(fs.readFileSync(idlPath, "utf-8"));
+  try {
+    return JSON.parse(fs.readFileSync(idlPath, "utf-8"));
+  } catch {
+    output.error(
+      `Failed to parse SVS-8 IDL at ${idlPath}: file contains invalid JSON. ` +
+        `Re-run \`anchor build\` to regenerate it.`,
+    );
+    process.exit(1);
+  }
 }
 
 export function registerBasketCommands(program: Command): void {
@@ -126,7 +139,9 @@ export function registerBasketCommands(program: Command): void {
   // ── set-price ─────────────────────────────────────────────────────────────
   basket
     .command("set-price <vault-id> <mint> <price>")
-    .description(`Set oracle price for an asset (scaled by ${PRICE_SCALE.toString()})`)
+    .description(
+      `Set oracle price for an asset (scaled by ${PRICE_SCALE.toString()})`,
+    )
     .action(async (vaultIdArg, mintArg, priceArg, opts) => {
       const globalOpts = getGlobalOptions(program);
       const ctx = await createContext(globalOpts, opts, true, true);
@@ -182,7 +197,10 @@ export function registerBasketCommands(program: Command): void {
       const idl = loadBasketIdl(output);
       const prog = new Program(idl, provider);
       const b = await BasketVault.load(prog, new BN(vaultIdArg));
-      const tx = await b.transferAuthority(wallet.publicKey, new PublicKey(newAuthorityArg));
+      const tx = await b.transferAuthority(
+        wallet.publicKey,
+        new PublicKey(newAuthorityArg),
+      );
       output.success(`Authority transferred! tx: ${tx}`);
     });
   // ── deposit ───────────────────────────────────────────────────────────────
@@ -198,15 +216,31 @@ export function registerBasketCommands(program: Command): void {
       const prog = new Program(idl, provider);
       const b = await BasketVault.load(prog, new BN(vaultIdArg));
       const assetMint = new PublicKey(mintArg);
-      const [oraclePrice] = getOraclePriceAddress(prog.programId, b.vault, assetMint);
+      const [oraclePrice] = getOraclePriceAddress(
+        prog.programId,
+        b.vault,
+        assetMint,
+      );
       const entry = await b.fetchAssetEntry(assetMint);
       const userAta = await getOrCreateAssociatedTokenAccount(
-        provider.connection, (wallet as any).payer, assetMint, wallet.publicKey,
-        false, undefined, undefined, TOKEN_PROGRAM_ID
+        provider.connection,
+        (wallet as any).payer,
+        assetMint,
+        wallet.publicKey,
+        false,
+        undefined,
+        undefined,
+        TOKEN_PROGRAM_ID,
       );
       const userSharesAta = await getOrCreateAssociatedTokenAccount(
-        provider.connection, (wallet as any).payer, b.sharesMint, wallet.publicKey,
-        false, undefined, undefined, TOKEN_2022_PROGRAM_ID
+        provider.connection,
+        (wallet as any).payer,
+        b.sharesMint,
+        wallet.publicKey,
+        false,
+        undefined,
+        undefined,
+        TOKEN_2022_PROGRAM_ID,
       );
       const tx = await b.depositSingle(wallet.publicKey, {
         assetMint,
@@ -235,12 +269,23 @@ export function registerBasketCommands(program: Command): void {
       const vaultState = await b.fetchState();
       output.info(`Vault state loaded, numAssets: ${vaultState.numAssets}`);
       const userSharesAta = await getOrCreateAssociatedTokenAccount(
-        provider.connection, (wallet as any).payer, b.sharesMint, wallet.publicKey,
-        false, undefined, undefined, TOKEN_2022_PROGRAM_ID
+        provider.connection,
+        (wallet as any).payer,
+        b.sharesMint,
+        wallet.publicKey,
+        false,
+        undefined,
+        undefined,
+        TOKEN_2022_PROGRAM_ID,
       );
       // NOTE: caller must pass asset mints via --assets flag in production
       // This example uses vault's tracked assets from on-chain state
-      const assetParams: Array<{mint: PublicKey; oraclePrice: PublicKey; vaultAta: PublicKey; userAta: PublicKey}> = [];
+      const assetParams: Array<{
+        mint: PublicKey;
+        oraclePrice: PublicKey;
+        vaultAta: PublicKey;
+        userAta: PublicKey;
+      }> = [];
       const tx = await b.redeemProportional(wallet.publicKey, {
         shares: new BN(sharesArg),
         minAssetsOut: new BN(opts.minAssets || "0"),
@@ -249,5 +294,4 @@ export function registerBasketCommands(program: Command): void {
       });
       output.success(`Redeemed! tx: ${tx}`);
     });
-
 }

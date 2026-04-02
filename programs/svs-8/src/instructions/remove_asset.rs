@@ -1,16 +1,19 @@
-use anchor_lang::prelude::*;
-use anchor_spl::token_interface::{TokenAccount, TokenInterface};
 use crate::{
     error::VaultError,
     events::AssetRemoved,
     state::{AssetEntry, MultiAssetVault},
 };
+use anchor_lang::prelude::*;
+use anchor_spl::token_interface::{TokenAccount, TokenInterface};
 
 pub fn handler(ctx: Context<RemoveAsset>) -> Result<()> {
     let vault = &mut ctx.accounts.vault;
     let asset_entry = &ctx.accounts.asset_entry;
 
-    require!(ctx.accounts.asset_vault.amount == 0, VaultError::AssetVaultNotEmpty);
+    require!(
+        ctx.accounts.asset_vault.amount == 0,
+        VaultError::AssetVaultNotEmpty
+    );
 
     let removed_index = asset_entry.index;
 
@@ -26,16 +29,22 @@ pub fn handler(ctx: Context<RemoveAsset>) -> Result<()> {
     for info in ctx.remaining_accounts.iter() {
         require!(info.owner == &svs8_id, VaultError::InvalidOracle);
         let mut entry = AssetEntry::try_deserialize(&mut &info.try_borrow_data()?[..])?;
-        if entry.vault == vault.key() && entry.index > removed_index {
+        // V4-P24: Error on wrong-vault remaining_accounts instead of silently skipping
+        require!(entry.vault == vault.key(), VaultError::AssetNotFound);
+        if entry.index > removed_index {
             entry.index = entry.index.checked_sub(1).ok_or(VaultError::MathOverflow)?;
             let mut data = info.try_borrow_mut_data()?;
             entry.try_serialize(&mut &mut data[..])?;
         }
     }
 
-    vault.num_assets = vault.num_assets
+    vault.num_assets = vault
+        .num_assets
         .checked_sub(1)
         .ok_or(VaultError::MathOverflow)?;
+
+    // Remaining weights no longer sum to 10,000 — block deposits until rebalanced
+    vault.weights_valid = false;
 
     emit!(AssetRemoved {
         vault: vault.key(),
@@ -60,8 +69,11 @@ pub struct RemoveAsset<'info> {
     )]
     pub asset_entry: Account<'info, AssetEntry>,
 
+    /// V9-P7: Constrain asset_vault to asset_entry.asset_vault to prevent passing
+    /// a different empty token account while the real vault ATA still holds tokens.
     #[account(
         mut,
+        constraint = asset_vault.key() == asset_entry.asset_vault @ VaultError::AssetNotFound,
         constraint = asset_vault.amount == 0 @ VaultError::AssetVaultNotEmpty,
     )]
     pub asset_vault: InterfaceAccount<'info, TokenAccount>,

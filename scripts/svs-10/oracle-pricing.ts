@@ -97,7 +97,7 @@ async function main() {
     .rpc();
 
   await program.methods
-    .fulfillDeposit(null)
+    .fulfillDeposit(null, new BN(0))
     .accountsStrict({
       operator: payer.publicKey, vault,
       depositRequest: seedRequest,
@@ -205,7 +205,7 @@ async function main() {
     const [depRequest] = getDepositRequestAddress(programId, vault, payer.publicKey);
 
     await program.methods
-      .fulfillDeposit(new BN(withinDeviationPrice))
+      .fulfillDeposit(new BN(withinDeviationPrice), new BN(0))
       .accountsStrict({
         operator: payer.publicKey, vault,
         depositRequest: depRequest,
@@ -232,7 +232,7 @@ async function main() {
     const [depRequest] = getDepositRequestAddress(programId, vault, payer.publicKey);
 
     await program.methods
-      .fulfillDeposit(new BN(exceedDeviationPrice))
+      .fulfillDeposit(new BN(exceedDeviationPrice), new BN(0))
       .accountsStrict({
         operator: payer.publicKey, vault,
         depositRequest: depRequest,
@@ -263,7 +263,7 @@ async function main() {
     const [depRequest] = getDepositRequestAddress(programId, vault, payer.publicKey);
 
     await program.methods
-      .fulfillDeposit(null)
+      .fulfillDeposit(null, new BN(0))
       .accountsStrict({
         operator: payer.publicKey, vault,
         depositRequest: depRequest,
@@ -309,7 +309,7 @@ async function main() {
     const [depRequest] = getDepositRequestAddress(programId, vault, payer.publicKey);
 
     await program.methods
-      .fulfillDeposit(new BN(boundaryPrice))
+      .fulfillDeposit(new BN(boundaryPrice), new BN(0))
       .accountsStrict({
         operator: payer.publicKey, vault,
         depositRequest: depRequest,

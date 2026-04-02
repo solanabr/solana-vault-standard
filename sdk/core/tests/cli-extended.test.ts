@@ -301,12 +301,12 @@ describe("Extended CLI Commands", () => {
       expect(validateTimelockConfig(config)).to.be.true;
     });
 
-    it("creates and checks proposal status", () => {
+    it("creates and checks proposal status", async () => {
       const admin = PublicKey.unique();
       const config = createTimelockConfig(admin, { minDelay: 3600 });
       const now = Math.floor(Date.now() / 1000);
 
-      const proposal = createProposal(
+      const proposal = await createProposal(
         TimelockAction.TransferAuthority,
         { newAuthority: PublicKey.unique().toBase58() },
         config,
@@ -326,12 +326,12 @@ describe("Extended CLI Commands", () => {
       expect(statusAfter).to.equal(ProposalStatus.Ready);
     });
 
-    it("canExecute returns false before ETA", () => {
+    it("canExecute returns false before ETA", async () => {
       const admin = PublicKey.unique();
       const config = createTimelockConfig(admin, { minDelay: 3600 });
       const now = Math.floor(Date.now() / 1000);
 
-      const proposal = createProposal(
+      const proposal = await createProposal(
         TimelockAction.Pause,
         {},
         config,

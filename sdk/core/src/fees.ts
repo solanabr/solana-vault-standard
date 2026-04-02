@@ -36,6 +36,9 @@ import { convertToShares, Rounding } from "./math";
 const BPS_DENOMINATOR = 10000;
 const SECONDS_PER_YEAR = 31536000;
 
+/** Share price scaling factor (1e9). Defined as a string to avoid floating-point in BN constructor. */
+const PRICE_SCALE = new BN("1000000000");
+
 /**
  * Fee configuration for a vault
  */
@@ -157,7 +160,7 @@ export function calculatePerformanceFee(
   const profitPerShare = currentSharePrice.sub(highWaterMark);
 
   // total profit = profitPerShare * totalShares / 1e9 (unscale)
-  const totalProfit = profitPerShare.mul(totalShares).div(new BN(1e9));
+  const totalProfit = profitPerShare.mul(totalShares).div(PRICE_SCALE);
 
   // fee = totalProfit * feeBps / 10000
   const fee = totalProfit.mul(new BN(feeBps)).div(new BN(BPS_DENOMINATOR));
@@ -191,9 +194,9 @@ export function calculateAccruedFees(
   );
 
   // Calculate current share price (scaled by 1e9)
-  let currentSharePrice = new BN(1e9);
+  let currentSharePrice = PRICE_SCALE;
   if (!totalShares.isZero()) {
-    currentSharePrice = totalAssets.mul(new BN(1e9)).div(totalShares);
+    currentSharePrice = totalAssets.mul(PRICE_SCALE).div(totalShares);
   }
 
   // Performance fee
@@ -300,7 +303,7 @@ export function feeToShares(
 export function createInitialFeeState(timestamp: number): FeeState {
   return {
     lastFeeTimestamp: timestamp,
-    highWaterMark: new BN(1e9), // 1.0 scaled
+    highWaterMark: PRICE_SCALE, // 1.0 scaled
     accruedManagementFee: new BN(0),
     accruedPerformanceFee: new BN(0),
   };
@@ -327,12 +330,14 @@ export function updateFeeState(
  */
 export function validateFeeConfig(config: FeeConfig): boolean {
   if (
+    !Number.isInteger(config.managementFeeBps) ||
     config.managementFeeBps < 0 ||
     config.managementFeeBps > BPS_DENOMINATOR
   ) {
     return false;
   }
   if (
+    !Number.isInteger(config.performanceFeeBps) ||
     config.performanceFeeBps < 0 ||
     config.performanceFeeBps > BPS_DENOMINATOR
   ) {
@@ -340,13 +345,17 @@ export function validateFeeConfig(config: FeeConfig): boolean {
   }
   if (
     config.entryFeeBps !== undefined &&
-    (config.entryFeeBps < 0 || config.entryFeeBps > BPS_DENOMINATOR)
+    (!Number.isInteger(config.entryFeeBps) ||
+      config.entryFeeBps < 0 ||
+      config.entryFeeBps > BPS_DENOMINATOR)
   ) {
     return false;
   }
   if (
     config.exitFeeBps !== undefined &&
-    (config.exitFeeBps < 0 || config.exitFeeBps > BPS_DENOMINATOR)
+    (!Number.isInteger(config.exitFeeBps) ||
+      config.exitFeeBps < 0 ||
+      config.exitFeeBps > BPS_DENOMINATOR)
   ) {
     return false;
   }

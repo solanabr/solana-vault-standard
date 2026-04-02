@@ -35,7 +35,7 @@ pub fn get_total_assets(asset_vault: &Account<TokenAccount>) -> u64 {
 ```rust
 #[account]
 pub struct Vault {
-    pub authority: Pubkey,          // 32 bytes
+    pub authority: Pubkey,           // 32 bytes
     pub asset_mint: Pubkey,          // 32 bytes
     pub shares_mint: Pubkey,         // 32 bytes
     pub asset_vault: Pubkey,         // 32 bytes
@@ -43,9 +43,10 @@ pub struct Vault {
     pub bump: u8,                    // 1 byte
     pub paused: bool,                // 1 byte
     pub vault_id: u64,               // 8 bytes
-    pub _reserved: [u8; 64],         // 64 bytes
+    pub pending_authority: Pubkey,   // 32 bytes
+    pub _reserved: [u8; 32],         // 32 bytes
 }
-// Total: 203 bytes
+// Total: 211 bytes (+ 8 byte discriminator)
 ```
 
 ## Instructions
@@ -213,7 +214,7 @@ When `vault.paused = true`:
 
 ### Devnet
 
-**Program ID**: `Bv8aVSQ3DJUe3B7TqQZRZgrNvVTh8TjfpwpoeR1ckDMC`
+**Program ID**: `CzZyssz2PdLccWpbVi6a3wFKMmMqdf28U2RapNNRJSPX`
 
 ```bash
 # Example initialization
@@ -578,7 +579,7 @@ Module hooks are called in deposit/mint/withdraw/redeem handlers:
 
 Module config PDAs are passed via `remaining_accounts`. If not provided, checks are skipped (pure ERC-4626 behavior).
 
-See [specs-modules.md](specs-modules.md) for full specification.
+See [MODULES.md](MODULES.md) for full specification.
 
 ---
 
@@ -596,8 +597,10 @@ See [specs-modules.md](specs-modules.md) for full specification.
 | `modules/svs-module-hooks/` | Shared module hooks and state (with `modules` feature) |
 | `programs/svs-1/src/instructions/module_admin.rs` | Module admin instructions (with `modules` feature) |
 
----
+## See Also
 
-**Specification Version**: 1.0.0
-**Last Updated**: 2026-03-12
-**Program Version**: 0.1.0
+- [SVS-2.md](./SVS-2.md) — Stored balance variant
+- [SVS-3.md](./SVS-3.md) — Confidential transfer variant
+- [ARCHITECTURE.md](./ARCHITECTURE.md) — Cross-variant design
+- [PATTERNS.md](./PATTERNS.md) — Implementation patterns
+- [ERRORS.md](./ERRORS.md) — Error code reference

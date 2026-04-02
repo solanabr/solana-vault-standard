@@ -211,8 +211,8 @@ class ConfidentialStoredBalanceVault extends ConfidentialSolanaVault {
 
 | Network | Program ID | Status |
 |---------|------------|--------|
-| Localnet | `2WP7LXWqrp1W4CwEJuVt2SxWPNY2n6AYmijh6Z4EeidY` | ✅ Active |
-| Devnet | `2WP7LXWqrp1W4CwEJuVt2SxWPNY2n6AYmijh6Z4EeidY` | ✅ Deployed |
+| Localnet | `EqRNvMTwczQjUhQL8wwrxJGALgz5VWsYne3d67e6ruCv` | ✅ Active |
+| Devnet | `EqRNvMTwczQjUhQL8wwrxJGALgz5VWsYne3d67e6ruCv` | ✅ Deployed |
 | Mainnet | Not deployed | ⏳ Pending audit |
 
 **Upgrade Authority:** `5fB4rwQTCd5GEyL17Ao7YR4juS6hDtSTkjrXMa7ZtY5x`
@@ -317,11 +317,11 @@ SVS-4 supports module configuration via admin instructions. Build with `anchor b
 
 **Note:** Same as SVS-3 — module admin instructions are available, handler hook integration pending due to confidential transfer complexity.
 
-See [SVS-3.md#module-integration](SVS-3.md#module-integration) for details and [specs-modules.md](specs-modules.md) for full specification.
+See [SVS-3.md#module-integration](SVS-3.md#module-integration) for details and [MODULES.md](MODULES.md) for full specification.
 
 ---
 
-**See Also**:
+## See Also
 - [SVS-2.md](./SVS-2.md) — Stored balance model and sync() details
 - [SVS-3.md](./SVS-3.md) — Confidential transfer implementation and ZK proof handling
 - [ARCHITECTURE.md](./ARCHITECTURE.md) — Feature matrix across all variants

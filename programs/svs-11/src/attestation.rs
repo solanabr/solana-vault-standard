@@ -51,12 +51,27 @@ pub fn validate_attestation(
 
     require!(!attestation.revoked, VaultError::AttestationRevoked);
 
-    if attestation.expires_at > 0 {
-        require!(
-            attestation.expires_at > clock.unix_timestamp,
-            VaultError::AttestationExpired
-        );
-    }
+    require!(attestation.expires_at > 0, VaultError::InvalidAttestation);
+    require!(
+        attestation.expires_at > clock.unix_timestamp,
+        VaultError::AttestationExpired
+    );
+
+    // V4-P16 FIX: Verify the attestation account is a canonical PDA derived from
+    // the investor's pubkey under the attestation program. Without this check, any
+    // account owned by the attestation_program that passes the field checks above
+    // would be accepted — a rogue attester could create arbitrary accounts. The
+    // canonical seed convention is [subject_pubkey], matching the SVS attestation
+    // spec (SAS, Civic Pass, etc.).
+    let expected_pda = Pubkey::create_program_address(
+        &[investor.as_ref(), &[attestation.bump]],
+        &vault.attestation_program,
+    )
+    .map_err(|_| error!(VaultError::InvalidAttestation))?;
+    require!(
+        attestation_info.key() == expected_pda,
+        VaultError::InvalidAttestation
+    );
 
     Ok(())
 }

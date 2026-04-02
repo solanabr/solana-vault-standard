@@ -40,7 +40,6 @@
  */
 
 import { PublicKey } from "@solana/web3.js";
-import { createHash } from "crypto";
 
 /**
  * Admin actions that can be timelocked
@@ -127,29 +126,49 @@ export interface TimeRemaining {
 }
 
 /**
+ * Compute SHA-256 hash using a universal approach.
+ * Prefers crypto.subtle (available in browsers and modern Node.js),
+ * falls back to Node.js crypto module for older Node.js environments.
+ */
+async function sha256Hex(data: Uint8Array): Promise<string> {
+  if (
+    typeof globalThis.crypto !== "undefined" &&
+    typeof globalThis.crypto.subtle !== "undefined"
+  ) {
+    const hashBuffer = await globalThis.crypto.subtle.digest("SHA-256", data);
+    return Array.from(new Uint8Array(hashBuffer))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+  }
+  // Fallback: Node.js crypto (dynamic import to avoid bundler issues)
+  const { createHash } = await import("crypto");
+  return createHash("sha256").update(data).digest("hex");
+}
+
+/**
  * Generate a unique proposal ID from action, params, and salt.
  */
-export function generateProposalId(
+export async function generateProposalId(
   action: TimelockAction,
   params: unknown,
-  salt: Buffer,
-): string {
-  const data = Buffer.from(
-    JSON.stringify({ action, params }) + salt.toString("hex"),
-  );
-  return createHash("sha256").update(data).digest("hex").slice(0, 16);
+  salt: Uint8Array,
+): Promise<string> {
+  const text = JSON.stringify({ action, params }) + Array.from(salt).map((b) => b.toString(16).padStart(2, "0")).join("");
+  const data = new TextEncoder().encode(text);
+  const hex = await sha256Hex(data);
+  return hex.slice(0, 16);
 }
 
 /**
  * Create a new proposal.
  */
-export function createProposal(
+export async function createProposal(
   action: TimelockAction,
   params: unknown,
   config: TimelockConfig,
   currentTimestamp: number,
   delay?: number,
-): Proposal {
+): Promise<Proposal> {
   // Use provided delay or default to minimum
   const actualDelay = delay ?? config.minDelay;
 
@@ -163,9 +182,9 @@ export function createProposal(
   const executeAfter = currentTimestamp + actualDelay;
   const expiresAt = executeAfter + config.gracePeriod;
 
-  // Generate unique ID with random salt
-  const salt = Buffer.from(Date.now().toString() + Math.random().toString());
-  const id = generateProposalId(action, params, salt);
+  // Generate unique ID with cryptographically random salt
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const id = await generateProposalId(action, params, salt);
 
   return {
     id,
@@ -325,13 +344,13 @@ export class TimelockManager {
   /**
    * Propose a new action.
    */
-  propose(
+  async propose(
     action: TimelockAction,
     params: unknown,
     currentTimestamp: number,
     delay?: number,
-  ): Proposal {
-    const proposal = createProposal(
+  ): Promise<Proposal> {
+    const proposal = await createProposal(
       action,
       params,
       this.config,

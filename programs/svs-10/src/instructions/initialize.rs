@@ -200,9 +200,12 @@ pub fn handler(
     vault.max_deviation_bps = DEFAULT_MAX_DEVIATION_BPS;
     vault.cancel_after = crate::constants::DEFAULT_CANCEL_AFTER;
     vault.total_fulfilled_deposits = 0;
+    vault.total_pending_redeems = 0;
+    vault.cumulative_redeem_fees = 0;
     vault.bump = vault_bump;
     vault.share_escrow_bump = share_escrow_bump;
-    vault._reserved = [0u8; 64];
+    vault.pending_authority = Pubkey::default();
+    vault._reserved = [0u8; 16];
 
     // --- 6. Emit event ---
     emit!(VaultInitialized {

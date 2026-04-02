@@ -1,5 +1,5 @@
 ---
-paths:
+globs:
   - "programs/**/src/**/*.rs"
 ---
 

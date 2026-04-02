@@ -1,22 +1,24 @@
-use anchor_lang::prelude::*;
-use anchor_spl::{
-    associated_token::AssociatedToken,
-    token_interface::{Mint, Token2022},
-};
 use crate::{
     constants::{MULTI_VAULT_SEED, SHARES_SEED},
     error::VaultError,
     events::VaultInitialized,
     state::MultiAssetVault,
 };
+use anchor_lang::prelude::*;
+use anchor_spl::{
+    associated_token::AssociatedToken,
+    token_interface::{Mint, Token2022},
+};
 
 pub fn handler(
     ctx: Context<Initialize>,
     vault_id: u64,
     base_decimals: u8,
+    shares_decimals: u8,
 ) -> Result<()> {
     // base_decimals must be <= 9 (same rule as asset decimals)
     require!(base_decimals <= 9, VaultError::InvalidAssetDecimals);
+    require!(shares_decimals <= 9, VaultError::InvalidAssetDecimals);
 
     let vault = &mut ctx.accounts.vault;
     vault.authority = ctx.accounts.authority.key();
@@ -27,7 +29,9 @@ pub fn handler(
     vault.vault_id = vault_id;
     vault.num_assets = 0;
     vault.base_decimals = base_decimals;
-    vault._reserved = [0u8; 64];
+    vault.weights_valid = false;
+    vault.pending_authority = Pubkey::default();
+    vault._reserved = [0u8; 31];
 
     emit!(VaultInitialized {
         vault: vault.key(),
@@ -41,7 +45,7 @@ pub fn handler(
 }
 
 #[derive(Accounts)]
-#[instruction(vault_id: u64)]
+#[instruction(vault_id: u64, base_decimals: u8, shares_decimals: u8)]
 pub struct Initialize<'info> {
     #[account(mut)]
     pub authority: Signer<'info>,
@@ -60,7 +64,7 @@ pub struct Initialize<'info> {
         payer = authority,
         seeds = [SHARES_SEED, vault.key().as_ref()],
         bump,
-        mint::decimals = 9,
+        mint::decimals = shares_decimals,
         mint::authority = vault,
         mint::freeze_authority = vault,
         mint::token_program = token_program,

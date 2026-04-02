@@ -60,11 +60,24 @@ export interface RequestRedeemParams {
   receiver?: PublicKey;
 }
 
-export interface FulfillParams {
+export interface FulfillDepositParams {
   owner: PublicKey;
   oraclePrice?: BN;
+  /** Maximum price per share the depositor will accept (0 = no limit) */
+  maxPricePerShare?: BN;
   operatorApproval?: boolean;
 }
+
+export interface FulfillRedeemParams {
+  owner: PublicKey;
+  oraclePrice?: BN;
+  /** Minimum price per share the redeemer will accept (0 = no limit) */
+  minPricePerShare?: BN;
+  operatorApproval?: boolean;
+}
+
+/** @deprecated Use FulfillDepositParams or FulfillRedeemParams */
+export type FulfillParams = FulfillDepositParams;
 
 export interface ClaimParams {
   owner: PublicKey;
@@ -332,7 +345,7 @@ export class AsyncVault {
 
   async fulfillDeposit(
     operator: PublicKey,
-    params: FulfillParams,
+    params: FulfillDepositParams,
   ): Promise<string> {
     const [depositRequest] = getDepositRequestAddress(
       this.program.programId,
@@ -350,7 +363,10 @@ export class AsyncVault {
       : undefined;
 
     return this.program.methods
-      .fulfillDeposit(params.oraclePrice ?? null)
+      .fulfillDeposit(
+        params.oraclePrice ?? null,
+        params.maxPricePerShare ?? new BN(0),
+      )
       .accountsPartial({
         operator,
         vault: this.vault,
@@ -455,7 +471,7 @@ export class AsyncVault {
 
   async fulfillRedeem(
     operator: PublicKey,
-    params: FulfillParams,
+    params: FulfillRedeemParams,
   ): Promise<string> {
     const [redeemRequest] = getRedeemRequestAddress(
       this.program.programId,
@@ -478,7 +494,10 @@ export class AsyncVault {
       : undefined;
 
     return this.program.methods
-      .fulfillRedeem(params.oraclePrice ?? null)
+      .fulfillRedeem(
+        params.oraclePrice ?? null,
+        params.minPricePerShare ?? new BN(0),
+      )
       .accountsPartial({
         operator,
         vault: this.vault,

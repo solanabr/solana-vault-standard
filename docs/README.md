@@ -43,13 +43,13 @@ Four program variants cover public/private and live/stored balance models:
 
 | Variant | Purpose | Status |
 |---------|---------|--------|
-| [SVS-5](specs-SVS05.md) | Streaming Yield | Draft |
-| [SVS-6](specs-SVS06.md) | Streaming + Confidential | Draft |
-| [SVS-7](specs-SVS07.md) | Native SOL | Draft |
-| [SVS-8](specs-SVS08.md) | Multi-Asset Basket | [Implemented](SVS-8.md) |
-| [SVS-9](specs-SVS09.md) | Allocator (Vault-of-Vaults) | Draft |
-| [SVS-10](SVS-10.md)      | Async (ERC-7540) | Implemented |
-| [SVS-11](specs-SVS11.md) | Credit Markets | ✅ Devnet |
+| [SVS-5](SVS-5.md) | Streaming Yield | Implemented |
+| [SVS-6](SVS-6.md) | Streaming + Confidential | Implemented |
+| [SVS-7](SVS-7.md) | Native SOL | Implemented |
+| [SVS-8](SVS-8.md) | Multi-Asset Basket | Implemented |
+| [SVS-9](SVS-9.md) | Allocator (Vault-of-Vaults) | Implemented |
+| [SVS-10](SVS-10.md) | Async (ERC-7540) | Implemented |
+| [SVS-11](SVS-11.md) | Credit Markets | Devnet |
 | [SVS-12](SVS-12.md) | Tranched (Structured) | Devnet |
 
 ---
@@ -60,12 +60,12 @@ Optional on-chain modules for additional functionality:
 
 | Module | Purpose | Spec |
 |--------|---------|------|
-| svs-fees | Entry/exit/management/performance fees | [specs-modules.md](specs-modules.md#31-svs-fees) |
-| svs-caps | Global and per-user deposit caps | [specs-modules.md](specs-modules.md#32-svs-caps) |
-| svs-locks | Time-locked shares | [specs-modules.md](specs-modules.md#33-svs-locks) |
-| svs-rewards | Secondary reward token distribution | [specs-modules.md](specs-modules.md#34-svs-rewards) |
-| svs-access | Whitelist/blacklist/freeze | [specs-modules.md](specs-modules.md#35-svs-access) |
-| svs-oracle | Shared oracle price interface | [specs-modules.md](specs-modules.md#36-svs-oracle) |
+| svs-fees | Entry/exit/management/performance fees | [MODULES.md](MODULES.md#svs-fees) |
+| svs-caps | Global and per-user deposit caps | [MODULES.md](MODULES.md#svs-caps) |
+| svs-locks | Time-locked shares | [MODULES.md](MODULES.md#svs-locks) |
+| svs-rewards | Secondary reward token distribution | [MODULES.md](MODULES.md#svs-rewards) |
+| svs-access | Whitelist/blacklist/freeze | [MODULES.md](MODULES.md#svs-access) |
+| svs-oracle | Shared oracle price interface | [MODULES.md](MODULES.md#svs-oracle) |
 
 ---
 
@@ -115,13 +115,18 @@ Optional on-chain modules for additional functionality:
 
 | Program | ID |
 |---------|-----|
-| SVS-1 | `Bv8aVSQ3DJUe3B7TqQZRZgrNvVTh8TjfpwpoeR1ckDMC` |
-| SVS-2 | `3UrYrxh1HmVgq7WPygZ5x1gNEaWFwqTMs7geNqMnsrtD` |
-| SVS-3 | `EcpnYtaCBrZ4p4uq7dDr55D3fL9nsxbCNqpyUREGpPkh` |
-| SVS-4 | `2WP7LXWqrp1W4CwEJuVt2SxWPNY2n6AYmijh6Z4EeidY` |
-| SVS-10 | `CpjFjyxRwTGYxR6JWXpfQ1923z5wVwpyBvgPFjm9jamJ` |
-| SVS-11 | `Bf17gDR2JdKTWdoTWK3Va9YQtkpePRAAVxMCaokj8ZFW` |
-| SVS-12 | `FM3ZfmPSdQzFniZSDXc6FfXKFvXRSNQXeTdPKC8tz5C` |
+| SVS-1 | `CzZyssz2PdLccWpbVi6a3wFKMmMqdf28U2RapNNRJSPX` |
+| SVS-2 | `7vnZM4aCsRapH9ft7Bo5ibTXNH2dvoxkj96c7JonLhoe` |
+| SVS-3 | `CC4xQGxmwKusLW3ToqUzRAFjh7cL2iKsgfkz6qJSasYs` |
+| SVS-4 | `EqRNvMTwczQjUhQL8wwrxJGALgz5VWsYne3d67e6ruCv` |
+| SVS-5 | `HCp23XHzV4HJHXwLWwQj8aSTU1yjyzj8FCNLe6NybwXt` |
+| SVS-6 | `oaT6wgNiwCqd7EGvB6Wb5ZFYUJXckk6LEhB7MWqXbyC` |
+| SVS-7 | `CR2ccVacmbQ2DaXvR66W7gnmH7KuDCqbVW5VwnTczQUC` |
+| SVS-8 | `HnZ9N8Y1v6jMhwDqo4Y76GfqjRArdinadgK67yLVFZbe` |
+| SVS-9 | `AaADS3DCGkjhDEDbGkygbG9bNaziR9TPK2X7SMBYedws` |
+| SVS-10 | `4G5d6KutMpUaDPTVcv7FJBpPTGZej8rx3GyGnfiRdD6M` |
+| SVS-11 | `CMeQ5Lx7AvjuW3DrzNvEkPZSdqKZjjhaTrAmgqBvPKHD` |
+| SVS-12 | `EPwH58e5V1UXYkkD8JZ4bq7Wr2iRiC9fLj1S6BRRz2R` |
 
 ### Mainnet
 

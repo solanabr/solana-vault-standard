@@ -222,7 +222,7 @@ const connection = new Connection('https://api.devnet.solana.com');
 const authority = Keypair.fromSecretKey(/* ... */);
 
 // Load existing vault
-const vaultPubkey = new PublicKey('3XQX3ZKGcy618XyWMmQiukYohJNSh3JNWoffq8ZeFdcS');
+const vaultPubkey = new PublicKey('HCp23XHzV4HJHXwLWwQj8aSTU1yjyzj8FCNLe6NybwXt');
 const vault = await StreamingVault.load(connection, vaultPubkey);
 
 // Read stream state
@@ -345,7 +345,7 @@ The SVS-2 sync timing attack (withhold `sync()`, deposit at stale price, then sy
 
 | Item | Value |
 |------|-------|
-| **Program ID** | `3XQX3ZKGcy618XyWMmQiukYohJNSh3JNWoffq8ZeFdcS` |
+| **Program ID** | `HCp23XHzV4HJHXwLWwQj8aSTU1yjyzj8FCNLe6NybwXt` |
 | **Network** | Devnet |
 | **SDK Package** | `@stbr/solana-vault` |
 | **Class** | `StreamingVault` |
@@ -354,10 +354,10 @@ The SVS-2 sync timing attack (withhold `sync()`, deposit at stale price, then sy
 
 ```bash
 # Verify program deployment
-solana program show 3XQX3ZKGcy618XyWMmQiukYohJNSh3JNWoffq8ZeFdcS --url devnet
+solana program show HCp23XHzV4HJHXwLWwQj8aSTU1yjyzj8FCNLe6NybwXt --url devnet
 
 # Anchor verify (if verifiable build available)
-anchor verify 3XQX3ZKGcy618XyWMmQiukYohJNSh3JNWoffq8ZeFdcS --provider.cluster devnet
+anchor verify HCp23XHzV4HJHXwLWwQj8aSTU1yjyzj8FCNLe6NybwXt --provider.cluster devnet
 ```
 
 ### Integration Example
@@ -366,7 +366,7 @@ anchor verify 3XQX3ZKGcy618XyWMmQiukYohJNSh3JNWoffq8ZeFdcS --provider.cluster de
 import { StreamingVault } from '@stbr/solana-vault';
 import { Connection, PublicKey } from '@solana/web3.js';
 
-const DEVNET_PROGRAM_ID = new PublicKey('3XQX3ZKGcy618XyWMmQiukYohJNSh3JNWoffq8ZeFdcS');
+const DEVNET_PROGRAM_ID = new PublicKey('HCp23XHzV4HJHXwLWwQj8aSTU1yjyzj8FCNLe6NybwXt');
 const connection = new Connection('https://api.devnet.solana.com');
 
 // Derive StreamVault PDA
@@ -566,7 +566,7 @@ Module hooks integrate at the same call sites as other variants, with one SVS-5-
 | **svs-rewards** | Secondary rewards run independently of streaming yield; both can be active simultaneously |
 | **svs-access** | Whitelist/blacklist/freeze checks on every financial instruction — unchanged |
 
-See [SVS-1.md#module-integration](SVS-1.md#module-integration) for hook architecture and [specs-modules.md](specs-modules.md) for full module specification.
+See [SVS-1.md#module-integration](SVS-1.md#module-integration) for hook architecture and [MODULES.md](MODULES.md) for full module specification.
 
 ---
 
@@ -589,10 +589,10 @@ See [SVS-1.md#module-integration](SVS-1.md#module-integration) for hook architec
 
 ---
 
-**See Also**:
+## See Also
 - [SVS-1.md](./SVS-1.md) — Live balance model
 - [SVS-2.md](./SVS-2.md) — Stored balance with sync()
-- [SVS-6.md](./specs-SVS06.md) — Streaming + Confidential variant
+- [SVS-6.md](./SVS-6.md) — Streaming + Confidential variant
 - [ARCHITECTURE.md](./ARCHITECTURE.md) — Cross-variant design
 - [PATTERNS.md](./PATTERNS.md) — Implementation patterns
 - [ERRORS.md](./ERRORS.md) — Full error code reference

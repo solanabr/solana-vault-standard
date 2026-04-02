@@ -10,7 +10,7 @@ use anchor_spl::{
 use spl_token_2022::extension::confidential_transfer::instruction::deposit as confidential_deposit;
 
 use crate::{
-    constants::{SHARES_DECIMALS, VAULT_SEED},
+    constants::{MIN_DEPOSIT_AMOUNT, SHARES_DECIMALS, VAULT_SEED},
     error::VaultError,
     events::Deposit as DepositEvent,
     math::{convert_to_assets, Rounding},
@@ -91,6 +91,9 @@ pub fn handler(ctx: Context<MintShares>, shares: u64, max_assets_in: u64) -> Res
         vault.decimals_offset,
         Rounding::Ceiling,
     )?;
+
+    // V9-P6: Enforce MIN_DEPOSIT_AMOUNT on mint path (consistent with deposit path)
+    require!(assets >= MIN_DEPOSIT_AMOUNT, VaultError::DepositTooSmall);
 
     // ===== Module Hooks (if enabled) =====
     #[cfg(feature = "modules")]
@@ -180,6 +183,16 @@ pub fn handler(ctx: Context<MintShares>, shares: u64, max_assets_in: u64) -> Res
             ctx.accounts.shares_mint.to_account_info(),
             ctx.accounts.user.to_account_info(),
         ],
+    )?;
+
+    // Update per-user cumulative deposit tracking (if caps module is active)
+    #[cfg(feature = "modules")]
+    module_hooks::update_user_deposit(
+        ctx.remaining_accounts,
+        &crate::ID,
+        &ctx.accounts.vault.key(),
+        &ctx.accounts.user.key(),
+        assets,
     )?;
 
     emit!(DepositEvent {

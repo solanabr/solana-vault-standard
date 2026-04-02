@@ -20,6 +20,24 @@ import {
 export { isValidPublicKey } from "./config/vault-aliases";
 
 /**
+ * Validate that a string represents a valid non-negative integer for BN construction.
+ * Rejects non-numeric, negative, decimal, or empty strings.
+ *
+ * @param value - The string to validate
+ * @param label - Human-readable label for error messages (e.g. "amount", "shares")
+ * @returns The validated string (unchanged)
+ * @throws Error if the value is not a valid non-negative integer string
+ */
+export function validateAmountInput(value: string, label: string): string {
+  if (!/^\d+$/.test(value)) {
+    throw new Error(
+      `Invalid ${label}: "${value}". Must be a non-negative integer (digits only).`,
+    );
+  }
+  return value;
+}
+
+/**
  * Derive cluster from RPC URL.
  */
 export function getCluster(
@@ -79,7 +97,23 @@ export function findIdlPath(variant?: SvsVariant): string | null {
  * @throws If file doesn't exist or contains invalid JSON
  */
 export function loadIdl(idlPath: string): unknown {
-  return JSON.parse(fs.readFileSync(idlPath, "utf-8"));
+  let content: string;
+  try {
+    content = fs.readFileSync(idlPath, "utf-8");
+  } catch (error) {
+    throw new Error(
+      `Failed to read IDL file at ${idlPath}: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+
+  try {
+    return JSON.parse(content);
+  } catch {
+    throw new Error(
+      `Failed to parse IDL file at ${idlPath}: file contains invalid JSON. ` +
+        `Re-run \`anchor build\` to regenerate it.`,
+    );
+  }
 }
 
 /**

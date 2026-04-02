@@ -124,7 +124,11 @@ pub fn accrue_management_fee(
         .checked_mul(SECONDS_PER_YEAR as u128)
         .ok_or(FeeError::MathOverflow)?;
 
-    let fee = numerator / denominator;
+    // Ceiling division to favor the vault (consistent with entry/exit fee strategy)
+    let fee = numerator
+        .checked_add(denominator.checked_sub(1).ok_or(FeeError::MathOverflow)?)
+        .ok_or(FeeError::MathOverflow)?
+        / denominator;
 
     if fee > u64::MAX as u128 {
         return Err(FeeError::MathOverflow);
@@ -157,7 +161,8 @@ pub fn accrue_management_fee(
 /// let (fee, new_hwm) = accrue_performance_fee(nav, hwm, 1_000_000, 2000).unwrap();
 /// // Profit: 10% of 1M = 100k, fee: 20% of 100k = 20k shares
 /// assert!(fee > 19_000 && fee < 21_000);
-/// assert_eq!(new_hwm, nav);
+/// // HWM is post-dilution: lower than pre-dilution NAV
+/// assert!(new_hwm < nav);
 /// ```
 pub fn accrue_performance_fee(
     current_nav: u64,
@@ -191,7 +196,31 @@ pub fn accrue_performance_fee(
         svs_math::Rounding::Floor,
     )?;
 
-    Ok((fee_shares, current_nav))
+    // V4-M5: Compute post-dilution HWM. After minting fee_shares, total supply
+    // increases but total assets stay the same, so NAV per share drops.
+    // post_dilution_nav = total_assets / (total_shares + fee_shares)
+    // Since total_assets = current_nav * total_shares / HWM_SCALE, we get:
+    // post_nav = current_nav * total_shares / (total_shares + fee_shares)
+    let new_hwm = if fee_shares > 0 {
+        let new_total_shares = (total_shares as u128)
+            .checked_add(fee_shares as u128)
+            .ok_or(FeeError::MathOverflow)?;
+
+        let post_nav = (current_nav as u128)
+            .checked_mul(total_shares as u128)
+            .ok_or(FeeError::MathOverflow)?
+            .checked_div(new_total_shares)
+            .ok_or(FeeError::MathOverflow)?;
+
+        if post_nav > u64::MAX as u128 {
+            return Err(FeeError::MathOverflow);
+        }
+        post_nav as u64
+    } else {
+        current_nav
+    };
+
+    Ok((fee_shares, new_hwm))
 }
 
 /// Calculate current NAV per share (scaled by HWM_SCALE).
@@ -294,7 +323,12 @@ mod tests {
         // Profit: 10% of 1M shares at HWM_SCALE = 100,000 "profit units"
         // Fee: 20% of profit = 20,000 shares
         assert_eq!(fee, 20000);
-        assert_eq!(new_hwm, nav);
+        // V4-M5: HWM is now post-dilution NAV
+        // post_nav = 1.1 * 1M / (1M + 20k) = 1_100_000_000 * 1_000_000 / 1_020_000
+        let expected_hwm = (nav as u128) * 1_000_000u128 / 1_020_000u128;
+        assert_eq!(new_hwm, expected_hwm as u64);
+        // Post-dilution NAV should be less than pre-dilution NAV
+        assert!(new_hwm < nav);
     }
 
     #[test]

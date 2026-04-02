@@ -4,7 +4,7 @@
 
 SVS-10 is the asynchronous tokenized vault variant in the Solana Vault Standard, equivalent to ERC-7540 on EVM. Unlike synchronous vaults (SVS-1 through SVS-4), deposits and redemptions follow a three-phase request → fulfill → claim lifecycle. This allows an operator to process requests off-hours, apply external pricing (oracle NAV), or manage illiquid positions before committing shares or assets.
 
-**Program ID**: `CpjFjyxRwTGYxR6JWXpfQ1923z5wVwpyBvgPFjm9jamJ`
+**Program ID**: `4G5d6KutMpUaDPTVcv7FJBpPTGZej8rx3GyGnfiRdD6M`
 
 **Use cases**: RWA tokenization, cross-chain strategies, institutional fund management, illiquid asset vaults.
 
@@ -230,7 +230,7 @@ SVS-10 supports all four optional modules. Hooks are called at different lifecyc
 
 Module config PDAs are passed via `remaining_accounts`. If not provided, checks are skipped (pure async vault behavior).
 
-See [specs-modules.md](specs-modules.md) for full module specifications.
+See [MODULES.md](MODULES.md) for full module specifications.
 
 ## SDK Usage
 
@@ -344,7 +344,7 @@ Between `fulfill_deposit` and `claim_deposit`, the operator has computed and res
 
 ### Devnet
 
-**Program ID**: `CpjFjyxRwTGYxR6JWXpfQ1923z5wVwpyBvgPFjm9jamJ`
+**Program ID**: `4G5d6KutMpUaDPTVcv7FJBpPTGZej8rx3GyGnfiRdD6M`
 
 **Example Vault**: [`7jaQ3FrdELsKq2A23LRNtGUFwSgkrhCnJ8bE2F8BMQMf`](https://explorer.solana.com/address/7jaQ3FrdELsKq2A23LRNtGUFwSgkrhCnJ8bE2F8BMQMf?cluster=devnet)
 
@@ -426,9 +426,9 @@ npx ts-node scripts/e2e-svs10-devnet.ts
 | **Escrow** | No | Share Escrow, ClaimableTokens PDAs |
 | **Use Case** | Liquid assets in vault | Illiquid or externally managed assets |
 
----
+## See Also
 
-**Specification Version**: 1.0.0
-**Last Updated**: 2026-03-10
-**Program Version**: 0.1.0
-**ERC Reference**: [ERC-7540](https://eips.ethereum.org/EIPS/eip-7540), [ERC-7887](https://eips.ethereum.org/EIPS/eip-7887)
+- [SVS-1.md](./SVS-1.md) — Synchronous vault comparison
+- [SVS-11.md](./SVS-11.md) — Credit Markets (extends SVS-10)
+- [ARCHITECTURE.md](./ARCHITECTURE.md) — Cross-variant design
+- [MODULES.md](./MODULES.md) — Module integration

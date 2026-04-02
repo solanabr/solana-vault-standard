@@ -11,7 +11,10 @@ Tokenized vault programs and TypeScript SDK for building yield-bearing vaults on
 | **SVS-3** | Private Vault (Live) | Live balance | Encrypted | No sync needed | ✅ Devnet |
 | **SVS-4** | Private Vault (Stored) | Stored balance | Encrypted | Requires sync() | ✅ Devnet |
 | **SVS-5** | Streaming Yield Vault | Interpolated balance | None | distribute_yield() + checkpoint() | ✅ Devnet |
-| **SVS-6** | Streaming Private Vault | Interpolated balance | None | distribute_yield() + checkpoint() | ✅ Devnet |
+| **SVS-6** | Streaming Private Vault | Interpolated balance | Encrypted | distribute_yield() + checkpoint() | ✅ Devnet |
+| **SVS-7** | SOL Vault | Live balance | None | Native SOL wrapping | ✅ Devnet |
+| **SVS-8** | Multi-Asset Basket | Oracle-weighted | None | Weight rebalancing | ✅ Devnet |
+| **SVS-9** | Allocator Vault | Stored balance | None | CPI to child vaults | ✅ Devnet |
 | **SVS-10** | Async Vault (ERC-7540) | Stored balance | None | Request→Fulfill→Claim | ✅ Devnet |
 | **SVS-11** | Credit Markets Vault | Oracle NAV | KYC + Freeze | Async (request→approve→claim) | ✅ Devnet |
 | **SVS-12** | Tranched Vault | Stored balance | None | Manager-driven | ✅ Devnet |
@@ -61,15 +64,20 @@ Tokenized vault programs and TypeScript SDK for building yield-bearing vaults on
 
 | Program | Devnet | Localnet |
 |---------|--------|----------|
-| SVS-1 | `Bv8aVSQ3DJUe3B7TqQZRZgrNvVTh8TjfpwpoeR1ckDMC` | Same as devnet |
-| SVS-2 | `3UrYrxh1HmVgq7WPygZ5x1gNEaWFwqTMs7geNqMnsrtD` | Same as devnet |
-| SVS-3 | `EcpnYtaCBrZ4p4uq7dDr55D3fL9nsxbCNqpyUREGpPkh` | Same as devnet |
-| SVS-4 | `2WP7LXWqrp1W4CwEJuVt2SxWPNY2n6AYmijh6Z4EeidY` | Same as devnet |
-| SVS-5 | `3XQX3ZKGcy618XyWMmQiukYohJNSh3JNWoffq8ZeFdcS` | Same as devnet |
-| SVS-6 | `2w7aL5ZrD2i9RpzQBGSPAg7s61wVc8Qs8gtuQUTojEDE` | Same as devnet |
-| SVS-10 | `CpjFjyxRwTGYxR6JWXpfQ1923z5wVwpyBvgPFjm9jamJ` | Same as devnet |
-| SVS-11 | `Bf17gDR2JdKTWdoTWK3Va9YQtkpePRAAVxMCaokj8ZFW` | Same as devnet |
-| SVS-12 | `85wwufKdhpHxiBe4kMeFBfidL1Kqo62T65DHb46qNugA` | Same as devnet |
+| SVS-1 | `CzZyssz2PdLccWpbVi6a3wFKMmMqdf28U2RapNNRJSPX` | Same as devnet |
+| SVS-2 | `7vnZM4aCsRapH9ft7Bo5ibTXNH2dvoxkj96c7JonLhoe` | Same as devnet |
+| SVS-3 | `CC4xQGxmwKusLW3ToqUzRAFjh7cL2iKsgfkz6qJSasYs` | Same as devnet |
+| SVS-4 | `EqRNvMTwczQjUhQL8wwrxJGALgz5VWsYne3d67e6ruCv` | Same as devnet |
+| SVS-5 | `HCp23XHzV4HJHXwLWwQj8aSTU1yjyzj8FCNLe6NybwXt` | Same as devnet |
+| SVS-6 | `oaT6wgNiwCqd7EGvB6Wb5ZFYUJXckk6LEhB7MWqXbyC` | Same as devnet |
+| SVS-7 | `CR2ccVacmbQ2DaXvR66W7gnmH7KuDCqbVW5VwnTczQUC` | Same as devnet |
+| SVS-8 | `HnZ9N8Y1v6jMhwDqo4Y76GfqjRArdinadgK67yLVFZbe` | Same as devnet |
+| SVS-9 | `AaADS3DCGkjhDEDbGkygbG9bNaziR9TPK2X7SMBYedws` | Same as devnet |
+| SVS-10 | `4G5d6KutMpUaDPTVcv7FJBpPTGZej8rx3GyGnfiRdD6M` | Same as devnet |
+| SVS-11 | `CMeQ5Lx7AvjuW3DrzNvEkPZSdqKZjjhaTrAmgqBvPKHD` | Same as devnet |
+| SVS-12 | `EPwH58e5V1UXYkkD8JZ4bq7Wr2iRiC9fLj1S6BRRz2R` | Same as devnet |
+| Mock Oracle | `Heezh11y1FJPvrUjKetGsDJTFFNdHqXPz9bFsUiEJxdh` | Same as devnet |
+| Mock SAS | `GTTMWDHTZibyEpqNRr33RnBhgms262U6qHaGrjoHqEXg` | Same as devnet |
 
 ## Installation
 
@@ -391,7 +399,7 @@ const [sharesMint] = PublicKey.findProgramAddressSync(
 - PDA bumps stored (not recalculated)
 - SVS-1/SVS-3 use live balance (no sync timing attack)
 
-**Audit Status:** Not audited. Use at your own risk.
+**Audit Status:** 10 internal audit rounds completed (v1–v10), all findings resolved. No external audit yet.
 
 ## Testing
 
@@ -432,15 +440,21 @@ solana-vault-standard/
 │   ├── svs-4/                    # Private vault, stored balance (beta)
 │   ├── svs-5/                    # Streaming yield vault
 │   ├── svs-6/                    # Streaming private vault
-│   └── svs-10/                   # Async vault (ERC-7540)
-│   └── svs-11/                   # Credit markets vault (async, oracle NAV, KYC)
-│   └── svs-12/                   # Tranched vault, waterfall yield/loss
+│   ├── svs-7/                    # SOL vault (native SOL wrapping)
+│   ├── svs-8/                    # Multi-asset basket vault
+│   ├── svs-9/                    # Allocator vault (CPI to child vaults)
+│   ├── svs-10/                   # Async vault (ERC-7540)
+│   ├── svs-11/                   # Credit markets vault (async, oracle NAV, KYC)
+│   ├── svs-12/                   # Tranched vault, waterfall yield/loss
+│   ├── mock-oracle/              # Mock oracle for testing
+│   └── mock-sas/                 # Mock SAS for testing
 ├── modules/
 │   ├── svs-math/                 # Shared math (mul_div, rounding, conversion)
 │   ├── svs-fees/                 # Entry/exit fee calculation
 │   ├── svs-caps/                 # Global/per-user deposit caps
 │   ├── svs-locks/                # Time-locked shares
 │   ├── svs-access/               # Whitelist/blacklist + merkle proofs
+│   ├── svs-module-hooks/          # Module hook integration
 │   ├── svs-rewards/              # Secondary reward distribution
 │   └── svs-oracle/               # Oracle price validation
 ├── sdk/
@@ -452,38 +466,40 @@ solana-vault-standard/
 │   ├── Dockerfile
 │   └── README.md
 ├── tests/
-│   ├── svs-1.ts                  # SVS-1 public vault tests (26)
-│   ├── svs-2.ts                  # SVS-2 stored balance + sync tests (35)
-│   ├── svs-3.ts                  # SVS-3 confidential live balance tests (42)
-│   ├── svs-4.ts                  # SVS-4 confidential stored balance tests (43)
-│   ├── svs-5.ts                  # SVS-5 streaming yield tests (35)
-│   ├── svs-10.ts                 # SVS-10 async vault tests (77)
-│   ├── svs-11.ts                 # SVS-11 credit markets vault tests (145)
+│   ├── svs-{1..12}.ts           # Per-program integration tests
+│   ├── svs-11-sdk.ts            # SVS-11 SDK tests
+│   ├── svs-12-sdk.ts            # SVS-12 SDK tests
+│   ├── svs-9-e2e.ts             # SVS-9 end-to-end tests
+│   ├── modules.ts               # Module integration tests
 │   ├── helpers/
-│   │   └── proof-client.ts       # ZK proof backend client helpers
-│   ├── admin-extended.ts         # Admin function tests
-│   ├── decimals.ts               # Multi-decimal tests
-│   ├── edge-cases.ts             # Edge case tests
-│   ├── full-lifecycle.ts         # Full lifecycle tests
-│   ├── invariants.ts             # Invariant tests
-│   ├── multi-user.ts             # Multi-user tests
-│   └── yield-sync.ts             # Yield/live balance tests
+│   │   └── proof-client.ts      # ZK proof backend client helpers
+│   ├── admin-extended.ts        # Admin function tests
+│   ├── decimals.ts              # Multi-decimal tests
+│   ├── edge-cases.ts            # Edge case tests
+│   ├── full-lifecycle.ts        # Full lifecycle tests
+│   ├── invariants.ts            # Invariant tests
+│   ├── multi-user.ts            # Multi-user tests
+│   └── yield-sync.ts            # Yield/live balance tests
 └── docs/
     ├── ARCHITECTURE.md          # Technical architecture
     ├── CLI.md                   # CLI reference
+    ├── CONSTANTS.md             # Constants reference
     ├── DEPLOYMENT.md            # Deployment guide
+    ├── ERC-4626-REFERENCE.md    # Original ERC-4626 spec
+    ├── ERRORS.md                # Error codes
+    ├── EVENTS.md                # Event definitions
+    ├── MODULES.md               # Module system
+    ├── PATTERNS.md              # Design patterns
     ├── PRIVACY.md               # Privacy model & proof backend
     ├── SDK.md                   # SDK usage guide
     ├── SECURITY.md              # Attack vectors & mitigations
     ├── TESTING.md               # Test guide & coverage
-    ├── SVS-1.md                 # SVS-1 spec (live balance)
-    ├── SVS-2.md                 # SVS-2 spec (stored balance + sync)
-    ├── SVS-3.md                 # SVS-3 spec (confidential live)
-    ├── SVS-4.md                 # SVS-4 spec (confidential stored)
-    ├── SVS-5.md                 # SVS-5 spec (streaming yield)
-    └── SVS-10.md                # SVS-10 spec (async vault)
-    └── SVS-12.md                # SVS-12 spec (tranched vault)
+    └── SVS-{1..12}.md           # Per-program specifications
 ```
+
+## AI Development
+
+This project uses [solana-claude](https://github.com/solanabr/solana-claude) for Claude Code integration — skills, rules, agents, and MCP servers for Solana development.
 
 ## Resources
 
@@ -499,4 +515,4 @@ Apache 2.0
 
 ## Disclaimer
 
-This software is provided "as is" without warranty. Use at your own risk. Not audited. Private vaults (SVS-3, SVS-4) require the Rust proofs backend for full functionality.
+This software is provided "as is" without warranty. Use at your own risk. 10 internal audit rounds completed but no external audit. Private vaults (SVS-3, SVS-4) require the Rust proofs backend for full functionality.

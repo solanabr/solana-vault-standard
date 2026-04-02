@@ -14,7 +14,7 @@ pub mod state;
 
 use instructions::*;
 
-declare_id!("CpjFjyxRwTGYxR6JWXpfQ1923z5wVwpyBvgPFjm9jamJ");
+declare_id!("4G5d6KutMpUaDPTVcv7FJBpPTGZej8rx3GyGnfiRdD6M");
 
 #[program]
 pub mod svs_10 {
@@ -41,8 +41,12 @@ pub mod svs_10 {
         instructions::cancel_deposit::handler(ctx)
     }
 
-    pub fn fulfill_deposit(ctx: Context<FulfillDeposit>, oracle_price: Option<u64>) -> Result<()> {
-        instructions::fulfill_deposit::handler(ctx, oracle_price)
+    pub fn fulfill_deposit(
+        ctx: Context<FulfillDeposit>,
+        oracle_price: Option<u64>,
+        max_price_per_share: u64,
+    ) -> Result<()> {
+        instructions::fulfill_deposit::handler(ctx, oracle_price, max_price_per_share)
     }
 
     pub fn claim_deposit(ctx: Context<ClaimDeposit>) -> Result<()> {
@@ -61,8 +65,12 @@ pub mod svs_10 {
         instructions::cancel_redeem::handler(ctx)
     }
 
-    pub fn fulfill_redeem(ctx: Context<FulfillRedeem>, oracle_price: Option<u64>) -> Result<()> {
-        instructions::fulfill_redeem::handler(ctx, oracle_price)
+    pub fn fulfill_redeem(
+        ctx: Context<FulfillRedeem>,
+        oracle_price: Option<u64>,
+        min_price_per_share: u64,
+    ) -> Result<()> {
+        instructions::fulfill_redeem::handler(ctx, oracle_price, min_price_per_share)
     }
 
     pub fn claim_redeem(ctx: Context<ClaimRedeem>) -> Result<()> {
@@ -77,8 +85,22 @@ pub mod svs_10 {
         instructions::admin::unpause(ctx)
     }
 
+    pub fn request_transfer_authority(ctx: Context<Admin>, new_authority: Pubkey) -> Result<()> {
+        instructions::admin::request_transfer_authority(ctx, new_authority)
+    }
+
+    pub fn accept_authority(ctx: Context<AcceptAuthority>) -> Result<()> {
+        instructions::admin::accept_authority(ctx)
+    }
+
+    #[allow(deprecated)]
     pub fn transfer_authority(ctx: Context<Admin>, new_authority: Pubkey) -> Result<()> {
         instructions::admin::transfer_authority(ctx, new_authority)
+    }
+
+    /// Cancel a pending two-step authority transfer.
+    pub fn cancel_transfer_authority(ctx: Context<Admin>) -> Result<()> {
+        instructions::admin::cancel_transfer_authority(ctx)
     }
 
     pub fn set_vault_operator(ctx: Context<Admin>, new_operator: Pubkey) -> Result<()> {

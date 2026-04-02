@@ -32,7 +32,7 @@ import {
 } from "../sdk/core/src/credit-vault-pda";
 
 const ATTESTATION_PROGRAM_ID = new PublicKey(
-  "4azCqYgLHDRmsiR6kmYu6v5qvzamaYGqZcmx8MrnrKMc"
+  "GTTMWDHTZibyEpqNRr33RnBhgms262U6qHaGrjoHqEXg"
 );
 const PRICE_SCALE = new BN(1_000_000_000);
 

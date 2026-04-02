@@ -66,6 +66,11 @@ pub struct ClaimRedeem<'info> {
     pub clock: Sysvar<'info, Clock>,
 }
 
+/// V5-P24: This handler intentionally does NOT check vault.paused. Already-approved
+/// redemptions have committed assets (claimable_tokens funded, shares burned).
+/// Blocking claims during a pause would trap investor funds and violate the approval
+/// guarantee. The pause mechanism is designed to halt NEW operations (requests,
+/// approvals), not to block settlement of already-approved claims.
 pub fn handler(ctx: Context<ClaimRedeem>) -> Result<()> {
     validate_attestation(
         &ctx.accounts.attestation.to_account_info(),

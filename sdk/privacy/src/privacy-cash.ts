@@ -7,10 +7,16 @@ import {
   TransactionSignature,
 } from "@solana/web3.js";
 import { BN, Wallet } from "@coral-xyz/anchor";
+import { getWalletKeypair } from "./wallet-utils";
+// TODO(V5-S12): Detect token program from mint account owner instead of
+// hardcoding TOKEN_2022_PROGRAM_ID. When shield()/unshield() are implemented,
+// fetch the mint account and check its owner to determine whether to use
+// TOKEN_PROGRAM_ID or TOKEN_2022_PROGRAM_ID for token operations.
 import {
   TOKEN_2022_PROGRAM_ID,
   getAssociatedTokenAddressSync,
   createTransferCheckedInstruction,
+  getMint,
 } from "@solana/spl-token";
 
 /**
@@ -66,6 +72,10 @@ export interface ShieldedNote {
  *
  * Provides methods to interact with the Privacy Cash shielded pool
  * for breaking on-chain address links.
+ *
+ * @experimental This class is a design-phase prototype. `shield()` and
+ * `unshield()` are not yet implemented and will throw at runtime.
+ * Do not use in production.
  */
 export class PrivacyCashClient {
   private connection: Connection;
@@ -82,12 +92,21 @@ export class PrivacyCashClient {
    * Transfers tokens from user's wallet into the shielded pool,
    * creating a commitment that can later be unshielded to any address.
    *
+   * LIMITATION: The unreachable implementation below hardcodes
+   * TOKEN_2022_PROGRAM_ID for all token operations. If re-enabled,
+   * the token program should be detected from the mint account's owner
+   * field rather than assumed. This class is not yet implemented.
+   *
    * @param params - Shield parameters
    * @returns Transaction signature and shielded note
    */
   async shield(
     params: ShieldParams,
   ): Promise<{ signature: TransactionSignature; note: ShieldedNote }> {
+    throw new Error(
+      "Privacy Cash shield not yet implemented - do not use in production",
+    );
+
     const userPubkey = this.wallet.publicKey;
 
     // Get user's token account
@@ -119,6 +138,14 @@ export class PrivacyCashClient {
     // Note: Actual implementation would use program CPI
     const tx = new Transaction();
 
+    // Fetch actual mint decimals from on-chain data
+    const mintInfo = await getMint(
+      this.connection,
+      params.tokenMint,
+      "confirmed",
+      TOKEN_2022_PROGRAM_ID,
+    );
+
     // Transfer to pool
     tx.add(
       createTransferCheckedInstruction(
@@ -127,7 +154,7 @@ export class PrivacyCashClient {
         poolAccount,
         userPubkey,
         BigInt(params.amount.toString()),
-        9, // decimals - would need to fetch
+        mintInfo.decimals,
         [],
         TOKEN_2022_PROGRAM_ID,
       ),
@@ -136,10 +163,18 @@ export class PrivacyCashClient {
     // Add shield instruction (placeholder)
     // In reality, this would be a CPI to Privacy Cash program
 
+    const { blockhash, lastValidBlockHeight } =
+      await this.connection.getLatestBlockhash("confirmed");
+    tx.recentBlockhash = blockhash;
+    tx.feePayer = userPubkey;
+
     const signature = await this.connection.sendTransaction(tx, [
-      (this.wallet as any).payer,
+      getWalletKeypair(this.wallet),
     ]);
-    await this.connection.confirmTransaction(signature);
+    await this.connection.confirmTransaction(
+      { signature, blockhash, lastValidBlockHeight },
+      "confirmed",
+    );
 
     return {
       signature,
@@ -162,6 +197,10 @@ export class PrivacyCashClient {
    * @returns Transaction signature
    */
   async unshield(params: UnshieldParams): Promise<TransactionSignature> {
+    throw new Error(
+      "Privacy Cash unshield not yet implemented - do not use in production",
+    );
+
     // Get pool token account
     const [poolAccount] = PublicKey.findProgramAddressSync(
       [Buffer.from("pool"), params.tokenMint.toBuffer()],
@@ -186,10 +225,18 @@ export class PrivacyCashClient {
     // 2. Nullifier hasn't been spent
     // 3. ZK proof of knowledge of opening
 
+    const { blockhash, lastValidBlockHeight } =
+      await this.connection.getLatestBlockhash("confirmed");
+    tx.recentBlockhash = blockhash;
+    tx.feePayer = this.wallet.publicKey;
+
     const signature = await this.connection.sendTransaction(tx, [
-      (this.wallet as any).payer,
+      getWalletKeypair(this.wallet),
     ]);
-    await this.connection.confirmTransaction(signature);
+    await this.connection.confirmTransaction(
+      { signature, blockhash, lastValidBlockHeight },
+      "confirmed",
+    );
 
     return signature;
   }
@@ -201,9 +248,9 @@ export class PrivacyCashClient {
    * @returns Merkle proof bytes
    */
   async getMerkleProof(commitment: Uint8Array): Promise<Uint8Array> {
-    // In production, fetch from Privacy Cash indexer
-    // Placeholder: return empty proof
-    return new Uint8Array(0);
+    throw new Error(
+      "Not implemented - requires Privacy Cash program integration",
+    );
   }
 
   /**
@@ -213,9 +260,9 @@ export class PrivacyCashClient {
    * @returns True if already spent
    */
   async isNullifierSpent(nullifier: Uint8Array): Promise<boolean> {
-    // In production, check on-chain nullifier set
-    // Placeholder: return false
-    return false;
+    throw new Error(
+      "Not implemented - requires Privacy Cash program integration",
+    );
   }
 
   // ============ Internal Helpers ============
@@ -278,11 +325,12 @@ export async function createPrivateDepositFlow(
 ): Promise<{
   ephemeralWallet: Keypair;
   shieldedNote: ShieldedNote;
+  shieldSignature: TransactionSignature;
 }> {
   const privacyCash = new PrivacyCashClient(connection, wallet);
 
   // Step 1: Shield assets
-  const { note } = await privacyCash.shield({
+  const { note, signature: shieldSignature } = await privacyCash.shield({
     amount,
     tokenMint,
   });
@@ -296,6 +344,7 @@ export async function createPrivateDepositFlow(
   return {
     ephemeralWallet,
     shieldedNote: note,
+    shieldSignature,
   };
 }
 

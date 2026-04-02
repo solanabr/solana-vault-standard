@@ -4,7 +4,7 @@ import { PublicKey } from "@solana/web3.js";
 import { createContext } from "../../middleware";
 import { getGlobalOptions } from "../../index";
 import { TranchedVault } from "../../../tranched-vault";
-import { findIdlPath, loadIdl } from "../../utils";
+import { findIdlPath, loadIdl, validateAmountInput } from "../../utils";
 
 export function registerTranchedDepositCommand(parent: Command): void {
   parent
@@ -37,8 +37,9 @@ export function registerTranchedDepositCommand(parent: Command): void {
         );
 
         const trancheIndex = parseInt(opts.tranche);
+        validateAmountInput(opts.amount, "amount");
         const amount = new BN(opts.amount);
-        const minSharesOut = new BN(opts.minShares);
+        const minSharesOut = new BN(validateAmountInput(opts.minShares, "min-shares"));
 
         output.info(
           `Depositing ${amount.toString()} into tranche ${trancheIndex}`,

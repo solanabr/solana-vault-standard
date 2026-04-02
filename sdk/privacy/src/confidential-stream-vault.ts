@@ -14,6 +14,7 @@ import {
   createAssociatedTokenAccountIdempotentInstruction,
 } from "@solana/spl-token";
 import { Program, AnchorProvider, BN, Idl, Wallet } from "@coral-xyz/anchor";
+import { getWalletKeypair } from "./wallet-utils";
 import {
   ConfidentialDepositParams,
   ConfidentialDepositResult,
@@ -44,7 +45,7 @@ import { ProofType } from "./types";
  * SVS-6 Program ID
  */
 export const SVS_6_PROGRAM_ID = new PublicKey(
-  "2w7aL5ZrD2i9RpzQBGSPAg7s61wVc8Qs8gtuQUTojEDE",
+  "oaT6wgNiwCqd7EGvB6Wb5ZFYUJXckk6LEhB7MWqXbyC",
 );
 
 /**
@@ -162,14 +163,14 @@ export class ConfidentialStreamVault {
       TOKEN_2022_PROGRAM_ID,
     );
 
-    const walletKeypair = (this.wallet as any).payer as Keypair;
-    const elgamalKeypair = deriveElGamalKeypair(
+    const walletKeypair = getWalletKeypair(this.wallet);
+    const elgamalKeypair = await deriveElGamalKeypair(
       walletKeypair,
       userSharesAccount,
     );
-    const aesKey = deriveAesKey(walletKeypair, userSharesAccount);
+    const aesKey = await deriveAesKey(walletKeypair, userSharesAccount);
 
-    const decryptableZeroBalance = createDecryptableZeroBalance(aesKey);
+    const decryptableZeroBalance = await createDecryptableZeroBalance(aesKey);
 
     const proofData = createPubkeyValidityProofData(elgamalKeypair);
     const proofIx = createVerifyPubkeyValidityInstruction(proofData);
@@ -427,7 +428,7 @@ export class ConfidentialStreamVault {
     equalityProofContext: PublicKey;
     rangeProofContext: PublicKey;
   }> {
-    const payer = (this.wallet as any).payer as Keypair;
+    const payer = getWalletKeypair(this.wallet);
 
     const equalityProofData = createEqualityProofData(
       elgamalKeypair,

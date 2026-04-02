@@ -61,7 +61,7 @@ describe("svs-8 (Multi Asset Basket)", () => {
 
   it("initializes vault", async () => {
     await program.methods
-      .initialize(VAULT_ID, 6)
+      .initialize(VAULT_ID, 6, 9)
       .accounts({
         vault: vaultPda,
         authority: user.publicKey,
@@ -461,7 +461,7 @@ describe("svs-8 (Multi Asset Basket)", () => {
     const assetVaultSingleKeypair = anchor.web3.Keypair.generate();
 
     // Initialize fresh vault
-    await program.methods.initialize(VAULT_ID_SINGLE, 6)
+    await program.methods.initialize(VAULT_ID_SINGLE, 6, 9)
       .accountsPartial({ authority: user.publicKey, sharesMint: sharesMintSingle, tokenProgram: TOKEN_2022_PROGRAM_ID, systemProgram: SystemProgram.programId, rent: anchor.web3.SYSVAR_RENT_PUBKEY })
       .rpc();
 

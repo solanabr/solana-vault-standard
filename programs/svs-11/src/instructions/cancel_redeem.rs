@@ -3,7 +3,8 @@ use anchor_spl::token_2022::Token2022;
 use anchor_spl::token_interface::{transfer_checked, Mint, TokenAccount, TransferChecked};
 
 use crate::constants::{
-    REDEMPTION_ESCROW_SEED, REDEMPTION_REQUEST_SEED, SHARES_DECIMALS, VAULT_SEED,
+    FROZEN_ACCOUNT_SEED, REDEMPTION_ESCROW_SEED, REDEMPTION_REQUEST_SEED, SHARES_DECIMALS,
+    VAULT_SEED,
 };
 use crate::error::VaultError;
 use crate::events::RedemptionCancelled;
@@ -15,6 +16,7 @@ pub struct CancelRedeem<'info> {
     pub investor: Signer<'info>,
 
     #[account(
+        mut,
         seeds = [VAULT_SEED, vault.asset_mint.as_ref(), &vault.vault_id.to_le_bytes()],
         bump = vault.bump,
     )]
@@ -48,11 +50,30 @@ pub struct CancelRedeem<'info> {
     )]
     pub redemption_escrow: InterfaceAccount<'info, TokenAccount>,
 
+    /// CHECK: If data is non-empty, investor is frozen
+    #[account(
+        seeds = [FROZEN_ACCOUNT_SEED, vault.key().as_ref(), investor.key().as_ref()],
+        bump,
+    )]
+    pub frozen_check: UncheckedAccount<'info>,
+
     pub token_2022_program: Program<'info, Token2022>,
     pub system_program: Program<'info, System>,
 }
 
 pub fn handler(ctx: Context<CancelRedeem>) -> Result<()> {
+    require!(!ctx.accounts.vault.paused, VaultError::VaultPaused);
+    require!(
+        ctx.accounts.frozen_check.data_is_empty(),
+        VaultError::AccountFrozen
+    );
+
+    let vault = &mut ctx.accounts.vault;
+    vault.total_pending_redeems = vault
+        .total_pending_redeems
+        .checked_sub(1)
+        .ok_or(VaultError::MathOverflow)?;
+
     let shares_to_return = ctx.accounts.redemption_request.shares_locked;
 
     let asset_mint_key = ctx.accounts.vault.asset_mint;

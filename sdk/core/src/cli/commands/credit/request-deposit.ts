@@ -4,7 +4,12 @@ import { PublicKey } from "@solana/web3.js";
 import { createContext } from "../../middleware";
 import { getGlobalOptions } from "../../index";
 import { CreditVault } from "../../../credit-vault";
-import { findIdlPath, loadIdl, resolveVaultArg } from "../../utils";
+import {
+  findIdlPath,
+  loadIdl,
+  resolveVaultArg,
+  validateAmountInput,
+} from "../../utils";
 
 export function registerRequestDepositCommand(program: Command): void {
   program
@@ -31,6 +36,7 @@ export function registerRequestDepositCommand(program: Command): void {
         process.exit(1);
       }
 
+      validateAmountInput(opts.amount, "amount");
       const amount = new BN(opts.amount);
       const attestation = new PublicKey(opts.attestation);
       const frozenCheck = opts.frozenCheck

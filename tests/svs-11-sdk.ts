@@ -70,7 +70,7 @@ describe("svs-11-sdk (CreditVault SDK)", () => {
         navOracle,
         oracleProgram: oracleProgram.programId,
         attester: Keypair.generate().publicKey,
-        attestationProgram: new PublicKey("4azCqYgLHDRmsiR6kmYu6v5qvzamaYGqZcmx8MrnrKMc"),
+        attestationProgram: new PublicKey("GTTMWDHTZibyEpqNRr33RnBhgms262U6qHaGrjoHqEXg"),
         minimumInvestment,
         maxStaleness,
       });

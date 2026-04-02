@@ -1,5 +1,3 @@
-use anchor_lang::prelude::*;
-use anchor_spl::token_interface::{burn_checked, BurnChecked, Mint, TokenAccount, TokenInterface};
 use crate::{
     constants::{MAX_ORACLE_STALENESS, MULTI_VAULT_SEED},
     error::VaultError,
@@ -7,6 +5,8 @@ use crate::{
     math::{oracle_value_for_amount, total_portfolio_value},
     state::{AssetEntry, MultiAssetVault, OraclePrice},
 };
+use anchor_lang::prelude::*;
+use anchor_spl::token_interface::{burn_checked, BurnChecked, Mint, TokenAccount, TokenInterface};
 
 #[cfg(feature = "modules")]
 use svs_module_hooks as module_hooks;
@@ -14,17 +14,24 @@ use svs_module_hooks as module_hooks;
 /// Redeem shares for a single specific asset.
 /// The user burns shares and receives only the chosen asset,
 /// proportional to its share of the portfolio value.
-pub fn handler(
-    ctx: Context<RedeemSingle>,
-    shares: u64,
-    min_assets_out: u64,
-) -> Result<()> {
+///
+/// V7-P6: `weights_valid` is intentionally NOT checked on redeem paths — users must always
+/// be able to exit even when weights are invalid (e.g. after asset removal/rebalance).
+pub fn handler(ctx: Context<RedeemSingle>, shares: u64, min_assets_out: u64) -> Result<()> {
     require!(!ctx.accounts.vault.paused, VaultError::VaultPaused);
     require!(shares > 0, VaultError::ZeroAmount);
-    require!(shares <= ctx.accounts.shares_mint.supply, VaultError::InsufficientShares);
+    require!(
+        shares <= ctx.accounts.shares_mint.supply,
+        VaultError::InsufficientShares
+    );
 
     let clock = Clock::get()?;
     let oracle = &ctx.accounts.oracle_price;
+    // V4-P21: Reject future oracle timestamps — saturating_sub would treat them as fresh
+    require!(
+        oracle.updated_at <= clock.unix_timestamp,
+        VaultError::InvalidOracle
+    );
     let age = clock.unix_timestamp.saturating_sub(oracle.updated_at) as u64;
     require!(age <= MAX_ORACLE_STALENESS, VaultError::OracleStale);
     require!(oracle.price > 0, VaultError::InvalidOracle);
@@ -38,7 +45,8 @@ pub fn handler(
 
     // Compute vault balance value for this asset
     let vault_balance = ctx.accounts.asset_vault_account.amount;
-    let _asset_value = oracle_value_for_amount(oracle.price, vault_balance, asset_decimals, base_decimals)?;
+    let _asset_value =
+        oracle_value_for_amount(oracle.price, vault_balance, asset_decimals, base_decimals)?;
     let mut balances: Vec<u64> = vec![vault_balance];
     let mut prices: Vec<u64> = vec![oracle.price];
     let mut decimals_vec: Vec<u8> = vec![asset_decimals];
@@ -57,25 +65,51 @@ pub fn handler(
     let spl_token_2022 = anchor_spl::token_2022::ID;
     for i in 0..num_other {
         let asset_entry_info = &rem[i * 3];
-        let oracle_info      = &rem[i * 3 + 1];
-        let vault_ta_info    = &rem[i * 3 + 2];
+        let oracle_info = &rem[i * 3 + 1];
+        let vault_ta_info = &rem[i * 3 + 2];
 
         // FIX P1: owner checks before deserialization
-        require!(asset_entry_info.owner == &svs8_id, VaultError::InvalidOracle);
+        require!(
+            asset_entry_info.owner == &svs8_id,
+            VaultError::InvalidOracle
+        );
         require!(oracle_info.owner == &svs8_id, VaultError::InvalidOracle);
         require!(
             vault_ta_info.owner == &spl_token || vault_ta_info.owner == &spl_token_2022,
             VaultError::AssetNotFound
         );
 
-        let other_entry = AssetEntry::try_deserialize(&mut &asset_entry_info.try_borrow_data()?[..])?;
-        require!(other_entry.vault == ctx.accounts.vault.key(), VaultError::InvalidOracle);
+        let other_entry =
+            AssetEntry::try_deserialize(&mut &asset_entry_info.try_borrow_data()?[..])?;
+        require!(
+            other_entry.vault == ctx.accounts.vault.key(),
+            VaultError::InvalidOracle
+        );
         // FIX P1: validate vault_ta matches asset_entry.asset_vault
-        require!(vault_ta_info.key() == other_entry.asset_vault, VaultError::AssetNotFound);
+        require!(
+            vault_ta_info.key() == other_entry.asset_vault,
+            VaultError::AssetNotFound
+        );
 
         let other_oracle = OraclePrice::from_account_info(oracle_info)?;
-        require!(other_oracle.vault == ctx.accounts.vault.key(), VaultError::InvalidOracle);
-        require!(other_oracle.asset_mint == other_entry.asset_mint, VaultError::InvalidOracle);
+        require!(
+            other_oracle.vault == ctx.accounts.vault.key(),
+            VaultError::InvalidOracle
+        );
+        require!(
+            other_oracle.asset_mint == other_entry.asset_mint,
+            VaultError::InvalidOracle
+        );
+        // V4-P18 FIX: Validate oracle account key matches asset_entry.oracle
+        require!(
+            oracle_info.key() == other_entry.oracle,
+            VaultError::InvalidOracle
+        );
+        // V4-P21: Reject future oracle timestamps — saturating_sub would treat them as fresh
+        require!(
+            other_oracle.updated_at <= clock.unix_timestamp,
+            VaultError::InvalidOracle
+        );
         let other_age = clock.unix_timestamp.saturating_sub(other_oracle.updated_at) as u64;
         require!(other_age <= MAX_ORACLE_STALENESS, VaultError::OracleStale);
         require!(other_oracle.price > 0, VaultError::InvalidOracle);
@@ -87,7 +121,12 @@ pub fn handler(
         decimals_vec.push(other_entry.asset_decimals);
     }
 
-    let total_value = total_portfolio_value(&balances, &prices, &decimals_vec, ctx.accounts.vault.base_decimals)?;
+    let total_value = total_portfolio_value(
+        &balances,
+        &prices,
+        &decimals_vec,
+        ctx.accounts.vault.base_decimals,
+    )?;
 
     // token_amount = vault_balance * shares / total_shares (floor — favors vault)
     // This is equivalent to redeeming the share of this asset proportional to shares burned
@@ -95,17 +134,25 @@ pub fn handler(
         0u64
     } else {
         (vault_balance as u128)
-            .checked_mul(shares as u128).ok_or(VaultError::MathOverflow)?
-            .checked_div(total_shares as u128).ok_or(VaultError::DivisionByZero)? as u64
+            .checked_mul(shares as u128)
+            .ok_or(VaultError::MathOverflow)?
+            .checked_div(total_shares as u128)
+            .ok_or(VaultError::DivisionByZero)?
+            .try_into()
+            .map_err(|_| VaultError::MathOverflow)?
     };
 
     // FIX P0: no unwrap_or — propagate overflow as error
-    let redeem_value = if total_shares == 0 {
+    let redeem_value: u64 = if total_shares == 0 {
         0u64
     } else {
         (total_value as u128)
-            .checked_mul(shares as u128).ok_or(VaultError::MathOverflow)?
-            .checked_div(total_shares as u128).ok_or(VaultError::DivisionByZero)? as u64
+            .checked_mul(shares as u128)
+            .ok_or(VaultError::MathOverflow)?
+            .checked_div(total_shares as u128)
+            .ok_or(VaultError::DivisionByZero)?
+            .try_into()
+            .map_err(|_| VaultError::MathOverflow)?
     };
 
     // ===== Module Hooks (if enabled) =====
@@ -114,8 +161,14 @@ pub fn handler(
         let remaining = ctx.remaining_accounts;
         let vault_key = ctx.accounts.vault.key();
         let user_key = ctx.accounts.user.key();
-        module_hooks::check_access(remaining, &crate::ID, &vault_key, &user_key, &[])?;
-        module_hooks::check_share_lock(remaining, &crate::ID, &vault_key, &user_key, clock.unix_timestamp)?;
+        module_hooks::check_withdrawal_access(remaining, &crate::ID, &vault_key, &user_key)?;
+        module_hooks::check_share_lock(
+            remaining,
+            &crate::ID,
+            &vault_key,
+            &user_key,
+            clock.unix_timestamp,
+        )?;
         let result = module_hooks::apply_exit_fee(remaining, &crate::ID, &vault_key, token_amount)?;
         result.net_assets
     };
@@ -123,9 +176,15 @@ pub fn handler(
     #[cfg(not(feature = "modules"))]
     let net_token_amount = token_amount;
 
-    require!(net_token_amount >= min_assets_out, VaultError::SlippageExceeded);
+    require!(
+        net_token_amount >= min_assets_out,
+        VaultError::SlippageExceeded
+    );
     require!(net_token_amount > 0, VaultError::ZeroAmount);
-    require!(net_token_amount <= vault_balance, VaultError::InsufficientShares);
+    require!(
+        net_token_amount <= vault_balance,
+        VaultError::InsufficientShares
+    );
 
     // Transfer asset from vault to user
     let signer_seeds: &[&[&[u8]]] = &[&[MULTI_VAULT_SEED, vault_id_bytes.as_ref(), &[bump]]];
@@ -168,7 +227,6 @@ pub fn handler(
         shares,
         9,
     )?;
-
 
     emit!(RedeemSingleEvent {
         vault: vault_key,

@@ -99,8 +99,8 @@ pub fn handler(ctx: Context<Redeem>, shares: u64, min_assets_out: u64) -> Result
         let vault_key = vault.key();
         let user_key = ctx.accounts.user.key();
 
-        // 1. Access control check (frozen account)
-        module_hooks::check_deposit_access(remaining, &crate::ID, &vault_key, &user_key, &[])?;
+        // 1. Access control check (frozen account — withdrawal only checks freeze, not whitelist/blacklist)
+        module_hooks::check_withdrawal_access(remaining, &crate::ID, &vault_key, &user_key)?;
         // 2. Lock check - ensure shares are not locked
         module_hooks::check_share_lock(
             remaining,
@@ -164,11 +164,13 @@ pub fn handler(ctx: Context<Redeem>, shares: u64, min_assets_out: u64) -> Result
         ctx.accounts.asset_mint.decimals,
     )?;
 
-    // SVS-5: Update base_assets (not effective total)
+    // SVS-5: Update base_assets by the full gross amount (not net_assets).
+    // The fee stays in the vault token account but belongs to the protocol,
+    // not depositors, so it must not remain counted in base_assets.
     let vault = &mut ctx.accounts.vault;
     vault.base_assets = vault
         .base_assets
-        .checked_sub(net_assets)
+        .checked_sub(assets)
         .ok_or(VaultError::MathOverflow)?;
 
     emit!(WithdrawEvent {

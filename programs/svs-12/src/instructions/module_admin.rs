@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 
 use crate::constants::TRANCHED_VAULT_SEED;
-use crate::error::TranchedVaultError;
+use crate::error::VaultError;
 use crate::events::ModuleConfigChanged;
 use crate::state::{
     AccessConfig, AccessMode, CapConfig, FeeConfig, LockConfig, TranchedVault, ACCESS_CONFIG_SEED,
@@ -14,7 +14,7 @@ pub struct InitializeFeeConfig<'info> {
     pub authority: Signer<'info>,
 
     #[account(
-        has_one = authority @ TranchedVaultError::Unauthorized,
+        has_one = authority @ VaultError::Unauthorized,
         seeds = [TRANCHED_VAULT_SEED, vault.asset_mint.as_ref(), &vault.vault_id.to_le_bytes()],
         bump = vault.bump,
     )]
@@ -48,7 +48,7 @@ pub fn initialize_fee_config(
         management_fee_bps,
         performance_fee_bps,
     )
-    .map_err(|_| TranchedVaultError::InvalidFeeConfig)?;
+    .map_err(|_| VaultError::InvalidFeeConfig)?;
 
     let fee_config = &mut ctx.accounts.fee_config;
     fee_config.vault = ctx.accounts.vault.key();
@@ -73,7 +73,7 @@ pub struct UpdateFeeConfig<'info> {
     pub authority: Signer<'info>,
 
     #[account(
-        has_one = authority @ TranchedVaultError::Unauthorized,
+        has_one = authority @ VaultError::Unauthorized,
         seeds = [TRANCHED_VAULT_SEED, vault.asset_mint.as_ref(), &vault.vault_id.to_le_bytes()],
         bump = vault.bump,
     )]
@@ -103,7 +103,7 @@ pub fn update_fee_config(
     let new_perf = performance_fee_bps.unwrap_or(fee_config.performance_fee_bps);
 
     svs_fees::validate_fee_config(new_entry, new_exit, new_mgmt, new_perf)
-        .map_err(|_| TranchedVaultError::InvalidFeeConfig)?;
+        .map_err(|_| VaultError::InvalidFeeConfig)?;
 
     fee_config.entry_fee_bps = new_entry;
     fee_config.exit_fee_bps = new_exit;
@@ -123,7 +123,7 @@ pub struct InitializeCapConfig<'info> {
     pub authority: Signer<'info>,
 
     #[account(
-        has_one = authority @ TranchedVaultError::Unauthorized,
+        has_one = authority @ VaultError::Unauthorized,
         seeds = [TRANCHED_VAULT_SEED, vault.asset_mint.as_ref(), &vault.vault_id.to_le_bytes()],
         bump = vault.bump,
     )]
@@ -147,7 +147,7 @@ pub fn initialize_cap_config(
     per_user_cap: u64,
 ) -> Result<()> {
     svs_caps::validate_cap_config(global_cap, per_user_cap)
-        .map_err(|_| TranchedVaultError::InvalidCapConfig)?;
+        .map_err(|_| VaultError::InvalidCapConfig)?;
 
     let cap_config = &mut ctx.accounts.cap_config;
     cap_config.vault = ctx.accounts.vault.key();
@@ -167,7 +167,7 @@ pub struct UpdateCapConfig<'info> {
     pub authority: Signer<'info>,
 
     #[account(
-        has_one = authority @ TranchedVaultError::Unauthorized,
+        has_one = authority @ VaultError::Unauthorized,
         seeds = [TRANCHED_VAULT_SEED, vault.asset_mint.as_ref(), &vault.vault_id.to_le_bytes()],
         bump = vault.bump,
     )]
@@ -193,7 +193,7 @@ pub fn update_cap_config(
     let new_per_user = per_user_cap.unwrap_or(cap_config.per_user_cap);
 
     svs_caps::validate_cap_config(new_global, new_per_user)
-        .map_err(|_| TranchedVaultError::InvalidCapConfig)?;
+        .map_err(|_| VaultError::InvalidCapConfig)?;
 
     cap_config.global_cap = new_global;
     cap_config.per_user_cap = new_per_user;
@@ -211,7 +211,7 @@ pub struct InitializeLockConfig<'info> {
     pub authority: Signer<'info>,
 
     #[account(
-        has_one = authority @ TranchedVaultError::Unauthorized,
+        has_one = authority @ VaultError::Unauthorized,
         seeds = [TRANCHED_VAULT_SEED, vault.asset_mint.as_ref(), &vault.vault_id.to_le_bytes()],
         bump = vault.bump,
     )]
@@ -233,8 +233,7 @@ pub fn initialize_lock_config(
     ctx: Context<InitializeLockConfig>,
     lock_duration: i64,
 ) -> Result<()> {
-    svs_locks::validate_lock_duration(lock_duration)
-        .map_err(|_| TranchedVaultError::InvalidLockConfig)?;
+    svs_locks::validate_lock_duration(lock_duration).map_err(|_| VaultError::InvalidLockConfig)?;
 
     let lock_config = &mut ctx.accounts.lock_config;
     lock_config.vault = ctx.accounts.vault.key();
@@ -253,7 +252,7 @@ pub struct UpdateLockConfig<'info> {
     pub authority: Signer<'info>,
 
     #[account(
-        has_one = authority @ TranchedVaultError::Unauthorized,
+        has_one = authority @ VaultError::Unauthorized,
         seeds = [TRANCHED_VAULT_SEED, vault.asset_mint.as_ref(), &vault.vault_id.to_le_bytes()],
         bump = vault.bump,
     )]
@@ -269,8 +268,7 @@ pub struct UpdateLockConfig<'info> {
 }
 
 pub fn update_lock_config(ctx: Context<UpdateLockConfig>, lock_duration: i64) -> Result<()> {
-    svs_locks::validate_lock_duration(lock_duration)
-        .map_err(|_| TranchedVaultError::InvalidLockConfig)?;
+    svs_locks::validate_lock_duration(lock_duration).map_err(|_| VaultError::InvalidLockConfig)?;
 
     ctx.accounts.lock_config.lock_duration = lock_duration;
 
@@ -287,7 +285,7 @@ pub struct InitializeAccessConfig<'info> {
     pub authority: Signer<'info>,
 
     #[account(
-        has_one = authority @ TranchedVaultError::Unauthorized,
+        has_one = authority @ VaultError::Unauthorized,
         seeds = [TRANCHED_VAULT_SEED, vault.asset_mint.as_ref(), &vault.vault_id.to_le_bytes()],
         bump = vault.bump,
     )]
@@ -328,7 +326,7 @@ pub struct UpdateAccessConfig<'info> {
     pub authority: Signer<'info>,
 
     #[account(
-        has_one = authority @ TranchedVaultError::Unauthorized,
+        has_one = authority @ VaultError::Unauthorized,
         seeds = [TRANCHED_VAULT_SEED, vault.asset_mint.as_ref(), &vault.vault_id.to_le_bytes()],
         bump = vault.bump,
     )]

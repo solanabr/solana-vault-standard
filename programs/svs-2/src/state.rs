@@ -24,8 +24,15 @@ pub struct Vault {
     pub paused: bool,
     /// Unique vault identifier (allows multiple vaults per asset)
     pub vault_id: u64,
+    /// Total exit fees collected (for transparency and accounting)
+    pub cumulative_exit_fees: u64,
+    /// Pending authority for two-step transfer (Pubkey::default() means no pending transfer)
+    pub pending_authority: Pubkey,
+    /// Designated fee recipient — fees can only be collected to this address.
+    /// Pubkey::default() means fee collection is disabled until set.
+    pub fee_recipient: Pubkey,
     /// Reserved for future upgrades
-    pub _reserved: [u8; 64],
+    pub _reserved: [u8; 24],
 }
 
 impl Vault {
@@ -39,7 +46,10 @@ impl Vault {
         1 +   // bump
         1 +   // paused
         8 +   // vault_id
-        64; // _reserved
+        8 +   // cumulative_exit_fees
+        32 +  // pending_authority
+        32 +  // fee_recipient
+        24; // _reserved
 
     pub const SEED_PREFIX: &'static [u8] = VAULT_SEED;
 }

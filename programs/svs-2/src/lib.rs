@@ -15,7 +15,7 @@ pub mod state;
 
 use instructions::*;
 
-declare_id!("3UrYrxh1HmVgq7WPygZ5x1gNEaWFwqTMs7geNqMnsrtD");
+declare_id!("7vnZM4aCsRapH9ft7Bo5ibTXNH2dvoxkj96c7JonLhoe");
 
 #[program]
 pub mod svs_2 {
@@ -66,14 +66,42 @@ pub mod svs_2 {
         instructions::admin::unpause(ctx)
     }
 
-    /// Transfer vault authority
+    /// Transfer vault authority (deprecated — prefer request + accept)
     pub fn transfer_authority(ctx: Context<Admin>, new_authority: Pubkey) -> Result<()> {
         instructions::admin::transfer_authority(ctx, new_authority)
+    }
+
+    /// Cancel a pending two-step authority transfer.
+    pub fn cancel_transfer_authority(ctx: Context<Admin>) -> Result<()> {
+        instructions::admin::cancel_transfer_authority(ctx)
+    }
+
+    /// Step 1: Request authority transfer (two-step pattern)
+    pub fn request_transfer_authority(ctx: Context<Admin>, new_authority: Pubkey) -> Result<()> {
+        instructions::admin::request_transfer_authority(ctx, new_authority)
+    }
+
+    /// Step 2: Accept authority transfer (must be signed by pending authority)
+    pub fn accept_authority(ctx: Context<AcceptAuthority>) -> Result<()> {
+        instructions::admin::accept_authority(ctx)
     }
 
     /// Sync total_assets with actual vault balance
     pub fn sync(ctx: Context<Sync>) -> Result<()> {
         instructions::admin::sync(ctx)
+    }
+
+    /// Set or update the designated fee recipient for the vault
+    pub fn set_fee_recipient(
+        ctx: Context<SetFeeRecipient>,
+        new_fee_recipient: Pubkey,
+    ) -> Result<()> {
+        instructions::admin::set_fee_recipient(ctx, new_fee_recipient)
+    }
+
+    /// Withdraw accumulated exit fees to the designated fee recipient
+    pub fn collect_fees(ctx: Context<CollectFees>) -> Result<()> {
+        instructions::admin::collect_fees(ctx)
     }
 
     // ============ Module Admin (feature: modules) ============

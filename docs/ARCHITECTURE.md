@@ -269,7 +269,8 @@ Approximate CU costs per instruction type:
 
 | Account Type | Size (bytes) | Variants |
 |--------------|-------------|----------|
-| Vault | 219 | SVS-1, SVS-2 |
+| Vault (SVS-1) | 211 | SVS-1 (live balance) |
+| Vault (SVS-2) | 227 | SVS-2 (stored balance) |
 | ConfidentialVault | 252 | SVS-3, SVS-4 |
 | TokenAccount (SPL) | 165 | Asset accounts |
 | TokenAccount (Token-2022) | 165+ | Shares, +CT extension |
@@ -333,7 +334,7 @@ seeds = [MODULE_SEED, vault.key().as_ref()]
 seeds = [USER_SEED, vault.key().as_ref(), user.key().as_ref()]
 ```
 
-See [specs-modules.md](specs-modules.md) for complete module specifications.
+See [MODULES.md](MODULES.md) for complete module specifications.
 
 ---
 
@@ -352,7 +353,7 @@ Beyond the core 4 variants, SVS defines additional specialized vaults:
 | SVS-11 | Credit Markets | Async + KYC + Oracle NAV |
 | SVS-12 | Tranched | Multiple share classes with waterfall |
 
-See individual spec files (`specs-SVS{N}.md`) for details.
+See individual spec files (`SVS-N.md`) for details.
 
 ---
 

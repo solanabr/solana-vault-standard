@@ -2,13 +2,12 @@
 
 use anchor_lang::prelude::*;
 use anchor_spl::{
-    associated_token::AssociatedToken,
     token_2022::{self, MintTo, Token2022},
     token_interface::{transfer_checked, Mint, TokenAccount, TokenInterface, TransferChecked},
 };
 
 use crate::{
-    constants::VAULT_SEED,
+    constants::{MIN_DEPOSIT_AMOUNT, VAULT_SEED},
     error::VaultError,
     events::Deposit as DepositEvent,
     math::{convert_to_assets, Rounding},
@@ -53,8 +52,7 @@ pub struct MintShares<'info> {
     pub shares_mint: InterfaceAccount<'info, Mint>,
 
     #[account(
-        init_if_needed,
-        payer = user,
+        mut,
         associated_token::mint = shares_mint,
         associated_token::authority = user,
         associated_token::token_program = token_2022_program,
@@ -63,8 +61,6 @@ pub struct MintShares<'info> {
 
     pub asset_token_program: Interface<'info, TokenInterface>,
     pub token_2022_program: Program<'info, Token2022>,
-    pub associated_token_program: Program<'info, AssociatedToken>,
-    pub system_program: Program<'info, System>,
 }
 
 /// Mint exact shares, paying required assets (ceiling rounding - protects vault)
@@ -93,6 +89,9 @@ pub fn handler(ctx: Context<MintShares>, shares: u64, max_assets_in: u64) -> Res
         vault.decimals_offset,
         Rounding::Ceiling,
     )?;
+
+    // V9-P6: Enforce MIN_DEPOSIT_AMOUNT on mint path (consistent with deposit path)
+    require!(assets >= MIN_DEPOSIT_AMOUNT, VaultError::DepositTooSmall);
 
     // ===== Module Hooks (if enabled) =====
     #[cfg(feature = "modules")]
@@ -166,6 +165,16 @@ pub fn handler(ctx: Context<MintShares>, shares: u64, max_assets_in: u64) -> Res
     )?;
 
     // NOTE: Entry fee shares NOT minted here - tracked in FeeConfig for later collection
+
+    // Update per-user cumulative deposit tracking (if caps module is active)
+    #[cfg(feature = "modules")]
+    module_hooks::update_user_deposit(
+        ctx.remaining_accounts,
+        &crate::ID,
+        &ctx.accounts.vault.key(),
+        &ctx.accounts.user.key(),
+        assets,
+    )?;
 
     emit!(DepositEvent {
         vault: ctx.accounts.vault.key(),

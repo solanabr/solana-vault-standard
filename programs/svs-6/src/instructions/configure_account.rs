@@ -71,6 +71,12 @@ pub fn handler(
         ],
     )?;
 
+    // Validate that proof data is not all zeros — an all-zero proof is invalid
+    require!(
+        decryptable_zero_balance.iter().any(|&b| b != 0),
+        crate::error::VaultError::InvalidProof
+    );
+
     let decryptable_balance: PodAeCiphertext =
         *try_from_bytes::<PodAeCiphertext>(&decryptable_zero_balance)
             .map_err(|_| crate::error::VaultError::InvalidCiphertext)?;

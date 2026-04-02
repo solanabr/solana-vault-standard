@@ -169,6 +169,19 @@ pub fn mint_handler(ctx: Context<MintShares>, shares: u64, max_assets_in: u64) -
         .checked_add(net_shares)
         .ok_or(VaultError::MathOverflow)?;
 
+    // Update per-user cumulative deposit tracking (if caps module is active)
+    #[cfg(feature = "modules")]
+    {
+        let (_, modules) = ctx.remaining_accounts.split_at(child_accounts_len);
+        module_hooks::update_user_deposit(
+            modules,
+            &crate::ID,
+            &ctx.accounts.allocator_vault.key(),
+            &ctx.accounts.owner.key(),
+            assets,
+        )?;
+    }
+
     // 7. EMIT EVENT
     emit!(crate::events::Deposit {
         vault: ctx.accounts.allocator_vault.key(),

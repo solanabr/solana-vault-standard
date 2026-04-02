@@ -289,3 +289,9 @@ solana-vault tranched admin update-tranche --asset-mint <MINT> -t 0 --yield-bps 
 # Info
 solana-vault tranched info --asset-mint <MINT>
 ```
+
+## See Also
+
+- [SVS-1.md](./SVS-1.md) — Single-tranche vault (base pattern)
+- [ARCHITECTURE.md](./ARCHITECTURE.md) — Cross-variant design
+- [MODULES.md](./MODULES.md) — Module integration

@@ -109,6 +109,14 @@ pub fn handler(
     let total_shares = ctx.accounts.shares_mint.supply;
 
     // ===== Module Hooks (if enabled) =====
+    // V5-P26: In SVS-3's live-balance model, exit fees (when modules are enabled) are
+    // deducted from the transferred asset amount but NOT collected into a separate fee
+    // account. The fee amount remains in the asset_vault, effectively accruing to
+    // remaining shareholders by increasing the assets-per-share ratio. This is by design:
+    // SVS-3 has no stored total_assets to track separately, and the live balance model
+    // means any assets left in the vault automatically benefit all share holders.
+    // For explicit fee collection, use SVS-4 which has stored total_assets and
+    // cumulative_exit_fees tracking.
     #[cfg(feature = "modules")]
     let net_assets = {
         let remaining = ctx.remaining_accounts;
@@ -117,7 +125,7 @@ pub fn handler(
         let user_key = ctx.accounts.user.key();
 
         // 1. Access control check (frozen account)
-        module_hooks::check_deposit_access(remaining, &crate::ID, &vault_key, &user_key, &[])?;
+        module_hooks::check_withdrawal_access(remaining, &crate::ID, &vault_key, &user_key)?;
 
         // 2. Lock check - ensure shares are not locked
         module_hooks::check_share_lock(
@@ -226,6 +234,8 @@ pub fn handler(
         owner: ctx.accounts.user.key(),
         assets: net_assets,
         shares,
+        // V7-P7: Exit fee for indexer consistency with SVS-1/2/4
+        exit_fee: assets.saturating_sub(net_assets),
     });
 
     Ok(())

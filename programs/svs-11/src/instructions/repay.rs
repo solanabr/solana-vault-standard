@@ -13,6 +13,7 @@ pub struct Repay<'info> {
     pub manager: Signer<'info>,
 
     #[account(
+        mut,
         has_one = manager,
         seeds = [VAULT_SEED, vault.asset_mint.as_ref(), &vault.vault_id.to_le_bytes()],
         bump = vault.bump,
@@ -56,8 +57,14 @@ pub fn handler(ctx: Context<Repay>, amount: u64) -> Result<()> {
         ctx.accounts.asset_mint.decimals,
     )?;
 
+    let vault = &mut ctx.accounts.vault;
+    vault.total_assets = vault
+        .total_assets
+        .checked_add(amount)
+        .ok_or(VaultError::MathOverflow)?;
+
     emit!(Repayment {
-        vault: ctx.accounts.vault.key(),
+        vault: vault.key(),
         amount,
     });
 

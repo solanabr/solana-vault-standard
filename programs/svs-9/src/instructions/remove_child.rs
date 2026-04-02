@@ -46,7 +46,7 @@ pub fn remove_child_handler(ctx: Context<RemoveChild>) -> Result<()> {
             .accounts
             .allocator_child_shares_account
             .as_ref()
-            .unwrap();
+            .ok_or(VaultError::InvalidRemainingAccounts)?;
         require!(
             shares_account.key() == ctx.accounts.child_allocation.child_shares_account,
             VaultError::Unauthorized

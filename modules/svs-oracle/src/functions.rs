@@ -28,9 +28,15 @@ pub fn validate_freshness(
     current_timestamp: i64,
     max_staleness: i64,
 ) -> Result<(), OracleError> {
+    // V4-M6: Reject future timestamps with a distinct error — a future timestamp
+    // is a different failure mode than stale data
+    if updated_at > current_timestamp {
+        return Err(OracleError::FutureTimestamp);
+    }
+
     let age = current_timestamp.saturating_sub(updated_at);
 
-    if age > max_staleness {
+    if age >= max_staleness {
         return Err(OracleError::StalePrice);
     }
 
@@ -136,7 +142,7 @@ pub fn validate_oracle(
 /// Ok(()) if valid
 pub fn validate_staleness_config(max_staleness: i64) -> Result<(), OracleError> {
     if max_staleness < MIN_STALENESS || max_staleness > MAX_STALENESS {
-        return Err(OracleError::InvalidPrice);
+        return Err(OracleError::InvalidStalenessConfig);
     }
     Ok(())
 }
@@ -226,8 +232,22 @@ mod tests {
 
     #[test]
     fn test_validate_freshness_exact() {
-        // Exactly at max staleness - still valid
-        assert!(validate_freshness(1000, 4600, 3600).is_ok());
+        // Exactly at max staleness boundary - considered stale
+        assert_eq!(
+            validate_freshness(1000, 4600, 3600),
+            Err(OracleError::StalePrice)
+        );
+        // One second before boundary - still valid
+        assert!(validate_freshness(1000, 4599, 3600).is_ok());
+    }
+
+    #[test]
+    fn test_validate_freshness_future_timestamp() {
+        // V4-M6: updated_at in the future returns FutureTimestamp, not StalePrice
+        assert_eq!(
+            validate_freshness(2000, 1000, 3600),
+            Err(OracleError::FutureTimestamp)
+        );
     }
 
     #[test]

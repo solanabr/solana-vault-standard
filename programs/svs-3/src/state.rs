@@ -26,8 +26,8 @@ pub struct ConfidentialVault {
     pub auditor_elgamal_pubkey: Option<[u8; 32]>,
     /// Authority for confidential transfer operations
     pub confidential_authority: Pubkey,
-    /// Reserved for future upgrades
-    pub _reserved: [u8; 32],
+    /// Pending authority for two-step transfer (default = Pubkey::default() means none)
+    pub pending_authority: Pubkey,
 }
 
 impl ConfidentialVault {
@@ -42,7 +42,7 @@ impl ConfidentialVault {
         8 +   // vault_id
         1 + 32 + // auditor_elgamal_pubkey (Option<[u8; 32]>)
         32 +  // confidential_authority
-        32; // _reserved
+        32; // pending_authority
 
     pub const SEED_PREFIX: &'static [u8] = VAULT_SEED;
 }

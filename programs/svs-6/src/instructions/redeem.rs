@@ -113,7 +113,7 @@ pub fn handler(
         let vault_key = vault.key();
         let user_key = ctx.accounts.user.key();
 
-        module_hooks::check_deposit_access(remaining, &crate::ID, &vault_key, &user_key, &[])?;
+        module_hooks::check_withdrawal_access(remaining, &crate::ID, &vault_key, &user_key)?;
         module_hooks::check_share_lock(
             remaining,
             &crate::ID,
@@ -206,11 +206,13 @@ pub fn handler(
         ctx.accounts.asset_mint.decimals,
     )?;
 
-    // Update stored state
+    // Update stored state: subtract the full gross amount (not net_assets).
+    // The fee stays in the vault token account but belongs to the protocol,
+    // not depositors, so it must not remain counted in base_assets.
     let vault = &mut ctx.accounts.vault;
     vault.base_assets = vault
         .base_assets
-        .checked_sub(net_assets)
+        .checked_sub(assets)
         .ok_or(VaultError::MathOverflow)?;
 
     emit!(WithdrawEvent {

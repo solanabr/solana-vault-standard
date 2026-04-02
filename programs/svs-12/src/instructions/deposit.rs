@@ -7,7 +7,7 @@ use svs_math::{convert_to_shares, Rounding};
 
 use crate::{
     constants::{BPS_DENOMINATOR, TRANCHED_VAULT_SEED},
-    error::TranchedVaultError,
+    error::VaultError,
     events::TrancheDeposit,
     state::{Tranche, TranchedVault},
     waterfall::check_subordination,
@@ -23,14 +23,14 @@ pub struct Deposit<'info> {
 
     #[account(
         mut,
-        constraint = !vault.paused @ TranchedVaultError::VaultPaused,
-        constraint = !vault.wiped @ TranchedVaultError::VaultWiped,
+        constraint = !vault.paused @ VaultError::VaultPaused,
+        constraint = !vault.wiped @ VaultError::VaultWiped,
     )]
     pub vault: Account<'info, TranchedVault>,
 
     #[account(
         mut,
-        constraint = target_tranche.vault == vault.key() @ TranchedVaultError::TrancheVaultMismatch,
+        has_one = vault @ VaultError::TrancheVaultMismatch,
     )]
     pub target_tranche: Account<'info, Tranche>,
 
@@ -76,7 +76,7 @@ pub struct Deposit<'info> {
 }
 
 pub fn handler(ctx: Context<Deposit>, assets: u64, min_shares_out: u64) -> Result<()> {
-    require!(assets > 0, TranchedVaultError::ZeroAmount);
+    require!(assets > 0, VaultError::ZeroAmount);
 
     let tranche = &ctx.accounts.target_tranche;
     let vault = &ctx.accounts.vault;
@@ -89,9 +89,9 @@ pub fn handler(ctx: Context<Deposit>, assets: u64, min_shares_out: u64) -> Resul
         vault.decimals_offset,
         Rounding::Floor,
     )
-    .map_err(|_| TranchedVaultError::MathOverflow)?;
+    .map_err(|_| VaultError::MathOverflow)?;
 
-    require!(shares > 0, TranchedVaultError::ZeroAmount);
+    require!(shares > 0, VaultError::ZeroAmount);
 
     #[cfg(feature = "modules")]
     let shares = {
@@ -113,41 +113,40 @@ pub fn handler(ctx: Context<Deposit>, assets: u64, min_shares_out: u64) -> Resul
         result.net_shares
     };
 
-    require!(shares > 0, TranchedVaultError::ZeroAmount);
+    require!(shares > 0, VaultError::ZeroAmount);
 
-    require!(
-        shares >= min_shares_out,
-        TranchedVaultError::SlippageExceeded
-    );
+    require!(shares >= min_shares_out, VaultError::SlippageExceeded);
 
     // 2. Update accounting (pre-CPI for cap + subordination checks on post-state)
     let tranche = &mut ctx.accounts.target_tranche;
     tranche.total_assets_allocated = tranche
         .total_assets_allocated
         .checked_add(assets)
-        .ok_or(TranchedVaultError::MathOverflow)?;
+        .ok_or(VaultError::MathOverflow)?;
     tranche.total_shares = tranche
         .total_shares
         .checked_add(shares)
-        .ok_or(TranchedVaultError::MathOverflow)?;
+        .ok_or(VaultError::MathOverflow)?;
 
     let vault = &mut ctx.accounts.vault;
     vault.total_assets = vault
         .total_assets
         .checked_add(assets)
-        .ok_or(TranchedVaultError::MathOverflow)?;
+        .ok_or(VaultError::MathOverflow)?;
 
     // 3. Cap check on post-state
     let tranche = &ctx.accounts.target_tranche;
     let cap_numerator = (vault.total_assets as u128)
         .checked_mul(tranche.cap_bps as u128)
-        .ok_or(TranchedVaultError::MathOverflow)?;
-    let cap_limit = cap_numerator
+        .ok_or(VaultError::MathOverflow)?;
+    let cap_limit: u64 = cap_numerator
         .checked_div(BPS_DENOMINATOR as u128)
-        .ok_or(TranchedVaultError::MathOverflow)? as u64;
+        .ok_or(VaultError::MathOverflow)?
+        .try_into()
+        .map_err(|_| VaultError::MathOverflow)?;
     require!(
         tranche.total_assets_allocated <= cap_limit,
-        TranchedVaultError::CapExceeded
+        VaultError::CapExceeded
     );
 
     // 4. Subordination check on post-state (collect all tranches)
@@ -167,14 +166,8 @@ pub fn handler(ctx: Context<Deposit>, assets: u64, min_shares_out: u64) -> Resul
         &ctx.accounts.tranche_3,
     ] {
         if let Some(t) = opt_tranche {
-            require!(
-                !seen_keys.contains(&t.key()),
-                TranchedVaultError::DuplicateTranche
-            );
-            require!(
-                t.vault == vault.key(),
-                TranchedVaultError::TrancheVaultMismatch
-            );
+            require!(!seen_keys.contains(&t.key()), VaultError::DuplicateTranche);
+            require!(t.vault == vault.key(), VaultError::TrancheVaultMismatch);
             seen_keys.push(t.key());
             all_allocations.push((t.priority, t.total_assets_allocated, t.subordination_bps));
         }
@@ -182,7 +175,7 @@ pub fn handler(ctx: Context<Deposit>, assets: u64, min_shares_out: u64) -> Resul
 
     require!(
         all_allocations.len() == vault.num_tranches as usize,
-        TranchedVaultError::WrongTrancheCount
+        VaultError::WrongTrancheCount
     );
 
     // Sort by priority ascending (senior first)
@@ -234,6 +227,25 @@ pub fn handler(ctx: Context<Deposit>, assets: u64, min_shares_out: u64) -> Resul
 
     ctx.accounts.asset_vault.reload()?;
     ctx.accounts.shares_mint.reload()?;
+
+    // V5-P10: Reconciliation check — verify tranche.total_shares matches shares_mint.supply
+    // after the mint CPI. When fee modules mint additional shares (e.g. management fees),
+    // the tranche's cached total_shares can diverge from the on-chain mint supply. Catching
+    // this here prevents silent accounting drift.
+    require!(
+        ctx.accounts.target_tranche.total_shares == ctx.accounts.shares_mint.supply,
+        VaultError::SharesMismatch
+    );
+
+    // Update per-user cumulative deposit tracking (if caps module is active)
+    #[cfg(feature = "modules")]
+    module_hooks::update_user_deposit(
+        ctx.remaining_accounts,
+        &crate::ID,
+        &ctx.accounts.vault.key(),
+        &ctx.accounts.user.key(),
+        assets,
+    )?;
 
     // 6. Emit event
     emit!(TrancheDeposit {

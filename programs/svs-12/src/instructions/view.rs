@@ -3,14 +3,14 @@ use anchor_lang::solana_program::program::set_return_data;
 use svs_math::{convert_to_assets, convert_to_shares, Rounding};
 
 use crate::constants::BPS_DENOMINATOR;
-use crate::error::TranchedVaultError;
+use crate::error::VaultError;
 use crate::state::{Tranche, TranchedVault};
 
 #[derive(Accounts)]
 pub struct TrancheView<'info> {
     pub vault: Account<'info, TranchedVault>,
 
-    #[account(has_one = vault @ TranchedVaultError::TrancheVaultMismatch)]
+    #[account(has_one = vault @ VaultError::TrancheVaultMismatch)]
     pub tranche: Account<'info, Tranche>,
 }
 
@@ -23,7 +23,7 @@ pub fn preview_deposit(ctx: Context<TrancheView>, assets: u64) -> Result<()> {
         ctx.accounts.vault.decimals_offset,
         Rounding::Floor,
     )
-    .map_err(|_| TranchedVaultError::MathOverflow)?;
+    .map_err(|_| VaultError::MathOverflow)?;
     set_return_data(&shares.to_le_bytes());
     Ok(())
 }
@@ -37,7 +37,7 @@ pub fn preview_redeem(ctx: Context<TrancheView>, shares: u64) -> Result<()> {
         ctx.accounts.vault.decimals_offset,
         Rounding::Floor,
     )
-    .map_err(|_| TranchedVaultError::MathOverflow)?;
+    .map_err(|_| VaultError::MathOverflow)?;
     set_return_data(&assets.to_le_bytes());
     Ok(())
 }
@@ -45,11 +45,13 @@ pub fn preview_redeem(ctx: Context<TrancheView>, shares: u64) -> Result<()> {
 pub fn get_tranche_state(ctx: Context<TrancheView>) -> Result<()> {
     let tranche = &ctx.accounts.tranche;
     let vault = &ctx.accounts.vault;
-    let cap_limit = (vault.total_assets as u128)
+    let cap_limit: u64 = (vault.total_assets as u128)
         .checked_mul(tranche.cap_bps as u128)
-        .ok_or(TranchedVaultError::MathOverflow)?
+        .ok_or(VaultError::MathOverflow)?
         .checked_div(BPS_DENOMINATOR as u128)
-        .ok_or(TranchedVaultError::MathOverflow)? as u64;
+        .ok_or(VaultError::MathOverflow)?
+        .try_into()
+        .map_err(|_| VaultError::MathOverflow)?;
     let headroom = cap_limit.saturating_sub(tranche.total_assets_allocated);
 
     let mut buf = [0u8; 24];

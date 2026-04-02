@@ -1,5 +1,5 @@
 ---
-paths:
+globs:
   - "app/**/*.{ts,tsx}"
   - "src/**/*.{ts,tsx}"
   - "tests/**/*.ts"
@@ -534,6 +534,10 @@ import styles from './Component.module.css';
 ```
 
 ---
+
+## Project Scaffolding
+
+- Use `create-solana-dapp` for new frontend projects
 
 **Remember**: Type safety prevents bugs. Simulate before sending. Handle errors gracefully. Choose web3.js version based on your project needs.
 

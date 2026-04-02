@@ -37,6 +37,12 @@ pub enum VaultError {
     #[msg("New authority cannot be the zero address")]
     InvalidAuthority,
 
+    #[msg("No pending authority transfer")]
+    NoPendingTransfer,
+
+    #[msg("Signer is not the pending authority")]
+    InvalidPendingAuthority,
+
     // Module errors (always defined for IDL compatibility — not behind #[cfg])
     #[msg("Deposit would exceed global vault cap")]
     GlobalCapExceeded,
@@ -82,4 +88,7 @@ pub enum VaultError {
 
     #[msg("Invalid cap configuration")]
     InvalidCapConfig,
+
+    #[msg("Cannot use deprecated transfer while a two-step transfer is pending")]
+    PendingTransferExists,
 }

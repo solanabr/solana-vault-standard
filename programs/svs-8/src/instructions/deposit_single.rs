@@ -1,3 +1,10 @@
+use crate::{
+    constants::{MAX_ORACLE_STALENESS, MIN_DEPOSIT, MULTI_VAULT_SEED},
+    error::VaultError,
+    events::DepositSingle as DepositSingleEvent,
+    math::{convert_to_shares, oracle_value_for_amount, total_portfolio_value, Rounding},
+    state::{AssetEntry, MultiAssetVault, OraclePrice},
+};
 use anchor_lang::prelude::*;
 use anchor_spl::{
     associated_token::AssociatedToken,
@@ -6,23 +13,16 @@ use anchor_spl::{
         TransferChecked,
     },
 };
-use crate::{
-    constants::{MIN_DEPOSIT, MULTI_VAULT_SEED, MAX_ORACLE_STALENESS},
-    error::VaultError,
-    events::DepositSingle as DepositSingleEvent,
-    math::{convert_to_shares, oracle_value_for_amount, total_portfolio_value, Rounding},
-    state::{AssetEntry, MultiAssetVault, OraclePrice},
-};
 
 #[cfg(feature = "modules")]
 use svs_module_hooks as module_hooks;
 
-pub fn handler(
-    ctx: Context<DepositSingle>,
-    amount: u64,
-    min_shares_out: u64,
-) -> Result<()> {
+pub fn handler(ctx: Context<DepositSingle>, amount: u64, min_shares_out: u64) -> Result<()> {
     require!(!ctx.accounts.vault.paused, VaultError::VaultPaused);
+    require!(
+        ctx.accounts.vault.weights_valid,
+        VaultError::WeightsNotValid
+    );
     require!(amount >= MIN_DEPOSIT, VaultError::DepositTooSmall);
 
     let base_decimals = ctx.accounts.vault.base_decimals;
@@ -31,17 +31,18 @@ pub fn handler(
     // Validate oracle freshness
     let clock = Clock::get()?;
     let oracle = &ctx.accounts.oracle_price;
+    // V4-P21: Reject future oracle timestamps — saturating_sub would treat them as fresh
+    require!(
+        oracle.updated_at <= clock.unix_timestamp,
+        VaultError::InvalidOracle
+    );
     let age = clock.unix_timestamp.saturating_sub(oracle.updated_at) as u64;
     require!(age <= MAX_ORACLE_STALENESS, VaultError::OracleStale);
     require!(oracle.price > 0, VaultError::InvalidOracle);
 
     // Compute deposit value using real oracle price
-    let deposit_value = oracle_value_for_amount(
-        oracle.price,
-        amount,
-        asset_decimals,
-        base_decimals,
-    )?;
+    let deposit_value =
+        oracle_value_for_amount(oracle.price, amount, asset_decimals, base_decimals)?;
     require!(deposit_value > 0, VaultError::ZeroAmount);
 
     // Read portfolio from remaining_accounts: [AssetEntry, OraclePrice, vault_ata] per other asset
@@ -59,17 +60,20 @@ pub fn handler(
         VaultError::AssetNotFound
     );
     let (asset_accounts, _module_accounts) = ctx.remaining_accounts.split_at(asset_len);
-    let mut i = 0;
-    while i + 2 < asset_accounts.len() + 1 && i / 3 < num_other {
-        let asset_entry_info = &asset_accounts[i];
-        let oracle_info      = &asset_accounts[i + 1];
-        let vault_ta_info    = &asset_accounts[i + 2];
+    // V7-P2: Use clean for-loop pattern (consistent with deposit_proportional, redeem_single, redeem_proportional)
+    for i in 0..num_other {
+        let asset_entry_info = &asset_accounts[i * 3];
+        let oracle_info = &asset_accounts[i * 3 + 1];
+        let vault_ta_info = &asset_accounts[i * 3 + 2];
 
         // Owner checks before deserialization
         let svs8_id = crate::ID;
         let spl_token = anchor_spl::token::ID;
         let spl_token_2022 = anchor_spl::token_2022::ID;
-        require!(asset_entry_info.owner == &svs8_id, VaultError::InvalidOracle);
+        require!(
+            asset_entry_info.owner == &svs8_id,
+            VaultError::InvalidOracle
+        );
         require!(oracle_info.owner == &svs8_id, VaultError::InvalidOracle);
         require!(
             vault_ta_info.owner == &spl_token || vault_ta_info.owner == &spl_token_2022,
@@ -77,13 +81,36 @@ pub fn handler(
         );
         // Validate vault_ta matches asset_entry.asset_vault
         // Validate AssetEntry belongs to this vault
-        let other_entry = AssetEntry::try_deserialize(&mut &asset_entry_info.try_borrow_data()?[..])?;
-        require!(other_entry.vault == ctx.accounts.vault.key(), VaultError::InvalidOracle);
-        require!(vault_ta_info.key() == other_entry.asset_vault, VaultError::AssetNotFound);
+        let other_entry =
+            AssetEntry::try_deserialize(&mut &asset_entry_info.try_borrow_data()?[..])?;
+        require!(
+            other_entry.vault == ctx.accounts.vault.key(),
+            VaultError::InvalidOracle
+        );
+        require!(
+            vault_ta_info.key() == other_entry.asset_vault,
+            VaultError::AssetNotFound
+        );
 
         let oracle = OraclePrice::from_account_info(oracle_info)?;
-        require!(oracle.vault == ctx.accounts.vault.key(), VaultError::InvalidOracle);
-        require!(oracle.asset_mint == other_entry.asset_mint, VaultError::InvalidOracle);
+        require!(
+            oracle.vault == ctx.accounts.vault.key(),
+            VaultError::InvalidOracle
+        );
+        require!(
+            oracle.asset_mint == other_entry.asset_mint,
+            VaultError::InvalidOracle
+        );
+        // V4-P18 FIX: Validate oracle account key matches asset_entry.oracle
+        require!(
+            oracle_info.key() == other_entry.oracle,
+            VaultError::InvalidOracle
+        );
+        // V4-P21: Reject future oracle timestamps — saturating_sub would treat them as fresh
+        require!(
+            oracle.updated_at <= clock.unix_timestamp,
+            VaultError::InvalidOracle
+        );
         let age = clock.unix_timestamp.saturating_sub(oracle.updated_at) as u64;
         require!(age <= MAX_ORACLE_STALENESS, VaultError::OracleStale);
         require!(oracle.price > 0, VaultError::InvalidOracle);
@@ -93,14 +120,17 @@ pub fn handler(
         balances.push(balance);
         // FIX P0: use per-asset decimals from AssetEntry, not deposited asset decimals
         decimals.push(other_entry.asset_decimals);
-
-        i += 3;
     }
 
     let total_value = if balances.is_empty() {
         0u64
     } else {
-        total_portfolio_value(&balances, &prices, &decimals, ctx.accounts.vault.base_decimals)?
+        total_portfolio_value(
+            &balances,
+            &prices,
+            &decimals,
+            ctx.accounts.vault.base_decimals,
+        )?
     };
 
     // ===== Module Hooks (if enabled) =====
@@ -125,7 +155,8 @@ pub fn handler(
 
         // Calculate shares (floor — favors vault)
         let shares = convert_to_shares(
-            deposit_value, total_value,
+            deposit_value,
+            total_value,
             ctx.accounts.shares_mint.supply,
             ctx.accounts.vault.decimals_offset,
             Rounding::Floor,
@@ -138,7 +169,8 @@ pub fn handler(
 
     #[cfg(not(feature = "modules"))]
     let net_shares = convert_to_shares(
-        deposit_value, total_value,
+        deposit_value,
+        total_value,
         ctx.accounts.shares_mint.supply,
         ctx.accounts.vault.decimals_offset,
         Rounding::Floor,
@@ -178,6 +210,16 @@ pub fn handler(
         ),
         net_shares,
         9,
+    )?;
+
+    // Update per-user cumulative deposit tracking (if caps module is active)
+    #[cfg(feature = "modules")]
+    module_hooks::update_user_deposit(
+        ctx.remaining_accounts,
+        &crate::ID,
+        &ctx.accounts.vault.key(),
+        &ctx.accounts.user.key(),
+        deposit_value,
     )?;
 
     emit!(DepositSingleEvent {
@@ -229,7 +271,12 @@ pub struct DepositSingle<'info> {
     )]
     pub shares_mint: Box<InterfaceAccount<'info, Mint>>,
 
-    #[account(mut)]
+    /// V9-P2: Add mint/owner constraints for defense-in-depth (CPI enforces, but belt-and-suspenders).
+    #[account(
+        mut,
+        token::mint = asset_mint,
+        token::authority = user,
+    )]
     pub user_asset_account: Box<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(

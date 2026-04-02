@@ -11,7 +11,7 @@ pub mod state;
 
 use instructions::*;
 
-declare_id!("Bf17gDR2JdKTWdoTWK3Va9YQtkpePRAAVxMCaokj8ZFW");
+declare_id!("CMeQ5Lx7AvjuW3DrzNvEkPZSdqKZjjhaTrAmgqBvPKHD");
 
 #[program]
 pub mod svs_11 {
@@ -117,9 +117,25 @@ pub mod svs_11 {
         instructions::admin::unpause_handler(ctx)
     }
 
-    /// Transfer vault authority to a new address.
+    /// Step 1 of two-step authority transfer: set pending authority.
+    pub fn request_transfer_authority(ctx: Context<Admin>, new_authority: Pubkey) -> Result<()> {
+        instructions::admin::request_transfer_authority_handler(ctx, new_authority)
+    }
+
+    /// Step 2 of two-step authority transfer: pending authority accepts.
+    pub fn accept_authority(ctx: Context<AcceptAuthority>) -> Result<()> {
+        instructions::admin::accept_authority_handler(ctx)
+    }
+
+    /// Transfer vault authority to a new address (deprecated -- prefer two-step transfer).
+    #[allow(deprecated)]
     pub fn transfer_authority(ctx: Context<Admin>, new_authority: Pubkey) -> Result<()> {
         instructions::admin::transfer_authority_handler(ctx, new_authority)
+    }
+
+    /// Cancel a pending two-step authority transfer.
+    pub fn cancel_transfer_authority(ctx: Context<Admin>) -> Result<()> {
+        instructions::admin::cancel_transfer_authority_handler(ctx)
     }
 
     /// Set a new vault manager.
@@ -137,18 +153,63 @@ pub mod svs_11 {
     }
 
     /// Update the NAV oracle configuration.
+    /// DEPRECATED: Bypasses 24h oracle timelock. Always returns an error.
+    /// Use `request_oracle_change` + `apply_oracle_change` for oracle address changes,
+    /// and `update_oracle_params` for staleness/deviation settings.
+    #[allow(deprecated)]
     pub fn update_oracle_config(
         ctx: Context<UpdateOracleConfig>,
         new_nav_oracle: Pubkey,
         new_oracle_program: Pubkey,
         new_max_staleness: i64,
+        new_max_deviation_bps: Option<u16>,
     ) -> Result<()> {
         instructions::admin::update_oracle_config_handler(
             ctx,
             new_nav_oracle,
             new_oracle_program,
             new_max_staleness,
+            new_max_deviation_bps,
         )
+    }
+
+    /// Update oracle non-address parameters (staleness, deviation) without timelock.
+    pub fn update_oracle_params(
+        ctx: Context<UpdateOracleParams>,
+        new_max_staleness: Option<i64>,
+        new_max_deviation_bps: Option<u16>,
+    ) -> Result<()> {
+        instructions::admin::update_oracle_params_handler(
+            ctx,
+            new_max_staleness,
+            new_max_deviation_bps,
+        )
+    }
+
+    /// Initialize the vault config PDA for oracle timelock.
+    pub fn initialize_vault_config(ctx: Context<InitializeVaultConfig>) -> Result<()> {
+        instructions::admin::initialize_vault_config_handler(ctx)
+    }
+
+    /// Request an oracle change (starts 24h timelock).
+    pub fn request_oracle_change(
+        ctx: Context<RequestOracleChange>,
+        new_oracle: Pubkey,
+    ) -> Result<()> {
+        instructions::admin::request_oracle_change_handler(ctx, new_oracle)
+    }
+
+    /// Apply a pending oracle change after timelock expires.
+    pub fn apply_oracle_change(ctx: Context<ApplyOracleChange>) -> Result<()> {
+        instructions::admin::apply_oracle_change_handler(ctx)
+    }
+
+    /// Set or update the compliance officer for freeze/unfreeze operations.
+    pub fn set_compliance_officer(
+        ctx: Context<SetComplianceOfficer>,
+        new_officer: Pubkey,
+    ) -> Result<()> {
+        instructions::admin::set_compliance_officer_handler(ctx, new_officer)
     }
 
     // =========================================================================

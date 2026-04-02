@@ -20,10 +20,10 @@ pub struct ClaimRedeem<'info> {
     #[account(mut)]
     pub claimant: Signer<'info>,
 
-    #[account(
-        mut,
-        constraint = !vault.paused @ VaultError::VaultPaused,
-    )]
+    /// V6-P4 / V5-P24: No pause check — already-fulfilled redemptions have committed assets
+    /// (shares burned, assets computed). Blocking claims during pause would trap user funds.
+    /// Pause halts NEW operations (requests, fulfillments), not settlement of committed claims.
+    #[account(mut)]
     pub vault: Account<'info, AsyncVault>,
 
     #[account(
@@ -67,6 +67,10 @@ pub struct ClaimRedeem<'info> {
     pub system_program: Program<'info, System>,
 }
 
+/// V6-P7: This handler does NOT update `vault.total_shares` because shares were already
+/// burned during `fulfill_redeem`. The `total_shares` field was decremented at fulfillment
+/// time, so no reconciliation is needed here. `claim_redeem` only transfers the computed
+/// assets to the receiver and closes the request PDA.
 pub fn handler(ctx: Context<ClaimRedeem>) -> Result<()> {
     let redeem_request = &ctx.accounts.redeem_request;
 

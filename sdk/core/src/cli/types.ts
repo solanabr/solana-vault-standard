@@ -13,12 +13,7 @@ import { AnchorProvider, BN } from "@coral-xyz/anchor";
 // ============================================================================
 
 /** SVS program variant identifier */
-export type SvsVariant =
-  | "svs-1"
-  | "svs-2"
-  | "svs-3"
-  | "svs-4"
-  | "svs-12";
+export type SvsVariant = "svs-1" | "svs-2" | "svs-3" | "svs-4" | "svs-5" | "svs-6" | "svs-7" | "svs-8" | "svs-9" | "svs-10" | "svs-11" | "svs-12";
 
 /** CLI output format */
 export type OutputFormat = "table" | "json" | "csv";
@@ -374,19 +369,40 @@ export const SVS_PROGRAMS: Record<
   { devnet: string; mainnet?: string }
 > = {
   "svs-1": {
-    devnet: "Bv8aVSQ3DJUe3B7TqQZRZgrNvVTh8TjfpwpoeR1ckDMC",
+    devnet: "CzZyssz2PdLccWpbVi6a3wFKMmMqdf28U2RapNNRJSPX",
   },
   "svs-2": {
-    devnet: "3UrYrxh1HmVgq7WPygZ5x1gNEaWFwqTMs7geNqMnsrtD",
+    devnet: "7vnZM4aCsRapH9ft7Bo5ibTXNH2dvoxkj96c7JonLhoe",
   },
   "svs-3": {
-    devnet: "EcpnYtaCBrZ4p4uq7dDr55D3fL9nsxbCNqpyUREGpPkh",
+    devnet: "CC4xQGxmwKusLW3ToqUzRAFjh7cL2iKsgfkz6qJSasYs",
   },
   "svs-4": {
-    devnet: "2WP7LXWqrp1W4CwEJuVt2SxWPNY2n6AYmijh6Z4EeidY",
+    devnet: "EqRNvMTwczQjUhQL8wwrxJGALgz5VWsYne3d67e6ruCv",
+  },
+  "svs-5": {
+    devnet: "HCp23XHzV4HJHXwLWwQj8aSTU1yjyzj8FCNLe6NybwXt",
+  },
+  "svs-6": {
+    devnet: "oaT6wgNiwCqd7EGvB6Wb5ZFYUJXckk6LEhB7MWqXbyC",
+  },
+  "svs-7": {
+    devnet: "CR2ccVacmbQ2DaXvR66W7gnmH7KuDCqbVW5VwnTczQUC",
+  },
+  "svs-8": {
+    devnet: "HnZ9N8Y1v6jMhwDqo4Y76GfqjRArdinadgK67yLVFZbe",
+  },
+  "svs-9": {
+    devnet: "AaADS3DCGkjhDEDbGkygbG9bNaziR9TPK2X7SMBYedws",
+  },
+  "svs-10": {
+    devnet: "4G5d6KutMpUaDPTVcv7FJBpPTGZej8rx3GyGnfiRdD6M",
+  },
+  "svs-11": {
+    devnet: "CMeQ5Lx7AvjuW3DrzNvEkPZSdqKZjjhaTrAmgqBvPKHD",
   },
   "svs-12": {
-    devnet: "FM3ZfmPSdQzFniZSDXc6FfXKFvXRSNQXeTdPKC8tz5C",
+    devnet: "EPwH58e5V1UXYkkD8JZ4bq7Wr2iRiC9fLj1S6BRRz2R",
   },
 };
 

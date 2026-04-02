@@ -7,7 +7,7 @@ use svs_math::{convert_to_assets, Rounding};
 
 use crate::{
     constants::TRANCHED_VAULT_SEED,
-    error::TranchedVaultError,
+    error::VaultError,
     events::TrancheRedeem,
     state::{Tranche, TranchedVault},
     waterfall::check_subordination,
@@ -23,13 +23,13 @@ pub struct Redeem<'info> {
 
     #[account(
         mut,
-        constraint = !vault.paused @ TranchedVaultError::VaultPaused,
+        constraint = !vault.paused @ VaultError::VaultPaused,
     )]
     pub vault: Account<'info, TranchedVault>,
 
     #[account(
         mut,
-        constraint = target_tranche.vault == vault.key() @ TranchedVaultError::TrancheVaultMismatch,
+        has_one = vault @ VaultError::TrancheVaultMismatch,
     )]
     pub target_tranche: Account<'info, Tranche>,
 
@@ -75,10 +75,10 @@ pub struct Redeem<'info> {
 }
 
 pub fn handler(ctx: Context<Redeem>, shares: u64, min_assets_out: u64) -> Result<()> {
-    require!(shares > 0, TranchedVaultError::ZeroAmount);
+    require!(shares > 0, VaultError::ZeroAmount);
     require!(
         ctx.accounts.user_shares_account.amount >= shares,
-        TranchedVaultError::InsufficientShares
+        VaultError::InsufficientShares
     );
 
     let tranche = &ctx.accounts.target_tranche;
@@ -90,7 +90,7 @@ pub fn handler(ctx: Context<Redeem>, shares: u64, min_assets_out: u64) -> Result
         let vault_key = vault.key();
         let user_key = ctx.accounts.user.key();
 
-        module_hooks::check_access(remaining, &crate::ID, &vault_key, &user_key, &[])?;
+        module_hooks::check_withdrawal_access(remaining, &crate::ID, &vault_key, &user_key)?;
 
         let current_timestamp = Clock::get()?.unix_timestamp;
         module_hooks::check_share_lock(
@@ -109,43 +109,46 @@ pub fn handler(ctx: Context<Redeem>, shares: u64, min_assets_out: u64) -> Result
         vault.decimals_offset,
         Rounding::Floor,
     )
-    .map_err(|_| TranchedVaultError::MathOverflow)?;
+    .map_err(|_| VaultError::MathOverflow)?;
 
     #[cfg(feature = "modules")]
-    let assets = {
+    let net_assets = {
         let remaining = ctx.remaining_accounts;
         let vault_key = vault.key();
         let result = module_hooks::apply_exit_fee(remaining, &crate::ID, &vault_key, assets)?;
         result.net_assets
     };
 
-    require!(assets > 0, TranchedVaultError::ZeroAmount);
+    #[cfg(not(feature = "modules"))]
+    let net_assets = assets;
 
-    require!(
-        assets >= min_assets_out,
-        TranchedVaultError::SlippageExceeded
-    );
+    require!(net_assets > 0, VaultError::ZeroAmount);
+
+    require!(net_assets >= min_assets_out, VaultError::SlippageExceeded);
+    // V9-P10: Uses gross `assets` for liquidity check (conservative, vault-favoring).
+    // Only `net_assets` is transferred out; the fee stays in vault. This may cause
+    // unnecessary reverts at the margin but never allows over-withdrawal.
     require!(
         ctx.accounts.asset_vault.amount >= assets,
-        TranchedVaultError::InsufficientLiquidity
+        VaultError::InsufficientLiquidity
     );
 
-    // 2. Update accounting
+    // 2. Update accounting (use gross assets to correctly reflect fee staying in vault)
     let tranche = &mut ctx.accounts.target_tranche;
     tranche.total_assets_allocated = tranche
         .total_assets_allocated
         .checked_sub(assets)
-        .ok_or(TranchedVaultError::MathOverflow)?;
+        .ok_or(VaultError::MathOverflow)?;
     tranche.total_shares = tranche
         .total_shares
         .checked_sub(shares)
-        .ok_or(TranchedVaultError::MathOverflow)?;
+        .ok_or(VaultError::MathOverflow)?;
 
     let vault = &mut ctx.accounts.vault;
     vault.total_assets = vault
         .total_assets
         .checked_sub(assets)
-        .ok_or(TranchedVaultError::MathOverflow)?;
+        .ok_or(VaultError::MathOverflow)?;
 
     // 3. Subordination check on post-state
     let tranche = &ctx.accounts.target_tranche;
@@ -165,14 +168,8 @@ pub fn handler(ctx: Context<Redeem>, shares: u64, min_assets_out: u64) -> Result
         &ctx.accounts.tranche_3,
     ] {
         if let Some(t) = opt_tranche {
-            require!(
-                !seen_keys.contains(&t.key()),
-                TranchedVaultError::DuplicateTranche
-            );
-            require!(
-                t.vault == vault.key(),
-                TranchedVaultError::TrancheVaultMismatch
-            );
+            require!(!seen_keys.contains(&t.key()), VaultError::DuplicateTranche);
+            require!(t.vault == vault.key(), VaultError::TrancheVaultMismatch);
             seen_keys.push(t.key());
             all_allocations.push((t.priority, t.total_assets_allocated, t.subordination_bps));
         }
@@ -180,7 +177,7 @@ pub fn handler(ctx: Context<Redeem>, shares: u64, min_assets_out: u64) -> Result
 
     require!(
         all_allocations.len() == vault.num_tranches as usize,
-        TranchedVaultError::WrongTrancheCount
+        VaultError::WrongTrancheCount
     );
 
     all_allocations.sort_by_key(|&(p, _, _)| p);
@@ -225,7 +222,7 @@ pub fn handler(ctx: Context<Redeem>, shares: u64, min_assets_out: u64) -> Result
             },
             signer_seeds,
         ),
-        assets,
+        net_assets,
         ctx.accounts.asset_mint.decimals,
     )?;
 

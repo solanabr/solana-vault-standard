@@ -650,13 +650,13 @@ async function detectVaultVariant(
   const programId = accountInfo.owner.toBase58();
 
   switch (programId) {
-    case "Bv8aVSQ3DJUe3B7TqQZRZgrNvVTh8TjfpwpoeR1ckDMC":
+    case "CzZyssz2PdLccWpbVi6a3wFKMmMqdf28U2RapNNRJSPX":
       return "svs-1";
-    case "3UrYrxh1HmVgq7WPygZ5x1gNEaWFwqTMs7geNqMnsrtD":
+    case "7vnZM4aCsRapH9ft7Bo5ibTXNH2dvoxkj96c7JonLhoe":
       return "svs-2";
-    case "EcpnYtaCBrZ4p4uq7dDr55D3fL9nsxbCNqpyUREGpPkh":
+    case "CC4xQGxmwKusLW3ToqUzRAFjh7cL2iKsgfkz6qJSasYs":
       return "svs-3";
-    case "2WP7LXWqrp1W4CwEJuVt2SxWPNY2n6AYmijh6Z4EeidY":
+    case "EqRNvMTwczQjUhQL8wwrxJGALgz5VWsYne3d67e6ruCv":
       return "svs-4";
     default:
       return null;

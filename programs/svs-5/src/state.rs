@@ -26,6 +26,9 @@ pub struct StreamVault {
     pub stream_end: i64,
     /// Timestamp of last checkpoint
     pub last_checkpoint: i64,
+    /// Cumulative yield already materialized from the current stream into base_assets.
+    /// Prevents rounding drift: accrued = total * elapsed / duration - distributed.
+    pub stream_distributed: u64,
     /// Virtual offset exponent (9 - asset_decimals) for inflation attack protection
     pub decimals_offset: u8,
     /// PDA bump seed
@@ -34,8 +37,10 @@ pub struct StreamVault {
     pub paused: bool,
     /// Unique vault identifier (allows multiple vaults per asset)
     pub vault_id: u64,
+    /// Pending authority for two-step transfer (default = Pubkey::default() means none)
+    pub pending_authority: Pubkey,
     /// Reserved for future upgrades
-    pub _reserved: [u8; 64],
+    pub _reserved: [u8; 24],
 }
 
 impl StreamVault {
@@ -49,11 +54,13 @@ impl StreamVault {
         8 +   // stream_start
         8 +   // stream_end
         8 +   // last_checkpoint
+        8 +   // stream_distributed
         1 +   // decimals_offset
         1 +   // bump
         1 +   // paused
         8 +   // vault_id
-        64; // _reserved
+        32 +  // pending_authority
+        24; // _reserved
 
     pub const SEED_PREFIX: &'static [u8] = VAULT_SEED;
 
@@ -62,37 +69,55 @@ impl StreamVault {
     /// Returns `base_assets + accrued_stream_yield` where accrued yield is linearly
     /// interpolated between stream_start and stream_end. Floor rounding protects
     /// the vault from over-distribution.
+    ///
+    /// Uses `stream_amount * elapsed / duration - stream_distributed` to avoid
+    /// rounding drift from repeated checkpoint operations.
     pub fn effective_total_assets(&self, now: i64) -> Result<u64> {
         if self.stream_amount == 0 || now <= self.stream_start {
             return Ok(self.base_assets);
         }
 
         if now >= self.stream_end {
+            // All remaining un-distributed yield
+            let remaining = self
+                .stream_amount
+                .checked_sub(self.stream_distributed)
+                .ok_or_else(|| error!(VaultError::MathOverflow))?;
             return self
                 .base_assets
-                .checked_add(self.stream_amount)
+                .checked_add(remaining)
                 .ok_or_else(|| error!(VaultError::MathOverflow));
         }
 
-        // Linear interpolation: accrued = stream_amount * elapsed / duration (floor)
-        // Safety: validate non-negative before i64→u64 cast to prevent wrapping
+        // Linear interpolation: total_accrued = stream_amount * elapsed / duration (floor)
+        // Safety: validate non-negative before i64->u64 cast to prevent wrapping
         let elapsed_i64 = now
             .checked_sub(self.stream_start)
             .ok_or(VaultError::MathOverflow)?;
         require!(elapsed_i64 >= 0, VaultError::MathOverflow);
-        let elapsed = elapsed_i64 as u64;
+        // V6-P6: Use try_into() for idiomatic i64→u64 conversion (safe after >= 0 check)
+        let elapsed: u64 = elapsed_i64
+            .try_into()
+            .map_err(|_| error!(VaultError::MathOverflow))?;
 
         let duration_i64 = self
             .stream_end
             .checked_sub(self.stream_start)
             .ok_or(VaultError::MathOverflow)?;
         require!(duration_i64 > 0, VaultError::MathOverflow);
-        let duration = duration_i64 as u64;
+        let duration: u64 = duration_i64
+            .try_into()
+            .map_err(|_| error!(VaultError::MathOverflow))?;
 
-        let accrued = math::mul_div(self.stream_amount, elapsed, duration, math::Rounding::Floor)?;
+        // Compute total accrued from original stream params, subtract already distributed
+        let total_accrued =
+            math::mul_div(self.stream_amount, elapsed, duration, math::Rounding::Floor)?;
+        let incremental = total_accrued
+            .checked_sub(self.stream_distributed)
+            .ok_or_else(|| error!(VaultError::MathOverflow))?;
 
         self.base_assets
-            .checked_add(accrued)
+            .checked_add(incremental)
             .ok_or_else(|| error!(VaultError::MathOverflow))
     }
 
@@ -115,17 +140,16 @@ impl StreamVault {
         }
 
         self.base_assets = effective;
+        self.stream_distributed = self
+            .stream_distributed
+            .checked_add(accrued)
+            .ok_or_else(|| error!(VaultError::MathOverflow))?;
 
         if now >= self.stream_end {
             self.stream_amount = 0;
             self.stream_start = 0;
             self.stream_end = 0;
-        } else {
-            self.stream_amount = self
-                .stream_amount
-                .checked_sub(accrued)
-                .ok_or_else(|| error!(VaultError::MathOverflow))?;
-            self.stream_start = now;
+            self.stream_distributed = 0;
         }
 
         self.last_checkpoint = now;

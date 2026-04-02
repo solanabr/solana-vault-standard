@@ -1,30 +1,39 @@
-use anchor_lang::prelude::*;
-use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
 use crate::{
     constants::{ASSET_ENTRY_SEED, MAX_ASSETS},
     error::VaultError,
     events::AssetAdded,
     state::{AssetEntry, MultiAssetVault},
 };
+use anchor_lang::prelude::*;
+use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
 
 pub fn handler(ctx: Context<AddAsset>, target_weight_bps: u16) -> Result<()> {
     let vault_key = ctx.accounts.vault.key();
 
     require!(!ctx.accounts.vault.paused, VaultError::VaultPaused);
-    require!(ctx.accounts.vault.num_assets < MAX_ASSETS, VaultError::MaxAssetsExceeded);
+    require!(target_weight_bps > 0, VaultError::InvalidWeight);
+    require!(
+        ctx.accounts.vault.num_assets < MAX_ASSETS,
+        VaultError::MaxAssetsExceeded
+    );
 
-    // Sum weights from remaining_accounts (existing AssetEntry accounts)
-    // FIX P1: typed deserialization with owner + vault checks instead of raw byte offsets
+    // Sum weights from remaining_accounts (existing AssetEntry accounts).
+    // V5-P15 FIX: Validate remaining_accounts length matches current asset count
+    // and error on entries that don't belong to this vault instead of silently skipping.
+    require!(
+        ctx.remaining_accounts.len() == ctx.accounts.vault.num_assets as usize,
+        VaultError::AssetNotFound
+    );
+
     let svs8_id = crate::ID;
     let mut current_total_weight: u16 = 0;
     for info in ctx.remaining_accounts.iter() {
         require!(info.owner == &svs8_id, VaultError::InvalidOracle);
         let entry = AssetEntry::try_deserialize(&mut &info.try_borrow_data()?[..])?;
-        if entry.vault == vault_key {
-            current_total_weight = current_total_weight
-                .checked_add(entry.target_weight_bps)
-                .ok_or(VaultError::MathOverflow)?;
-        }
+        require!(entry.vault == vault_key, VaultError::AssetNotFound);
+        current_total_weight = current_total_weight
+            .checked_add(entry.target_weight_bps)
+            .ok_or(VaultError::MathOverflow)?;
     }
 
     let new_total = current_total_weight
@@ -49,9 +58,15 @@ pub fn handler(ctx: Context<AddAsset>, target_weight_bps: u16) -> Result<()> {
     asset_entry.index = index;
     asset_entry.bump = bump;
 
-    ctx.accounts.vault.num_assets = ctx.accounts.vault.num_assets
+    ctx.accounts.vault.num_assets = ctx
+        .accounts
+        .vault
+        .num_assets
         .checked_add(1)
         .ok_or(VaultError::MathOverflow)?;
+
+    // Mark weights as valid only when they sum to exactly 10,000 bps
+    ctx.accounts.vault.weights_valid = new_total == 10_000;
 
     emit!(AssetAdded {
         vault: vault_key,

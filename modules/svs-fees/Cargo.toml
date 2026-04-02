@@ -1,6 +1,6 @@
 [package]
 name = "svs-fees"
-version = "0.1.0"
+version = "2.0.0"
 edition = "2021"
 description = "Fee module for SVS vault programs - entry/exit/management/performance fees"
 license = "Apache-2.0"

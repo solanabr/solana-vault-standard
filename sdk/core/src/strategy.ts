@@ -227,9 +227,18 @@ export function calculateStrategyAllocations(
   let remaining = totalAssets;
   let totalWeight = 0;
 
-  // Validate weights sum
+  // Validate weights are within BPS range and compute sum
   for (const weight of targetWeights.values()) {
+    if (weight < 0 || weight > 10000) {
+      throw new Error(
+        `Weight ${weight} is outside valid BPS range [0, 10000]`,
+      );
+    }
     totalWeight += weight;
+  }
+
+  if (totalWeight === 0) {
+    return allocations;
   }
 
   // Filter active strategies
@@ -242,11 +251,11 @@ export function calculateStrategyAllocations(
 
     if (targetWeight === 0) continue;
 
-    // Calculate target amount
-    const targetAmount = totalAssets.muln(targetWeight).divn(totalWeight);
+    // Calculate target amount using BN arithmetic to avoid muln/divn truncation
+    const targetAmount = totalAssets.mul(new BN(targetWeight)).div(new BN(totalWeight));
 
     // Cap at max allocation
-    const maxAmount = totalAssets.muln(strategy.maxAllocationBps).divn(10000);
+    const maxAmount = totalAssets.mul(new BN(strategy.maxAllocationBps)).div(new BN(10000));
     const amount = BN.min(targetAmount, maxAmount);
 
     // Don't exceed remaining
@@ -347,6 +356,7 @@ export function getCurrentWeights(
   }
 
   for (const pos of positions) {
+    // V6-S1: muln(10000) is safe — BPS constant, not user input. Consistent with V5-S10 pattern.
     const weight = pos.estimatedValue.muln(10000).div(total).toNumber();
     weights.set(pos.strategyId, weight);
   }

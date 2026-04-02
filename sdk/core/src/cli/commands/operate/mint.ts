@@ -5,7 +5,12 @@ import { Program, BN } from "@coral-xyz/anchor";
 import { createContext } from "../../middleware";
 import { getGlobalOptions } from "../../index";
 import { SolanaVault } from "../../../vault";
-import { findIdlPath, loadIdl, resolveVaultArg } from "../../utils";
+import {
+  findIdlPath,
+  loadIdl,
+  resolveVaultArg,
+  validateAmountInput,
+} from "../../utils";
 
 export function registerMintCommand(program: Command): void {
   program
@@ -35,6 +40,7 @@ export function registerMintCommand(program: Command): void {
         process.exit(1);
       }
 
+      validateAmountInput(opts.shares, "shares");
       const shares = new BN(opts.shares);
       const slippageBps = parseInt(opts.slippage);
 
@@ -49,7 +55,7 @@ export function registerMintCommand(program: Command): void {
 
         const previewAssetCost = await vault.previewMint(shares);
         const maxAssets = opts.maxAssets
-          ? new BN(opts.maxAssets)
+          ? new BN(validateAmountInput(opts.maxAssets, "max-assets"))
           : previewAssetCost.muln(10000 + slippageBps).divn(10000);
 
         output.info(`Vault: ${vaultArg}`);

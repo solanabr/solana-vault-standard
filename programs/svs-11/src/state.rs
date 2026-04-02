@@ -1,7 +1,8 @@
 use anchor_lang::prelude::*;
 
 use crate::constants::{
-    FROZEN_ACCOUNT_SEED, INVESTMENT_REQUEST_SEED, REDEMPTION_REQUEST_SEED, VAULT_SEED,
+    FROZEN_ACCOUNT_SEED, INVESTMENT_REQUEST_SEED, REDEMPTION_REQUEST_SEED, VAULT_CONFIG_SEED,
+    VAULT_SEED,
 };
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, Default)]
@@ -27,6 +28,11 @@ pub struct CreditVault {
     pub attestation_program: Pubkey,
     pub vault_id: u64,
     pub total_assets: u64,
+    /// V4-P20: Cached share count. Updated atomically with mint/burn CPIs in
+    /// claim_deposit (+) and approve_redeem (-). Used for NAV deviation checks
+    /// in approve_deposit/approve_redeem. Callers with access to shares_mint
+    /// should prefer shares_mint.supply as the canonical source. A reconciliation
+    /// check is enforced in approve_redeem (which has shares_mint in its context).
     pub total_shares: u64,
     pub total_pending_deposits: u64,
     pub minimum_investment: u64,
@@ -39,7 +45,11 @@ pub struct CreditVault {
     pub paused: bool,
     pub total_approved_deposits: u64,
     pub max_deviation_bps: u16,
-    pub _reserved: [u8; 64],
+    /// Pending authority for two-step transfer (default = Pubkey::default() means none)
+    pub pending_authority: Pubkey,
+    /// Number of pending (not yet approved/rejected/cancelled) redemption requests
+    pub total_pending_redeems: u64,
+    pub _reserved: [u8; 24],
 }
 
 impl CreditVault {
@@ -66,7 +76,9 @@ impl CreditVault {
         1 +   // paused
         8 +   // total_approved_deposits
         2 +   // max_deviation_bps
-        64; // _reserved
+        32 +  // pending_authority
+        8 +   // total_pending_redeems
+        24; // _reserved
 
     pub const SEED_PREFIX: &'static [u8] = VAULT_SEED;
 }
@@ -147,6 +159,28 @@ impl FrozenAccount {
         1; // bump
 
     pub const SEED_PREFIX: &'static [u8] = FROZEN_ACCOUNT_SEED;
+}
+
+#[account]
+pub struct VaultConfig {
+    pub vault: Pubkey,              // 32
+    pub pending_oracle: Pubkey,     // 32 - proposed new oracle
+    pub oracle_change_at: i64,      // 8  - when the change can be applied
+    pub compliance_officer: Pubkey, // 32 - separate compliance officer for freeze/unfreeze
+    pub bump: u8,                   // 1
+    pub _reserved: [u8; 31],        // future use (63 - 32 = 31)
+}
+
+impl VaultConfig {
+    pub const LEN: usize = 8 + // discriminator
+        32 +  // vault
+        32 +  // pending_oracle
+        8 +   // oracle_change_at
+        32 +  // compliance_officer
+        1 +   // bump
+        31; // _reserved
+
+    pub const SEED_PREFIX: &'static [u8] = VAULT_CONFIG_SEED;
 }
 
 // =============================================================================

@@ -56,6 +56,103 @@ export const ALLOCATOR_VAULT_SEED = Buffer.from("allocator_vault");
 export const CHILD_ALLOCATION_SEED = Buffer.from("child_allocation");
 
 // ============================================================
+// Child Vault Account Layout Constants
+// ============================================================
+
+/**
+ * Anchor account discriminator size (8-byte SHA256 prefix).
+ * All Anchor accounts start with this discriminator.
+ */
+const ANCHOR_DISCRIMINATOR_SIZE = 8;
+
+/**
+ * Known child vault account data lengths by vault type.
+ *
+ * SVS-1 (Basic Vault):          discriminator(8) + authority(32) + asset_mint(32) + shares_mint(32) + asset_vault(32) + fields = 197 bytes
+ * SVS-1 (with optional fields): 201 bytes (includes additional config flags)
+ * SVS-3 (Confidential Vault):   211 bytes (includes auditor_elgamal_pubkey + confidential_authority)
+ * SVS-5 (Streaming Vault):      246 bytes (includes stream state fields)
+ * SVS-6 (Conf. Streaming):      254 bytes (includes confidential + stream fields)
+ */
+const VAULT_DATA_LEN_SVS1_BASIC = 197;
+const VAULT_DATA_LEN_SVS1_EXTENDED = 201;
+const VAULT_DATA_LEN_SVS3_CONFIDENTIAL = 211;
+const VAULT_DATA_LEN_SVS5_STREAMING = 246;
+const VAULT_DATA_LEN_SVS6_CONF_STREAMING = 254;
+
+/**
+ * Field offsets for shares_mint and asset_vault within child vault accounts.
+ *
+ * For SVS-1/SVS-1-ext/SVS-3 layout:
+ *   [discriminator: 8][authority: 32][asset_mint: 32] = offset 72 for shares_mint
+ *   [shares_mint: 32] = offset 104 for asset_vault
+ *
+ * For SVS-5/SVS-6 layout (extra field before shares_mint):
+ *   [discriminator: 8][authority: 32][asset_mint: 32][extra: 32] = offset 104 for shares_mint
+ *   [shares_mint: 32] = offset 136 for asset_vault
+ */
+const SHARES_MINT_OFFSET_STANDARD = 72;
+const ASSET_VAULT_OFFSET_STANDARD = 104;
+const SHARES_MINT_OFFSET_STREAMING = 104;
+const ASSET_VAULT_OFFSET_STREAMING = 136;
+
+/**
+ * Parse shares_mint and asset_vault from a child vault account's raw data.
+ * Validates the data length against known vault types and checks for a
+ * non-zero Anchor discriminator before parsing.
+ *
+ * @throws If the data length does not match any known vault type.
+ */
+function parseChildVaultFields(data: Buffer): {
+  sharesMint: PublicKey;
+  assetVault: PublicKey;
+} {
+  // Verify the account has a non-zero discriminator (basic Anchor check)
+  if (data.length < ANCHOR_DISCRIMINATOR_SIZE) {
+    throw new Error(
+      `Child vault data too short (${data.length} bytes) to contain discriminator`,
+    );
+  }
+  const discriminator = data.subarray(0, ANCHOR_DISCRIMINATOR_SIZE);
+  if (discriminator.every((b) => b === 0)) {
+    throw new Error("Child vault account has zero discriminator (uninitialized)");
+  }
+
+  switch (data.length) {
+    case VAULT_DATA_LEN_SVS1_BASIC:
+    case VAULT_DATA_LEN_SVS1_EXTENDED:
+    case VAULT_DATA_LEN_SVS3_CONFIDENTIAL:
+      return {
+        sharesMint: new PublicKey(
+          data.subarray(SHARES_MINT_OFFSET_STANDARD, SHARES_MINT_OFFSET_STANDARD + 32),
+        ),
+        assetVault: new PublicKey(
+          data.subarray(ASSET_VAULT_OFFSET_STANDARD, ASSET_VAULT_OFFSET_STANDARD + 32),
+        ),
+      };
+
+    case VAULT_DATA_LEN_SVS5_STREAMING:
+    case VAULT_DATA_LEN_SVS6_CONF_STREAMING:
+      return {
+        sharesMint: new PublicKey(
+          data.subarray(SHARES_MINT_OFFSET_STREAMING, SHARES_MINT_OFFSET_STREAMING + 32),
+        ),
+        assetVault: new PublicKey(
+          data.subarray(ASSET_VAULT_OFFSET_STREAMING, ASSET_VAULT_OFFSET_STREAMING + 32),
+        ),
+      };
+
+    default:
+      throw new Error(
+        `Unknown child vault data length: ${data.length}. ` +
+          `Expected one of: ${VAULT_DATA_LEN_SVS1_BASIC}, ${VAULT_DATA_LEN_SVS1_EXTENDED}, ` +
+          `${VAULT_DATA_LEN_SVS3_CONFIDENTIAL}, ${VAULT_DATA_LEN_SVS5_STREAMING}, ` +
+          `${VAULT_DATA_LEN_SVS6_CONF_STREAMING}`,
+      );
+  }
+}
+
+// ============================================================
 // PDA Helpers
 // ============================================================
 
@@ -89,11 +186,7 @@ export function getChildAllocationAddress(
   childVault: PublicKey,
 ): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
-    [
-      CHILD_ALLOCATION_SEED,
-      allocatorVault.toBuffer(),
-      childVault.toBuffer(),
-    ],
+    [CHILD_ALLOCATION_SEED, allocatorVault.toBuffer(), childVault.toBuffer()],
     programId,
   );
 }
@@ -342,10 +435,7 @@ export class AllocatorVaultClient {
     const id = typeof vaultId === "number" ? new BN(vaultId) : vaultId;
 
     // Detect token program for the asset mint
-    const assetTokenProgram = await detectTokenProgram(
-      provider,
-      assetMint,
-    );
+    const assetTokenProgram = await detectTokenProgram(provider, assetMint);
 
     const { allocatorVault, idleVault } = deriveAllocatorAddresses(
       program.programId,
@@ -464,7 +554,7 @@ export class AllocatorVaultClient {
    */
   async getChildAccountsForComputation(): Promise<AccountMeta[]> {
     const remainingAccounts: AccountMeta[] = [];
-    
+
     // Fetch all ChildAllocation accounts matching this allocatorVault
     // Offset 8 is because allocator_vault is the first field after the 8-byte discriminator
     const accountNs = this.program.account as Record<string, any>;
@@ -479,32 +569,57 @@ export class AllocatorVaultClient {
 
     for (const alloc of childAllocations) {
       if (alloc.account.enabled) {
-        remainingAccounts.push({ pubkey: alloc.publicKey, isSigner: false, isWritable: false });
-        remainingAccounts.push({ pubkey: alloc.account.childVault as PublicKey, isSigner: false, isWritable: false });
-        remainingAccounts.push({ pubkey: alloc.account.childSharesAccount as PublicKey, isSigner: false, isWritable: false });
+        remainingAccounts.push({
+          pubkey: alloc.publicKey,
+          isSigner: false,
+          isWritable: false,
+        });
+        remainingAccounts.push({
+          pubkey: alloc.account.childVault as PublicKey,
+          isSigner: false,
+          isWritable: false,
+        });
+        remainingAccounts.push({
+          pubkey: alloc.account.childSharesAccount as PublicKey,
+          isSigner: false,
+          isWritable: false,
+        });
 
-        let childVaultKey = alloc.account.childVault as PublicKey;
+        const childVaultKey = alloc.account.childVault as PublicKey;
         let assetVault = childVaultKey;
         let sharesMint = childVaultKey;
         try {
-          const vaultData = await this.provider.connection.getAccountInfo(childVaultKey);
+          const vaultData =
+            await this.provider.connection.getAccountInfo(childVaultKey);
           if (vaultData) {
-            if (vaultData.data.length === 211) {
-              sharesMint = new PublicKey(vaultData.data.subarray(72, 104));
-              assetVault = new PublicKey(vaultData.data.subarray(104, 136));
-            } else if (vaultData.data.length === 197 || vaultData.data.length === 201) {
-              sharesMint = new PublicKey(vaultData.data.subarray(72, 104));
-              assetVault = new PublicKey(vaultData.data.subarray(104, 136));
-            } else if (vaultData.data.length === 246 || vaultData.data.length === 254) {
-              sharesMint = new PublicKey(vaultData.data.subarray(104, 136));
-              assetVault = new PublicKey(vaultData.data.subarray(136, 168));
-            }
+            const parsed = parseChildVaultFields(vaultData.data);
+            sharesMint = parsed.sharesMint;
+            assetVault = parsed.assetVault;
           }
         } catch (e) {
-            // fallback
+          console.warn(
+            "Failed to parse child vault:",
+            childVaultKey.toString(),
+            e,
+          );
+          // Skip this child entry entirely - using wrong keys would produce
+          // incorrect total asset computations
+          // Remove the 3 AccountMeta entries already pushed for this child
+          remainingAccounts.pop(); // childSharesAccount
+          remainingAccounts.pop(); // childVault
+          remainingAccounts.pop(); // childAllocation
+          continue;
         }
-        remainingAccounts.push({ pubkey: assetVault, isSigner: false, isWritable: false });
-        remainingAccounts.push({ pubkey: sharesMint, isSigner: false, isWritable: false });
+        remainingAccounts.push({
+          pubkey: assetVault,
+          isSigner: false,
+          isWritable: false,
+        });
+        remainingAccounts.push({
+          pubkey: sharesMint,
+          isSigner: false,
+          isWritable: false,
+        });
       }
     }
     return remainingAccounts;
@@ -637,18 +752,12 @@ export class AllocatorVaultClient {
     );
 
     // Fetch child vault to get its shares mint
-    const vaultData = await this.provider.connection.getAccountInfo(params.childVault);
+    const vaultData = await this.provider.connection.getAccountInfo(
+      params.childVault,
+    );
     if (!vaultData) throw new Error("Child vault not found");
-    
-    // SVS-1/5/2/3/4 all have shares_mint at offset 72 or 104
-    let childSharesMint: PublicKey;
-    if (vaultData.data.length === 211 || vaultData.data.length === 197 || vaultData.data.length === 201) {
-      childSharesMint = new PublicKey(vaultData.data.subarray(72, 104));
-    } else if (vaultData.data.length === 246 || vaultData.data.length === 254) {
-      childSharesMint = new PublicKey(vaultData.data.subarray(104, 136));
-    } else {
-      throw new Error(`Unknown vault data length: ${vaultData.data.length}`);
-    }
+
+    const { sharesMint: childSharesMint } = parseChildVaultFields(vaultData.data);
 
     const allocatorChildSharesAccount = getAllocatorChildSharesAddress(
       this.allocatorVault,
@@ -1032,11 +1141,15 @@ export class AllocatorVaultClient {
   async maxDeposit(): Promise<BN> {
     const remainingAccounts = await this.getChildAccountsForComputation();
     const state = await this.getState();
-    const sim: any = await this.program.methods.maxDeposit().accounts({
-      allocatorVault: this.allocatorVault,
-      sharesMint: state.sharesMint,
-      idleVault: this.idleVault,
-    } as any).remainingAccounts(remainingAccounts).simulate();
+    const sim: any = await this.program.methods
+      .maxDeposit()
+      .accounts({
+        allocatorVault: this.allocatorVault,
+        sharesMint: state.sharesMint,
+        idleVault: this.idleVault,
+      } as any)
+      .remainingAccounts(remainingAccounts)
+      .simulate();
     const buf = Buffer.from(sim.returnData || sim.returnValue, "base64");
     return new BN(buf, "le");
   }
@@ -1044,11 +1157,15 @@ export class AllocatorVaultClient {
   async maxMint(): Promise<BN> {
     const remainingAccounts = await this.getChildAccountsForComputation();
     const state = await this.getState();
-    const sim: any = await this.program.methods.maxMint().accounts({
-      allocatorVault: this.allocatorVault,
-      sharesMint: state.sharesMint,
-      idleVault: this.idleVault,
-    } as any).remainingAccounts(remainingAccounts).simulate();
+    const sim: any = await this.program.methods
+      .maxMint()
+      .accounts({
+        allocatorVault: this.allocatorVault,
+        sharesMint: state.sharesMint,
+        idleVault: this.idleVault,
+      } as any)
+      .remainingAccounts(remainingAccounts)
+      .simulate();
     const buf = Buffer.from(sim.returnData || sim.returnValue, "base64");
     return new BN(buf, "le");
   }
@@ -1056,12 +1173,16 @@ export class AllocatorVaultClient {
   async maxWithdraw(owner: PublicKey): Promise<BN> {
     const remainingAccounts = await this.getChildAccountsForComputation();
     const state = await this.getState();
-    const sim: any = await this.program.methods.maxWithdraw().accounts({
-      allocatorVault: this.allocatorVault,
-      sharesMint: state.sharesMint,
-      idleVault: this.idleVault,
-      ownerSharesAccount: this.getUserSharesAccount(owner),
-    } as any).remainingAccounts(remainingAccounts).simulate();
+    const sim: any = await this.program.methods
+      .maxWithdraw()
+      .accounts({
+        allocatorVault: this.allocatorVault,
+        sharesMint: state.sharesMint,
+        idleVault: this.idleVault,
+        ownerSharesAccount: this.getUserSharesAccount(owner),
+      } as any)
+      .remainingAccounts(remainingAccounts)
+      .simulate();
     const buf = Buffer.from(sim.returnData || sim.returnValue, "base64");
     return new BN(buf, "le");
   }
@@ -1069,12 +1190,16 @@ export class AllocatorVaultClient {
   async maxRedeem(owner: PublicKey): Promise<BN> {
     const remainingAccounts = await this.getChildAccountsForComputation();
     const state = await this.getState();
-    const sim: any = await this.program.methods.maxRedeem().accounts({
-      allocatorVault: this.allocatorVault,
-      sharesMint: state.sharesMint,
-      idleVault: this.idleVault,
-      ownerSharesAccount: this.getUserSharesAccount(owner),
-    } as any).remainingAccounts(remainingAccounts).simulate();
+    const sim: any = await this.program.methods
+      .maxRedeem()
+      .accounts({
+        allocatorVault: this.allocatorVault,
+        sharesMint: state.sharesMint,
+        idleVault: this.idleVault,
+        ownerSharesAccount: this.getUserSharesAccount(owner),
+      } as any)
+      .remainingAccounts(remainingAccounts)
+      .simulate();
     const buf = Buffer.from(sim.returnData || sim.returnValue, "base64");
     return new BN(buf, "le");
   }
@@ -1082,11 +1207,15 @@ export class AllocatorVaultClient {
   async convertToShares(assets: BN): Promise<BN> {
     const remainingAccounts = await this.getChildAccountsForComputation();
     const state = await this.getState();
-    const sim: any = await this.program.methods.convertToShares(assets).accounts({
-      allocatorVault: this.allocatorVault,
-      sharesMint: state.sharesMint,
-      idleVault: this.idleVault,
-    } as any).remainingAccounts(remainingAccounts).simulate();
+    const sim: any = await this.program.methods
+      .convertToShares(assets)
+      .accounts({
+        allocatorVault: this.allocatorVault,
+        sharesMint: state.sharesMint,
+        idleVault: this.idleVault,
+      } as any)
+      .remainingAccounts(remainingAccounts)
+      .simulate();
     const buf = Buffer.from(sim.returnData || sim.returnValue, "base64");
     return new BN(buf, "le");
   }
@@ -1094,11 +1223,15 @@ export class AllocatorVaultClient {
   async convertToAssets(shares: BN): Promise<BN> {
     const remainingAccounts = await this.getChildAccountsForComputation();
     const state = await this.getState();
-    const sim: any = await this.program.methods.convertToAssets(shares).accounts({
-      allocatorVault: this.allocatorVault,
-      sharesMint: state.sharesMint,
-      idleVault: this.idleVault,
-    } as any).remainingAccounts(remainingAccounts).simulate();
+    const sim: any = await this.program.methods
+      .convertToAssets(shares)
+      .accounts({
+        allocatorVault: this.allocatorVault,
+        sharesMint: state.sharesMint,
+        idleVault: this.idleVault,
+      } as any)
+      .remainingAccounts(remainingAccounts)
+      .simulate();
     const buf = Buffer.from(sim.returnData || sim.returnValue, "base64");
     return new BN(buf, "le");
   }
@@ -1192,9 +1325,7 @@ export class AllocatorVaultClient {
   getUserSharesAccount(owner: PublicKey): PublicKey {
     const state = this._state;
     if (!state) {
-      throw new Error(
-        "State not loaded. Call refresh() or getState() first.",
-      );
+      throw new Error("State not loaded. Call refresh() or getState() first.");
     }
     return getAssociatedTokenAddressSync(
       state.sharesMint,

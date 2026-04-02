@@ -5,7 +5,12 @@ import { Program, BN } from "@coral-xyz/anchor";
 import { createContext } from "../../middleware";
 import { getGlobalOptions } from "../../index";
 import { SolanaVault } from "../../../vault";
-import { findIdlPath, loadIdl, resolveVaultArg } from "../../utils";
+import {
+  findIdlPath,
+  loadIdl,
+  resolveVaultArg,
+  validateAmountInput,
+} from "../../utils";
 
 export function registerDepositCommand(program: Command): void {
   program
@@ -35,6 +40,7 @@ export function registerDepositCommand(program: Command): void {
         process.exit(1);
       }
 
+      validateAmountInput(opts.amount, "amount");
       const amount = new BN(opts.amount);
       const slippageBps = parseInt(opts.slippage);
 
@@ -49,7 +55,7 @@ export function registerDepositCommand(program: Command): void {
 
         const previewShares = await vault.previewDeposit(amount);
         const minShares = opts.minShares
-          ? new BN(opts.minShares)
+          ? new BN(validateAmountInput(opts.minShares, "min-shares"))
           : previewShares.muln(10000 - slippageBps).divn(10000);
 
         output.info(`Vault: ${vaultArg}`);

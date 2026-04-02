@@ -89,14 +89,14 @@ pub fn handler(ctx: Context<Redeem>, shares: u64, min_assets_out: u64) -> Result
 
     // ===== Module Hooks (if enabled) =====
     #[cfg(feature = "modules")]
-    let net_assets = {
+    let (net_assets, fee_assets) = {
         let remaining = ctx.remaining_accounts;
         let clock = Clock::get()?;
         let vault_key = vault.key();
         let user_key = ctx.accounts.user.key();
 
         // 1. Access control check (frozen account)
-        module_hooks::check_deposit_access(remaining, &crate::ID, &vault_key, &user_key, &[])?;
+        module_hooks::check_withdrawal_access(remaining, &crate::ID, &vault_key, &user_key)?;
 
         // 2. Lock check - ensure shares are not locked
         module_hooks::check_share_lock(
@@ -109,11 +109,11 @@ pub fn handler(ctx: Context<Redeem>, shares: u64, min_assets_out: u64) -> Result
 
         // 3. Apply exit fee
         let result = module_hooks::apply_exit_fee(remaining, &crate::ID, &vault_key, assets)?;
-        result.net_assets
+        (result.net_assets, result.fee_assets)
     };
 
     #[cfg(not(feature = "modules"))]
-    let net_assets = assets;
+    let (net_assets, fee_assets) = (assets, 0u64);
 
     // Slippage check (on net assets after fee)
     require!(net_assets >= min_assets_out, VaultError::SlippageExceeded);
@@ -167,6 +167,12 @@ pub fn handler(ctx: Context<Redeem>, shares: u64, min_assets_out: u64) -> Result
         .checked_sub(net_assets)
         .ok_or(VaultError::MathOverflow)?;
 
+    // Track cumulative exit fees for transparency
+    vault.cumulative_exit_fees = vault
+        .cumulative_exit_fees
+        .checked_add(fee_assets)
+        .ok_or(VaultError::MathOverflow)?;
+
     emit!(WithdrawEvent {
         vault: ctx.accounts.vault.key(),
         caller: ctx.accounts.user.key(),
@@ -174,6 +180,7 @@ pub fn handler(ctx: Context<Redeem>, shares: u64, min_assets_out: u64) -> Result
         owner: ctx.accounts.user.key(),
         assets: net_assets,
         shares,
+        exit_fee: fee_assets,
     });
 
     Ok(())

@@ -53,4 +53,22 @@ pub enum VaultError {
     InvalidRemainingAccounts,
     #[msg("Duplicate child vault found in remaining accounts")]
     DuplicateChildVault,
+
+    // --- Allowlist errors ---
+    #[msg("Allowed programs list is full")]
+    AllowlistFull,
+    #[msg("Program already exists in the allowlist")]
+    ProgramAlreadyAllowed,
+    #[msg("Program not found in the allowlist")]
+    ProgramNotInAllowlist,
+
+    // --- Authority transfer errors ---
+    #[msg("Invalid address: cannot be the zero address")]
+    InvalidAddress,
+    #[msg("No pending authority transfer")]
+    NoPendingTransfer,
+    #[msg("Signer does not match pending authority")]
+    InvalidPendingAuthority,
+    #[msg("Cannot transfer authority while a two-step transfer is pending")]
+    PendingTransferExists,
 }

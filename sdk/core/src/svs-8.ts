@@ -5,6 +5,14 @@
  * Supports deposit_single, deposit_proportional, redeem_proportional,
  * oracle price updates, and vault administration.
  *
+ * NOTE: SVS-8 uses oracle-based pricing to value multi-asset basket positions.
+ * Unlike SVS-3/SVS-4 (confidential vaults), SVS-8 does NOT use decryptable
+ * balances or Token-2022 confidential transfers. Share balances are public
+ * Token-2022 balances, and asset valuations are determined by on-chain oracle
+ * price accounts (see OraclePriceState). This design is intentional: a
+ * multi-asset basket requires a common unit of account (oracle prices) to
+ * compute share exchange rates across heterogeneous assets.
+ *
  * @example
  * ```ts
  * import { BasketVault } from "@stbr/solana-vault";
@@ -200,7 +208,10 @@ export class BasketVault {
   }
 
   /** Load an existing basket vault */
-  static async load(program: Program, vaultId: BN | number): Promise<BasketVault> {
+  static async load(
+    program: Program,
+    vaultId: BN | number,
+  ): Promise<BasketVault> {
     const id = new BN(vaultId.toString());
     const [vault] = getBasketVaultAddress(program.programId, id);
     const [sharesMint] = getBasketSharesMintAddress(program.programId, vault);
@@ -218,7 +229,13 @@ export class BasketVault {
     const [sharesMint] = getBasketSharesMintAddress(program.programId, vault);
 
     await program.methods
-      .initialize(id, params.name, params.symbol, params.uri, params.baseDecimals)
+      .initialize(
+        id,
+        params.name,
+        params.symbol,
+        params.uri,
+        params.baseDecimals,
+      )
       .accountsPartial({
         authority,
         sharesMint,
@@ -238,13 +255,21 @@ export class BasketVault {
 
   /** Fetch asset entry state */
   async fetchAssetEntry(assetMint: PublicKey): Promise<AssetEntryState> {
-    const [assetEntry] = getAssetEntryAddress(this.programId, this.vault, assetMint);
+    const [assetEntry] = getAssetEntryAddress(
+      this.programId,
+      this.vault,
+      assetMint,
+    );
     return (this.program.account as any).assetEntry.fetch(assetEntry);
   }
 
   /** Fetch oracle price state */
   async fetchOraclePrice(assetMint: PublicKey): Promise<OraclePriceState> {
-    const [oraclePrice] = getOraclePriceAddress(this.programId, this.vault, assetMint);
+    const [oraclePrice] = getOraclePriceAddress(
+      this.programId,
+      this.vault,
+      assetMint,
+    );
     return (this.program.account as any).oraclePrice.fetch(oraclePrice);
   }
 
@@ -261,8 +286,15 @@ export class BasketVault {
   }
 
   /** Add a new asset to the basket */
-  async addAsset(authority: PublicKey, params: AddAssetParams): Promise<string> {
-    const [assetEntry] = getAssetEntryAddress(this.programId, this.vault, params.assetMint);
+  async addAsset(
+    authority: PublicKey,
+    params: AddAssetParams,
+  ): Promise<string> {
+    const [assetEntry] = getAssetEntryAddress(
+      this.programId,
+      this.vault,
+      params.assetMint,
+    );
 
     return this.program.methods
       .addAsset(params.targetWeightBps)
@@ -280,14 +312,22 @@ export class BasketVault {
       .rpc();
   }
 
-  /** Update oracle price for an asset */
-  async updateOracle(authority: PublicKey, params: UpdateOracleParams): Promise<string> {
-    const [oraclePrice] = getOraclePriceAddress(this.programId, this.vault, params.assetMint);
+  /** Initialize oracle price for an asset (first time) */
+  async initializeOracle(
+    authority: PublicKey,
+    params: UpdateOracleParams,
+  ): Promise<string> {
+    const [oraclePrice] = getOraclePriceAddress(
+      this.programId,
+      this.vault,
+      params.assetMint,
+    );
 
     return this.program.methods
-      .updateOracle(params.price)
+      .initializeOracle(params.price)
       .accountsPartial({
         vault: this.vault,
+        authority,
         assetMint: params.assetMint,
         oraclePrice,
         systemProgram: SystemProgram.programId,
@@ -295,9 +335,38 @@ export class BasketVault {
       .rpc();
   }
 
+  /** Update oracle price for an asset (must be initialized first) */
+  async updateOracle(
+    authority: PublicKey,
+    params: UpdateOracleParams,
+  ): Promise<string> {
+    const [oraclePrice] = getOraclePriceAddress(
+      this.programId,
+      this.vault,
+      params.assetMint,
+    );
+
+    return this.program.methods
+      .updateOracle(params.price)
+      .accountsPartial({
+        vault: this.vault,
+        authority,
+        assetMint: params.assetMint,
+        oraclePrice,
+      })
+      .rpc();
+  }
+
   /** Deposit a single asset */
-  async depositSingle(user: PublicKey, params: DepositSingleParams): Promise<string> {
-    const [oraclePrice] = getOraclePriceAddress(this.programId, this.vault, params.assetMint);
+  async depositSingle(
+    user: PublicKey,
+    params: DepositSingleParams,
+  ): Promise<string> {
+    const [oraclePrice] = getOraclePriceAddress(
+      this.programId,
+      this.vault,
+      params.assetMint,
+    );
 
     return this.program.methods
       .depositSingle(params.amount, params.minSharesOut)
@@ -320,12 +389,19 @@ export class BasketVault {
   }
 
   /** Deposit proportionally across ALL basket assets (atomic) */
-  async depositProportional(user: PublicKey, params: DepositProportionalParams): Promise<string> {
+  async depositProportional(
+    user: PublicKey,
+    params: DepositProportionalParams,
+  ): Promise<string> {
     // Layout: [AssetEntry, OraclePrice, vault_ata, user_ata, mint] x num_assets
     const remainingAccounts: AccountMeta[] = [];
 
     for (const asset of params.assets) {
-      const [assetEntry] = getAssetEntryAddress(this.programId, this.vault, asset.mint);
+      const [assetEntry] = getAssetEntryAddress(
+        this.programId,
+        this.vault,
+        asset.mint,
+      );
       remainingAccounts.push(
         { pubkey: assetEntry, isWritable: false, isSigner: false },
         { pubkey: asset.oraclePrice, isWritable: false, isSigner: false },
@@ -334,7 +410,6 @@ export class BasketVault {
         { pubkey: asset.mint, isWritable: false, isSigner: false },
       );
     }
-
 
     return this.program.methods
       .depositProportional(params.baseAmount, params.minSharesOut)
@@ -353,12 +428,19 @@ export class BasketVault {
   }
 
   /** Redeem shares proportionally across ALL basket assets */
-  async redeemProportional(user: PublicKey, params: RedeemProportionalParams): Promise<string> {
+  async redeemProportional(
+    user: PublicKey,
+    params: RedeemProportionalParams,
+  ): Promise<string> {
     // Layout: [AssetEntry, OraclePrice, vault_ata, user_ata, mint] x num_assets
     const remainingAccounts: AccountMeta[] = [];
 
     for (const asset of params.assets) {
-      const [assetEntry] = getAssetEntryAddress(this.programId, this.vault, asset.mint);
+      const [assetEntry] = getAssetEntryAddress(
+        this.programId,
+        this.vault,
+        asset.mint,
+      );
       remainingAccounts.push(
         { pubkey: assetEntry, isWritable: false, isSigner: false },
         { pubkey: asset.oraclePrice, isWritable: false, isSigner: false },
@@ -367,7 +449,6 @@ export class BasketVault {
         { pubkey: asset.mint, isWritable: false, isSigner: false },
       );
     }
-
 
     return this.program.methods
       .redeemProportional(params.shares, params.minAssetsOut)
@@ -386,22 +467,19 @@ export class BasketVault {
 
   /** Pause the vault (emergency) */
   async pause(authority: PublicKey): Promise<string> {
-    return this.program.methods
-      .pause()
-      .accounts({ vault: this.vault })
-      .rpc();
+    return this.program.methods.pause().accounts({ vault: this.vault }).rpc();
   }
 
   /** Unpause the vault */
   async unpause(authority: PublicKey): Promise<string> {
-    return this.program.methods
-      .unpause()
-      .accounts({ vault: this.vault })
-      .rpc();
+    return this.program.methods.unpause().accounts({ vault: this.vault }).rpc();
   }
 
   /** Transfer vault authority */
-  async transferAuthority(authority: PublicKey, newAuthority: PublicKey): Promise<string> {
+  async transferAuthority(
+    authority: PublicKey,
+    newAuthority: PublicKey,
+  ): Promise<string> {
     return this.program.methods
       .transferAuthority(newAuthority)
       .accounts({ vault: this.vault })

@@ -67,4 +67,16 @@ pub enum VaultError {
 
     #[msg("Invalid parameter value")]
     InvalidParameter,
+
+    #[msg("Price slippage tolerance exceeded")]
+    SlippageExceeded,
+
+    #[msg("No pending authority transfer to accept")]
+    NoPendingTransfer,
+
+    #[msg("Caller is not the pending authority")]
+    InvalidPendingAuthority,
+
+    #[msg("Cannot use deprecated transfer while a two-step transfer is pending")]
+    PendingTransferExists,
 }

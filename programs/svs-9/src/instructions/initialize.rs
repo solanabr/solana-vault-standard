@@ -97,7 +97,8 @@ pub fn initialize_handler(
     vault.paused = false;
     vault.vault_id = vault_id;
     vault.total_shares = 0;
-    vault._reserved = [0u8; 64];
+    vault.pending_authority = Pubkey::default();
+    vault._reserved = [0u8; 32];
 
     // 7. EMIT EVENT
     let virtual_shares = 10u128.pow(decimals_offset as u32);

@@ -10,7 +10,7 @@ pub mod utils;
 
 use instructions::*;
 
-declare_id!("CZweMiLWPPgKMiQXVNSuuwaoiHUyKWZzoBhhFg2D1VaU");
+declare_id!("AaADS3DCGkjhDEDbGkygbG9bNaziR9TPK2X7SMBYedws");
 
 #[program]
 pub mod svs_9 {
@@ -56,12 +56,47 @@ pub mod svs_9 {
         admin::unpause(ctx)
     }
 
+    /// Step 1 of two-step authority transfer: set pending authority.
+    pub fn request_transfer_authority(ctx: Context<Admin>, new_authority: Pubkey) -> Result<()> {
+        admin::request_transfer_authority(ctx, new_authority)
+    }
+
+    /// Step 2 of two-step authority transfer: pending authority accepts.
+    pub fn accept_authority(ctx: Context<AcceptAuthority>) -> Result<()> {
+        admin::accept_authority(ctx)
+    }
+
+    /// Transfer vault authority to a new address (deprecated -- prefer two-step transfer).
+    #[allow(deprecated)]
     pub fn transfer_authority(ctx: Context<Admin>, new_authority: Pubkey) -> Result<()> {
         admin::transfer_authority(ctx, new_authority)
     }
 
+    /// Cancel a pending two-step authority transfer.
+    pub fn cancel_transfer_authority(ctx: Context<Admin>) -> Result<()> {
+        admin::cancel_transfer_authority(ctx)
+    }
+
     pub fn set_curator(ctx: Context<Admin>, new_curator: Pubkey) -> Result<()> {
         admin::set_curator(ctx, new_curator)
+    }
+
+    pub fn initialize_allowed_programs(
+        ctx: Context<InitializeAllowedPrograms>,
+        initial_programs: Vec<Pubkey>,
+    ) -> Result<()> {
+        initialize_allowed_programs_handler(ctx, initial_programs)
+    }
+
+    pub fn add_allowed_program(ctx: Context<AddAllowedProgram>, program_id: Pubkey) -> Result<()> {
+        add_allowed_program_handler(ctx, program_id)
+    }
+
+    pub fn remove_allowed_program(
+        ctx: Context<RemoveAllowedProgram>,
+        program_id: Pubkey,
+    ) -> Result<()> {
+        remove_allowed_program_handler(ctx, program_id)
     }
 
     pub fn remove_child(ctx: Context<RemoveChild>) -> Result<()> {

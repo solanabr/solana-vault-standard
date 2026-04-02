@@ -65,6 +65,11 @@ pub struct Deposit<'info> {
     pub token_2022_program: Program<'info, Token2022>,
 }
 
+/// V4-P22: Same-slot deposit after distribute_yield is mitigated by the streaming
+/// model — yield accrues linearly over `duration` seconds, not instantly. A deposit
+/// in the same slot as distribute_yield captures at most 1 slot's worth of yield
+/// (negligible). If stricter enforcement is needed, add `last_yield_slot: u64` to
+/// ConfidentialStreamVault state and require `clock.slot > vault.last_yield_slot` here.
 pub fn handler(ctx: Context<Deposit>, assets: u64, min_shares_out: u64) -> Result<()> {
     require!(assets > 0, VaultError::ZeroAmount);
     require!(assets >= MIN_DEPOSIT_AMOUNT, VaultError::DepositTooSmall);
@@ -187,6 +192,16 @@ pub fn handler(ctx: Context<Deposit>, assets: u64, min_shares_out: u64) -> Resul
         .base_assets
         .checked_add(assets)
         .ok_or(VaultError::MathOverflow)?;
+
+    // Update per-user cumulative deposit tracking (if caps module is active)
+    #[cfg(feature = "modules")]
+    module_hooks::update_user_deposit(
+        ctx.remaining_accounts,
+        &crate::ID,
+        &ctx.accounts.vault.key(),
+        &ctx.accounts.user.key(),
+        assets,
+    )?;
 
     emit!(DepositEvent {
         vault: ctx.accounts.vault.key(),

@@ -1,135 +1,153 @@
 ---
-name: vault-standard-dev
-description: Solana Tokenized Vault Standard (ERC-4626 port) development playbook. Covers Anchor program development, vault mechanics, share/asset accounting, inflation attack protection, and testing with LiteSVM/Mollusk/Trident.
+name: solana-dev
+description: Unified skill hub for Solana development. Routes to external submodule skills (solana-foundation, sendai, solana-game, trailofbits, cloudflare, qedgen, colosseum) and local skills. Progressive disclosure — read only what you need.
 user-invocable: true
 ---
 
-# Solana Tokenized Vault Standard Skill
+# Solana Development Skill Hub
 
-## What this Skill is for
+Routes to the right skill file based on the task. Read the relevant section, follow the link, load that skill.
 
-Use this Skill when the user asks for:
-- ERC-4626 tokenized vault implementation
-- Deposit/mint/withdraw/redeem operations
-- Share/asset conversion math
-- Inflation attack protection patterns
-- Virtual shares/assets implementation
-- Anchor program development
-- Vault testing strategies
-- Security hardening for vault contracts
-- Deployment workflows (devnet → mainnet)
+## Core Solana Development
 
-## Core Vault Concepts
+**Primary entry point** — read first for any Solana program, frontend, testing, or client task:
 
-### ERC-4626 Operations
+- [ext/solana-dev/skill/SKILL.md](ext/solana-dev/skill/SKILL.md) — Solana Foundation skill (framework-kit-first, Kit types, wallet-standard)
 
-| Operation | Input | Output | Rounding |
-|-----------|-------|--------|----------|
-| `deposit` | assets | shares | Floor (favors vault) |
-| `mint` | shares | assets | Ceiling (protects user) |
-| `withdraw` | assets | shares | Ceiling (protects vault) |
-| `redeem` | shares | assets | Floor (favors vault) |
+Key references within:
+- [programs/anchor.md](ext/solana-dev/skill/references/programs/anchor.md) — Anchor patterns, IDL, constraints (canonical)
+- [programs/pinocchio.md](ext/solana-dev/skill/references/programs/pinocchio.md) — Zero-copy, CU optimization (canonical)
+- [frontend-framework-kit.md](ext/solana-dev/skill/references/frontend-framework-kit.md) — React hooks, wallet connection, @solana/kit UI
+- [kit-web3-interop.md](ext/solana-dev/skill/references/kit-web3-interop.md) — Kit ↔ web3.js boundary patterns
+- [testing.md](ext/solana-dev/skill/references/testing.md) — LiteSVM, Mollusk, Surfpool, CI
+- [security.md](ext/solana-dev/skill/references/security.md) — Vulnerability categories, checklists
+- [idl-codegen.md](ext/solana-dev/skill/references/idl-codegen.md) — Codama/Shank client generation
+- [payments.md](ext/solana-dev/skill/references/payments.md) — Commerce Kit, Kora, Solana Pay
+- [resources.md](ext/solana-dev/skill/references/resources.md) — Official documentation links
 
-### Share/Asset Conversion (with Virtual Offset)
+## Token Extensions
 
-```rust
-// Convert assets to shares
-shares = (assets * (total_shares + offset)) / (total_assets + 1)
+- [token-2022.md](token-2022.md) — SPL Token-2022 extensions: transfer hooks, confidential transfers, transfer fees, metadata, CPI guard, soulbound tokens, and all extension types with Anchor/native patterns
 
-// Convert shares to assets
-assets = (shares * (total_assets + 1)) / (total_shares + offset)
+## DeFi & Ecosystem Protocols
 
-// offset = 10^decimals_offset
-// decimals_offset = 9 - asset_decimals
-```
+Protocol-specific skills from [SendAI](ext/sendai/skills/):
 
-### Inflation Attack Protection
+| Protocol | Skill | Use for |
+|----------|-------|---------|
+| Jupiter | [jupiter/](ext/sendai/skills/jupiter/) | Swaps, DCA, limit orders |
+| Drift | [drift/](ext/sendai/skills/drift/) | Perpetuals, margin trading |
+| Raydium | [raydium/](ext/sendai/skills/raydium/) | AMM, CLMM pools |
+| Meteora | [meteora/](ext/sendai/skills/meteora/) | DLMM, dynamic pools |
+| Orca | [orca/](ext/sendai/skills/orca/) | Whirlpools, concentrated liquidity |
+| Kamino | [kamino/](ext/sendai/skills/kamino/) | Lending, vaults |
+| Marginfi | [marginfi/](ext/sendai/skills/marginfi/) | Lending protocol |
+| Sanctum | [sanctum/](ext/sendai/skills/sanctum/) | LST staking |
+| Metaplex | [metaplex/](ext/sendai/skills/metaplex/) | NFT standards, metadata |
+| PumpFun | [pumpfun/](ext/sendai/skills/pumpfun/) | Token launch |
+| Pyth | [pyth/](ext/sendai/skills/pyth/) | Price oracles |
+| Switchboard | [switchboard/](ext/sendai/skills/switchboard/) | Oracles, VRF |
+| Squads | [squads/](ext/sendai/skills/squads/) | Multisig |
+| Helius | [helius/](ext/sendai/skills/helius/) | RPC, webhooks, DAS |
+| DeBridge | [debridge/](ext/sendai/skills/debridge/) | Cross-chain bridging |
+| Light Protocol | [light-protocol/](ext/sendai/skills/light-protocol/) | ZK compression |
+| Solana Agent Kit | [solana-agent-kit/](ext/sendai/skills/solana-agent-kit/) | AI agent framework |
+| Phantom Connect | [phantom-connect/](ext/sendai/skills/phantom-connect/) | Phantom wallet connection |
+| MagicBlock | [magicblock/](ext/sendai/skills/magicblock/) | On-chain game engine |
+| QuickNode | [quicknode/](ext/sendai/skills/quicknode/) | RPC, streams, functions |
+| Solana Kit | [solana-kit/](ext/sendai/skills/solana-kit/) | @solana/kit patterns |
+| Solana Kit Migration | [solana-kit-migration/](ext/sendai/skills/solana-kit-migration/) | web3.js → Kit migration |
+| Manifest | [manifest/](ext/sendai/skills/manifest/) | Order book DEX |
+| dFlow | [dflow/](ext/sendai/skills/dflow/) | Payment-for-order-flow |
+| VulnHunter | [vulnhunter/](ext/sendai/skills/vulnhunter/) | Vulnerability scanning |
 
-Virtual shares/assets make price manipulation economically infeasible:
-- Attacker must donate assets to inflate share price
-- With offset, the cost to steal $1 from depositors exceeds $1
-- Larger offset (3-6 decimals) provides stronger protection
+## Security Auditing
 
-## Technology Stack
+From [Trail of Bits](ext/trailofbits/plugins/building-secure-contracts/skills/):
 
-| Layer | Primary Tool |
-|-------|-------------|
-| Programs | Anchor 0.31+ |
-| Token Standard | SPL Token, Token-2022 |
-| Testing | LiteSVM, Mollusk, Trident |
-| Client | @coral-xyz/anchor, @solana/web3.js |
+- [solana-vulnerability-scanner/](ext/trailofbits/plugins/building-secure-contracts/skills/solana-vulnerability-scanner/) — Automated Solana vulnerability detection
+- [audit-prep-assistant/](ext/trailofbits/plugins/building-secure-contracts/skills/audit-prep-assistant/) — Prepare codebase for audit
+- [code-maturity-assessor/](ext/trailofbits/plugins/building-secure-contracts/skills/code-maturity-assessor/) — Assess code maturity level
+- [token-integration-analyzer/](ext/trailofbits/plugins/building-secure-contracts/skills/token-integration-analyzer/) — Token integration analysis
+- [guidelines-advisor/](ext/trailofbits/plugins/building-secure-contracts/skills/guidelines-advisor/) — Security guidelines
 
-## Operating Procedure
+From [safe-solana-builder](ext/safe-solana-builder/):
 
-### 1. Classify the task
+- [ext/safe-solana-builder/SKILL.md](ext/safe-solana-builder/SKILL.md) — Security-first Solana program scaffolding: 5-step workflow enforcing vulnerability prevention during code generation. Covers Anchor, native Rust, and Pinocchio. 70+ audit-derived security rules.
 
-- Vault mechanics (deposit/withdraw logic)
-- Share math (conversion, rounding)
-- Account structure (PDAs, state)
-- Access control (permissions)
-- Testing (unit, integration, fuzz)
-- Security (audit, attack vectors)
+## Formal Verification
 
-### 2. Implementation Checklist
+From [QEDGen](ext/qedgen/):
 
-Always verify:
-- Correct rounding direction for each operation
-- Virtual offset properly configured
-- Account validation (owner, signer, PDA)
-- Checked arithmetic throughout
-- Events emitted for deposit/withdraw
-- Preview functions match actual behavior
+- [ext/qedgen/SKILL.md](ext/qedgen/SKILL.md) — Formal verification for Solana programs using Lean 4 theorem proving (Leanstral). Verifies access control, CPI correctness, state machines, arithmetic safety. Requires `qedgen` CLI and `MISTRAL_API_KEY`.
 
-### 3. Testing Requirements
+## Infrastructure & Deployment
 
-- Unit test: Each operation in isolation
-- Integration test: Full deposit → redeem flow
-- Fuzz test: Random amounts, edge cases
-- Attack test: Inflation attack scenarios
+From [Cloudflare](ext/cloudflare/skills/):
 
-## Progressive Disclosure (read when needed)
+- [workers-best-practices/](ext/cloudflare/skills/workers-best-practices/) — Cloudflare Workers deployment
+- [agents-sdk/](ext/cloudflare/skills/agents-sdk/) — Agents SDK
+- [building-mcp-server-on-cloudflare/](ext/cloudflare/skills/building-mcp-server-on-cloudflare/) — MCP server deployment
+- [building-ai-agent-on-cloudflare/](ext/cloudflare/skills/building-ai-agent-on-cloudflare/) — AI agent deployment on Workers
+- [durable-objects/](ext/cloudflare/skills/durable-objects/) — Durable Objects patterns
+- [wrangler/](ext/cloudflare/skills/wrangler/) — Wrangler CLI usage
 
-### Programs & Development
-- [programs-anchor.md](programs-anchor.md) - Anchor patterns, constraints, testing pyramid, IDL generation
+Local:
+- [deployment.md](deployment.md) — Devnet/mainnet workflows, verifiable builds, multisig, CI/CD
 
-### Testing & Security
-- [docs/TESTING.md](../../docs/TESTING.md) - LiteSVM, Mollusk, Trident, CI guidance
-- [docs/SECURITY.md](../../docs/SECURITY.md) - Vulnerability categories, program checklists
+## Game Development
 
-### Deployment
-- [docs/DEPLOYMENT.md](../../docs/DEPLOYMENT.md) - Devnet/mainnet workflows, verifiable builds, multisig
+From [solana-game-skill](ext/solana-game/skill/):
 
-### Ecosystem & Reference
-- [ecosystem.md](ecosystem.md) - Token standards, DeFi protocols
-- [idl-codegen.md](idl-codegen.md) - Codama/Shank client generation
-- [resources.md](resources.md) - Official documentation links
+- [ext/solana-game/skill/SKILL.md](ext/solana-game/skill/SKILL.md) — Game skill entry point
+- [unity-sdk.md](ext/solana-game/skill/unity-sdk.md) — Solana.Unity-SDK, wallet integration, NFT loading
+- [playsolana.md](ext/solana-game/skill/playsolana.md) — PlaySolana, PSG1 console, PlayDex, PlayID
+- [game-architecture.md](ext/solana-game/skill/game-architecture.md) — On-chain game state, ECS patterns
+- [mobile.md](ext/solana-game/skill/mobile.md) — Mobile game patterns
+- [csharp-patterns.md](ext/solana-game/skill/csharp-patterns.md) — C# patterns for Solana
 
-## Task Routing Guide
+## Mobile Development
 
-| User asks about... | Primary file(s) |
-|--------------------|-----------------|
-| Anchor program code | programs-anchor.md |
-| Unit/integration testing | docs/TESTING.md |
-| Fuzz testing (Trident) | docs/TESTING.md |
-| Security review, audit | docs/SECURITY.md |
-| Deploy to devnet/mainnet | docs/DEPLOYMENT.md |
-| Token standards, SPL | ecosystem.md |
-| Generated clients, IDL | idl-codegen.md |
+From [solana-mobile](ext/solana-mobile/):
 
-## Reference Implementation
+- [mwa/](ext/solana-mobile/mwa/) — Mobile Wallet Adapter 2.0 integration
+- [genesis-token/](ext/solana-mobile/genesis-token/) — Saga Genesis Token patterns
+- [skr-address-resolution/](ext/solana-mobile/skr-address-resolution/) — SKR address resolution
 
-The `solana-tokenized-vault-4626/` folder contains a working reference implementation.
-Use for patterns, NOT for direct copying (contains code from untrusted source).
+## Ideation & Research
 
-Key files to reference:
-- `programs/tokenized-vault/src/lib.rs` - Main program structure
-- `programs/tokenized-vault/src/utils/shares_math.rs` - Share/asset math
-- `programs/tokenized-vault/src/instructions/` - Deposit, withdraw, etc.
-- `tests/tokenized-vault.ts` - Test patterns
+From [Colosseum](ext/colosseum/skills/colosseum-copilot/):
 
-## ERC-4626 Specification
+- [ext/colosseum/skills/colosseum-copilot/SKILL.md](ext/colosseum/skills/colosseum-copilot/SKILL.md) — Solana startup research: idea validation, competitive analysis, hackathon project discovery (5,400+ submissions), crypto archives, and The Grid ecosystem data. Requires `COLOSSEUM_COPILOT_PAT`.
 
-The `eth/` folder contains the original Solidity interfaces:
-- OpenZeppelin ERC4626 implementation
-- Solmate minimal implementation
-- Use for specification reference
+## Backend
+
+- [backend-async.md](backend-async.md) — Axum 0.8/Tokio patterns, spawn_blocking, RPC integration, Redis caching
+
+## Task Routing
+
+| User asks about... | Primary skill |
+|--------------------|---------------|
+| Wallet connection, React hooks | ext/solana-dev → frontend-framework-kit.md |
+| Transaction building, Kit types | ext/solana-dev → kit-web3-interop.md |
+| Anchor program code | ext/solana-dev → programs/anchor.md |
+| CU optimization, Pinocchio | ext/solana-dev → programs/pinocchio.md |
+| Unit testing, CU benchmarks | ext/solana-dev → testing.md |
+| Security review, audit | ext/solana-dev → security.md + ext/trailofbits |
+| Backend API, indexer | backend-async.md |
+| Deploy to devnet/mainnet | deployment.md |
+| DeFi integration (swaps, lending) | ext/sendai → protocol-specific skill |
+| NFT standards, metadata | ext/sendai → metaplex/ |
+| Payment flows, checkout | ext/solana-dev → payments.md |
+| Generated clients, IDL | ext/solana-dev → idl-codegen.md |
+| Unity game development | ext/solana-game → unity-sdk.md |
+| PlaySolana, PSG1 console | ext/solana-game → playsolana.md |
+| Game architecture, ECS | ext/solana-game → game-architecture.md |
+| Workers, edge deployment | ext/cloudflare → workers-best-practices/ |
+| Mobile wallet adapter, MWA | ext/solana-mobile → mwa/ |
+| Saga Genesis Token | ext/solana-mobile → genesis-token/ |
+| Token-2022, transfer hooks, extensions | token-2022.md |
+| Vulnerability scanning | ext/trailofbits → solana-vulnerability-scanner/ |
+| Formal verification, proofs | ext/qedgen → SKILL.md |
+| Idea validation, competitive research, hackathon projects | ext/colosseum → colosseum-copilot/SKILL.md |
+| Security-first scaffolding, safe code generation | ext/safe-solana-builder → SKILL.md |

@@ -124,11 +124,13 @@ pub fn handler(ctx: Context<Initialize>, vault_id: u64) -> Result<()> {
     vault.stream_start = 0;
     vault.stream_end = 0;
     vault.last_checkpoint = clock.unix_timestamp;
+    vault.stream_distributed = 0;
     vault.decimals_offset = MAX_DECIMALS - asset_decimals;
     vault.bump = vault_bump;
     vault.paused = false;
     vault.vault_id = vault_id;
-    vault._reserved = [0u8; 64];
+    vault.pending_authority = Pubkey::default();
+    vault._reserved = [0u8; 24];
 
     emit!(VaultInitialized {
         vault: vault.key(),

@@ -34,8 +34,12 @@ pub struct Rebalance<'info> {
     )]
     pub idle_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
-    /// CHECK: The child vault for deposit/withdraw CPI. Checked by program CPI.
-    #[account(mut)]
+    /// CHECK: Validated against child_allocation.child_vault
+    #[account(
+        mut,
+        constraint = child_vault.key() == child_allocation.child_vault
+            @ VaultError::InvalidChildVault,
+    )]
     pub child_vault: UncheckedAccount<'info>,
 
     /// CHECK: Target SVS program ID. Checked to match child_allocation.child_program.
@@ -69,6 +73,36 @@ pub struct Rebalance<'info> {
 
 pub fn rebalance_handler(ctx: Context<Rebalance>, min_out: u64) -> Result<()> {
     // 1. VALIDATION (curator + paused + enabled checked by constraints)
+    //
+    // Authenticate child_asset_vault and child_shares_mint against the child
+    // vault's on-chain state to prevent spoofed token accounts.
+    {
+        let vault_data = ctx.accounts.child_vault.try_borrow_data()?;
+        require!(vault_data.len() >= 8, VaultError::InvalidChildVault);
+        let disc = &vault_data[0..8];
+
+        let (asset_vault_offset, shares_mint_offset) = if disc == ALLOCATOR_VAULT_DISCRIMINATOR {
+            (136, 104) // SVS-9: idle_vault @ 136, shares_mint @ 104
+        } else if disc == VAULT_DISCRIMINATOR || disc == CONFIDENTIAL_VAULT_DISCRIMINATOR {
+            (104, 72) // SVS-1: asset_vault @ 104, shares_mint @ 72
+        } else {
+            return Err(VaultError::InvalidChildVault.into());
+        };
+
+        let expected_asset_vault = crate::utils::read_pubkey(&vault_data, asset_vault_offset)?;
+        let expected_shares_mint = crate::utils::read_pubkey(&vault_data, shares_mint_offset)?;
+
+        require_keys_eq!(
+            ctx.accounts.child_asset_vault.key(),
+            expected_asset_vault,
+            VaultError::InvalidRemainingAccounts
+        );
+        require_keys_eq!(
+            ctx.accounts.child_shares_mint.key(),
+            expected_shares_mint,
+            VaultError::InvalidRemainingAccounts
+        );
+    }
 
     // 2. READ STATE
     let idle_amount = ctx.accounts.idle_vault.amount;
@@ -90,7 +124,10 @@ pub fn rebalance_handler(ctx: Context<Rebalance>, min_out: u64) -> Result<()> {
         .checked_mul(idle_buffer_bps)
         .ok_or(VaultError::MathOverflow)?
         .checked_div(10000)
-        .ok_or(VaultError::DivisionByZero)? as u64;
+        .ok_or(VaultError::DivisionByZero)?;
+    let ideal_idle: u64 = ideal_idle
+        .try_into()
+        .map_err(|_| VaultError::MathOverflow)?;
 
     // 3. COMPUTE — decide if we need to deposit or withdraw
     let asset_mint_key = ctx.accounts.allocator_vault.asset_mint;
@@ -137,18 +174,23 @@ pub fn rebalance_handler(ctx: Context<Rebalance>, min_out: u64) -> Result<()> {
         let child_assets_after = current_market_value
             .checked_add(surplus)
             .ok_or(VaultError::MathOverflow)?;
-        let _child_weight_after = (child_assets_after as u128)
+        let _child_weight_after: u16 = (child_assets_after as u128)
             .checked_mul(10000)
             .ok_or(VaultError::MathOverflow)?
             .checked_div(total_assets as u128)
-            .ok_or(VaultError::DivisionByZero)? as u16;
+            .ok_or(VaultError::DivisionByZero)?
+            .try_into()
+            .map_err(|_| VaultError::MathOverflow)?;
 
         // Compute max deposit allowed by the weight cap
         let max_allowed = (total_assets as u128)
             .checked_mul(child_allocation.max_weight_bps as u128)
             .ok_or(VaultError::MathOverflow)?
             .checked_div(10000)
-            .ok_or(VaultError::DivisionByZero)? as u64;
+            .ok_or(VaultError::DivisionByZero)?;
+        let max_allowed: u64 = max_allowed
+            .try_into()
+            .map_err(|_| VaultError::MathOverflow)?;
 
         // Respect both the weight cap and the available capacity
         let available_capacity = max_allowed.saturating_sub(current_market_value);
@@ -292,14 +334,19 @@ pub fn rebalance_handler(ctx: Context<Rebalance>, min_out: u64) -> Result<()> {
             .ok_or(VaultError::MathOverflow)?;
 
         let child_allocation = &mut ctx.accounts.child_allocation;
-        let shares_after = shares_held.checked_sub(shares_to_redeem).unwrap_or(0);
+        let shares_after = shares_held
+            .checked_sub(shares_to_redeem)
+            .ok_or(VaultError::MathOverflow)?;
 
         if shares_held > 0 {
             let new_deposited = (child_allocation.deposited_assets as u128)
                 .checked_mul(shares_after as u128)
                 .ok_or(VaultError::MathOverflow)?
                 .checked_div(shares_held as u128)
-                .ok_or(VaultError::DivisionByZero)? as u64;
+                .ok_or(VaultError::DivisionByZero)?;
+            let new_deposited: u64 = new_deposited
+                .try_into()
+                .map_err(|_| VaultError::MathOverflow)?;
             child_allocation.deposited_assets = new_deposited;
         }
 

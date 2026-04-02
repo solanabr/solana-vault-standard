@@ -43,6 +43,8 @@ pub struct DepositSingle {
     pub deposit_value: u64,
 }
 
+/// V4-P19: Event now emits actual_deposit_value (post-rounding) in addition to
+/// the requested base_amount, so indexers can distinguish requested vs actual.
 #[event]
 pub struct DepositProportional {
     pub vault: Pubkey,
@@ -50,6 +52,8 @@ pub struct DepositProportional {
     pub base_amount: u64,
     pub shares: u64,
     pub total_value: u64,
+    /// Actual total deposit value after per-asset rounding (may differ from base_amount)
+    pub actual_deposit_value: u64,
 }
 
 #[event]
@@ -74,6 +78,13 @@ pub struct RedeemSingle {
 pub struct VaultStatusChanged {
     pub vault: Pubkey,
     pub paused: bool,
+}
+
+#[event]
+pub struct AuthorityTransferRequested {
+    pub vault: Pubkey,
+    pub current_authority: Pubkey,
+    pub pending_authority: Pubkey,
 }
 
 #[event]

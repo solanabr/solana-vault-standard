@@ -1,4 +1,11 @@
 //! Merkle tree utilities for access control.
+//!
+//! Security: This implementation uses domain-separated hashing to prevent
+//! second-preimage attacks. Leaf nodes are prefixed with 0x00 and internal
+//! nodes with 0x01, ensuring that a valid leaf hash can never be confused
+//! with an internal node hash and vice versa. Without this separation, an
+//! attacker could craft a proof that treats an internal node as a leaf,
+//! potentially forging membership proofs.
 
 use crate::error::AccessError;
 
@@ -83,8 +90,10 @@ pub fn compute_root(users: &[[u8; 32]]) -> [u8; 32] {
             if i + 1 < hashes.len() {
                 next_level.push(hash_pair(&hashes[i], &hashes[i + 1]));
             } else {
-                // Odd number of nodes - promote the last one
-                next_level.push(hashes[i]);
+                // V4-M7: Hash unpaired node with itself instead of promoting
+                // verbatim. Verbatim promotion allows an attacker to forge proofs
+                // by substituting an internal node for a leaf at certain positions.
+                next_level.push(hash_pair(&hashes[i], &hashes[i]));
             }
         }
 
@@ -118,10 +127,13 @@ pub fn generate_proof(users: &[[u8; 32]], user_index: usize) -> Vec<[u8; 32]> {
 
     // Build tree and collect proof
     while hashes.len() > 1 {
-        // Get sibling
+        // Get sibling -- if unpaired, sibling is the node itself
         let sibling_index = if index % 2 == 0 { index + 1 } else { index - 1 };
         if sibling_index < hashes.len() {
             proof.push(hashes[sibling_index]);
+        } else {
+            // V4-M7: Unpaired node — sibling is itself
+            proof.push(hashes[index]);
         }
 
         // Build next level
@@ -130,7 +142,8 @@ pub fn generate_proof(users: &[[u8; 32]], user_index: usize) -> Vec<[u8; 32]> {
             if i + 1 < hashes.len() {
                 next_level.push(hash_pair(&hashes[i], &hashes[i + 1]));
             } else {
-                next_level.push(hashes[i]);
+                // V4-M7: Hash unpaired node with itself
+                next_level.push(hash_pair(&hashes[i], &hashes[i]));
             }
         }
 

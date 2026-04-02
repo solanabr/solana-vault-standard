@@ -41,6 +41,7 @@ import {
 
 import { deriveVaultAddresses } from "./pda";
 import * as math from "./math";
+import { simulateAndSendTransaction } from "./transaction-utils";
 
 /**
  * Detect which token program owns a mint account.
@@ -297,13 +298,15 @@ export class SolanaVault {
   // ============ Core Operations ============
 
   /**
-   * Deposit assets and receive shares
+   * Deposit assets and receive shares.
+   * Simulates the transaction before sending to detect errors early
+   * and optimize compute unit allocation.
    */
   async deposit(user: PublicKey, params: DepositParams): Promise<string> {
     const userAssetAccount = this.getUserAssetAccount(user);
     const userSharesAccount = this.getUserSharesAccount(user);
 
-    return this.program.methods
+    const tx = await this.program.methods
       .deposit(params.assets, params.minSharesOut)
       .accountsStrict({
         user,
@@ -318,17 +321,21 @@ export class SolanaVault {
         associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
       })
-      .rpc();
+      .transaction();
+
+    return simulateAndSendTransaction(this.provider, tx);
   }
 
   /**
-   * Mint exact shares by paying assets
+   * Mint exact shares by paying assets.
+   * Simulates the transaction before sending to detect errors early
+   * and optimize compute unit allocation.
    */
   async mint(user: PublicKey, params: MintParams): Promise<string> {
     const userAssetAccount = this.getUserAssetAccount(user);
     const userSharesAccount = this.getUserSharesAccount(user);
 
-    return this.program.methods
+    const tx = await this.program.methods
       .mint(params.shares, params.maxAssetsIn)
       .accountsStrict({
         user,
@@ -343,17 +350,21 @@ export class SolanaVault {
         associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
       })
-      .rpc();
+      .transaction();
+
+    return simulateAndSendTransaction(this.provider, tx);
   }
 
   /**
-   * Withdraw exact assets by burning shares
+   * Withdraw exact assets by burning shares.
+   * Simulates the transaction before sending to detect errors early
+   * and optimize compute unit allocation.
    */
   async withdraw(user: PublicKey, params: WithdrawParams): Promise<string> {
     const userAssetAccount = this.getUserAssetAccount(user);
     const userSharesAccount = this.getUserSharesAccount(user);
 
-    return this.program.methods
+    const tx = await this.program.methods
       .withdraw(params.assets, params.maxSharesIn)
       .accountsStrict({
         user,
@@ -366,17 +377,21 @@ export class SolanaVault {
         assetTokenProgram: this.assetTokenProgram,
         token2022Program: TOKEN_2022_PROGRAM_ID,
       })
-      .rpc();
+      .transaction();
+
+    return simulateAndSendTransaction(this.provider, tx);
   }
 
   /**
-   * Redeem shares for assets
+   * Redeem shares for assets.
+   * Simulates the transaction before sending to detect errors early
+   * and optimize compute unit allocation.
    */
   async redeem(user: PublicKey, params: RedeemParams): Promise<string> {
     const userAssetAccount = this.getUserAssetAccount(user);
     const userSharesAccount = this.getUserSharesAccount(user);
 
-    return this.program.methods
+    const tx = await this.program.methods
       .redeem(params.shares, params.minAssetsOut)
       .accountsStrict({
         user,
@@ -389,7 +404,9 @@ export class SolanaVault {
         assetTokenProgram: this.assetTokenProgram,
         token2022Program: TOKEN_2022_PROGRAM_ID,
       })
-      .rpc();
+      .transaction();
+
+    return simulateAndSendTransaction(this.provider, tx);
   }
 
   // ============ View Functions (Off-chain) ============

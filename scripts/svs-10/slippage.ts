@@ -122,7 +122,7 @@ async function main() {
     .rpc();
 
   await program.methods
-    .fulfillDeposit(null)
+    .fulfillDeposit(null, new BN(0))
     .accountsStrict({
       operator: payer.publicKey, vault,
       depositRequest: seedReq,
@@ -183,7 +183,7 @@ async function main() {
   const higherPrice = Math.floor(PRICE_SCALE * 1.03); // 3% above fair
 
   await program.methods
-    .fulfillDeposit(new BN(higherPrice))
+    .fulfillDeposit(new BN(higherPrice), new BN(0))
     .accountsStrict({
       operator: payer.publicKey, vault,
       depositRequest: depReqA,
@@ -244,7 +244,7 @@ async function main() {
   const lowerPrice = Math.floor(PRICE_SCALE * 0.97); // 3% below fair
 
   await program.methods
-    .fulfillDeposit(new BN(lowerPrice))
+    .fulfillDeposit(new BN(lowerPrice), new BN(0))
     .accountsStrict({
       operator: payer.publicKey, vault,
       depositRequest: depReqB,
@@ -307,7 +307,7 @@ async function main() {
     .rpc();
 
   await program.methods
-    .fulfillDeposit(null)
+    .fulfillDeposit(null, new BN(0))
     .accountsStrict({
       operator: payer.publicKey, vault,
       depositRequest: depReqC,
@@ -354,7 +354,7 @@ async function main() {
   const redeemHighPrice = Math.floor(PRICE_SCALE * 1.02);
 
   await program.methods
-    .fulfillRedeem(new BN(redeemHighPrice))
+    .fulfillRedeem(new BN(redeemHighPrice), new BN(0))
     .accountsStrict({
       operator: payer.publicKey, vault,
       redeemRequest: redeemReqC, operatorApproval: programId,
@@ -414,7 +414,7 @@ async function main() {
   const oddPrice = Math.floor(PRICE_SCALE * 1.0123);
 
   await program.methods
-    .fulfillDeposit(new BN(oddPrice))
+    .fulfillDeposit(new BN(oddPrice), new BN(0))
     .accountsStrict({
       operator: payer.publicKey, vault,
       depositRequest: depReqD,

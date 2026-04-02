@@ -227,6 +227,10 @@ export interface ConfidentialWithdrawResult {
 export interface PrivateDepositParams {
   assets: BN;
   minSharesOut: BN;
+  /** Pre-derived ElGamal keypair. If omitted, derivation is attempted via backend proof generation. */
+  elgamalKeypair?: ElGamalKeypair;
+  /** Pre-derived AES key. If omitted, derived from the ephemeral wallet. */
+  aesKey?: AesKey;
 }
 
 /**

@@ -106,8 +106,11 @@ pub fn redeem_handler(ctx: Context<Redeem>, shares: u64, min_assets_out: u64) ->
         let vault_key = ctx.accounts.allocator_vault.key();
         let user_key = ctx.accounts.caller.key();
 
+        // V9-P15: Lock/access checks use caller key (not owner). When caller != owner,
+        // the check applies to the caller. Both must sign, so owner has explicitly
+        // authorized the redemption. A locked owner can authorize an unlocked caller.
         // 1. Check user access
-        module_hooks::check_access(modules, &crate::ID, &vault_key, &user_key, &[])?;
+        module_hooks::check_withdrawal_access(modules, &crate::ID, &vault_key, &user_key)?;
 
         // 2. Lock check - ensure shares are not locked
         module_hooks::check_share_lock(

@@ -108,7 +108,7 @@ export async function setupScript(scriptName: string): Promise<SetupResult> {
   }
 
   const idl = JSON.parse(fs.readFileSync(idlPath, "utf-8"));
-  const programId = new PublicKey("E8bGqwitsaFELBtuhbwAKwVBKjAjGzrfcnBPishvvRsA");
+  const programId = new PublicKey("HnZ9N8Y1v6jMhwDqo4Y76GfqjRArdinadgK67yLVFZbe");
   console.log(`  Program ID: ${programId.toBase58()}`);
 
   const program = new Program(idl, provider) as Program<Svs8>;

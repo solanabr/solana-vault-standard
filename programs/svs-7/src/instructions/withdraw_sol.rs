@@ -50,12 +50,17 @@ pub struct WithdrawSol<'info> {
     /// User's wSOL token account (temporary landing pad for unwrap).
     /// The user owns this account (authority = user). After receiving
     /// wSOL from the vault, we close it and native SOL goes to `user`.
+    ///
+    /// Constrained to SPL Token program (not Token-2022) because the close
+    /// instruction targets `token_program` which is pinned to SPL Token.
+    /// Accepting a Token-2022 wSOL account here would cause the close to fail.
     #[account(
         mut,
-        constraint = user_wsol_account.mint == native_mint.key(),
-        constraint = user_wsol_account.owner == user.key(),
+        token::mint = native_mint,
+        token::authority = user,
+        token::token_program = token_program,
     )]
-    pub user_wsol_account: InterfaceAccount<'info, TokenAccount>,
+    pub user_wsol_account: Account<'info, anchor_spl::token::TokenAccount>,
 
     #[account(
         mut,
@@ -106,7 +111,7 @@ pub fn handler(ctx: Context<WithdrawSol>, lamports: u64, max_shares_in: u64) -> 
         let vault_key = vault.key();
         let user_key = ctx.accounts.user.key();
 
-        module_hooks::check_deposit_access(remaining, &crate::ID, &vault_key, &user_key, &[])?;
+        module_hooks::check_withdrawal_access(remaining, &crate::ID, &vault_key, &user_key)?;
         module_hooks::check_share_lock(
             remaining,
             &crate::ID,
@@ -174,16 +179,20 @@ pub fn handler(ctx: Context<WithdrawSol>, lamports: u64, max_shares_in: u64) -> 
         ctx.accounts.native_mint.decimals,
     )?;
 
-    // 5c. Close user's wSOL account — unwraps wSOL to native SOL, lamports go to user
-    // User is authority on their wSOL account and is a signer on this tx.
-    token_2022::close_account(CpiContext::new(
-        ctx.accounts.token_program.to_account_info(),
-        CloseAccount {
-            account: ctx.accounts.user_wsol_account.to_account_info(),
-            destination: ctx.accounts.user.to_account_info(),
-            authority: ctx.accounts.user.to_account_info(),
-        },
-    ))?;
+    // 5c. Close user's wSOL account — unwraps wSOL to native SOL, lamports go to user.
+    // Reload to get post-transfer balance; only close if no remaining wSOL balance
+    // (user may have pre-existing wSOL they don't want closed).
+    ctx.accounts.user_wsol_account.reload()?;
+    if ctx.accounts.user_wsol_account.amount == 0 {
+        token_2022::close_account(CpiContext::new(
+            ctx.accounts.token_program.to_account_info(),
+            CloseAccount {
+                account: ctx.accounts.user_wsol_account.to_account_info(),
+                destination: ctx.accounts.user.to_account_info(),
+                authority: ctx.accounts.user.to_account_info(),
+            },
+        ))?;
+    }
 
     // 6. EMIT EVENT
     emit!(WithdrawEvent {

@@ -127,6 +127,16 @@ pub fn handler(ctx: Context<RequestDeposit>, amount: u64) -> Result<()> {
         ctx.accounts.asset_mint.decimals,
     )?;
 
+    // Update per-user cumulative deposit tracking (if caps module is active)
+    #[cfg(feature = "modules")]
+    module_hooks::update_user_deposit(
+        ctx.remaining_accounts,
+        &crate::ID,
+        &ctx.accounts.vault.key(),
+        &ctx.accounts.investor.key(),
+        amount,
+    )?;
+
     let request = &mut ctx.accounts.investment_request;
     request.investor = ctx.accounts.investor.key();
     request.vault = ctx.accounts.vault.key();

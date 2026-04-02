@@ -1,3 +1,6 @@
+use crate::constants::{
+    ALLOCATOR_VAULT_DISCRIMINATOR, CONFIDENTIAL_VAULT_DISCRIMINATOR, VAULT_DISCRIMINATOR,
+};
 use crate::error::VaultError;
 use crate::math::{convert_to_assets, Rounding};
 use crate::state::ChildAllocation;
@@ -37,6 +40,12 @@ use anchor_spl::token_interface::TokenAccount;
 // by `compute_total_assets` when it needs to peek at the vault state for
 // fallback compatibility (e.g. reading decimals_offset for future use).
 
+/// Byte offset of `shares_mint` (Pubkey) inside a serialized SVS-1 Vault account.
+const SVS1_VAULT_SHARES_MINT_OFFSET: usize = 72;
+
+/// Byte offset of `asset_vault` (Pubkey) inside a serialized SVS-1 Vault account.
+const SVS1_VAULT_ASSET_VAULT_OFFSET: usize = 104;
+
 /// Byte offset of `decimals_offset` (u8) inside a serialized SVS-1 Vault account.
 #[allow(dead_code)]
 const SVS1_VAULT_DECIMALS_OFFSET_BYTE: usize = 136;
@@ -44,6 +53,14 @@ const SVS1_VAULT_DECIMALS_OFFSET_BYTE: usize = 136;
 /// Byte offset of `vault_id` (u64 LE) inside a serialized SVS-1 Vault account.
 #[allow(dead_code)]
 const SVS1_VAULT_VAULT_ID_OFFSET: usize = 139;
+
+/// Byte offset of `shares_mint` (Pubkey) inside a serialized SVS-9 AllocatorVault account.
+/// Layout: discriminator(8) + authority(32) + curator(32) + asset_mint(32) = 104
+const SVS9_VAULT_SHARES_MINT_OFFSET: usize = 104;
+
+/// Byte offset of `idle_vault` (Pubkey) inside a serialized SVS-9 AllocatorVault account.
+/// Layout: discriminator(8) + authority(32) + curator(32) + asset_mint(32) + shares_mint(32) = 136
+const SVS9_VAULT_IDLE_VAULT_OFFSET: usize = 136;
 
 // When reading live balance vaults (SVS-1), `total_assets` and `total_shares`
 // must be read from the token accounts, not from the vault state.
@@ -63,6 +80,13 @@ const SVS1_VAULT_VAULT_ID_OFFSET: usize = 139;
 // replaced by the live-balance read strategy documented below and passing decimals_offset.
 
 /// Computes the total assets managed by the SVS-9 allocator vault.
+///
+/// V5-P21: This function intentionally does NOT check the paused state of child vaults.
+/// A paused child vault still holds valid assets (its token accounts remain intact and
+/// its total_assets/total_shares are accurate). The allocator's pause mechanism is
+/// independent — pausing a child only disables new deposits/withdrawals to that child,
+/// it does not zero out its NAV. Excluding paused children would understate the
+/// allocator's total assets, potentially enabling share price manipulation.
 ///
 /// `total = idle_vault_balance + Σ value_of_shares_held_in_each_child_vault`
 ///
@@ -91,13 +115,19 @@ pub fn compute_total_assets<'info>(
     remaining_accounts: &[AccountInfo<'info>],
     vault_key: Pubkey,
 ) -> Result<u64> {
-    if remaining_accounts.len() != (num_children as usize) * 5 {
+    // Remaining accounts must be in groups of 5. Disabled children may be
+    // omitted, so the count can be less than num_children * 5.
+    if remaining_accounts.len() % 5 != 0 {
+        return Err(VaultError::InvalidRemainingAccounts.into());
+    }
+    if remaining_accounts.len() > (num_children as usize) * 5 {
         return Err(VaultError::InvalidRemainingAccounts.into());
     }
 
     let mut total: u128 = idle_amount as u128;
     let mut processed_children: std::vec::Vec<Pubkey> =
         std::vec::Vec::with_capacity(num_children as usize);
+    let mut enabled_count: u8 = 0;
 
     // Iterate through remaining accounts in chunks of 5
     for chunk in remaining_accounts.chunks_exact(5) {
@@ -135,9 +165,43 @@ pub fn compute_total_assets<'info>(
             VaultError::InvalidRemainingAccounts
         );
 
+        // Validate child_asset_vault and child_shares_mint against the child vault
+        // state. The vault_info account is already authenticated above, so reading
+        // its fields at known offsets gives us the canonical token accounts.
+        let vault_data = vault_info.try_borrow_data()?;
+        require!(vault_data.len() >= 8, VaultError::InvalidChildVault);
+        let disc = &vault_data[0..8];
+
+        let (asset_vault_offset, shares_mint_offset) = if disc == ALLOCATOR_VAULT_DISCRIMINATOR {
+            (SVS9_VAULT_IDLE_VAULT_OFFSET, SVS9_VAULT_SHARES_MINT_OFFSET)
+        } else if disc == VAULT_DISCRIMINATOR || disc == CONFIDENTIAL_VAULT_DISCRIMINATOR {
+            (SVS1_VAULT_ASSET_VAULT_OFFSET, SVS1_VAULT_SHARES_MINT_OFFSET)
+        } else {
+            return Err(VaultError::InvalidChildVault.into());
+        };
+
+        let expected_asset_vault = read_pubkey(&vault_data, asset_vault_offset)?;
+        let expected_shares_mint = read_pubkey(&vault_data, shares_mint_offset)?;
+
+        require_keys_eq!(
+            child_asset_vault.key(),
+            expected_asset_vault,
+            VaultError::InvalidRemainingAccounts
+        );
+        require_keys_eq!(
+            child_shares_mint.key(),
+            expected_shares_mint,
+            VaultError::InvalidRemainingAccounts
+        );
+        drop(vault_data);
+
         if !allocation.enabled {
             continue;
         }
+
+        enabled_count = enabled_count
+            .checked_add(1)
+            .ok_or(VaultError::MathOverflow)?;
 
         // 2. Skip if shares account not yet initialised
         if allocation.child_shares_account == Pubkey::default() {
@@ -168,6 +232,14 @@ pub fn compute_total_assets<'info>(
         total = total
             .checked_add(child_assets as u128)
             .ok_or(VaultError::MathOverflow)?;
+    }
+
+    // Ensure all enabled children were provided. The number of groups passed
+    // must cover every enabled child — callers may omit disabled children but
+    // must include all enabled ones.
+    let groups_passed = (remaining_accounts.len() / 5) as u8;
+    if enabled_count > groups_passed {
+        return Err(VaultError::InvalidRemainingAccounts.into());
     }
 
     u64::try_from(total).map_err(|_| VaultError::MathOverflow.into())

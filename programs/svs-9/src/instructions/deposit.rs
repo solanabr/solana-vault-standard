@@ -194,6 +194,16 @@ pub fn deposit_handler(ctx: Context<Deposit>, assets: u64, min_shares_out: u64) 
         .checked_add(net_shares)
         .ok_or(VaultError::MathOverflow)?;
 
+    // Update per-user cumulative deposit tracking (if caps module is active)
+    #[cfg(feature = "modules")]
+    module_hooks::update_user_deposit(
+        module_accounts,
+        &crate::ID,
+        &ctx.accounts.allocator_vault.key(),
+        &ctx.accounts.caller.key(),
+        assets,
+    )?;
+
     // 7. EMIT EVENT
     emit!(crate::events::Deposit {
         vault: ctx.accounts.allocator_vault.key(),

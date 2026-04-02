@@ -54,6 +54,10 @@ pub struct ApproveDeposit<'info> {
 pub fn handler(ctx: Context<ApproveDeposit>) -> Result<()> {
     require!(!ctx.accounts.vault.paused, VaultError::VaultPaused);
     require!(
+        ctx.accounts.vault.investment_window_open,
+        VaultError::InvestmentWindowClosed
+    );
+    require!(
         ctx.accounts.frozen_check.data_is_empty(),
         VaultError::AccountFrozen
     );
@@ -84,6 +88,9 @@ pub fn handler(ctx: Context<ApproveDeposit>) -> Result<()> {
         svs_oracle::validate_deviation(price, expected_price_u128 as u64, vault.max_deviation_bps)
             .map_err(|_| VaultError::OracleDeviationExceeded)?;
     }
+    // Oracle price validity (staleness, positive price) is always enforced by
+    // read_and_validate_oracle above, even on the first deposit when there is no
+    // on-chain expected price to compare against.
 
     let amount_locked = ctx.accounts.investment_request.amount_locked;
     let shares = math::assets_to_shares(amount_locked, price)?;

@@ -20,7 +20,8 @@ use anchor_lang::prelude::*;
 /// |    187 |    1 | decimals_offset   |
 /// |    188 |    1 | bump              |
 /// |    189 |    1 | paused            |
-/// |    190 |   64 | _reserved         |
+/// |    190 |   32 | pending_authority |
+/// |    222 |   32 | _reserved         |
 #[account]
 #[derive(InitSpace)]
 pub struct AllocatorVault {
@@ -36,7 +37,11 @@ pub struct AllocatorVault {
     pub idle_vault: Pubkey,
     /// Unique vault identifier
     pub vault_id: u64,
-    /// Total minted shares — tracked for ERC-4626 compliance
+    /// V4-P20: Cached share count — tracked for ERC-4626 compliance and CPI
+    /// callers that need shares without fetching the mint. Updated atomically
+    /// with mint/burn CPIs. All security-critical calculations (view functions,
+    /// deposit/redeem math) read shares_mint.supply directly as the canonical
+    /// source. This field is informational; divergence indicates a program bug.
     pub total_shares: u64,
     /// Minimum idle ratio in bps
     pub idle_buffer_bps: u16,
@@ -48,8 +53,10 @@ pub struct AllocatorVault {
     pub bump: u8,
     /// Emergency pause flag
     pub paused: bool,
+    /// Pending authority for two-step transfer (default = Pubkey::default() means none)
+    pub pending_authority: Pubkey,
     /// Reserved for future upgrades — must be zeroed on init
-    pub _reserved: [u8; 64],
+    pub _reserved: [u8; 32],
 }
 
 /// Per-child allocation state — one PDA per (AllocatorVault, ChildVault) pair.
@@ -96,6 +103,30 @@ pub struct ChildAllocation {
     pub bump: u8,
     /// Reserved for future upgrades — must be zeroed on init
     pub _reserved: [u8; 63],
+}
+
+/// Configurable allowlist of child vault programs for an allocator vault.
+///
+/// Seeds: ["allowed_programs", allocator_vault.key()]
+///
+/// Memory layout (after 8-byte Anchor discriminator):
+/// | offset | size | field            |
+/// |--------|------|------------------|
+/// |      8 |   32 | allocator_vault  |
+/// |     40 |    1 | num_programs     |
+/// |     41 |  320 | programs         |
+/// |    361 |    1 | bump             |
+#[account]
+#[derive(InitSpace)]
+pub struct AllowedPrograms {
+    /// The allocator vault this allowlist belongs to
+    pub allocator_vault: Pubkey,
+    /// Number of active programs in the list
+    pub num_programs: u8,
+    /// Allowed program IDs (fixed-size array, use num_programs for active count)
+    pub programs: [Pubkey; 10],
+    /// PDA bump seed
+    pub bump: u8,
 }
 
 // =============================================================================

@@ -175,7 +175,7 @@ const connection = new Connection('https://api.devnet.solana.com');
 const authority = Keypair.fromSecretKey(/* ... */);
 
 // Load existing vault
-const vaultPubkey = new PublicKey('3UrYrxh1HmVgq7WPygZ5x1gNEaWFwqTMs7geNqMnsrtD');
+const vaultPubkey = new PublicKey('7vnZM4aCsRapH9ft7Bo5ibTXNH2dvoxkj96c7JonLhoe');
 const vault = await ManagedVault.load(connection, vaultPubkey);
 
 // Check stored vs actual balance
@@ -267,7 +267,7 @@ class ManagedVault extends SolanaVault {
 
 | Item | Value |
 |------|-------|
-| **Program ID** | `3UrYrxh1HmVgq7WPygZ5x1gNEaWFwqTMs7geNqMnsrtD` |
+| **Program ID** | `7vnZM4aCsRapH9ft7Bo5ibTXNH2dvoxkj96c7JonLhoe` |
 | **Network** | Devnet |
 | **SDK Package** | `@stbr/solana-vault` |
 | **Class** | `ManagedVault` |
@@ -276,10 +276,10 @@ class ManagedVault extends SolanaVault {
 
 ```bash
 # Verify program deployment
-solana program show 3UrYrxh1HmVgq7WPygZ5x1gNEaWFwqTMs7geNqMnsrtD --url devnet
+solana program show 7vnZM4aCsRapH9ft7Bo5ibTXNH2dvoxkj96c7JonLhoe --url devnet
 
 # Anchor verify (if verifiable build available)
-anchor verify 3UrYrxh1HmVgq7WPygZ5x1gNEaWFwqTMs7geNqMnsrtD --provider.cluster devnet
+anchor verify 7vnZM4aCsRapH9ft7Bo5ibTXNH2dvoxkj96c7JonLhoe --provider.cluster devnet
 ```
 
 ### Integration Example
@@ -288,7 +288,7 @@ anchor verify 3UrYrxh1HmVgq7WPygZ5x1gNEaWFwqTMs7geNqMnsrtD --provider.cluster de
 import { ManagedVault } from '@stbr/solana-vault';
 import { Connection, PublicKey } from '@solana/web3.js';
 
-const DEVNET_PROGRAM_ID = new PublicKey('3UrYrxh1HmVgq7WPygZ5x1gNEaWFwqTMs7geNqMnsrtD');
+const DEVNET_PROGRAM_ID = new PublicKey('7vnZM4aCsRapH9ft7Bo5ibTXNH2dvoxkj96c7JonLhoe');
 const connection = new Connection('https://api.devnet.solana.com');
 
 // Find vault PDA
@@ -394,7 +394,7 @@ In addition to [core errors](ERRORS.md):
 
 SVS-2 supports the same module system as SVS-1. Build with `anchor build -- --features modules`.
 
-Module hooks are fully integrated into deposit/mint/withdraw/redeem handlers. See [SVS-1.md#module-integration](SVS-1.md#module-integration) for details and [specs-modules.md](specs-modules.md) for full specification.
+Module hooks are fully integrated into deposit/mint/withdraw/redeem handlers. See [SVS-1.md#module-integration](SVS-1.md#module-integration) for details and [MODULES.md](MODULES.md) for full specification.
 
 ---
 
@@ -410,7 +410,7 @@ Module hooks are fully integrated into deposit/mint/withdraw/redeem handlers. Se
 
 ---
 
-**See Also**:
+## See Also
 - [SVS-1.md](./SVS-1.md) — Live balance comparison
 - [SVS-4.md](./SVS-4.md) — Stored balance + confidential
 - [ARCHITECTURE.md](./ARCHITECTURE.md) — Cross-variant design

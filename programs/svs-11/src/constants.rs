@@ -5,7 +5,10 @@ pub const INVESTMENT_REQUEST_SEED: &[u8] = b"investment_request";
 pub const REDEMPTION_REQUEST_SEED: &[u8] = b"redemption_request";
 pub const CLAIMABLE_TOKENS_SEED: &[u8] = b"claimable_tokens";
 pub const FROZEN_ACCOUNT_SEED: &[u8] = b"frozen_account";
+pub const VAULT_CONFIG_SEED: &[u8] = b"vault_config";
 
 pub const MAX_DECIMALS: u8 = 9;
 pub const SHARES_DECIMALS: u8 = 9;
 pub const DEFAULT_MAX_DEVIATION_BPS: u16 = 500;
+pub const MAX_DEVIATION_BPS_CAP: u16 = 2000;
+pub const ORACLE_TIMELOCK: i64 = 86400; // 24 hours

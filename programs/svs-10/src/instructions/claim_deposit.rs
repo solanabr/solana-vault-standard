@@ -25,10 +25,10 @@ pub struct ClaimDeposit<'info> {
     #[account(mut)]
     pub claimant: Signer<'info>,
 
-    #[account(
-        mut,
-        constraint = !vault.paused @ VaultError::VaultPaused,
-    )]
+    /// V6-P4 / V5-P24: No pause check — already-fulfilled deposits have committed funds
+    /// (assets locked, shares computed). Blocking claims during pause would trap user funds.
+    /// Pause halts NEW operations (requests, fulfillments), not settlement of committed claims.
+    #[account(mut)]
     pub vault: Account<'info, AsyncVault>,
 
     #[account(
@@ -60,6 +60,9 @@ pub struct ClaimDeposit<'info> {
     /// CHECK: Receiver derived from deposit_request
     pub receiver: SystemAccount<'info>,
 
+    /// V9-P3: Manual PDA validation is intentional — Anchor constraints don't support
+    /// conditional seeds on `Option<Account>` types. The handler validates the PDA key
+    /// via `create_program_address` + key comparison when this account is `Some`.
     pub operator_approval: Option<Account<'info, OperatorApproval>>,
 
     pub token_2022_program: Program<'info, Token2022>,
@@ -151,6 +154,12 @@ pub fn handler(ctx: Context<ClaimDeposit>) -> Result<()> {
         .checked_add(shares_claimable)
         .ok_or(VaultError::MathOverflow)?;
 
+    // V9-P12: set_share_lock currently operates at vault-level only (no per-user PDA).
+    // It computes a locked_until timestamp from LockConfig but does not write to a
+    // per-user ShareLock PDA because the hook lacks a user_key parameter and write
+    // access to the ShareLock account. To enable per-user share locking on claim,
+    // the module hook needs a user_key parameter and the ShareLock PDA in
+    // remaining_accounts with mut access. Documented as known limitation.
     #[cfg(feature = "modules")]
     {
         let remaining = ctx.remaining_accounts;

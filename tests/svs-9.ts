@@ -49,7 +49,7 @@ describe("svs-9", () => {
   // ─── Child Vault (real SVS-1 vault) ───
   let childVaultAddress: PublicKey;
   let childSharesMintAddress: PublicKey;
-  const SVS1_ID = new PublicKey("Bv8aVSQ3DJUe3B7TqQZRZgrNvVTh8TjfpwpoeR1ckDMC");
+  const SVS1_ID = new PublicKey("CzZyssz2PdLccWpbVi6a3wFKMmMqdf28U2RapNNRJSPX");
   
   // ─── PDAs and Derived Accounts ───
   let childAllocationPDA: PublicKey;

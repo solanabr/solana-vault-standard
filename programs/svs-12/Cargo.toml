@@ -1,6 +1,6 @@
 [package]
 name = "svs-12"
-version = "0.1.0"
+version = "2.0.0"
 description = "SVS-12: Tranched Vault with waterfall yield distribution and loss absorption"
 edition = "2021"
 license = "MIT"

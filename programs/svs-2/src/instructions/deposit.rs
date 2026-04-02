@@ -2,7 +2,6 @@
 
 use anchor_lang::prelude::*;
 use anchor_spl::{
-    associated_token::AssociatedToken,
     token_2022::{self, MintTo, Token2022},
     token_interface::{transfer_checked, Mint, TokenAccount, TokenInterface, TransferChecked},
 };
@@ -54,8 +53,7 @@ pub struct Deposit<'info> {
     pub shares_mint: InterfaceAccount<'info, Mint>,
 
     #[account(
-        init_if_needed,
-        payer = user,
+        mut,
         associated_token::mint = shares_mint,
         associated_token::authority = user,
         associated_token::token_program = token_2022_program,
@@ -64,8 +62,6 @@ pub struct Deposit<'info> {
 
     pub asset_token_program: Interface<'info, TokenInterface>,
     pub token_2022_program: Program<'info, Token2022>,
-    pub associated_token_program: Program<'info, AssociatedToken>,
-    pub system_program: Program<'info, System>,
 }
 
 pub fn handler(ctx: Context<Deposit>, assets: u64, min_shares_out: u64) -> Result<()> {
@@ -171,6 +167,16 @@ pub fn handler(ctx: Context<Deposit>, assets: u64, min_shares_out: u64) -> Resul
         .total_assets
         .checked_add(assets)
         .ok_or(VaultError::MathOverflow)?;
+
+    // Update per-user cumulative deposit tracking (if caps module is active)
+    #[cfg(feature = "modules")]
+    module_hooks::update_user_deposit(
+        ctx.remaining_accounts,
+        &crate::ID,
+        &ctx.accounts.vault.key(),
+        &ctx.accounts.user.key(),
+        assets,
+    )?;
 
     emit!(DepositEvent {
         vault: ctx.accounts.vault.key(),

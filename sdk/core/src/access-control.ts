@@ -39,7 +39,7 @@
  */
 
 import { PublicKey } from "@solana/web3.js";
-import { createHash } from "crypto";
+import { hash } from "blake3";
 
 /**
  * Access control mode
@@ -94,28 +94,43 @@ export interface MerkleProof {
   leaf: Buffer;
 }
 
-/**
- * Hash a value using keccak256.
- */
-function keccak256(data: Buffer): Buffer {
-  return createHash("sha3-256").update(data).digest();
-}
+/** Domain separation prefix for leaf nodes (matches on-chain merkle.rs) */
+const LEAF_PREFIX = 0x00;
+/** Domain separation prefix for internal nodes (matches on-chain merkle.rs) */
+const INTERNAL_PREFIX = 0x01;
 
 /**
  * Create a leaf hash from a public key.
+ *
+ * Uses blake3 with a 0x00 domain separation prefix to match
+ * the on-chain implementation in svs-access/src/merkle.rs.
  */
 export function hashLeaf(address: PublicKey): Buffer {
-  return keccak256(address.toBuffer());
+  // hash(0x00 || pubkey_bytes) — matches on-chain hash_leaf()
+  const data = Buffer.alloc(33);
+  data[0] = LEAF_PREFIX;
+  address.toBuffer().copy(data, 1);
+  return Buffer.from(hash(data));
 }
 
 /**
  * Combine two hashes for parent node.
- * Hashes are sorted before combining for consistent tree structure.
+ *
+ * Uses blake3 with a 0x01 domain separation prefix and sorted children
+ * to match the on-chain implementation in svs-access/src/merkle.rs.
  */
 function hashPair(a: Buffer, b: Buffer): Buffer {
-  // Sort to ensure consistent tree regardless of order
-  const sorted = Buffer.compare(a, b) < 0 ? [a, b] : [b, a];
-  return keccak256(Buffer.concat(sorted));
+  // hash(0x01 || left || right) with sorted children — matches on-chain hash_pair()
+  const data = Buffer.alloc(65);
+  data[0] = INTERNAL_PREFIX;
+  if (Buffer.compare(a, b) <= 0) {
+    a.copy(data, 1);
+    b.copy(data, 33);
+  } else {
+    b.copy(data, 1);
+    a.copy(data, 33);
+  }
+  return Buffer.from(hash(data));
 }
 
 /**
@@ -207,6 +222,15 @@ export function verifyMerkleProof(
   // Check leaf matches
   if (!leaf.equals(proof.leaf)) {
     return false;
+  }
+
+  // Validate proof element lengths — each sibling hash must be exactly 32 bytes
+  for (const sibling of proof.proof) {
+    if (sibling.length !== 32) {
+      throw new Error(
+        `Invalid proof element length: expected 32 bytes, got ${sibling.length}`,
+      );
+    }
   }
 
   // Compute root from proof

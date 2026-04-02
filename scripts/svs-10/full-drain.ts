@@ -115,7 +115,7 @@ async function main() {
     .rpc();
 
   await program.methods
-    .fulfillDeposit(null)
+    .fulfillDeposit(null, new BN(0))
     .accountsStrict({
       operator: payer.publicKey, vault,
       depositRequest: depReq1,
@@ -160,7 +160,7 @@ async function main() {
   const [claimable1] = getClaimableTokensAddress(programId, vault, payer.publicKey);
 
   await program.methods
-    .fulfillRedeem(null)
+    .fulfillRedeem(null, new BN(0))
     .accountsStrict({
       operator: payer.publicKey, vault,
       redeemRequest: redeemReq1, operatorApproval: programId,
@@ -248,7 +248,7 @@ async function main() {
   for (let i = 0; i < users.length; i++) {
     const [depReq] = getDepositRequestAddress(programId, vault, users[i].keypair.publicKey);
     await program.methods
-      .fulfillDeposit(null)
+      .fulfillDeposit(null, new BN(0))
       .accountsStrict({
         operator: payer.publicKey, vault,
         depositRequest: depReq,
@@ -303,7 +303,7 @@ async function main() {
     const [claimableTokens] = getClaimableTokensAddress(programId, vault, users[i].keypair.publicKey);
 
     await program.methods
-      .fulfillRedeem(null)
+      .fulfillRedeem(null, new BN(0))
       .accountsStrict({
         operator: payer.publicKey, vault,
         redeemRequest: redeemReq, operatorApproval: programId,
@@ -382,7 +382,7 @@ async function main() {
       .rpc();
 
     await program.methods
-      .fulfillDeposit(null)
+      .fulfillDeposit(null, new BN(0))
       .accountsStrict({
         operator: payer.publicKey, vault,
         depositRequest: newDepReq,

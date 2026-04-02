@@ -172,7 +172,7 @@ export async function depositCycle(
     .rpc();
 
   const fulSig = await program.methods
-    .fulfillDeposit(null)
+    .fulfillDeposit(null, new BN(0))
     .accountsStrict({
       operator: payer.publicKey,
       vault: ctx.vault,
@@ -229,7 +229,7 @@ export async function redeemCycle(
     .rpc();
 
   const fulSig = await program.methods
-    .fulfillRedeem(null)
+    .fulfillRedeem(null, new BN(0))
     .accountsStrict({
       operator: payer.publicKey,
       vault: ctx.vault,

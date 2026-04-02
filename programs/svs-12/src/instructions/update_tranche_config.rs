@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 
 use crate::{
-    error::TranchedVaultError,
+    error::VaultError,
     events::TrancheConfigUpdated,
     state::{Tranche, TranchedVault},
     waterfall::check_subordination,
@@ -12,13 +12,13 @@ pub struct UpdateTrancheConfig<'info> {
     pub authority: Signer<'info>,
 
     #[account(
-        has_one = authority @ TranchedVaultError::Unauthorized,
+        has_one = authority @ VaultError::Unauthorized,
     )]
     pub vault: Account<'info, TranchedVault>,
 
     #[account(
         mut,
-        constraint = target_tranche.vault == vault.key() @ TranchedVaultError::TrancheVaultMismatch,
+        has_one = vault @ VaultError::TrancheVaultMismatch,
     )]
     pub target_tranche: Account<'info, Tranche>,
 
@@ -34,15 +34,15 @@ pub fn handler(
     subordination_bps: Option<u16>,
 ) -> Result<()> {
     if let Some(v) = target_yield_bps {
-        require!(v <= 10_000, TranchedVaultError::InvalidYieldConfig);
+        require!(v <= 10_000, VaultError::InvalidYieldConfig);
         ctx.accounts.target_tranche.target_yield_bps = v;
     }
     if let Some(v) = cap_bps {
-        require!(v > 0 && v <= 10_000, TranchedVaultError::InvalidCapConfig);
+        require!(v > 0 && v <= 10_000, VaultError::InvalidCapConfig);
         ctx.accounts.target_tranche.cap_bps = v;
     }
     if let Some(v) = subordination_bps {
-        require!(v <= 10_000, TranchedVaultError::InvalidSubordinationConfig);
+        require!(v <= 10_000, VaultError::InvalidSubordinationConfig);
         ctx.accounts.target_tranche.subordination_bps = v;
     }
 
@@ -63,14 +63,8 @@ pub fn handler(
         &ctx.accounts.tranche_3,
     ] {
         if let Some(t) = opt_tranche {
-            require!(
-                t.vault == vault.key(),
-                TranchedVaultError::TrancheVaultMismatch
-            );
-            require!(
-                !seen_keys.contains(&t.key()),
-                TranchedVaultError::DuplicateTranche
-            );
+            require!(t.vault == vault.key(), VaultError::TrancheVaultMismatch);
+            require!(!seen_keys.contains(&t.key()), VaultError::DuplicateTranche);
             seen_keys.push(t.key());
             all_allocations.push((t.priority, t.total_assets_allocated, t.subordination_bps));
         }
@@ -78,7 +72,7 @@ pub fn handler(
 
     require!(
         all_allocations.len() == vault.num_tranches as usize,
-        TranchedVaultError::WrongTrancheCount
+        VaultError::WrongTrancheCount
     );
 
     all_allocations.sort_by_key(|&(p, _, _)| p);

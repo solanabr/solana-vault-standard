@@ -9,7 +9,7 @@ pub mod state;
 
 use instructions::*;
 
-declare_id!("E8bGqwitsaFELBtuhbwAKwVBKjAjGzrfcnBPishvvRsA");
+declare_id!("HnZ9N8Y1v6jMhwDqo4Y76GfqjRArdinadgK67yLVFZbe");
 
 #[program]
 pub mod svs_8 {
@@ -19,14 +19,12 @@ pub mod svs_8 {
         ctx: Context<Initialize>,
         vault_id: u64,
         base_decimals: u8,
+        shares_decimals: u8,
     ) -> Result<()> {
-        instructions::initialize::handler(ctx, vault_id, base_decimals)
+        instructions::initialize::handler(ctx, vault_id, base_decimals, shares_decimals)
     }
 
-    pub fn add_asset(
-        ctx: Context<AddAsset>,
-        target_weight_bps: u16,
-    ) -> Result<()> {
+    pub fn add_asset(ctx: Context<AddAsset>, target_weight_bps: u16) -> Result<()> {
         instructions::add_asset::handler(ctx, target_weight_bps)
     }
 
@@ -34,10 +32,7 @@ pub mod svs_8 {
         instructions::remove_asset::handler(ctx)
     }
 
-    pub fn update_weights(
-        ctx: Context<UpdateWeights>,
-        new_weight_bps: u16,
-    ) -> Result<()> {
+    pub fn update_weights(ctx: Context<UpdateWeights>, new_weight_bps: u16) -> Result<()> {
         instructions::update_weights::handler(ctx, new_weight_bps)
     }
 
@@ -73,10 +68,11 @@ pub mod svs_8 {
         instructions::admin::unpause(ctx)
     }
 
-    pub fn update_oracle(
-        ctx: Context<UpdateOracle>,
-        price: u64,
-    ) -> Result<()> {
+    pub fn initialize_oracle(ctx: Context<InitializeOracle>, price: u64) -> Result<()> {
+        instructions::update_oracle::initialize_oracle_handler(ctx, price)
+    }
+
+    pub fn update_oracle(ctx: Context<UpdateOracle>, price: u64) -> Result<()> {
         instructions::update_oracle::handler(ctx, price)
     }
 
@@ -87,7 +83,24 @@ pub mod svs_8 {
     ) -> Result<()> {
         instructions::redeem_single::handler(ctx, shares, min_assets_out)
     }
+    /// Step 1: Request authority transfer (sets pending_authority)
+    pub fn request_transfer_authority(ctx: Context<Admin>, new_authority: Pubkey) -> Result<()> {
+        instructions::admin::request_transfer_authority(ctx, new_authority)
+    }
+
+    /// Step 2: Accept authority transfer (must be signed by pending authority)
+    pub fn accept_authority(ctx: Context<AcceptAuthority>) -> Result<()> {
+        instructions::admin::accept_authority(ctx)
+    }
+
+    /// Direct transfer authority (deprecated -- prefer two-step transfer)
+    #[allow(deprecated)]
     pub fn transfer_authority(ctx: Context<Admin>, new_authority: Pubkey) -> Result<()> {
         instructions::admin::transfer_authority(ctx, new_authority)
+    }
+
+    /// Cancel a pending two-step authority transfer.
+    pub fn cancel_transfer_authority(ctx: Context<Admin>) -> Result<()> {
+        instructions::admin::cancel_transfer_authority(ctx)
     }
 }

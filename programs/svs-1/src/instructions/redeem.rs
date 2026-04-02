@@ -101,7 +101,7 @@ pub fn handler(ctx: Context<Redeem>, shares: u64, min_assets_out: u64) -> Result
         let user_key = ctx.accounts.user.key();
 
         // 1. Access control check (frozen account)
-        module_hooks::check_deposit_access(remaining, &crate::ID, &vault_key, &user_key, &[])?;
+        module_hooks::check_withdrawal_access(remaining, &crate::ID, &vault_key, &user_key)?;
 
         // 2. Lock check - ensure shares are not locked
         module_hooks::check_share_lock(
@@ -168,6 +168,11 @@ pub fn handler(ctx: Context<Redeem>, shares: u64, min_assets_out: u64) -> Result
 
     // NOTE: Exit fee stays in vault - use collect_fees instruction to withdraw
 
+    // V4-P25: Compute exit fee for event disclosure
+    let exit_fee = assets
+        .checked_sub(net_assets)
+        .ok_or(VaultError::MathOverflow)?;
+
     emit!(WithdrawEvent {
         vault: ctx.accounts.vault.key(),
         caller: ctx.accounts.user.key(),
@@ -175,6 +180,7 @@ pub fn handler(ctx: Context<Redeem>, shares: u64, min_assets_out: u64) -> Result
         owner: ctx.accounts.user.key(),
         assets: net_assets,
         shares,
+        exit_fee,
     });
 
     Ok(())

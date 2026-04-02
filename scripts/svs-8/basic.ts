@@ -69,7 +69,7 @@ async function main() {
   console.log("-".repeat(70));
 
   const initTx = await program.methods
-    .initialize(vaultId, 6)
+    .initialize(vaultId, 6, 9)
     .accountsPartial({
       authority: payer.publicKey,
       sharesMint,

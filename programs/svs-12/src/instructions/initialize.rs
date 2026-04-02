@@ -6,7 +6,7 @@ use anchor_spl::{
 
 use crate::{
     constants::{MAX_DECIMALS, TRANCHED_VAULT_SEED},
-    error::TranchedVaultError,
+    error::VaultError,
     events::VaultInitialized,
     state::{TranchedVault, WaterfallMode},
 };
@@ -46,13 +46,13 @@ pub fn handler(ctx: Context<Initialize>, vault_id: u64, waterfall_mode: u8) -> R
     let asset_decimals = ctx.accounts.asset_mint.decimals;
     require!(
         asset_decimals <= MAX_DECIMALS,
-        TranchedVaultError::InvalidAssetDecimals
+        VaultError::InvalidAssetDecimals
     );
 
     let mode = match waterfall_mode {
         0 => WaterfallMode::Sequential,
         1 => WaterfallMode::ProRataYieldSequentialLoss,
-        _ => return err!(TranchedVaultError::InvalidWaterfallMode),
+        _ => return err!(VaultError::InvalidWaterfallMode),
     };
 
     let vault = &mut ctx.accounts.vault;
@@ -69,7 +69,9 @@ pub fn handler(ctx: Context<Initialize>, vault_id: u64, waterfall_mode: u8) -> R
     vault.priority_bitmap = 0;
     vault.vault_id = vault_id;
     vault.waterfall_mode = mode;
-    vault._reserved = [0u8; 64];
+    vault.pending_authority = Pubkey::default();
+    vault.last_yield_distribution = 0;
+    vault._reserved = [0u8; 24];
 
     emit!(VaultInitialized {
         vault: vault.key(),

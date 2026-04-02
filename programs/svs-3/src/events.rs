@@ -28,6 +28,8 @@ pub struct Withdraw {
     pub owner: Pubkey,
     pub assets: u64,
     pub shares: u64,
+    /// V7-P7: Exit fee deducted (0 when modules disabled). Consistent with SVS-1/2/4.
+    pub exit_fee: u64,
 }
 
 // NOTE: No VaultSynced event in SVS-3 - uses live balance
@@ -37,6 +39,13 @@ pub struct Withdraw {
 pub struct VaultStatusChanged {
     pub vault: Pubkey,
     pub paused: bool,
+}
+
+#[event]
+pub struct AuthorityTransferRequested {
+    pub vault: Pubkey,
+    pub current_authority: Pubkey,
+    pub pending_authority: Pubkey,
 }
 
 #[event]
