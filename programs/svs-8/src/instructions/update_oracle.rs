@@ -30,6 +30,9 @@ pub fn initialize_oracle_handler(ctx: Context<InitializeOracle>, price: u64) -> 
     Ok(())
 }
 
+// NOTE: Rate limiting oracle updates (e.g., minimum interval between updates) is recommended
+// but enforced off-chain by the oracle authority. On-chain staleness checks at read time
+// (via max_staleness) provide the safety backstop.
 pub fn handler(ctx: Context<UpdateOracle>, price: u64) -> Result<()> {
     require!(price > 0, VaultError::InvalidOracle);
 
@@ -73,7 +76,6 @@ pub struct InitializeOracle<'info> {
 
 #[derive(Accounts)]
 pub struct UpdateOracle<'info> {
-    #[account(has_one = authority)]
     pub vault: Account<'info, MultiAssetVault>,
 
     pub authority: Signer<'info>,
@@ -86,6 +88,7 @@ pub struct UpdateOracle<'info> {
         bump = oracle_price.bump,
         has_one = vault,
         has_one = asset_mint,
+        has_one = authority @ VaultError::Unauthorized,
     )]
     pub oracle_price: Account<'info, OraclePrice>,
 }

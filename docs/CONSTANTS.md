@@ -81,7 +81,7 @@ offset = 10^decimals_offset
 
 ## Account Sizes
 
-### Vault State (SVS-1, SVS-2)
+### Vault State (SVS-1)
 
 | Field | Size (bytes) |
 |-------|-------------|
@@ -90,19 +90,15 @@ offset = 10^decimals_offset
 | asset_mint | 32 |
 | shares_mint | 32 |
 | asset_vault | 32 |
-| total_assets | 8 |
 | decimals_offset | 1 |
 | bump | 1 |
 | paused | 1 |
 | vault_id | 8 |
-| _reserved | 64 |
-| **Total** | **219** |
+| pending_authority | 32 |
+| _reserved | 32 |
+| **Total** | **211** |
 
-```rust
-impl Vault {
-    pub const LEN: usize = 8 + 32 + 32 + 32 + 32 + 8 + 1 + 1 + 1 + 8 + 64;
-}
-```
+SVS-2 adds `total_assets` (8), `cumulative_exit_fees` (8), and `fee_recipient` (32) = **259 bytes**.
 
 ### ConfidentialVault State (SVS-3, SVS-4)
 
@@ -258,11 +254,11 @@ export const MIN_DEPOSIT_AMOUNT = 1000n;
 export const BPS_DENOMINATOR = 10000n;
 
 // Program IDs (devnet)
-export const SVS_1_PROGRAM_ID = new PublicKey('Bv8aVSQ3DJUe3B7TqQZRZgrNvVTh8TjfpwpoeR1ckDMC');
-export const SVS_2_PROGRAM_ID = new PublicKey('3UrYrxh1HmVgq7WPygZ5x1gNEaWFwqTMs7geNqMnsrtD');
-export const SVS_3_PROGRAM_ID = new PublicKey('EcpnYtaCBrZ4p4uq7dDr55D3fL9nsxbCNqpyUREGpPkh');
-export const SVS_4_PROGRAM_ID = new PublicKey('2WP7LXWqrp1W4CwEJuVt2SxWPNY2n6AYmijh6Z4EeidY');
-export const SVS_10_PROGRAM_ID = new PublicKey('CpjFjyxRwTGYxR6JWXpfQ1923z5wVwpyBvgPFjm9jamJ');
+export const SVS_1_PROGRAM_ID = new PublicKey('CzZyssz2PdLccWpbVi6a3wFKMmMqdf28U2RapNNRJSPX');
+export const SVS_2_PROGRAM_ID = new PublicKey('7vnZM4aCsRapH9ft7Bo5ibTXNH2dvoxkj96c7JonLhoe');
+export const SVS_3_PROGRAM_ID = new PublicKey('CC4xQGxmwKusLW3ToqUzRAFjh7cL2iKsgfkz6qJSasYs');
+export const SVS_4_PROGRAM_ID = new PublicKey('EqRNvMTwczQjUhQL8wwrxJGALgz5VWsYne3d67e6ruCv');
+export const SVS_10_PROGRAM_ID = new PublicKey('4G5d6KutMpUaDPTVcv7FJBpPTGZej8rx3GyGnfiRdD6M');
 ```
 
 ---

@@ -15,6 +15,8 @@ pub enum OracleError {
     MathOverflow,
     /// Staleness configuration is out of allowed range.
     InvalidStalenessConfig,
+    /// Oracle updated_at timestamp is in the future.
+    FutureTimestamp,
 }
 
 impl core::fmt::Display for OracleError {
@@ -27,6 +29,9 @@ impl core::fmt::Display for OracleError {
             OracleError::MathOverflow => write!(f, "arithmetic overflow in price calculation"),
             OracleError::InvalidStalenessConfig => {
                 write!(f, "staleness config out of allowed range")
+            }
+            OracleError::FutureTimestamp => {
+                write!(f, "oracle updated_at timestamp is in the future")
             }
         }
     }

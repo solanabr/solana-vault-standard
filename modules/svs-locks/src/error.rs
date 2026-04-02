@@ -11,6 +11,8 @@ pub enum LockError {
     InvalidDuration,
     /// Arithmetic overflow during lock calculation.
     MathOverflow,
+    /// Shares to redeem exceed user balance.
+    InsufficientBalance,
 }
 
 impl core::fmt::Display for LockError {
@@ -20,6 +22,9 @@ impl core::fmt::Display for LockError {
             LockError::DurationExceedsMax => write!(f, "lock duration exceeds maximum"),
             LockError::InvalidDuration => write!(f, "invalid lock duration"),
             LockError::MathOverflow => write!(f, "arithmetic overflow in lock calculation"),
+            LockError::InsufficientBalance => {
+                write!(f, "shares to redeem exceed user balance")
+            }
         }
     }
 }

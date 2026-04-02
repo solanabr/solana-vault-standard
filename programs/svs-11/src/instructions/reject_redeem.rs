@@ -14,6 +14,7 @@ pub struct RejectRedeem<'info> {
     pub manager: Signer<'info>,
 
     #[account(
+        mut,
         has_one = manager,
         seeds = [VAULT_SEED, vault.asset_mint.as_ref(), &vault.vault_id.to_le_bytes()],
         bump = vault.bump,
@@ -54,7 +55,17 @@ pub struct RejectRedeem<'info> {
     pub system_program: Program<'info, System>,
 }
 
+/// V5-P20: This handler intentionally does NOT check vault.paused. During a pause,
+/// the manager must still be able to reject pending redemption requests to clear the
+/// queue and return escrowed shares to investors. Blocking rejections during pause
+/// would trap investor shares in the escrow indefinitely.
 pub fn handler(ctx: Context<RejectRedeem>, reason_code: u8) -> Result<()> {
+    let vault = &mut ctx.accounts.vault;
+    vault.total_pending_redeems = vault
+        .total_pending_redeems
+        .checked_sub(1)
+        .ok_or(VaultError::MathOverflow)?;
+
     let shares_to_return = ctx.accounts.redemption_request.shares_locked;
 
     let asset_mint_key = ctx.accounts.vault.asset_mint;

@@ -44,6 +44,9 @@ pub struct FulfillRedeem<'info> {
     )]
     pub redeem_request: Account<'info, RedeemRequest>,
 
+    /// V9-P3: Manual PDA validation is intentional — Anchor constraints don't support
+    /// conditional seeds on `Option<Account>` types. The handler validates the PDA key
+    /// via `create_program_address` + key comparison when this account is `Some`.
     pub operator_approval: Option<Account<'info, OperatorApproval>>,
 
     #[account(
@@ -87,11 +90,26 @@ pub struct FulfillRedeem<'info> {
     pub clock: Sysvar<'info, Clock>,
 }
 
-pub fn handler(ctx: Context<FulfillRedeem>, oracle_price: Option<u64>) -> Result<()> {
+pub fn handler(
+    ctx: Context<FulfillRedeem>,
+    oracle_price: Option<u64>,
+    min_price_per_share: u64,
+) -> Result<()> {
     let vault = &ctx.accounts.vault;
     let redeem_request = &ctx.accounts.redeem_request;
     let clock = &ctx.accounts.clock;
     let shares_locked = redeem_request.shares_locked;
+
+    // Use shares_mint.supply as the authoritative total shares instead of the
+    // cached vault.total_shares, which can be stale when fulfilled-but-unclaimed
+    // deposits exist. Subtract total_pending_redeems because escrowed shares are
+    // still in the mint supply but their backing assets remain in total_assets.
+    let live_total_shares = ctx
+        .accounts
+        .shares_mint
+        .supply
+        .checked_sub(vault.total_pending_redeems)
+        .ok_or(VaultError::MathOverflow)?;
 
     let is_vault_operator = vault.operator == ctx.accounts.operator.key();
     if !is_vault_operator {
@@ -137,7 +155,7 @@ pub fn handler(ctx: Context<FulfillRedeem>, oracle_price: Option<u64>) -> Result
         let remaining = ctx.remaining_accounts;
         let vault_key = vault.key();
         let owner_key = redeem_request.owner;
-        module_hooks::check_access(remaining, &crate::ID, &vault_key, &owner_key, &[])?;
+        module_hooks::check_withdrawal_access(remaining, &crate::ID, &vault_key, &owner_key)?;
     }
 
     let assets = if let Some(price) = oracle_price {
@@ -152,11 +170,19 @@ pub fn handler(ctx: Context<FulfillRedeem>, oracle_price: Option<u64>) -> Result
         // Deviation check: compare oracle price against vault-derived price when
         // shares exist, or against PRICE_SCALE (1:1) on the first redeem to prevent
         // an operator from setting an extreme price.
-        let expected_price = if vault.total_assets > 0 || vault.total_shares > 0 {
+        //
+        // Include pending and fulfilled deposits in the NAV calculation so that large
+        // queued deposits don't loosen the deviation guard (V4-P6).
+        let nav_total_assets = vault
+            .total_assets
+            .checked_add(vault.total_pending_deposits)
+            .and_then(|v| v.checked_add(vault.total_fulfilled_deposits))
+            .ok_or(VaultError::MathOverflow)?;
+        let expected_price = if nav_total_assets > 0 || live_total_shares > 0 {
             crate::math::convert_to_assets(
                 svs_oracle::PRICE_SCALE,
-                vault.total_assets,
-                vault.total_shares,
+                nav_total_assets,
+                live_total_shares,
                 vault.decimals_offset,
                 crate::math::Rounding::Floor,
             )?
@@ -179,14 +205,38 @@ pub fn handler(ctx: Context<FulfillRedeem>, oracle_price: Option<u64>) -> Result
             _ => VaultError::MathOverflow,
         })?
     } else {
+        // V5-P8: Vault-priced path intentionally uses raw vault.total_assets (the real
+        // backing assets) for share-to-asset conversion, NOT the expanded NAV used in
+        // the deviation check above. The deviation guard uses total_assets + pending +
+        // fulfilled to prevent the oracle from drifting too far from the full economic
+        // picture, while the actual conversion must use real total_assets so redeemers
+        // receive assets proportional to what the vault truly holds.
         crate::math::convert_to_assets(
             shares_locked,
             vault.total_assets,
-            vault.total_shares,
+            live_total_shares,
             vault.decimals_offset,
             crate::math::Rounding::Floor,
         )?
     };
+
+    // V4-P27 / V9-P13: Slippage guard. A zero min_price_per_share intentionally disables
+    // this check for the request. The oracle deviation check (max_deviation_bps) provides
+    // secondary protection against extreme price manipulation. Integrators should set
+    // non-zero bounds for production use.
+    if min_price_per_share > 0 && shares_locked > 0 {
+        let effective_price: u64 = (assets as u128)
+            .checked_mul(svs_oracle::PRICE_SCALE as u128)
+            .ok_or(VaultError::MathOverflow)?
+            .checked_div(shares_locked as u128)
+            .ok_or(VaultError::MathOverflow)?
+            .try_into()
+            .map_err(|_| VaultError::MathOverflow)?;
+        require!(
+            effective_price >= min_price_per_share,
+            VaultError::SlippageExceeded
+        );
+    }
 
     #[cfg(feature = "modules")]
     let net_assets = {

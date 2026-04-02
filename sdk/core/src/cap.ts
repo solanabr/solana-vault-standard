@@ -36,6 +36,10 @@
 import { BN } from "@coral-xyz/anchor";
 import { PublicKey } from "@solana/web3.js";
 
+// V6-S4: Named constant for u64::MAX avoids fragile string literal duplication
+const U64_MAX_STR = "18446744073709551615";
+const U64_MAX = new BN(U64_MAX_STR);
+
 /**
  * Deposit cap configuration
  */
@@ -106,13 +110,13 @@ export function checkDepositCap(
   if (!config.enabled) {
     return {
       allowed: true,
-      maxAllowedDeposit: new BN("18446744073709551615"), // u64::MAX
+      maxAllowedDeposit: new BN(U64_MAX), // u64::MAX
     };
   }
 
   // Calculate max allowed for each cap
-  let globalMax = new BN("18446744073709551615");
-  let userMax = new BN("18446744073709551615");
+  let globalMax = new BN(U64_MAX);
+  let userMax = new BN(U64_MAX);
 
   if (config.globalCap !== null) {
     const globalRemaining = config.globalCap.sub(currentTotalAssets);
@@ -156,10 +160,10 @@ export function maxDeposit(
   config: CapConfig,
 ): BN {
   if (!config.enabled) {
-    return new BN("18446744073709551615");
+    return new BN(U64_MAX);
   }
 
-  let max = new BN("18446744073709551615");
+  let max = new BN(U64_MAX);
 
   if (config.globalCap !== null) {
     const globalRemaining = config.globalCap.sub(currentTotalAssets);
@@ -184,15 +188,17 @@ export function getCapStatus(
   config: CapConfig,
 ): CapStatus {
   let globalUtilization = 0;
-  let globalRemaining = new BN("18446744073709551615");
+  let globalRemaining = new BN(U64_MAX);
 
   if (
     config.enabled &&
     config.globalCap !== null &&
     !config.globalCap.isZero()
   ) {
-    globalUtilization =
-      (totalAssets.toNumber() / config.globalCap.toNumber()) * 100;
+    globalUtilization = totalAssets
+      .mul(new BN(100))
+      .div(config.globalCap)
+      .toNumber();
     globalUtilization = Math.min(100, Math.max(0, globalUtilization));
 
     const remaining = config.globalCap.sub(totalAssets);
@@ -200,15 +206,17 @@ export function getCapStatus(
   }
 
   let userUtilization = 0;
-  let userRemaining = new BN("18446744073709551615");
+  let userRemaining = new BN(U64_MAX);
 
   if (
     config.enabled &&
     config.perUserCap !== null &&
     !config.perUserCap.isZero()
   ) {
-    userUtilization =
-      (userDeposit.toNumber() / config.perUserCap.toNumber()) * 100;
+    userUtilization = userDeposit
+      .mul(new BN(100))
+      .div(config.perUserCap)
+      .toNumber();
     userUtilization = Math.min(100, Math.max(0, userUtilization));
 
     const remaining = config.perUserCap.sub(userDeposit);

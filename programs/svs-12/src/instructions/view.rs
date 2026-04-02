@@ -45,11 +45,13 @@ pub fn preview_redeem(ctx: Context<TrancheView>, shares: u64) -> Result<()> {
 pub fn get_tranche_state(ctx: Context<TrancheView>) -> Result<()> {
     let tranche = &ctx.accounts.tranche;
     let vault = &ctx.accounts.vault;
-    let cap_limit = (vault.total_assets as u128)
+    let cap_limit: u64 = (vault.total_assets as u128)
         .checked_mul(tranche.cap_bps as u128)
         .ok_or(VaultError::MathOverflow)?
         .checked_div(BPS_DENOMINATOR as u128)
-        .ok_or(VaultError::MathOverflow)? as u64;
+        .ok_or(VaultError::MathOverflow)?
+        .try_into()
+        .map_err(|_| VaultError::MathOverflow)?;
     let headroom = cap_limit.saturating_sub(tranche.total_assets_allocated);
 
     let mut buf = [0u8; 24];

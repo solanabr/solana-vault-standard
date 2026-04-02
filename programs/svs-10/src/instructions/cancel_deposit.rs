@@ -56,6 +56,24 @@ pub struct CancelDeposit<'info> {
 }
 
 pub fn handler(ctx: Context<CancelDeposit>) -> Result<()> {
+    // V4-P15 FIX: Enforce minimum lock period before allowing cancellation.
+    // Without this, users could request + immediately cancel deposits in the
+    // same slot, enabling griefing (inflating total_pending_deposits transiently).
+    // When cancel_after > 0, the deposit must be at least 1 slot old.
+    // When cancel_after == 0 (disabled), cancellation is always allowed (operator
+    // is expected to fulfill or reject promptly).
+    if ctx.accounts.vault.cancel_after > 0 {
+        let clock = Clock::get()?;
+        let requested_at = ctx.accounts.deposit_request.requested_at;
+        // Minimum lock: deposit must have existed for at least 1 slot (~400ms).
+        // This prevents same-slot request+cancel griefing while remaining
+        // permissive enough for legitimate cancellations.
+        require!(
+            clock.unix_timestamp > requested_at,
+            VaultError::RequestNotPending
+        );
+    }
+
     let assets_to_return = ctx.accounts.deposit_request.assets_locked;
 
     let asset_mint_key = ctx.accounts.vault.asset_mint;

@@ -8,7 +8,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use trident_fuzz::fuzzing::*;
 
 pub fn program_id() -> Pubkey {
-    pubkey!("CpjFjyxRwTGYxR6JWXpfQ1923z5wVwpyBvgPFjm9jamJ")
+    pubkey!("4G5d6KutMpUaDPTVcv7FJBpPTGZej8rx3GyGnfiRdD6M")
 }
 
 // ============================================================================
@@ -304,11 +304,12 @@ pub struct FulfillDepositAccounts {
 #[derive(Debug, BorshDeserialize, BorshSerialize, Clone)]
 pub struct FulfillDepositData {
     pub oracle_price: Option<u64>,
+    pub max_price_per_share: u64,
 }
 
 impl FulfillDepositData {
     pub fn new(oracle_price: Option<u64>) -> Self {
-        Self { oracle_price }
+        Self { oracle_price, max_price_per_share: 0 }
     }
 }
 
@@ -643,11 +644,12 @@ pub struct FulfillRedeemAccounts {
 #[derive(Debug, BorshDeserialize, BorshSerialize, Clone)]
 pub struct FulfillRedeemData {
     pub oracle_price: Option<u64>,
+    pub min_price_per_share: u64,
 }
 
 impl FulfillRedeemData {
     pub fn new(oracle_price: Option<u64>) -> Self {
-        Self { oracle_price }
+        Self { oracle_price, min_price_per_share: 0 }
     }
 }
 

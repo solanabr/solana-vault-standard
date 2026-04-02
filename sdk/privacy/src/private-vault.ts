@@ -12,6 +12,7 @@ import {
   createAssociatedTokenAccountIdempotentInstruction,
 } from "@solana/spl-token";
 import { BN, Wallet, Idl } from "@coral-xyz/anchor";
+import { getWalletKeypair } from "./wallet-utils";
 import {
   PrivateDepositParams,
   PrivateDepositResult,
@@ -20,6 +21,7 @@ import {
   ElGamalKeypair,
   AesKey,
 } from "./types";
+import { createPubkeyValidityProofViaBackend } from "./proofs";
 import { ConfidentialSolanaVault } from "./confidential-vault";
 import {
   PrivacyCashClient,
@@ -28,11 +30,32 @@ import {
   completePrivateDeposit,
 } from "./privacy-cash";
 import {
-  deriveElGamalKeypair,
   deriveAesKey,
   createDecryptableBalance,
   decryptBalance,
 } from "./encryption";
+
+/**
+ * Byte offset to the `decryptable_available_balance` field within a Token-2022
+ * account that has the ConfidentialTransfer extension enabled.
+ *
+ * Layout breakdown:
+ *   165  Base SPL Token Account
+ *   + 1  Account Type discriminator
+ *   + 2  Extension Type (u16 LE)
+ *   + 2  Extension data Length (u16 LE)
+ *   + 1  approved (bool)
+ *   +32  elgamal_pubkey
+ *   +64  pending_balance_lo (ElGamal ciphertext)
+ *   +64  pending_balance_hi (ElGamal ciphertext)
+ *   +64  available_balance (ElGamal ciphertext)
+ *  ----
+ *  =395
+ */
+const CONFIDENTIAL_TRANSFER_DECRYPTABLE_BALANCE_OFFSET = 395;
+
+/** Size of a decryptable balance ciphertext: 12-byte nonce + 8-byte value + 16-byte tag */
+const DECRYPTABLE_BALANCE_SIZE = 36;
 
 /**
  * PrivacySolanaVault - Full Privacy Vault SDK
@@ -53,6 +76,7 @@ export class PrivacySolanaVault {
   private privacyCash: PrivacyCashClient;
   private connection: Connection;
   private wallet: Wallet;
+  private idl: Idl;
 
   /**
    * Encryption keys derived for the user's vault position
@@ -66,9 +90,33 @@ export class PrivacySolanaVault {
    */
   private ephemeralWallets: Map<string, Keypair> = new Map();
 
-  constructor(connection: Connection, wallet: Wallet, idl: Idl) {
+  /**
+   * Maximum number of ephemeral wallets to retain.
+   * Oldest entries are evicted (and their secret keys zeroed) when this limit is reached.
+   */
+  private static readonly MAX_EPHEMERAL_WALLETS = 64;
+
+  /** Default lamport fee estimate for ephemeral wallet funding */
+  private static readonly DEFAULT_EPHEMERAL_WALLET_FUNDING = 10_000;
+
+  /**
+   * Configurable lamport amount added to ephemeral wallet funding
+   * to cover transaction fees. Defaults to 10000 lamports.
+   */
+  private ephemeralWalletFunding: number;
+
+  constructor(connection: Connection, wallet: Wallet, idl: Idl, options?: { ephemeralWalletFunding?: number }) {
+    if (!idl || !idl.instructions) {
+      throw new Error(
+        "A valid IDL with instruction definitions is required. " +
+          "Import the IDL from your program's generated artifacts.",
+      );
+    }
     this.connection = connection;
     this.wallet = wallet;
+    this.idl = idl;
+    this.ephemeralWalletFunding = options?.ephemeralWalletFunding
+      ?? PrivacySolanaVault.DEFAULT_EPHEMERAL_WALLET_FUNDING;
     this.confidentialVault = new ConfidentialSolanaVault(
       connection,
       wallet,
@@ -100,17 +148,17 @@ export class PrivacySolanaVault {
     const vaultState = await this.confidentialVault.getVault(vault);
 
     // Step 1: Shield assets in Privacy Cash
-    const { shieldedNote, ephemeralWallet } = await createPrivateDepositFlow(
+    const { shieldedNote, ephemeralWallet, shieldSignature } = await createPrivateDepositFlow(
       this.connection,
       this.wallet,
       vaultState.assetMint,
       params.assets,
     );
 
-    const shieldTx = "shield_tx_placeholder"; // From createPrivateDepositFlow
+    const shieldTx = shieldSignature;
 
-    // Store ephemeral wallet for potential future operations
-    this.ephemeralWallets.set(vault.toBase58(), ephemeralWallet);
+    // Store ephemeral wallet for potential future operations, with eviction
+    this.storeEphemeralWallet(vault.toBase58(), ephemeralWallet);
 
     // Step 2: Unshield to ephemeral wallet
     const withdrawTx = await completePrivateDeposit(
@@ -142,37 +190,51 @@ export class PrivacySolanaVault {
     const ephemeralVaultClient = new ConfidentialSolanaVault(
       this.connection,
       ephemeralWalletAdapter,
-      {} as Idl, // Would need actual IDL
+      this.idl,
     );
 
     // Step 5: Configure ephemeral wallet's shares account for confidential transfers
+    const ephemeralSharesAccount = getAssociatedTokenAddressSync(
+      vaultState.sharesMint,
+      ephemeralWallet.publicKey,
+      false,
+      TOKEN_2022_PROGRAM_ID,
+    );
+
+    // Use caller-provided keys if available; otherwise derive AES key
+    // (which works in pure JS) and obtain ElGamal keypair via backend proof.
+    let elgamalKeypairForConfig: ElGamalKeypair;
+    let aesKeyForConfig: AesKey;
+
+    if (params.elgamalKeypair) {
+      elgamalKeypairForConfig = params.elgamalKeypair;
+    } else {
+      // Derive ElGamal keypair via backend proof generation.
+      // NOTE: This trusts the backend with secret key material.
+      const { elgamalPubkey } = await createPubkeyValidityProofViaBackend(
+        ephemeralWallet,
+        ephemeralSharesAccount,
+        true,
+      );
+      // The backend proof flow returns the public key; the secret key
+      // remains on the backend. For the SDK type we store the pubkey
+      // and a zeroed secret key placeholder since the backend holds it.
+      elgamalKeypairForConfig = {
+        publicKey: elgamalPubkey,
+        secretKey: new Uint8Array(32),
+      };
+    }
+
+    aesKeyForConfig = params.aesKey
+      ? params.aesKey
+      : await deriveAesKey(ephemeralWallet, ephemeralSharesAccount);
+
     const { elgamalKeypair, aesKey } =
       await ephemeralVaultClient.configureAccount({
         vault,
-        userSharesAccount: getAssociatedTokenAddressSync(
-          vaultState.sharesMint,
-          ephemeralWallet.publicKey,
-          false,
-          TOKEN_2022_PROGRAM_ID,
-        ),
-        elgamalKeypair: deriveElGamalKeypair(
-          ephemeralWallet,
-          getAssociatedTokenAddressSync(
-            vaultState.sharesMint,
-            ephemeralWallet.publicKey,
-            false,
-            TOKEN_2022_PROGRAM_ID,
-          ),
-        ),
-        aesKey: deriveAesKey(
-          ephemeralWallet,
-          getAssociatedTokenAddressSync(
-            vaultState.sharesMint,
-            ephemeralWallet.publicKey,
-            false,
-            TOKEN_2022_PROGRAM_ID,
-          ),
-        ),
+        userSharesAccount: ephemeralSharesAccount,
+        elgamalKeypair: elgamalKeypairForConfig,
+        aesKey: aesKeyForConfig,
       });
 
     // Store keys for this vault
@@ -243,7 +305,7 @@ export class PrivacySolanaVault {
     const ephemeralVaultClient = new ConfidentialSolanaVault(
       this.connection,
       ephemeralWalletAdapter,
-      {} as Idl,
+      this.idl,
     );
 
     // Step 1: Calculate shares to redeem and assets to receive
@@ -268,8 +330,14 @@ export class PrivacySolanaVault {
       );
 
     // Step 3: Compute new decryptable balance after redeem
+    if (currentBalance.lt(params.shares)) {
+      throw new Error(
+        `Insufficient balance: cannot redeem ${params.shares.toString()} shares ` +
+          `from balance of ${currentBalance.toString()}`,
+      );
+    }
     const newBalance = currentBalance.sub(params.shares);
-    const newDecryptableBalance = createDecryptableBalance(
+    const newDecryptableBalance = await createDecryptableBalance(
       this.aesKey,
       newBalance,
     );
@@ -335,7 +403,7 @@ export class PrivacySolanaVault {
     // Calculate new available balance after applying pending
     // In production, would decrypt current balance + pending
     const newAvailableBalance = expectedPendingCredits; // Simplified
-    const newDecryptableBalance = createDecryptableBalance(
+    const newDecryptableBalance = await createDecryptableBalance(
       this.aesKey,
       newAvailableBalance,
     );
@@ -357,7 +425,7 @@ export class PrivacySolanaVault {
     const ephemeralVaultClient = new ConfidentialSolanaVault(
       this.connection,
       ephemeralWalletAdapter,
-      {} as Idl,
+      this.idl,
     );
 
     return ephemeralVaultClient.applyPending({
@@ -410,25 +478,77 @@ export class PrivacySolanaVault {
       return new BN(0);
     }
 
-    // Parse decryptable_available_balance from extension data
-    // This is a simplification - actual implementation would parse
-    // the ConfidentialTransferAccount extension data
+    // Parse decryptable_available_balance from the ConfidentialTransferAccount
+    // extension data within the Token-2022 account.
+    //
+    // Token-2022 account layout for ConfidentialTransfer extension:
+    //   Base Token Account:           165 bytes (mint 32 + owner 32 + amount 8 +
+    //                                 delegate_option 4 + delegate 32 + state 1 +
+    //                                 is_native_option 4 + is_native 8 +
+    //                                 delegated_amount 8 + close_authority_option 4 +
+    //                                 close_authority 32)
+    //   Account Type discriminator:     1 byte
+    //   Extension Type discriminator:   2 bytes
+    //   Extension Length:               2 bytes
+    //   ConfidentialTransferAccount fields before decryptable_available_balance:
+    //     approved:                     1 byte
+    //     elgamal_pubkey:              32 bytes
+    //     pending_balance_lo:          64 bytes (ElGamal ciphertext)
+    //     pending_balance_hi:          64 bytes (ElGamal ciphertext)
+    //     available_balance:           64 bytes (ElGamal ciphertext)
+    //     decryptable_available_balance starts at offset:
+    //       165 + 1 + 2 + 2 + 1 + 32 + 64 + 64 + 64 = 395
     const decryptableBalance = {
-      ciphertext: accountInfo.data.slice(165, 201), // Placeholder offset
+      ciphertext: accountInfo.data.slice(
+        CONFIDENTIAL_TRANSFER_DECRYPTABLE_BALANCE_OFFSET,
+        CONFIDENTIAL_TRANSFER_DECRYPTABLE_BALANCE_OFFSET + DECRYPTABLE_BALANCE_SIZE,
+      ),
     };
 
-    return decryptBalance(this.aesKey, decryptableBalance);
+    return await decryptBalance(this.aesKey, decryptableBalance);
   }
 
   // ============ Internal Helpers ============
 
   /**
+   * Store an ephemeral wallet with LRU eviction.
+   * When the map exceeds MAX_EPHEMERAL_WALLETS, the oldest entry is
+   * evicted and its secret key bytes are zeroed to prevent accumulation
+   * of sensitive key material in memory.
+   */
+  private storeEphemeralWallet(key: string, wallet: Keypair): void {
+    // If this key already exists, zero the old one first
+    const existing = this.ephemeralWallets.get(key);
+    if (existing) {
+      existing.secretKey.fill(0);
+      this.ephemeralWallets.delete(key);
+    }
+
+    // Evict oldest entries if at capacity
+    while (this.ephemeralWallets.size >= PrivacySolanaVault.MAX_EPHEMERAL_WALLETS) {
+      const oldestKey = this.ephemeralWallets.keys().next().value;
+      if (oldestKey === undefined) break;
+      const evicted = this.ephemeralWallets.get(oldestKey);
+      if (evicted) {
+        evicted.secretKey.fill(0);
+      }
+      this.ephemeralWallets.delete(oldestKey);
+    }
+
+    this.ephemeralWallets.set(key, wallet);
+  }
+
+  /**
    * Fund ephemeral wallet with SOL for transaction fees
+   *
+   * The fee estimate is configurable via the `ephemeralWalletFunding` constructor
+   * option (defaults to 10000 lamports). During periods of high network congestion,
+   * callers should either increase this value or use a priority fee estimator.
    */
   private async fundEphemeralWallet(ephemeralPubkey: PublicKey): Promise<void> {
     const minBalance =
       await this.connection.getMinimumBalanceForRentExemption(0);
-    const txFees = 10000; // Estimated tx fees
+    const txFees = this.ephemeralWalletFunding;
 
     const tx = new Transaction().add(
       SystemProgram.transfer({
@@ -438,6 +558,17 @@ export class PrivacySolanaVault {
       }),
     );
 
-    await this.connection.sendTransaction(tx, [(this.wallet as any).payer]);
+    const { blockhash, lastValidBlockHeight } =
+      await this.connection.getLatestBlockhash("confirmed");
+    tx.recentBlockhash = blockhash;
+    tx.feePayer = this.wallet.publicKey;
+
+    const signature = await this.connection.sendTransaction(tx, [
+      getWalletKeypair(this.wallet),
+    ]);
+    await this.connection.confirmTransaction(
+      { signature, blockhash, lastValidBlockHeight },
+      "confirmed",
+    );
   }
 }

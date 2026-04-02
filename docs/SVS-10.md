@@ -4,7 +4,7 @@
 
 SVS-10 is the asynchronous tokenized vault variant in the Solana Vault Standard, equivalent to ERC-7540 on EVM. Unlike synchronous vaults (SVS-1 through SVS-4), deposits and redemptions follow a three-phase request → fulfill → claim lifecycle. This allows an operator to process requests off-hours, apply external pricing (oracle NAV), or manage illiquid positions before committing shares or assets.
 
-**Program ID**: `CpjFjyxRwTGYxR6JWXpfQ1923z5wVwpyBvgPFjm9jamJ`
+**Program ID**: `4G5d6KutMpUaDPTVcv7FJBpPTGZej8rx3GyGnfiRdD6M`
 
 **Use cases**: RWA tokenization, cross-chain strategies, institutional fund management, illiquid asset vaults.
 
@@ -344,7 +344,7 @@ Between `fulfill_deposit` and `claim_deposit`, the operator has computed and res
 
 ### Devnet
 
-**Program ID**: `CpjFjyxRwTGYxR6JWXpfQ1923z5wVwpyBvgPFjm9jamJ`
+**Program ID**: `4G5d6KutMpUaDPTVcv7FJBpPTGZej8rx3GyGnfiRdD6M`
 
 **Example Vault**: [`7jaQ3FrdELsKq2A23LRNtGUFwSgkrhCnJ8bE2F8BMQMf`](https://explorer.solana.com/address/7jaQ3FrdELsKq2A23LRNtGUFwSgkrhCnJ8bE2F8BMQMf?cluster=devnet)
 

@@ -278,7 +278,7 @@ export function registerTimelockCommands(program: Command): void {
         },
       );
 
-      const proposal = createProposal(
+      const proposal = await createProposal(
         action as TimelockAction,
         params,
         timelockConfig,

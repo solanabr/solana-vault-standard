@@ -27,4 +27,13 @@ pub enum ModuleError {
 
     #[msg("Arithmetic overflow")]
     MathOverflow,
+
+    #[msg("Invalid account discriminator")]
+    InvalidDiscriminator,
+
+    #[msg("Account exists at PDA address but has wrong owner")]
+    InvalidAccountOwner,
+
+    #[msg("Frozen account PDA must be passed in remaining_accounts for high-security vaults")]
+    FrozenCheckRequired,
 }

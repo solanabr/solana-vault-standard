@@ -83,6 +83,13 @@ pub struct VaultUnpaused {
 }
 
 #[event]
+pub struct AuthorityTransferRequested {
+    pub vault: Pubkey,
+    pub current_authority: Pubkey,
+    pub pending_authority: Pubkey,
+}
+
+#[event]
 pub struct AuthorityTransferred {
     pub vault: Pubkey,
     pub old_authority: Pubkey,

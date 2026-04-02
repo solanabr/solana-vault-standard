@@ -168,7 +168,8 @@ pub fn handler(
     vault.stream_distributed = 0;
     vault.auditor_elgamal_pubkey = auditor_elgamal_pubkey;
     vault.confidential_authority = vault_key;
-    vault._reserved = [0u8; 56];
+    vault.pending_authority = Pubkey::default();
+    vault._reserved = [0u8; 24];
 
     emit!(VaultInitialized {
         vault: vault.key(),

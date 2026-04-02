@@ -28,6 +28,11 @@ pub struct CreditVault {
     pub attestation_program: Pubkey,
     pub vault_id: u64,
     pub total_assets: u64,
+    /// V4-P20: Cached share count. Updated atomically with mint/burn CPIs in
+    /// claim_deposit (+) and approve_redeem (-). Used for NAV deviation checks
+    /// in approve_deposit/approve_redeem. Callers with access to shares_mint
+    /// should prefer shares_mint.supply as the canonical source. A reconciliation
+    /// check is enforced in approve_redeem (which has shares_mint in its context).
     pub total_shares: u64,
     pub total_pending_deposits: u64,
     pub minimum_investment: u64,
@@ -40,7 +45,11 @@ pub struct CreditVault {
     pub paused: bool,
     pub total_approved_deposits: u64,
     pub max_deviation_bps: u16,
-    pub _reserved: [u8; 64],
+    /// Pending authority for two-step transfer (default = Pubkey::default() means none)
+    pub pending_authority: Pubkey,
+    /// Number of pending (not yet approved/rejected/cancelled) redemption requests
+    pub total_pending_redeems: u64,
+    pub _reserved: [u8; 24],
 }
 
 impl CreditVault {
@@ -67,7 +76,9 @@ impl CreditVault {
         1 +   // paused
         8 +   // total_approved_deposits
         2 +   // max_deviation_bps
-        64; // _reserved
+        32 +  // pending_authority
+        8 +   // total_pending_redeems
+        24; // _reserved
 
     pub const SEED_PREFIX: &'static [u8] = VAULT_SEED;
 }

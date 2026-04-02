@@ -40,6 +40,8 @@ if [ -n "${SOLANA_CLAUDE_LOCAL_SRC:-}" ] && [ -d "$SOLANA_CLAUDE_LOCAL_SRC/.clau
   mkdir -p "$TEMP_DIR/repo"
   cp -r "$SOLANA_CLAUDE_LOCAL_SRC/.claude" "$TEMP_DIR/repo/.claude"
   [ -f "$SOLANA_CLAUDE_LOCAL_SRC/CLAUDE-solana.md" ] && cp "$SOLANA_CLAUDE_LOCAL_SRC/CLAUDE-solana.md" "$TEMP_DIR/repo/CLAUDE-solana.md"
+  [ -f "$SOLANA_CLAUDE_LOCAL_SRC/.mcp.json" ] && cp "$SOLANA_CLAUDE_LOCAL_SRC/.mcp.json" "$TEMP_DIR/repo/.mcp.json"
+  [ -f "$SOLANA_CLAUDE_LOCAL_SRC/.env.example" ] && cp "$SOLANA_CLAUDE_LOCAL_SRC/.env.example" "$TEMP_DIR/repo/.env.example"
   [ -f "$SOLANA_CLAUDE_LOCAL_SRC/.gitmodules" ] && cp "$SOLANA_CLAUDE_LOCAL_SRC/.gitmodules" "$TEMP_DIR/repo/.gitmodules"
 else
   echo "Fetching latest from upstream..."
@@ -62,7 +64,7 @@ echo "Config directory: $CONFIG_NAME/"
 CHANGES=""
 
 # Preserved files — never overwrite these
-# .env, settings.json, settings.local.json, mcp.json, MEMORY.md, memory/, CLAUDE.local.md
+# .env, settings.json, settings.local.json, .mcp.json, MEMORY.md, memory/, CLAUDE.local.md
 
 # Directories to update (full update for both modes)
 UPDATE_DIRS="agents skills rules commands bin"
@@ -109,6 +111,38 @@ if [ -f "$TEMP_DIR/repo/.claude/CHANGELOG.md" ]; then
     cp "$TEMP_DIR/repo/.claude/CHANGELOG.md" "$TARGET_DIR/$CONFIG_NAME/CHANGELOG.md"
   fi
   CHANGES="$CHANGES  [updated] $CONFIG_NAME/CHANGELOG.md\n"
+fi
+
+# Merge .env.example — append new vars without overwriting user edits
+# shellcheck source=_env_merge.sh
+source "$SCRIPT_DIR/_env_merge.sh"
+if [ -f "$TEMP_DIR/repo/.env.example" ]; then
+  if [ "$DRY_RUN" = true ]; then
+    # Check if there would be new vars
+    if [ -f "$TARGET_DIR/.env.example" ]; then
+      local_keys=$(grep -oE '^[A-Z_][A-Z0-9_]*=' "$TARGET_DIR/.env.example" 2>/dev/null || true)
+      new_keys=""
+      while IFS= read -r line; do
+        if [[ "$line" =~ ^([A-Z_][A-Z0-9_]*)= ]]; then
+          key="${BASH_REMATCH[1]}"
+          if ! echo "$local_keys" | grep -q "^${key}=$"; then
+            new_keys="$new_keys $key"
+          fi
+        fi
+      done < "$TEMP_DIR/repo/.env.example"
+      if [ -n "$new_keys" ]; then
+        CHANGES="$CHANGES  [would add] New env vars in .env.example:$new_keys\n"
+      fi
+    else
+      CHANGES="$CHANGES  [would create] .env.example\n"
+    fi
+  else
+    merge_env_file "$TEMP_DIR/repo/.env.example" "$TARGET_DIR/.env.example"
+    if [ -f "$TARGET_DIR/.env" ]; then
+      merge_env_file "$TEMP_DIR/repo/.env.example" "$TARGET_DIR/.env"
+    fi
+    CHANGES="$CHANGES  [merged] .env.example (new vars appended)\n"
+  fi
 fi
 
 # CLAUDE.md handling — don't overwrite, offer upstream version for manual merge

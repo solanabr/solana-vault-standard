@@ -23,7 +23,7 @@ pub mod state;
 
 use instructions::*;
 
-declare_id!("6v6FHxx26oqjJEjZa3S2XiuWSuDbYScd9VB7kLa4yzmE");
+declare_id!("CR2ccVacmbQ2DaXvR66W7gnmH7KuDCqbVW5VwnTczQUC");
 
 #[program]
 pub mod svs_7 {
@@ -108,9 +108,25 @@ pub mod svs_7 {
         instructions::admin::unpause(ctx)
     }
 
-    /// Transfer vault authority to a new address
+    /// Step 1: Request authority transfer (sets pending_authority)
+    pub fn request_transfer_authority(ctx: Context<Admin>, new_authority: Pubkey) -> Result<()> {
+        instructions::admin::request_transfer_authority(ctx, new_authority)
+    }
+
+    /// Step 2: Accept authority transfer (must be signed by pending authority)
+    pub fn accept_authority(ctx: Context<AcceptAuthority>) -> Result<()> {
+        instructions::admin::accept_authority(ctx)
+    }
+
+    /// Direct transfer authority (deprecated -- prefer two-step transfer)
+    #[allow(deprecated)]
     pub fn transfer_authority(ctx: Context<Admin>, new_authority: Pubkey) -> Result<()> {
         instructions::admin::transfer_authority(ctx, new_authority)
+    }
+
+    /// Cancel a pending two-step authority transfer.
+    pub fn cancel_transfer_authority(ctx: Context<Admin>) -> Result<()> {
+        instructions::admin::cancel_transfer_authority(ctx)
     }
 
     // ============ View Functions (CPI composable) ============

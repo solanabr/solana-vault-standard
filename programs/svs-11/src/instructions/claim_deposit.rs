@@ -68,6 +68,11 @@ pub struct ClaimDeposit<'info> {
     pub clock: Sysvar<'info, Clock>,
 }
 
+/// V5-P24: This handler intentionally does NOT check vault.paused. Already-approved
+/// deposits have committed funds (assets locked in deposit_vault, shares computed).
+/// Blocking claims during a pause would trap investor funds and violate the approval
+/// guarantee. The pause mechanism is designed to halt NEW operations (requests,
+/// approvals), not to block settlement of already-approved claims.
 pub fn handler(ctx: Context<ClaimDeposit>) -> Result<()> {
     validate_attestation(
         &ctx.accounts.attestation.to_account_info(),
@@ -120,6 +125,12 @@ pub fn handler(ctx: Context<ClaimDeposit>) -> Result<()> {
         .checked_add(shares)
         .ok_or(VaultError::MathOverflow)?;
 
+    // V9-P12: set_share_lock currently operates at vault-level only (no per-user PDA).
+    // It computes a locked_until timestamp from LockConfig but does not write to a
+    // per-user ShareLock PDA because the hook lacks a user_key parameter and write
+    // access to the ShareLock account. To enable per-user share locking on claim,
+    // the module hook needs a user_key parameter and the ShareLock PDA in
+    // remaining_accounts with mut access. Documented as known limitation.
     #[cfg(feature = "modules")]
     {
         let remaining = ctx.remaining_accounts;

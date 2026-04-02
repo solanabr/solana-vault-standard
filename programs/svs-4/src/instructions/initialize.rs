@@ -173,7 +173,9 @@ pub fn handler(
     vault.vault_id = vault_id;
     vault.auditor_elgamal_pubkey = auditor_elgamal_pubkey;
     vault.confidential_authority = vault_key;
-    vault._reserved = [0u8; 32];
+    vault.cumulative_exit_fees = 0;
+    vault.pending_authority = Pubkey::default();
+    vault.fee_recipient = Pubkey::default();
 
     emit!(VaultInitialized {
         vault: vault.key(),

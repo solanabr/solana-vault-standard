@@ -14,6 +14,9 @@ use svs_module_hooks as module_hooks;
 /// Redeem shares for a single specific asset.
 /// The user burns shares and receives only the chosen asset,
 /// proportional to its share of the portfolio value.
+///
+/// V7-P6: `weights_valid` is intentionally NOT checked on redeem paths — users must always
+/// be able to exit even when weights are invalid (e.g. after asset removal/rebalance).
 pub fn handler(ctx: Context<RedeemSingle>, shares: u64, min_assets_out: u64) -> Result<()> {
     require!(!ctx.accounts.vault.paused, VaultError::VaultPaused);
     require!(shares > 0, VaultError::ZeroAmount);
@@ -24,6 +27,11 @@ pub fn handler(ctx: Context<RedeemSingle>, shares: u64, min_assets_out: u64) -> 
 
     let clock = Clock::get()?;
     let oracle = &ctx.accounts.oracle_price;
+    // V4-P21: Reject future oracle timestamps — saturating_sub would treat them as fresh
+    require!(
+        oracle.updated_at <= clock.unix_timestamp,
+        VaultError::InvalidOracle
+    );
     let age = clock.unix_timestamp.saturating_sub(oracle.updated_at) as u64;
     require!(age <= MAX_ORACLE_STALENESS, VaultError::OracleStale);
     require!(oracle.price > 0, VaultError::InvalidOracle);
@@ -92,6 +100,16 @@ pub fn handler(ctx: Context<RedeemSingle>, shares: u64, min_assets_out: u64) -> 
             other_oracle.asset_mint == other_entry.asset_mint,
             VaultError::InvalidOracle
         );
+        // V4-P18 FIX: Validate oracle account key matches asset_entry.oracle
+        require!(
+            oracle_info.key() == other_entry.oracle,
+            VaultError::InvalidOracle
+        );
+        // V4-P21: Reject future oracle timestamps — saturating_sub would treat them as fresh
+        require!(
+            other_oracle.updated_at <= clock.unix_timestamp,
+            VaultError::InvalidOracle
+        );
         let other_age = clock.unix_timestamp.saturating_sub(other_oracle.updated_at) as u64;
         require!(other_age <= MAX_ORACLE_STALENESS, VaultError::OracleStale);
         require!(other_oracle.price > 0, VaultError::InvalidOracle);
@@ -119,18 +137,22 @@ pub fn handler(ctx: Context<RedeemSingle>, shares: u64, min_assets_out: u64) -> 
             .checked_mul(shares as u128)
             .ok_or(VaultError::MathOverflow)?
             .checked_div(total_shares as u128)
-            .ok_or(VaultError::DivisionByZero)? as u64
+            .ok_or(VaultError::DivisionByZero)?
+            .try_into()
+            .map_err(|_| VaultError::MathOverflow)?
     };
 
     // FIX P0: no unwrap_or — propagate overflow as error
-    let redeem_value = if total_shares == 0 {
+    let redeem_value: u64 = if total_shares == 0 {
         0u64
     } else {
         (total_value as u128)
             .checked_mul(shares as u128)
             .ok_or(VaultError::MathOverflow)?
             .checked_div(total_shares as u128)
-            .ok_or(VaultError::DivisionByZero)? as u64
+            .ok_or(VaultError::DivisionByZero)?
+            .try_into()
+            .map_err(|_| VaultError::MathOverflow)?
     };
 
     // ===== Module Hooks (if enabled) =====
@@ -139,7 +161,7 @@ pub fn handler(ctx: Context<RedeemSingle>, shares: u64, min_assets_out: u64) -> 
         let remaining = ctx.remaining_accounts;
         let vault_key = ctx.accounts.vault.key();
         let user_key = ctx.accounts.user.key();
-        module_hooks::check_access(remaining, &crate::ID, &vault_key, &user_key, &[])?;
+        module_hooks::check_withdrawal_access(remaining, &crate::ID, &vault_key, &user_key)?;
         module_hooks::check_share_lock(
             remaining,
             &crate::ID,

@@ -26,6 +26,7 @@ pub struct RequestRedeem<'info> {
     pub investor: Signer<'info>,
 
     #[account(
+        mut,
         seeds = [VAULT_SEED, vault.asset_mint.as_ref(), &vault.vault_id.to_le_bytes()],
         bump = vault.bump,
     )]
@@ -94,7 +95,7 @@ pub fn handler(ctx: Context<RequestRedeem>, shares: u64) -> Result<()> {
         let vault_key = ctx.accounts.vault.key();
         let investor_key = ctx.accounts.investor.key();
 
-        module_hooks::check_access(remaining, &crate::ID, &vault_key, &investor_key, &[])?;
+        module_hooks::check_withdrawal_access(remaining, &crate::ID, &vault_key, &investor_key)?;
 
         let current_timestamp = Clock::get()?.unix_timestamp;
         module_hooks::check_share_lock(
@@ -119,6 +120,15 @@ pub fn handler(ctx: Context<RequestRedeem>, shares: u64) -> Result<()> {
         shares,
         SHARES_DECIMALS,
     )?;
+
+    // V7-P5: total_pending_redeems tracks REQUEST COUNT (not shares). This differs from
+    // SVS-10 which tracks total locked shares. The counter is used for operational
+    // monitoring only — it does NOT affect share price calculations.
+    let vault = &mut ctx.accounts.vault;
+    vault.total_pending_redeems = vault
+        .total_pending_redeems
+        .checked_add(1)
+        .ok_or(VaultError::MathOverflow)?;
 
     let request = &mut ctx.accounts.redemption_request;
     request.investor = ctx.accounts.investor.key();

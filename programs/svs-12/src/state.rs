@@ -24,7 +24,11 @@ pub struct TranchedVault {
     pub priority_bitmap: u8,
     pub vault_id: u64,
     pub waterfall_mode: WaterfallMode,
-    pub _reserved: [u8; 64],
+    /// Pending authority for two-step transfer (default = Pubkey::default() means none)
+    pub pending_authority: Pubkey,
+    /// Unix timestamp of the last yield distribution (0 = never distributed)
+    pub last_yield_distribution: i64,
+    pub _reserved: [u8; 24],
 }
 
 impl TranchedVault {
@@ -42,7 +46,9 @@ impl TranchedVault {
         1 +   // priority_bitmap
         8 +   // vault_id
         1 +   // waterfall_mode
-        64; // _reserved
+        32 +  // pending_authority
+        8 +   // last_yield_distribution
+        24; // _reserved
 
     pub const SEED_PREFIX: &'static [u8] = TRANCHED_VAULT_SEED;
 }

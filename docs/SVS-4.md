@@ -211,8 +211,8 @@ class ConfidentialStoredBalanceVault extends ConfidentialSolanaVault {
 
 | Network | Program ID | Status |
 |---------|------------|--------|
-| Localnet | `2WP7LXWqrp1W4CwEJuVt2SxWPNY2n6AYmijh6Z4EeidY` | ✅ Active |
-| Devnet | `2WP7LXWqrp1W4CwEJuVt2SxWPNY2n6AYmijh6Z4EeidY` | ✅ Deployed |
+| Localnet | `EqRNvMTwczQjUhQL8wwrxJGALgz5VWsYne3d67e6ruCv` | ✅ Active |
+| Devnet | `EqRNvMTwczQjUhQL8wwrxJGALgz5VWsYne3d67e6ruCv` | ✅ Deployed |
 | Mainnet | Not deployed | ⏳ Pending audit |
 
 **Upgrade Authority:** `5fB4rwQTCd5GEyL17Ao7YR4juS6hDtSTkjrXMa7ZtY5x`

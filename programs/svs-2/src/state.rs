@@ -28,6 +28,9 @@ pub struct Vault {
     pub cumulative_exit_fees: u64,
     /// Pending authority for two-step transfer (Pubkey::default() means no pending transfer)
     pub pending_authority: Pubkey,
+    /// Designated fee recipient — fees can only be collected to this address.
+    /// Pubkey::default() means fee collection is disabled until set.
+    pub fee_recipient: Pubkey,
     /// Reserved for future upgrades
     pub _reserved: [u8; 24],
 }
@@ -45,6 +48,7 @@ impl Vault {
         8 +   // vault_id
         8 +   // cumulative_exit_fees
         32 +  // pending_authority
+        32 +  // fee_recipient
         24; // _reserved
 
     pub const SEED_PREFIX: &'static [u8] = VAULT_SEED;

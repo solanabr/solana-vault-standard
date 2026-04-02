@@ -12,6 +12,7 @@ pub fn assets_to_shares(assets: u64, price_per_share: u64) -> Result<u64> {
         svs_oracle::OracleError::InvalidStalenessConfig => {
             VaultError::InvalidStalenessConfig.into()
         }
+        svs_oracle::OracleError::FutureTimestamp => VaultError::OracleStale.into(),
     })
 }
 
@@ -25,6 +26,7 @@ pub fn shares_to_assets(shares: u64, price_per_share: u64) -> Result<u64> {
         svs_oracle::OracleError::InvalidStalenessConfig => {
             VaultError::InvalidStalenessConfig.into()
         }
+        svs_oracle::OracleError::FutureTimestamp => VaultError::OracleStale.into(),
     })
 }
 

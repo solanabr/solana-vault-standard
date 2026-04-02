@@ -328,8 +328,8 @@ Same virtual offset mechanism as SVS-1. Share price manipulation via donation at
 
 | Network | Program ID | Status |
 |---------|------------|--------|
-| Localnet | `EcpnYtaCBrZ4p4uq7dDr55D3fL9nsxbCNqpyUREGpPkh` | ✅ Active |
-| Devnet | `EcpnYtaCBrZ4p4uq7dDr55D3fL9nsxbCNqpyUREGpPkh` | ✅ Deployed |
+| Localnet | `CC4xQGxmwKusLW3ToqUzRAFjh7cL2iKsgfkz6qJSasYs` | ✅ Active |
+| Devnet | `CC4xQGxmwKusLW3ToqUzRAFjh7cL2iKsgfkz6qJSasYs` | ✅ Deployed |
 | Mainnet | Not deployed | ⏳ Pending audit |
 
 **Upgrade Authority:** `5fB4rwQTCd5GEyL17Ao7YR4juS6hDtSTkjrXMa7ZtY5x`

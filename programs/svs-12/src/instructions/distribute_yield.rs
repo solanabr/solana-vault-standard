@@ -55,10 +55,34 @@ pub struct DistributeYield<'info> {
     pub associated_token_program: Program<'info, AssociatedToken>,
 }
 
+/// Maximum yield per distribution as a fraction of total allocated assets.
+/// 10_000 bps = 100% of total_allocated. This prevents a malicious or
+/// compromised manager from injecting an absurdly high yield that would
+/// manipulate NAV. For legitimate high-yield scenarios, multiple
+/// distributions can be batched across separate transactions.
+///
+/// V5-P22 (fixed): The per-transaction cap is now time-bounded with a minimum cooldown
+/// between distributions. This prevents a compromised manager from calling distribute_yield
+/// repeatedly within a short period.
+const MAX_YIELD_BPS: u64 = 10_000; // 100% of total_allocated per distribution
+
+/// Minimum seconds between consecutive yield distributions (1 hour).
+const MIN_YIELD_COOLDOWN: i64 = 3600;
+
 pub fn handler(ctx: Context<DistributeYield>, total_yield: u64) -> Result<()> {
     require!(total_yield > 0, VaultError::ZeroAmount);
 
+    // V5-P22 FIX: Enforce minimum cooldown between yield distributions
+    let clock = Clock::get()?;
     let vault = &ctx.accounts.vault;
+    require!(
+        clock.unix_timestamp
+            >= vault
+                .last_yield_distribution
+                .checked_add(MIN_YIELD_COOLDOWN)
+                .ok_or(VaultError::MathOverflow)?,
+        VaultError::YieldCooldownNotElapsed
+    );
     let num_tranches = vault.num_tranches as usize;
 
     // Phase 1: Read tranche data (immutable borrows)
@@ -100,6 +124,17 @@ pub fn handler(ctx: Context<DistributeYield>, total_yield: u64) -> Result<()> {
         .try_fold(0u64, |acc, &x| acc.checked_add(x))
         .ok_or(VaultError::MathOverflow)?;
     require!(total_allocated > 0, VaultError::ZeroAmount);
+
+    // V4-P17 FIX: Cap yield to prevent NAV manipulation via absurdly high
+    // distributions. Max = MAX_YIELD_BPS / 10_000 * total_allocated (i.e. 100%).
+    let max_yield: u64 = (total_allocated as u128)
+        .checked_mul(MAX_YIELD_BPS as u128)
+        .ok_or(VaultError::MathOverflow)?
+        .checked_div(10_000u128)
+        .ok_or(VaultError::MathOverflow)?
+        .try_into()
+        .map_err(|_| VaultError::MathOverflow)?;
+    require!(total_yield <= max_yield, VaultError::CapExceeded);
 
     let distribution = match vault.waterfall_mode {
         WaterfallMode::Sequential => {
@@ -155,6 +190,7 @@ pub fn handler(ctx: Context<DistributeYield>, total_yield: u64) -> Result<()> {
         .total_assets
         .checked_add(total_yield)
         .ok_or(VaultError::MathOverflow)?;
+    vault.last_yield_distribution = clock.unix_timestamp;
 
     emit!(YieldDistributed {
         vault: vault.key(),

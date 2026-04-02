@@ -55,4 +55,7 @@ pub enum VaultError {
 
     #[msg("Caller is not the pending authority")]
     InvalidPendingAuthority,
+
+    #[msg("Cannot use deprecated transfer while a two-step transfer is pending")]
+    PendingTransferExists,
 }

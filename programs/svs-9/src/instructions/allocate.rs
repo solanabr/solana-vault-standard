@@ -32,10 +32,11 @@ pub struct Allocate<'info> {
     )]
     pub idle_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
-    /// CHECK: The child vault being deposited into. Checked by program CPI and owner check.
+    /// CHECK: The child vault being deposited into. Validated against child_allocation + owner check.
     #[account(
         mut,
-        constraint = child_vault.owner == &child_program.key() @ VaultError::InvalidChildProgram
+        constraint = child_vault.key() == child_allocation.child_vault @ VaultError::InvalidChildVault,
+        constraint = child_vault.owner == &child_program.key() @ VaultError::InvalidChildProgram,
     )]
     pub child_vault: UncheckedAccount<'info>,
 

@@ -34,12 +34,19 @@ pub struct FulfillDeposit<'info> {
     )]
     pub deposit_request: Account<'info, DepositRequest>,
 
+    /// V9-P3: Manual PDA validation is intentional — Anchor constraints don't support
+    /// conditional seeds on `Option<Account>` types. The handler validates the PDA key
+    /// via `create_program_address` + key comparison when this account is `Some`.
     pub operator_approval: Option<Account<'info, OperatorApproval>>,
 
     pub clock: Sysvar<'info, Clock>,
 }
 
-pub fn handler(ctx: Context<FulfillDeposit>, oracle_price: Option<u64>) -> Result<()> {
+pub fn handler(
+    ctx: Context<FulfillDeposit>,
+    oracle_price: Option<u64>,
+    max_price_per_share: u64,
+) -> Result<()> {
     let vault = &ctx.accounts.vault;
     let deposit_request = &ctx.accounts.deposit_request;
     let clock = &ctx.accounts.clock;
@@ -91,6 +98,14 @@ pub fn handler(ctx: Context<FulfillDeposit>, oracle_price: Option<u64>) -> Resul
         module_hooks::check_deposit_access(remaining, &crate::ID, &vault_key, &owner_key, &[])?;
     }
 
+    // V5-P19: The deposit path uses vault.total_shares (not live_total_shares) intentionally.
+    // fulfill_redeem subtracts total_pending_redeems from mint supply to compute
+    // live_total_shares because escrowed redeem shares are still in the supply but
+    // their backing assets remain in total_assets — burning them at stale NAV would
+    // short-change redeemers. The deposit path does NOT need this adjustment because
+    // new shares are being minted (not burned): pending redeems do not affect the
+    // share price for incoming deposits, and total_shares already excludes any shares
+    // that have been burned by prior fulfilled redeems.
     let shares = if let Some(price) = oracle_price {
         svs_oracle::validate_price(price).map_err(|e| match e {
             svs_oracle::OracleError::InvalidPrice => VaultError::ZeroAmount,
@@ -103,10 +118,18 @@ pub fn handler(ctx: Context<FulfillDeposit>, oracle_price: Option<u64>) -> Resul
         // Deviation check: compare oracle price against vault-derived price when
         // shares exist, or against PRICE_SCALE (1:1) on the first deposit to prevent
         // an operator from setting an extreme initial price.
-        let expected_price = if vault.total_assets > 0 || vault.total_shares > 0 {
+        //
+        // Include pending and fulfilled deposits in the NAV calculation so that large
+        // queued deposits don't loosen the deviation guard (V4-P6).
+        let nav_total_assets = vault
+            .total_assets
+            .checked_add(vault.total_pending_deposits)
+            .and_then(|v| v.checked_add(vault.total_fulfilled_deposits))
+            .ok_or(VaultError::MathOverflow)?;
+        let expected_price = if nav_total_assets > 0 || vault.total_shares > 0 {
             crate::math::convert_to_assets(
                 svs_oracle::PRICE_SCALE,
-                vault.total_assets,
+                nav_total_assets,
                 vault.total_shares,
                 vault.decimals_offset,
                 crate::math::Rounding::Floor,
@@ -138,6 +161,24 @@ pub fn handler(ctx: Context<FulfillDeposit>, oracle_price: Option<u64>) -> Resul
             crate::math::Rounding::Floor,
         )?
     };
+
+    // V4-P27 / V9-P13: Slippage guard. A zero max_price_per_share intentionally disables
+    // this check for the request. The oracle deviation check (max_deviation_bps) provides
+    // secondary protection against extreme price manipulation. Integrators should set
+    // non-zero bounds for production use.
+    if max_price_per_share > 0 && shares > 0 {
+        let effective_price: u64 = (deposit_request.assets_locked as u128)
+            .checked_mul(svs_oracle::PRICE_SCALE as u128)
+            .ok_or(VaultError::MathOverflow)?
+            .checked_div(shares as u128)
+            .ok_or(VaultError::MathOverflow)?
+            .try_into()
+            .map_err(|_| VaultError::MathOverflow)?;
+        require!(
+            effective_price <= max_price_per_share,
+            VaultError::SlippageExceeded
+        );
+    }
 
     #[cfg(feature = "modules")]
     let net_shares = {

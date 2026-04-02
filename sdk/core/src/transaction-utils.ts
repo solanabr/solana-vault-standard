@@ -78,11 +78,11 @@ export async function simulateAndSendTransaction(
 
     // Prepend CU instruction at the front
     transaction.instructions = [cuInstruction, ...transaction.instructions];
-
-    // Re-set blockhash since instructions changed
-    const latest = await connection.getLatestBlockhash();
-    transaction.recentBlockhash = latest.blockhash;
   }
+
+  // Fetch a fresh blockhash close to send time to avoid stale block height
+  const freshBlockhash = await connection.getLatestBlockhash();
+  transaction.recentBlockhash = freshBlockhash.blockhash;
 
   // Sign and send
   const signed = await provider.wallet.signTransaction(transaction);
@@ -95,8 +95,8 @@ export async function simulateAndSendTransaction(
   await connection.confirmTransaction(
     {
       signature,
-      blockhash: transaction.recentBlockhash,
-      lastValidBlockHeight,
+      blockhash: freshBlockhash.blockhash,
+      lastValidBlockHeight: freshBlockhash.lastValidBlockHeight,
     },
     provider.opts?.commitment ?? "confirmed",
   );

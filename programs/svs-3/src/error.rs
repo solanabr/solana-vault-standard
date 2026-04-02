@@ -64,4 +64,13 @@ pub enum VaultError {
 
     #[msg("Invalid address: cannot be default/zero")]
     InvalidAddress,
+
+    #[msg("No pending authority transfer")]
+    NoPendingTransfer,
+
+    #[msg("Signer does not match pending authority")]
+    InvalidPendingAuthority,
+
+    #[msg("Cannot use deprecated transfer while a two-step transfer is pending")]
+    PendingTransferExists,
 }

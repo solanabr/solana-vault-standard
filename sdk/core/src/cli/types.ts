@@ -369,19 +369,19 @@ export const SVS_PROGRAMS: Record<
   { devnet: string; mainnet?: string }
 > = {
   "svs-1": {
-    devnet: "Bv8aVSQ3DJUe3B7TqQZRZgrNvVTh8TjfpwpoeR1ckDMC",
+    devnet: "CzZyssz2PdLccWpbVi6a3wFKMmMqdf28U2RapNNRJSPX",
   },
   "svs-2": {
-    devnet: "3UrYrxh1HmVgq7WPygZ5x1gNEaWFwqTMs7geNqMnsrtD",
+    devnet: "7vnZM4aCsRapH9ft7Bo5ibTXNH2dvoxkj96c7JonLhoe",
   },
   "svs-3": {
-    devnet: "EcpnYtaCBrZ4p4uq7dDr55D3fL9nsxbCNqpyUREGpPkh",
+    devnet: "CC4xQGxmwKusLW3ToqUzRAFjh7cL2iKsgfkz6qJSasYs",
   },
   "svs-4": {
-    devnet: "2WP7LXWqrp1W4CwEJuVt2SxWPNY2n6AYmijh6Z4EeidY",
+    devnet: "EqRNvMTwczQjUhQL8wwrxJGALgz5VWsYne3d67e6ruCv",
   },
   "svs-12": {
-    devnet: "FM3ZfmPSdQzFniZSDXc6FfXKFvXRSNQXeTdPKC8tz5C",
+    devnet: "EPwH58e5V1UXYkkD8JZ4bq7Wr2iRiC9fLj1S6BRRz2R",
   },
 };
 

@@ -66,6 +66,8 @@ pub struct MintShares<'info> {
 /// Mint exact shares, paying required assets (ceiling rounding - protects vault)
 ///
 /// IMPORTANT: Both deposit() and mint() enforce caps to prevent bypass.
+///
+/// V4-P22: Same-slot deposit after distribute_yield — see deposit.rs comment.
 pub fn handler(ctx: Context<MintShares>, shares: u64, max_assets_in: u64) -> Result<()> {
     require!(shares > 0, VaultError::ZeroAmount);
 
@@ -160,6 +162,16 @@ pub fn handler(ctx: Context<MintShares>, shares: u64, max_assets_in: u64) -> Res
         .base_assets
         .checked_add(assets)
         .ok_or(VaultError::MathOverflow)?;
+
+    // Update per-user cumulative deposit tracking (if caps module is active)
+    #[cfg(feature = "modules")]
+    module_hooks::update_user_deposit(
+        ctx.remaining_accounts,
+        &crate::ID,
+        &ctx.accounts.vault.key(),
+        &ctx.accounts.user.key(),
+        assets,
+    )?;
 
     emit!(DepositEvent {
         vault: ctx.accounts.vault.key(),

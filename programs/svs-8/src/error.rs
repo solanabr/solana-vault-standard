@@ -29,6 +29,15 @@ pub enum VaultError {
     #[msg("Unauthorized - caller is not vault authority")]
     Unauthorized,
 
+    #[msg("New authority cannot be the zero address")]
+    InvalidAddress,
+
+    #[msg("No pending authority transfer")]
+    NoPendingTransfer,
+
+    #[msg("Signer is not the pending authority")]
+    InvalidPendingAuthority,
+
     #[msg("Deposit amount below minimum threshold")]
     DepositTooSmall,
 
@@ -67,4 +76,10 @@ pub enum VaultError {
 
     #[msg("Lock duration exceeds maximum")]
     LockDurationExceedsMax,
+
+    #[msg("Weights do not sum to 10000 bps — rebalance required before deposits")]
+    WeightsNotValid,
+
+    #[msg("Cannot use deprecated transfer while a two-step transfer is pending")]
+    PendingTransferExists,
 }

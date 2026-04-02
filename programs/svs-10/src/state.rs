@@ -15,6 +15,10 @@ pub struct AsyncVault {
     pub asset_vault: Pubkey,
     pub vault_id: u64,
     pub total_assets: u64,
+    /// Cached share count for convenience. May lag behind `shares_mint.supply`
+    /// when fulfilled-but-unclaimed deposits exist. Security-critical calculations
+    /// (e.g., fulfill_redeem) should derive live totals from `shares_mint.supply`
+    /// minus `total_pending_redeems` instead of reading this field directly.
     pub total_shares: u64,
     pub total_pending_deposits: u64,
     pub decimals_offset: u8,
@@ -27,7 +31,8 @@ pub struct AsyncVault {
     pub total_pending_redeems: u64,
     /// Total exit fees collected during redeem fulfillment (for transparency)
     pub cumulative_redeem_fees: u64,
-    pub _reserved: [u8; 48],
+    pub pending_authority: Pubkey,
+    pub _reserved: [u8; 16],
 }
 
 impl AsyncVault {
@@ -50,7 +55,8 @@ impl AsyncVault {
         8 +   // total_fulfilled_deposits
         8 +   // total_pending_redeems
         8 +   // cumulative_redeem_fees
-        48; // _reserved
+        32 +  // pending_authority
+        16; // _reserved
 
     pub const SEED_PREFIX: &'static [u8] = VAULT_SEED;
 }

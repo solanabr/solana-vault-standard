@@ -99,7 +99,7 @@ pub fn handler(ctx: Context<RedeemWsol>, shares: u64, min_assets_out: u64) -> Re
         let vault_key = vault.key();
         let user_key = ctx.accounts.user.key();
 
-        module_hooks::check_deposit_access(remaining, &crate::ID, &vault_key, &user_key, &[])?;
+        module_hooks::check_withdrawal_access(remaining, &crate::ID, &vault_key, &user_key)?;
         module_hooks::check_share_lock(
             remaining,
             &crate::ID,

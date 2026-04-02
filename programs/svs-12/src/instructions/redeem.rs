@@ -90,7 +90,7 @@ pub fn handler(ctx: Context<Redeem>, shares: u64, min_assets_out: u64) -> Result
         let vault_key = vault.key();
         let user_key = ctx.accounts.user.key();
 
-        module_hooks::check_access(remaining, &crate::ID, &vault_key, &user_key, &[])?;
+        module_hooks::check_withdrawal_access(remaining, &crate::ID, &vault_key, &user_key)?;
 
         let current_timestamp = Clock::get()?.unix_timestamp;
         module_hooks::check_share_lock(
@@ -112,22 +112,28 @@ pub fn handler(ctx: Context<Redeem>, shares: u64, min_assets_out: u64) -> Result
     .map_err(|_| VaultError::MathOverflow)?;
 
     #[cfg(feature = "modules")]
-    let assets = {
+    let net_assets = {
         let remaining = ctx.remaining_accounts;
         let vault_key = vault.key();
         let result = module_hooks::apply_exit_fee(remaining, &crate::ID, &vault_key, assets)?;
         result.net_assets
     };
 
-    require!(assets > 0, VaultError::ZeroAmount);
+    #[cfg(not(feature = "modules"))]
+    let net_assets = assets;
 
-    require!(assets >= min_assets_out, VaultError::SlippageExceeded);
+    require!(net_assets > 0, VaultError::ZeroAmount);
+
+    require!(net_assets >= min_assets_out, VaultError::SlippageExceeded);
+    // V9-P10: Uses gross `assets` for liquidity check (conservative, vault-favoring).
+    // Only `net_assets` is transferred out; the fee stays in vault. This may cause
+    // unnecessary reverts at the margin but never allows over-withdrawal.
     require!(
         ctx.accounts.asset_vault.amount >= assets,
         VaultError::InsufficientLiquidity
     );
 
-    // 2. Update accounting
+    // 2. Update accounting (use gross assets to correctly reflect fee staying in vault)
     let tranche = &mut ctx.accounts.target_tranche;
     tranche.total_assets_allocated = tranche
         .total_assets_allocated
@@ -216,7 +222,7 @@ pub fn handler(ctx: Context<Redeem>, shares: u64, min_assets_out: u64) -> Result
             },
             signer_seeds,
         ),
-        assets,
+        net_assets,
         ctx.accounts.asset_mint.decimals,
     )?;
 

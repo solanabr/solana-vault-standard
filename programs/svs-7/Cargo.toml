@@ -1,6 +1,6 @@
 [package]
 name = "svs-7"
-version = "0.2.0"
+version = "2.0.0"
 description = "SVS-7: Native SOL Vault - accepts/returns native SOL with internal wSOL accounting"
 edition = "2021"
 license = "MIT"

@@ -156,7 +156,7 @@ async function main() {
     const [depRequest] = getDepositRequestAddress(programId, vault, user.keypair.publicKey);
 
     await program.methods
-      .fulfillDeposit(null)
+      .fulfillDeposit(null, new BN(0))
       .accountsStrict({
         operator: payer.publicKey, vault,
         depositRequest: depRequest,
@@ -250,7 +250,7 @@ async function main() {
     const [claimableTokens] = getClaimableTokensAddress(programId, vault, user.keypair.publicKey);
 
     await program.methods
-      .fulfillRedeem(null)
+      .fulfillRedeem(null, new BN(0))
       .accountsStrict({
         operator: payer.publicKey, vault,
         redeemRequest, operatorApproval: programId,

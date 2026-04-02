@@ -4,6 +4,10 @@
  * TypeScript client for the SVS-7 (Native SOL) on-chain program.
  * Wraps all instruction calls, PDA derivations, and account resolution.
  *
+ * V6-S3: This file uses `as any` casts extensively (~23 instances) to bridge
+ * between Anchor-generated types and runtime account resolution. These should
+ * be replaced with proper type definitions when the IDL types are stabilized.
+ *
  * @packageDocumentation
  */
 

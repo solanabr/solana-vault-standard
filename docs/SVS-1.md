@@ -35,7 +35,7 @@ pub fn get_total_assets(asset_vault: &Account<TokenAccount>) -> u64 {
 ```rust
 #[account]
 pub struct Vault {
-    pub authority: Pubkey,          // 32 bytes
+    pub authority: Pubkey,           // 32 bytes
     pub asset_mint: Pubkey,          // 32 bytes
     pub shares_mint: Pubkey,         // 32 bytes
     pub asset_vault: Pubkey,         // 32 bytes
@@ -43,9 +43,10 @@ pub struct Vault {
     pub bump: u8,                    // 1 byte
     pub paused: bool,                // 1 byte
     pub vault_id: u64,               // 8 bytes
-    pub _reserved: [u8; 64],         // 64 bytes
+    pub pending_authority: Pubkey,   // 32 bytes
+    pub _reserved: [u8; 32],         // 32 bytes
 }
-// Total: 203 bytes
+// Total: 211 bytes (+ 8 byte discriminator)
 ```
 
 ## Instructions
@@ -213,7 +214,7 @@ When `vault.paused = true`:
 
 ### Devnet
 
-**Program ID**: `Bv8aVSQ3DJUe3B7TqQZRZgrNvVTh8TjfpwpoeR1ckDMC`
+**Program ID**: `CzZyssz2PdLccWpbVi6a3wFKMmMqdf28U2RapNNRJSPX`
 
 ```bash
 # Example initialization

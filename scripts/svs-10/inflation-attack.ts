@@ -138,7 +138,7 @@ async function main() {
   console.log("  Request deposit: OK");
 
   await program.methods
-    .fulfillDeposit(null)
+    .fulfillDeposit(null, new BN(0))
     .accountsStrict({
       operator: payer.publicKey, vault,
       depositRequest: attackerDepositRequest,
@@ -209,7 +209,7 @@ async function main() {
   console.log("  Request deposit: OK");
 
   await program.methods
-    .fulfillDeposit(null)
+    .fulfillDeposit(null, new BN(0))
     .accountsStrict({
       operator: payer.publicKey, vault,
       depositRequest: victimDepositRequest,

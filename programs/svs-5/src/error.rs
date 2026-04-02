@@ -31,6 +31,15 @@ pub enum VaultError {
     #[msg("Unauthorized - caller is not vault authority")]
     Unauthorized,
 
+    #[msg("New authority cannot be the zero address")]
+    InvalidAddress,
+
+    #[msg("No pending authority transfer")]
+    NoPendingTransfer,
+
+    #[msg("Signer is not the pending authority")]
+    InvalidPendingAuthority,
+
     #[msg("Deposit amount below minimum threshold")]
     DepositTooSmall,
 
@@ -39,6 +48,9 @@ pub enum VaultError {
 
     #[msg("Stream duration must be at least 60 seconds")]
     StreamTooShort,
+
+    #[msg("Cannot start new stream while current stream is still active")]
+    StreamStillActive,
 
     // Module errors (kept for module_admin instructions)
     #[msg("Invalid fee configuration")]
@@ -49,4 +61,7 @@ pub enum VaultError {
 
     #[msg("Lock duration exceeds maximum")]
     LockDurationExceedsMax,
+
+    #[msg("Cannot use deprecated transfer while a two-step transfer is pending")]
+    PendingTransferExists,
 }

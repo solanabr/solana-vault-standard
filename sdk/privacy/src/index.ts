@@ -108,6 +108,9 @@ export {
   type ShieldedNote,
 } from "./privacy-cash";
 
+// Wallet utilities
+export { getWalletKeypair } from "./wallet-utils";
+
 // Full Privacy Vault (SVS-3/4 + Privacy Cash)
 export { PrivacySolanaVault } from "./private-vault";
 

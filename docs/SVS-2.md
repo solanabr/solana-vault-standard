@@ -175,7 +175,7 @@ const connection = new Connection('https://api.devnet.solana.com');
 const authority = Keypair.fromSecretKey(/* ... */);
 
 // Load existing vault
-const vaultPubkey = new PublicKey('3UrYrxh1HmVgq7WPygZ5x1gNEaWFwqTMs7geNqMnsrtD');
+const vaultPubkey = new PublicKey('7vnZM4aCsRapH9ft7Bo5ibTXNH2dvoxkj96c7JonLhoe');
 const vault = await ManagedVault.load(connection, vaultPubkey);
 
 // Check stored vs actual balance
@@ -267,7 +267,7 @@ class ManagedVault extends SolanaVault {
 
 | Item | Value |
 |------|-------|
-| **Program ID** | `3UrYrxh1HmVgq7WPygZ5x1gNEaWFwqTMs7geNqMnsrtD` |
+| **Program ID** | `7vnZM4aCsRapH9ft7Bo5ibTXNH2dvoxkj96c7JonLhoe` |
 | **Network** | Devnet |
 | **SDK Package** | `@stbr/solana-vault` |
 | **Class** | `ManagedVault` |
@@ -276,10 +276,10 @@ class ManagedVault extends SolanaVault {
 
 ```bash
 # Verify program deployment
-solana program show 3UrYrxh1HmVgq7WPygZ5x1gNEaWFwqTMs7geNqMnsrtD --url devnet
+solana program show 7vnZM4aCsRapH9ft7Bo5ibTXNH2dvoxkj96c7JonLhoe --url devnet
 
 # Anchor verify (if verifiable build available)
-anchor verify 3UrYrxh1HmVgq7WPygZ5x1gNEaWFwqTMs7geNqMnsrtD --provider.cluster devnet
+anchor verify 7vnZM4aCsRapH9ft7Bo5ibTXNH2dvoxkj96c7JonLhoe --provider.cluster devnet
 ```
 
 ### Integration Example
@@ -288,7 +288,7 @@ anchor verify 3UrYrxh1HmVgq7WPygZ5x1gNEaWFwqTMs7geNqMnsrtD --provider.cluster de
 import { ManagedVault } from '@stbr/solana-vault';
 import { Connection, PublicKey } from '@solana/web3.js';
 
-const DEVNET_PROGRAM_ID = new PublicKey('3UrYrxh1HmVgq7WPygZ5x1gNEaWFwqTMs7geNqMnsrtD');
+const DEVNET_PROGRAM_ID = new PublicKey('7vnZM4aCsRapH9ft7Bo5ibTXNH2dvoxkj96c7JonLhoe');
 const connection = new Connection('https://api.devnet.solana.com');
 
 // Find vault PDA

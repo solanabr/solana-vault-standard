@@ -102,6 +102,14 @@ pub fn handler(ctx: Context<ApproveRedeem>) -> Result<()> {
         VaultError::AccountFrozen
     );
 
+    // V4-P20 FIX: Reconciliation check — verify stored total_shares matches
+    // shares_mint.supply. If they diverge, something has gone wrong and we
+    // should not proceed with a redemption based on stale share counts.
+    require!(
+        ctx.accounts.vault.total_shares == ctx.accounts.shares_mint.supply,
+        VaultError::MathOverflow
+    );
+
     validate_attestation(
         &ctx.accounts.attestation.to_account_info(),
         &ctx.accounts.vault,
@@ -115,6 +123,11 @@ pub fn handler(ctx: Context<ApproveRedeem>) -> Result<()> {
         &ctx.accounts.clock,
     )?;
 
+    // V5-P9: Deviation check — compare oracle price against vault-derived expected price.
+    // SVS-11 (credit vault) does not use ERC-4626-style virtual shares/assets (no
+    // decimals_offset), so the simple ratio (total_assets * PRICE_SCALE / total_shares)
+    // is the correct expected price. This differs from SVS-10 which uses convert_to_assets
+    // with decimals_offset to account for virtual share inflation.
     let vault = &ctx.accounts.vault;
     if vault.total_shares > 0 && vault.total_assets > 0 {
         let expected_price_u128 = (vault.total_assets as u128)
@@ -204,6 +217,10 @@ pub fn handler(ctx: Context<ApproveRedeem>) -> Result<()> {
     vault.total_shares = vault
         .total_shares
         .checked_sub(shares_locked)
+        .ok_or(VaultError::MathOverflow)?;
+    vault.total_pending_redeems = vault
+        .total_pending_redeems
+        .checked_sub(1)
         .ok_or(VaultError::MathOverflow)?;
 
     emit!(RedemptionApproved {

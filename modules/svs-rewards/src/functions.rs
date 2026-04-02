@@ -12,42 +12,59 @@ use crate::error::RewardError;
 ///
 /// Formula: new_acc = old_acc + (rewards * PRECISION / total_shares)
 ///
+/// Returns both the updated accumulator and the remainder (in scaled units)
+/// that was lost to integer division. Callers should carry the remainder
+/// forward and add it to the next accumulation to prevent sub-precision
+/// reward loss (V4-M8).
+///
 /// # Arguments
 /// * `current_acc_per_share` - Current accumulated rewards per share (scaled by PRECISION)
 /// * `reward_amount` - New rewards to distribute
 /// * `total_shares` - Total shares outstanding
+/// * `carry_remainder` - Remainder carried from previous accumulation (scaled units)
 ///
 /// # Returns
-/// Updated accumulated rewards per share
+/// `(updated_acc_per_share, new_remainder)` - Updated accumulator and remainder to carry
 ///
 /// # Example
 /// ```
 /// use svs_rewards::{update_accumulated_per_share, REWARD_PRECISION};
 ///
-/// // Add 1000 rewards to vault with 1M shares, starting from 0
-/// let new_acc = update_accumulated_per_share(0, 1000, 1_000_000).unwrap();
+/// // Add 1000 rewards to vault with 1M shares, starting from 0, no carry
+/// let (new_acc, remainder) = update_accumulated_per_share(0, 1000, 1_000_000, 0).unwrap();
 /// // new_acc = 1000 * 1e18 / 1M = 1e15
 /// assert_eq!(new_acc, REWARD_PRECISION / 1000);
+/// assert_eq!(remainder, 0); // Evenly divisible, no remainder
 /// ```
 pub fn update_accumulated_per_share(
     current_acc_per_share: u128,
     reward_amount: u64,
     total_shares: u64,
-) -> Result<u128, RewardError> {
+    carry_remainder: u128,
+) -> Result<(u128, u128), RewardError> {
     if total_shares == 0 || reward_amount == 0 {
-        return Ok(current_acc_per_share);
+        return Ok((current_acc_per_share, carry_remainder));
     }
 
-    // delta = reward_amount * PRECISION / total_shares
-    let delta = (reward_amount as u128)
+    // V4-M8: Include carried remainder from previous accumulation to prevent
+    // sub-precision rewards from being permanently lost
+    let scaled_rewards = (reward_amount as u128)
         .checked_mul(REWARD_PRECISION)
         .ok_or(RewardError::MathOverflow)?
-        .checked_div(total_shares as u128)
-        .ok_or(RewardError::DivisionByZero)?;
+        .checked_add(carry_remainder)
+        .ok_or(RewardError::MathOverflow)?;
 
-    current_acc_per_share
+    let total = total_shares as u128;
+    let delta = scaled_rewards
+        .checked_div(total)
+        .ok_or(RewardError::DivisionByZero)?;
+    let remainder = scaled_rewards % total;
+
+    let new_acc = current_acc_per_share
         .checked_add(delta)
-        .ok_or(RewardError::MathOverflow)
+        .ok_or(RewardError::MathOverflow)?;
+
+    Ok((new_acc, remainder))
 }
 
 /// Calculate pending rewards for a user.
@@ -91,7 +108,9 @@ pub fn calculate_pending_rewards(
         .ok_or(RewardError::MathOverflow)?;
 
     // new_rewards_scaled = accumulated_scaled - user_debt (both scaled)
-    let new_rewards_scaled = accumulated_scaled.saturating_sub(user_debt);
+    let new_rewards_scaled = accumulated_scaled
+        .checked_sub(user_debt)
+        .ok_or(RewardError::MathOverflow)?;
 
     // Divide by PRECISION to get actual reward count
     let new_rewards = new_rewards_scaled / REWARD_PRECISION;
@@ -101,17 +120,21 @@ pub fn calculate_pending_rewards(
         .checked_add(unclaimed as u128)
         .ok_or(RewardError::MathOverflow)?;
 
-    // Cap at u64::MAX
+    // V5-M5: Error instead of silently capping at u64::MAX
     if total > u64::MAX as u128 {
-        Ok(u64::MAX)
-    } else {
-        Ok(total as u64)
+        return Err(RewardError::MathOverflow);
     }
+    Ok(total as u64)
 }
 
 /// Calculate new reward debt after deposit/stake.
 ///
 /// Formula: new_debt = user_shares * acc_per_share / PRECISION
+///
+/// # Deprecated
+/// V5-M4: This function truncates then re-scales, creating systematic reward
+/// leakage. Use [`calculate_scaled_debt`] instead, which keeps the debt in
+/// scaled form (matching `acc_per_share` storage format) without truncation.
 ///
 /// # Arguments
 /// * `user_shares` - User's share balance after deposit
@@ -119,13 +142,21 @@ pub fn calculate_pending_rewards(
 ///
 /// # Returns
 /// New reward debt value
+#[deprecated(
+    since = "0.5.0",
+    note = "V5-M4: truncates then re-scales, causing reward leakage. Use calculate_scaled_debt instead."
+)]
 pub fn calculate_reward_debt(user_shares: u64, acc_per_share: u128) -> Result<u128, RewardError> {
-    (user_shares as u128)
+    // V4-M3: Use checked_mul and propagate overflow instead of silently capping to u128::MAX
+    let unscaled = (user_shares as u128)
         .checked_mul(acc_per_share)
         .ok_or(RewardError::MathOverflow)?
         .checked_div(REWARD_PRECISION)
-        .ok_or(RewardError::DivisionByZero)
-        .map(|v| v.checked_mul(REWARD_PRECISION).unwrap_or(u128::MAX))
+        .ok_or(RewardError::DivisionByZero)?;
+
+    unscaled
+        .checked_mul(REWARD_PRECISION)
+        .ok_or(RewardError::MathOverflow)
 }
 
 /// Calculate reward debt using scaled value (matches storage format).
@@ -214,7 +245,9 @@ pub fn on_withdraw(
     )?;
 
     // New share count
-    let new_shares = current_shares.saturating_sub(withdraw_shares);
+    let new_shares = current_shares
+        .checked_sub(withdraw_shares)
+        .ok_or(RewardError::MathOverflow)?;
 
     // Calculate new debt based on new share count
     let new_debt = calculate_scaled_debt(new_shares, acc_per_share)?;
@@ -258,25 +291,41 @@ mod tests {
     #[test]
     fn test_update_accumulated_per_share() {
         // 1000 rewards, 1M shares
-        let acc = update_accumulated_per_share(0, 1000, 1_000_000).unwrap();
+        let (acc, remainder) = update_accumulated_per_share(0, 1000, 1_000_000, 0).unwrap();
         assert_eq!(acc, REWARD_PRECISION / 1000);
+        assert_eq!(remainder, 0);
 
         // Add more rewards
-        let acc2 = update_accumulated_per_share(acc, 1000, 1_000_000).unwrap();
+        let (acc2, _) = update_accumulated_per_share(acc, 1000, 1_000_000, 0).unwrap();
         assert_eq!(acc2, REWARD_PRECISION / 500);
     }
 
     #[test]
     fn test_update_accumulated_zero_shares() {
         // No shares = no update
-        let acc = update_accumulated_per_share(0, 1000, 0).unwrap();
+        let (acc, _) = update_accumulated_per_share(0, 1000, 0, 0).unwrap();
         assert_eq!(acc, 0);
     }
 
     #[test]
     fn test_update_accumulated_zero_rewards() {
-        let acc = update_accumulated_per_share(100, 0, 1_000_000).unwrap();
+        let (acc, _) = update_accumulated_per_share(100, 0, 1_000_000, 0).unwrap();
         assert_eq!(acc, 100);
+    }
+
+    #[test]
+    fn test_remainder_carry_forward() {
+        // V4-M8: Small rewards that round to 0 should accumulate via remainder
+        // 1 reward token across 3 shares: delta would be 0 without remainder carry
+        let (acc1, rem1) = update_accumulated_per_share(0, 1, 3, 0).unwrap();
+        // 1 * 1e18 / 3 = 333...e15, remainder = 1e18 % 3 = 1
+        assert!(rem1 > 0);
+
+        // Carry remainder into next accumulation
+        let (acc2, _rem2) = update_accumulated_per_share(acc1, 1, 3, rem1).unwrap();
+        // With carry, we get slightly more precision than without
+        let (acc2_no_carry, _) = update_accumulated_per_share(acc1, 1, 3, 0).unwrap();
+        assert!(acc2 >= acc2_no_carry);
     }
 
     #[test]
@@ -377,7 +426,7 @@ mod tests {
         assert_eq!(user_a_unclaimed, 0);
 
         // 1000 rewards added
-        let acc_1 = update_accumulated_per_share(acc_0, 1000, 100_000).unwrap();
+        let (acc_1, _) = update_accumulated_per_share(acc_0, 1000, 100_000, 0).unwrap();
 
         // User B deposits 100k shares
         let (user_b_debt, user_b_unclaimed) = on_deposit(0, 100_000, acc_1, 0, 0).unwrap();
@@ -385,7 +434,7 @@ mod tests {
         assert_eq!(user_b_unclaimed, 0);
 
         // 1000 more rewards (now split between A and B)
-        let acc_2 = update_accumulated_per_share(acc_1, 1000, 200_000).unwrap();
+        let (acc_2, _) = update_accumulated_per_share(acc_1, 1000, 200_000, 0).unwrap();
 
         // User A claims
         let (a_claim, _, _) = on_claim(100_000, acc_2, user_a_debt, user_a_unclaimed).unwrap();

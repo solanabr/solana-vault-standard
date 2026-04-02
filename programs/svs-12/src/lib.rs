@@ -9,7 +9,7 @@ pub mod waterfall;
 
 use instructions::*;
 
-declare_id!("FM3ZfmPSdQzFniZSDXc6FfXKFvXRSNQXeTdPKC8tz5C");
+declare_id!("EPwH58e5V1UXYkkD8JZ4bq7Wr2iRiC9fLj1S6BRRz2R");
 
 #[program]
 pub mod svs_12 {
@@ -63,8 +63,25 @@ pub mod svs_12 {
         instructions::admin::unpause(ctx)
     }
 
+    /// Step 1 of two-step authority transfer: set pending authority.
+    pub fn request_transfer_authority(ctx: Context<Admin>, new_authority: Pubkey) -> Result<()> {
+        instructions::admin::request_transfer_authority(ctx, new_authority)
+    }
+
+    /// Step 2 of two-step authority transfer: pending authority accepts.
+    pub fn accept_authority(ctx: Context<AcceptAuthority>) -> Result<()> {
+        instructions::admin::accept_authority(ctx)
+    }
+
+    /// Transfer vault authority to a new address (deprecated -- prefer two-step transfer).
+    #[allow(deprecated)]
     pub fn transfer_authority(ctx: Context<Admin>, new_authority: Pubkey) -> Result<()> {
         instructions::admin::transfer_authority(ctx, new_authority)
+    }
+
+    /// Cancel a pending two-step authority transfer.
+    pub fn cancel_transfer_authority(ctx: Context<Admin>) -> Result<()> {
+        instructions::admin::cancel_transfer_authority(ctx)
     }
 
     pub fn set_manager(ctx: Context<Admin>, new_manager: Pubkey) -> Result<()> {

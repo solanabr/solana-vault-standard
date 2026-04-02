@@ -52,11 +52,10 @@ pub fn handler(ctx: Context<RecordLoss>, total_loss: u64) -> Result<()> {
     let vault = &ctx.accounts.vault;
     require!(total_loss <= vault.total_assets, VaultError::TotalLoss);
 
-    // Verify recorded loss does not exceed actual token balance
-    require!(
-        total_loss <= ctx.accounts.asset_vault.amount,
-        VaultError::InsufficientLiquidity
-    );
+    // V4-P28: The previous check against asset_vault.amount was redundant and misleading.
+    // record_loss is an accounting write-down — no tokens leave the vault. The "stranded"
+    // tokens (asset_vault.amount > vault.total_assets after loss) are intentional and may
+    // recover later via distribute_yield. The only meaningful bound is total_assets above.
 
     let num_tranches = vault.num_tranches as usize;
 

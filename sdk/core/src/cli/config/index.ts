@@ -74,9 +74,15 @@ export function loadConfig(): CliConfig {
       const validated = safeValidateConfig(userConfig);
       if (validated.success) {
         config = mergeConfigs(config, validated.data);
+      } else {
+        console.warn(
+          `Warning: config at ${getConfigPath()} failed validation, using defaults`,
+        );
       }
-    } catch {
-      // Silently use defaults if config is invalid
+    } catch (err) {
+      console.warn(
+        `Warning: failed to load config at ${getConfigPath()}: ${err instanceof Error ? err.message : String(err)}. Using defaults.`,
+      );
     }
   }
 
@@ -86,9 +92,15 @@ export function loadConfig(): CliConfig {
       const validated = safeValidateConfig(localConfig);
       if (validated.success) {
         config = mergeConfigs(config, validated.data);
+      } else {
+        console.warn(
+          `Warning: local config at ${getLocalConfigPath()} failed validation, ignoring`,
+        );
       }
-    } catch {
-      // Silently ignore invalid local config
+    } catch (err) {
+      console.warn(
+        `Warning: failed to load local config at ${getLocalConfigPath()}: ${err instanceof Error ? err.message : String(err)}. Ignoring.`,
+      );
     }
   }
 
@@ -99,9 +111,15 @@ export function loadConfig(): CliConfig {
       const validated = safeValidateConfig(envFileConfig);
       if (validated.success) {
         config = mergeConfigs(config, validated.data);
+      } else {
+        console.warn(
+          `Warning: env config at ${envConfig} failed validation, ignoring`,
+        );
       }
-    } catch {
-      // Silently ignore invalid env config
+    } catch (err) {
+      console.warn(
+        `Warning: failed to load env config at ${envConfig}: ${err instanceof Error ? err.message : String(err)}. Ignoring.`,
+      );
     }
   }
 

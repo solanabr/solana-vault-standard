@@ -1,6 +1,6 @@
 [package]
 name = "svs-3"
-version = "0.2.0"
+version = "2.0.0"
 description = "SVS-3: Private Solana Vault Standard (Beta) - Confidential tokenized vault with encrypted share balances, live balance"
 edition = "2021"
 license = "MIT"

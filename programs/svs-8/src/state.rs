@@ -21,8 +21,12 @@ pub struct MultiAssetVault {
     pub num_assets: u8,
     /// Decimal precision for portfolio value (e.g. 6 for USD)
     pub base_decimals: u8,
+    /// Whether target weights sum to exactly 10,000 bps. Deposits blocked when false.
+    pub weights_valid: bool,
+    /// Pending authority for two-step transfer (default = Pubkey::default() means none)
+    pub pending_authority: Pubkey,
     /// Reserved for future upgrades
-    pub _reserved: [u8; 64],
+    pub _reserved: [u8; 31],
 }
 
 impl MultiAssetVault {
@@ -35,7 +39,9 @@ impl MultiAssetVault {
         8 +   // vault_id
         1 +   // num_assets
         1 +   // base_decimals
-        64; // _reserved
+        1 +   // weights_valid
+        32 +  // pending_authority
+        31; // _reserved
 
     pub const SEED_PREFIX: &'static [u8] = MULTI_VAULT_SEED;
 }

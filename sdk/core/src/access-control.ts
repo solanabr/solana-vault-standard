@@ -224,6 +224,15 @@ export function verifyMerkleProof(
     return false;
   }
 
+  // Validate proof element lengths — each sibling hash must be exactly 32 bytes
+  for (const sibling of proof.proof) {
+    if (sibling.length !== 32) {
+      throw new Error(
+        `Invalid proof element length: expected 32 bytes, got ${sibling.length}`,
+      );
+    }
+  }
+
   // Compute root from proof
   let computed = leaf;
   for (const sibling of proof.proof) {

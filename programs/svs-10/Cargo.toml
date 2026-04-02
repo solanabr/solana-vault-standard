@@ -1,6 +1,6 @@
 [package]
 name = "svs-10"
-version = "0.2.0"
+version = "2.0.0"
 description = "SVS-10: Solana Vault Standard - Async vault with request/fulfill/claim lifecycle (ERC-7540 equivalent)"
 edition = "2021"
 license = "MIT"

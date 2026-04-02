@@ -2,6 +2,30 @@
 
 All notable changes to solana-claude-config.
 
+## [1.3.0] - 2026-04-01
+
+### Fixed
+- **MCP servers not loading**: Moved `.claude/mcp.json` → `.mcp.json` (project root) — Claude Code only reads `.mcp.json` at project root, the old path was silently ignored
+- **MCP servers stuck in pending**: Added `enableAllProjectMcpServers: true` to `settings.json` — without this, project-level MCP servers require manual approval and are silently skipped
+
+### Changed
+- Replaced Puppeteer MCP server with Playwright (`@playwright/mcp`) — actively maintained by Microsoft, Puppeteer MCP is unmaintained
+- `install.sh` now places `.mcp.json` at project root instead of inside `.claude/`
+- `update.sh` updated to handle `.mcp.json` at project root
+
+### Added
+- Tests for MCP file location (must be at root, not `.claude/`) and `enableAllProjectMcpServers` setting
+
+## [1.2.1] - 2026-03-31
+
+### Fixed
+- `install.sh` nesting bug: installing into a directory with existing `.claude/` created `.claude/.claude/` instead of merging
+- `install.sh` now preserves user files (`settings.json`, `mcp.json`, `MEMORY.md`) on reinstall instead of overwriting
+
+### Added
+- `test_install_existing_claude.sh` — verifies install into pre-existing `.claude/` directory (no nesting, user files preserved, upstream content installed)
+- Enhanced `test_install_idempotent.sh` with nesting checks and user file preservation assertions
+
 ## [1.2.0] - 2026-03-31
 
 ### Added

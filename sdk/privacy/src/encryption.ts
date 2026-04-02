@@ -4,7 +4,6 @@ import {
   ElGamalKeypair,
   AesKey,
   DecryptableBalance,
-  EncryptedBalance,
 } from "./types";
 import { BN } from "@coral-xyz/anchor";
 
@@ -28,44 +27,28 @@ import { BN } from "@coral-xyz/anchor";
  * @see https://solana.com/docs/tokens/extensions/confidential-transfer
  */
 
-// Standard seed messages for key derivation (hardcoded for compatibility)
-const ELGAMAL_SEED_MESSAGE = "ElGamalSecretKey";
+// Standard seed message for AES key derivation (hardcoded for compatibility)
 const AES_SEED_MESSAGE = "AeKey";
 
 /**
- * Derive an ElGamal keypair deterministically from a signer and account
+ * Derive an ElGamal keypair deterministically from a signer and account.
  *
- * This follows the Solana Token-2022 standard for ElGamal key derivation:
- * 1. Create message: seed || publicSeed (empty for CLI compatibility)
- * 2. Sign the message with the wallet
- * 3. Use signature to derive ElGamal keypair via solana-zk-sdk
+ * ElGamal key derivation requires Ristretto scalar reduction which cannot be
+ * performed correctly in pure JavaScript. This function always throws.
+ * Use `@solana/zk-elgamal-proof` WASM bindings when available.
  *
- * @param signer - The wallet keypair
- * @param tokenAccount - The token account address
- * @returns ElGamal keypair (32-byte public key, 32-byte secret key)
+ * @param _signer - The wallet keypair (unused)
+ * @param _tokenAccount - The token account address (unused)
+ * @throws Always throws -- WASM module required
  */
-export function deriveElGamalKeypair(
-  signer: Keypair,
-  tokenAccount: PublicKey,
-): ElGamalKeypair {
-  // Create the message to sign: seed || tokenAccount (matches CLI)
-  const seedBuffer = Buffer.from(ELGAMAL_SEED_MESSAGE);
-  const accountBuffer = tokenAccount.toBuffer();
-  const message = Buffer.concat([seedBuffer, accountBuffer]);
-
-  // Sign the message (simulating wallet signature)
-  // In production with actual wallet: wallet.signMessage(message)
-  const signature = signMessage(signer.secretKey, message);
-
-  // Derive ElGamal keypair from signature
-  // NOTE: In production, use solana-zk-sdk WASM:
-  // const elgamalKeypair = ElGamalKeypair.newFromSigner(signature);
-  const keypairBytes = deriveKeyFromSignature(signature, 64);
-
-  return {
-    publicKey: keypairBytes.slice(0, 32),
-    secretKey: keypairBytes.slice(32, 64),
-  };
+export async function deriveElGamalKeypair(
+  _signer: Keypair,
+  _tokenAccount: PublicKey,
+): Promise<ElGamalKeypair> {
+  throw new Error(
+    "ElGamal key derivation requires WASM module — not available in pure JS. " +
+      "Use @solana/zk-elgamal-proof when released.",
+  );
 }
 
 /**
@@ -74,13 +57,16 @@ export function deriveElGamalKeypair(
  * This follows the Solana Token-2022 standard for AES key derivation:
  * 1. Create message: "AeKey" || tokenAccount
  * 2. Sign the message with the wallet
- * 3. Use signature to derive AES key via solana-zk-sdk
+ * 3. Hash signature with SHA-256 to derive key bytes
  *
  * @param signer - The wallet keypair
  * @param tokenAccount - The token account address
  * @returns AES key (16 bytes for AES-128-GCM)
  */
-export function deriveAesKey(signer: Keypair, tokenAccount: PublicKey): AesKey {
+export async function deriveAesKey(
+  signer: Keypair,
+  tokenAccount: PublicKey,
+): Promise<AesKey> {
   // Create the message to sign: seed || tokenAccount (matches CLI)
   const seedBuffer = Buffer.from(AES_SEED_MESSAGE);
   const accountBuffer = tokenAccount.toBuffer();
@@ -89,14 +75,26 @@ export function deriveAesKey(signer: Keypair, tokenAccount: PublicKey): AesKey {
   // Sign the message
   const signature = signMessage(signer.secretKey, message);
 
-  // Derive AES key from signature
-  // NOTE: In production, use solana-zk-sdk WASM:
-  // const aesKey = AeKey.newFromSigner(signature);
-  const keyBytes = deriveKeyFromSignature(signature, 16);
+  // Derive AES key from signature using SHA-256 (take first 16 bytes)
+  const hash = await crypto.subtle.digest("SHA-256", signature);
+  const hashBytes = new Uint8Array(hash);
 
-  return {
+  // Copy key bytes into a dedicated buffer before zeroing the source.
+  // Uint8Array.slice() returns an independent copy, but we make the intent
+  // explicit and ensure the full hash buffer is zeroed afterwards.
+  const keyBytes = new Uint8Array(16);
+  keyBytes.set(hashBytes.subarray(0, 16));
+
+  const aesKey = {
     key: keyBytes,
   };
+
+  // Zero ALL intermediate buffers that held key-derived material.
+  // After this, only aesKey.key retains the derived key bytes.
+  hashBytes.fill(0);
+  signature.fill(0);
+
+  return aesKey;
 }
 
 /**
@@ -107,9 +105,9 @@ export function deriveAesKey(signer: Keypair, tokenAccount: PublicKey): AesKey {
  * @param aesKey - The AES key for this account
  * @returns 36-byte decryptable balance ciphertext
  */
-export function createDecryptableZeroBalance(
+export async function createDecryptableZeroBalance(
   aesKey: AesKey,
-): DecryptableBalance {
+): Promise<DecryptableBalance> {
   // AE ciphertext format: 12-byte nonce + 8-byte encrypted value + 16-byte tag
   const ciphertext = new Uint8Array(36);
 
@@ -117,9 +115,12 @@ export function createDecryptableZeroBalance(
   const nonce = crypto.getRandomValues(new Uint8Array(12));
   ciphertext.set(nonce, 0);
 
-  // Encrypt zero value (8 bytes, little-endian)
-  // In production, use actual AES-GCM encryption
-  const encryptedValue = encryptAesGcm(aesKey.key, nonce, new Uint8Array(8));
+  // Encrypt zero value (8 bytes, little-endian) using Web Crypto API
+  const encryptedValue = await encryptAesGcmAsync(
+    aesKey.key,
+    nonce,
+    new Uint8Array(8),
+  );
   ciphertext.set(encryptedValue, 12);
 
   return { ciphertext };
@@ -132,10 +133,10 @@ export function createDecryptableZeroBalance(
  * @param amount - The balance amount
  * @returns 36-byte decryptable balance ciphertext
  */
-export function createDecryptableBalance(
+export async function createDecryptableBalance(
   aesKey: AesKey,
   amount: BN,
-): DecryptableBalance {
+): Promise<DecryptableBalance> {
   const ciphertext = new Uint8Array(36);
 
   // Generate random nonce
@@ -145,8 +146,8 @@ export function createDecryptableBalance(
   // Convert amount to 8-byte little-endian
   const amountBytes = amount.toArrayLike(Buffer, "le", 8);
 
-  // Encrypt
-  const encryptedValue = encryptAesGcm(aesKey.key, nonce, amountBytes);
+  // Encrypt using Web Crypto API
+  const encryptedValue = await encryptAesGcmAsync(aesKey.key, nonce, amountBytes);
   ciphertext.set(encryptedValue, 12);
 
   return { ciphertext };
@@ -159,14 +160,14 @@ export function createDecryptableBalance(
  * @param decryptable - The decryptable balance ciphertext
  * @returns The decrypted balance amount
  */
-export function decryptBalance(
+export async function decryptBalance(
   aesKey: AesKey,
   decryptable: DecryptableBalance,
-): BN {
+): Promise<BN> {
   const nonce = decryptable.ciphertext.slice(0, 12);
   const encrypted = decryptable.ciphertext.slice(12);
 
-  const decrypted = decryptAesGcm(aesKey.key, nonce, encrypted);
+  const decrypted = await decryptAesGcmAsync(aesKey.key, nonce, encrypted);
 
   return new BN(decrypted, "le");
 }
@@ -179,11 +180,16 @@ export function decryptBalance(
  * @param withdrawAmount - Amount being withdrawn
  * @returns New decryptable balance ciphertext
  */
-export function computeNewDecryptableBalance(
+export async function computeNewDecryptableBalance(
   aesKey: AesKey,
   currentBalance: BN,
   withdrawAmount: BN,
-): DecryptableBalance {
+): Promise<DecryptableBalance> {
+  if (currentBalance.lt(withdrawAmount)) {
+    throw new Error(
+      `Insufficient balance: cannot withdraw ${withdrawAmount.toString()} from balance of ${currentBalance.toString()}`,
+    );
+  }
   const newBalance = currentBalance.sub(withdrawAmount);
   return createDecryptableBalance(aesKey, newBalance);
 }
@@ -205,59 +211,6 @@ export function computeNewDecryptableBalance(
  */
 function signMessage(secretKey: Uint8Array, message: Buffer): Uint8Array {
   return nacl.sign.detached(message, secretKey);
-}
-
-/**
- * Derive key bytes from a signature
- */
-function deriveKeyFromSignature(
-  signature: Uint8Array,
-  length: number,
-): Uint8Array {
-  // Hash the signature to derive key bytes
-  return hashSync(signature, length);
-}
-
-/**
- * Synchronous hash function using FNV-1a.
- *
- * WARNING: FNV-1a is NOT cryptographically secure. This function is gated
- * to test environments only. Production code must use the async
- * `crypto.subtle.digest('SHA-256', ...)` path instead.
- *
- * @throws {Error} If called outside of a test environment (NODE_ENV !== 'test')
- */
-function hashSync(input: Uint8Array, outputLength: number): Uint8Array {
-  if (process.env.NODE_ENV !== "test") {
-    throw new Error(
-      "hashSync uses FNV-1a which is not cryptographically secure. " +
-        "Use the async crypto.subtle.digest path for production. " +
-        "Set NODE_ENV=test to use this function in tests.",
-    );
-  }
-
-  const output = new Uint8Array(outputLength);
-
-  // Simple HKDF-like expansion using FNV-1a (test-only)
-  let counter = 0;
-  let pos = 0;
-  while (pos < outputLength) {
-    const block = new Uint8Array(input.length + 1);
-    block.set(input);
-    block[input.length] = counter++;
-
-    let hash = 0x811c9dc5; // FNV offset basis
-    for (let i = 0; i < block.length; i++) {
-      hash ^= block[i];
-      hash = (hash * 0x01000193) >>> 0; // FNV prime
-    }
-
-    for (let i = 0; i < 4 && pos < outputLength; i++) {
-      output[pos++] = (hash >> (i * 8)) & 0xff;
-    }
-  }
-
-  return output;
 }
 
 /**
@@ -317,87 +270,6 @@ export async function decryptAesGcmAsync(
   );
 
   return new Uint8Array(plaintext);
-}
-
-/**
- * AES-GCM encryption (synchronous fallback)
- * Uses simplified implementation for non-async contexts
- */
-function encryptAesGcm(
-  key: Uint8Array,
-  nonce: Uint8Array,
-  plaintext: Uint8Array,
-): Uint8Array {
-  // Synchronous fallback using CTR-like mode with authentication
-  const output = new Uint8Array(plaintext.length + 16);
-
-  // Derive keystream from key + nonce
-  const keystream = hashSync(
-    new Uint8Array([...key, ...nonce]),
-    plaintext.length,
-  );
-
-  // XOR plaintext with keystream
-  for (let i = 0; i < plaintext.length; i++) {
-    output[i] = plaintext[i] ^ keystream[i];
-  }
-
-  // Compute authentication tag
-  const tagInput = new Uint8Array([
-    ...key,
-    ...nonce,
-    ...output.slice(0, plaintext.length),
-  ]);
-  const tag = hashSync(tagInput, 16);
-  output.set(tag, plaintext.length);
-
-  return output;
-}
-
-/**
- * AES-GCM decryption (synchronous fallback, test-only)
- *
- * Verifies the authentication tag before returning plaintext.
- *
- * @throws {Error} If the authentication tag does not match (tampered ciphertext)
- */
-function decryptAesGcm(
-  key: Uint8Array,
-  nonce: Uint8Array,
-  ciphertext: Uint8Array,
-): Uint8Array {
-  const plaintextLen = ciphertext.length - 16;
-  if (plaintextLen < 0) {
-    throw new Error("Ciphertext too short: missing authentication tag");
-  }
-
-  const encryptedData = ciphertext.slice(0, plaintextLen);
-  const receivedTag = ciphertext.slice(plaintextLen);
-
-  // Verify authentication tag before decrypting
-  const tagInput = new Uint8Array([...key, ...nonce, ...encryptedData]);
-  const expectedTag = hashSync(tagInput, 16);
-
-  let tagMatch = 0;
-  for (let i = 0; i < 16; i++) {
-    tagMatch |= receivedTag[i] ^ expectedTag[i];
-  }
-  if (tagMatch !== 0) {
-    throw new Error(
-      "AES-GCM authentication tag verification failed: ciphertext may be tampered",
-    );
-  }
-
-  // Derive keystream from key + nonce
-  const keystream = hashSync(new Uint8Array([...key, ...nonce]), plaintextLen);
-
-  // XOR ciphertext with keystream
-  const output = new Uint8Array(plaintextLen);
-  for (let i = 0; i < plaintextLen; i++) {
-    output[i] = encryptedData[i] ^ keystream[i];
-  }
-
-  return output;
 }
 
 /**

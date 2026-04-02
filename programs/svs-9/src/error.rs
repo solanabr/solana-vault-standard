@@ -61,4 +61,14 @@ pub enum VaultError {
     ProgramAlreadyAllowed,
     #[msg("Program not found in the allowlist")]
     ProgramNotInAllowlist,
+
+    // --- Authority transfer errors ---
+    #[msg("Invalid address: cannot be the zero address")]
+    InvalidAddress,
+    #[msg("No pending authority transfer")]
+    NoPendingTransfer,
+    #[msg("Signer does not match pending authority")]
+    InvalidPendingAuthority,
+    #[msg("Cannot transfer authority while a two-step transfer is pending")]
+    PendingTransferExists,
 }

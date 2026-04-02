@@ -139,9 +139,11 @@ pub fn handler(ctx: Context<Deposit>, assets: u64, min_shares_out: u64) -> Resul
     let cap_numerator = (vault.total_assets as u128)
         .checked_mul(tranche.cap_bps as u128)
         .ok_or(VaultError::MathOverflow)?;
-    let cap_limit = cap_numerator
+    let cap_limit: u64 = cap_numerator
         .checked_div(BPS_DENOMINATOR as u128)
-        .ok_or(VaultError::MathOverflow)? as u64;
+        .ok_or(VaultError::MathOverflow)?
+        .try_into()
+        .map_err(|_| VaultError::MathOverflow)?;
     require!(
         tranche.total_assets_allocated <= cap_limit,
         VaultError::CapExceeded
@@ -225,6 +227,25 @@ pub fn handler(ctx: Context<Deposit>, assets: u64, min_shares_out: u64) -> Resul
 
     ctx.accounts.asset_vault.reload()?;
     ctx.accounts.shares_mint.reload()?;
+
+    // V5-P10: Reconciliation check — verify tranche.total_shares matches shares_mint.supply
+    // after the mint CPI. When fee modules mint additional shares (e.g. management fees),
+    // the tranche's cached total_shares can diverge from the on-chain mint supply. Catching
+    // this here prevents silent accounting drift.
+    require!(
+        ctx.accounts.target_tranche.total_shares == ctx.accounts.shares_mint.supply,
+        VaultError::SharesMismatch
+    );
+
+    // Update per-user cumulative deposit tracking (if caps module is active)
+    #[cfg(feature = "modules")]
+    module_hooks::update_user_deposit(
+        ctx.remaining_accounts,
+        &crate::ID,
+        &ctx.accounts.vault.key(),
+        &ctx.accounts.user.key(),
+        assets,
+    )?;
 
     // 6. Emit event
     emit!(TrancheDeposit {

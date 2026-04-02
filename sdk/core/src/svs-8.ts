@@ -5,6 +5,14 @@
  * Supports deposit_single, deposit_proportional, redeem_proportional,
  * oracle price updates, and vault administration.
  *
+ * NOTE: SVS-8 uses oracle-based pricing to value multi-asset basket positions.
+ * Unlike SVS-3/SVS-4 (confidential vaults), SVS-8 does NOT use decryptable
+ * balances or Token-2022 confidential transfers. Share balances are public
+ * Token-2022 balances, and asset valuations are determined by on-chain oracle
+ * price accounts (see OraclePriceState). This design is intentional: a
+ * multi-asset basket requires a common unit of account (oracle prices) to
+ * compute share exchange rates across heterogeneous assets.
+ *
  * @example
  * ```ts
  * import { BasketVault } from "@stbr/solana-vault";

@@ -105,6 +105,16 @@ pub fn handler(ctx: Context<RequestDeposit>, assets: u64, receiver: Pubkey) -> R
         .checked_add(assets)
         .ok_or(VaultError::MathOverflow)?;
 
+    // Update per-user cumulative deposit tracking (if caps module is active)
+    #[cfg(feature = "modules")]
+    module_hooks::update_user_deposit(
+        ctx.remaining_accounts,
+        &crate::ID,
+        &vault.key(),
+        &ctx.accounts.user.key(),
+        assets,
+    )?;
+
     let deposit_request = &mut ctx.accounts.deposit_request;
     deposit_request.owner = ctx.accounts.user.key();
     deposit_request.receiver = receiver;

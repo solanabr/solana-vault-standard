@@ -28,8 +28,17 @@ pub struct ConfidentialVault {
     pub auditor_elgamal_pubkey: Option<[u8; 32]>,
     /// Authority for confidential transfer operations
     pub confidential_authority: Pubkey,
-    /// Reserved for future upgrades
-    pub _reserved: [u8; 32],
+    /// V5-P5: Total exit fees collected (for transparency and accounting).
+    /// Consumed 8 bytes from _reserved.
+    pub cumulative_exit_fees: u64,
+    /// Pending authority for two-step transfer (default = Pubkey::default() means none).
+    /// V5-P16: Consumes 24 bytes from _reserved + 8 extra bytes (account size increased).
+    /// Existing vaults require realloc to use two-step transfer.
+    pub pending_authority: Pubkey,
+    /// Designated fee recipient — fees can only be collected to this address.
+    /// Pubkey::default() means fee collection is disabled until set.
+    /// V9-P1: Added for collect_fees / set_fee_recipient support.
+    pub fee_recipient: Pubkey,
 }
 
 impl ConfidentialVault {
@@ -45,7 +54,9 @@ impl ConfidentialVault {
         8 +   // vault_id
         1 + 32 + // auditor_elgamal_pubkey (Option<[u8; 32]>)
         32 +  // confidential_authority
-        32; // _reserved
+        8 +   // cumulative_exit_fees
+        32 +  // pending_authority
+        32; // fee_recipient
 
     pub const SEED_PREFIX: &'static [u8] = VAULT_SEED;
 }

@@ -55,6 +55,12 @@ pub fn handler(ctx: Context<DistributeYield>, yield_amount: u64, duration: i64) 
     let now = clock.unix_timestamp;
     let vault = &mut ctx.accounts.vault;
 
+    // Block new stream while current one is still active
+    require!(
+        now >= vault.stream_end || vault.stream_amount == 0,
+        VaultError::StreamStillActive
+    );
+
     let accrued = vault.checkpoint(now)?;
     if accrued > 0 {
         emit!(Checkpointed {

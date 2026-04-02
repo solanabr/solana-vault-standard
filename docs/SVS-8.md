@@ -135,9 +135,9 @@ All accounts are validated with owner checks before deserialization. vault_ata i
 
 ## Devnet Deployment
 
-**Program ID:** `E8bGqwitsaFELBtuhbwAKwVBKjAjGzrfcnBPishvvRsA`  
+**Program ID:** `HnZ9N8Y1v6jMhwDqo4Y76GfqjRArdinadgK67yLVFZbe`  
 **Deploy tx:** `36BenKJ91uSPoraJV2YpxWDSxMSqyWj3zhZjryFZmKGJoXS393Pur7fitueVuEebgsBdURqrWjhFAk1DzEw5anfw`  
-**Explorer:** https://explorer.solana.com/address/E8bGqwitsaFELBtuhbwAKwVBKjAjGzrfcnBPishvvRsA?cluster=devnet
+**Explorer:** https://explorer.solana.com/address/HnZ9N8Y1v6jMhwDqo4Y76GfqjRArdinadgK67yLVFZbe?cluster=devnet
 
 ---
 

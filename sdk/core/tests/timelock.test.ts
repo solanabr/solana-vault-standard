@@ -33,14 +33,14 @@ describe("SDK Timelock Module", () => {
   });
 
   describe("generateProposalId", () => {
-    it("generates unique IDs for different params", () => {
-      const salt = Buffer.from("test");
-      const id1 = generateProposalId(
+    it("generates unique IDs for different params", async () => {
+      const salt = new Uint8Array(Buffer.from("test"));
+      const id1 = await generateProposalId(
         TimelockAction.TransferAuthority,
         { newAuthority: "addr1" },
         salt,
       );
-      const id2 = generateProposalId(
+      const id2 = await generateProposalId(
         TimelockAction.TransferAuthority,
         { newAuthority: "addr2" },
         salt,
@@ -49,36 +49,36 @@ describe("SDK Timelock Module", () => {
       expect(id1).to.not.equal(id2);
     });
 
-    it("generates unique IDs for different salts", () => {
+    it("generates unique IDs for different salts", async () => {
       const params = { newAuthority: "addr1" };
-      const id1 = generateProposalId(
+      const id1 = await generateProposalId(
         TimelockAction.TransferAuthority,
         params,
-        Buffer.from("salt1"),
+        new Uint8Array(Buffer.from("salt1")),
       );
-      const id2 = generateProposalId(
+      const id2 = await generateProposalId(
         TimelockAction.TransferAuthority,
         params,
-        Buffer.from("salt2"),
+        new Uint8Array(Buffer.from("salt2")),
       );
 
       expect(id1).to.not.equal(id2);
     });
 
-    it("generates consistent ID for same inputs", () => {
-      const salt = Buffer.from("fixed");
+    it("generates consistent ID for same inputs", async () => {
+      const salt = new Uint8Array(Buffer.from("fixed"));
       const params = { test: true };
-      const id1 = generateProposalId(TimelockAction.Pause, params, salt);
-      const id2 = generateProposalId(TimelockAction.Pause, params, salt);
+      const id1 = await generateProposalId(TimelockAction.Pause, params, salt);
+      const id2 = await generateProposalId(TimelockAction.Pause, params, salt);
 
       expect(id1).to.equal(id2);
     });
   });
 
   describe("createProposal", () => {
-    it("creates proposal with minimum delay", () => {
+    it("creates proposal with minimum delay", async () => {
       const now = 1000000;
-      const proposal = createProposal(
+      const proposal = await createProposal(
         TimelockAction.Pause,
         {},
         defaultConfig,
@@ -92,10 +92,10 @@ describe("SDK Timelock Module", () => {
       expect(proposal.status).to.equal(ProposalStatus.Pending);
     });
 
-    it("creates proposal with custom delay", () => {
+    it("creates proposal with custom delay", async () => {
       const now = 1000000;
       const customDelay = ONE_DAY * 3;
-      const proposal = createProposal(
+      const proposal = await createProposal(
         TimelockAction.TransferAuthority,
         { newAuthority: NEW_AUTHORITY.toBase58() },
         defaultConfig,
@@ -106,34 +106,40 @@ describe("SDK Timelock Module", () => {
       expect(proposal.executeAfter).to.equal(now + customDelay);
     });
 
-    it("throws for delay below minimum", () => {
+    it("throws for delay below minimum", async () => {
       const now = 1000000;
 
-      expect(() => {
-        createProposal(TimelockAction.Pause, {}, defaultConfig, now, 100);
-      }).to.throw("Delay 100 is outside bounds");
+      try {
+        await createProposal(TimelockAction.Pause, {}, defaultConfig, now, 100);
+        expect.fail("Expected error");
+      } catch (e: any) {
+        expect(e.message).to.include("Delay 100 is outside bounds");
+      }
     });
 
-    it("throws for delay above maximum", () => {
+    it("throws for delay above maximum", async () => {
       const now = 1000000;
 
-      expect(() => {
-        createProposal(
+      try {
+        await createProposal(
           TimelockAction.Pause,
           {},
           defaultConfig,
           now,
           ONE_WEEK + 1,
         );
-      }).to.throw("is outside bounds");
+        expect.fail("Expected error");
+      } catch (e: any) {
+        expect(e.message).to.include("is outside bounds");
+      }
     });
 
-    it("stores params correctly", () => {
+    it("stores params correctly", async () => {
       const params = {
         newAuthority: NEW_AUTHORITY.toBase58(),
         extra: "data",
       };
-      const proposal = createProposal(
+      const proposal = await createProposal(
         TimelockAction.TransferAuthority,
         params,
         defaultConfig,
@@ -145,8 +151,8 @@ describe("SDK Timelock Module", () => {
   });
 
   describe("canExecute", () => {
-    it("allows execution when ready", () => {
-      const proposal = createProposal(
+    it("allows execution when ready", async () => {
+      const proposal = await createProposal(
         TimelockAction.Pause,
         {},
         defaultConfig,
@@ -158,9 +164,9 @@ describe("SDK Timelock Module", () => {
       expect(result.executable).to.be.true;
     });
 
-    it("denies execution before delay elapsed", () => {
+    it("denies execution before delay elapsed", async () => {
       const now = 1000000;
-      const proposal = createProposal(
+      const proposal = await createProposal(
         TimelockAction.Pause,
         {},
         defaultConfig,
@@ -174,9 +180,9 @@ describe("SDK Timelock Module", () => {
       expect(result.waitTime).to.equal(ONE_DAY - 100);
     });
 
-    it("denies execution after expiry", () => {
+    it("denies execution after expiry", async () => {
       const now = 1000000;
-      const proposal = createProposal(
+      const proposal = await createProposal(
         TimelockAction.Pause,
         {},
         defaultConfig,
@@ -189,8 +195,8 @@ describe("SDK Timelock Module", () => {
       expect(result.reason).to.equal("Proposal expired");
     });
 
-    it("denies execution of already executed proposal", () => {
-      const proposal = createProposal(
+    it("denies execution of already executed proposal", async () => {
+      const proposal = await createProposal(
         TimelockAction.Pause,
         {},
         defaultConfig,
@@ -204,8 +210,8 @@ describe("SDK Timelock Module", () => {
       expect(result.reason).to.equal("Already executed");
     });
 
-    it("denies execution of cancelled proposal", () => {
-      const proposal = createProposal(
+    it("denies execution of cancelled proposal", async () => {
+      const proposal = await createProposal(
         TimelockAction.Pause,
         {},
         defaultConfig,
@@ -219,8 +225,8 @@ describe("SDK Timelock Module", () => {
       expect(result.reason).to.equal("Proposal cancelled");
     });
 
-    it("allows execution exactly at executeAfter", () => {
-      const proposal = createProposal(
+    it("allows execution exactly at executeAfter", async () => {
+      const proposal = await createProposal(
         TimelockAction.Pause,
         {},
         defaultConfig,
@@ -234,9 +240,9 @@ describe("SDK Timelock Module", () => {
   });
 
   describe("getProposalStatus", () => {
-    it("returns Pending before delay", () => {
+    it("returns Pending before delay", async () => {
       const now = 1000000;
-      const proposal = createProposal(
+      const proposal = await createProposal(
         TimelockAction.Pause,
         {},
         defaultConfig,
@@ -248,9 +254,9 @@ describe("SDK Timelock Module", () => {
       );
     });
 
-    it("returns Ready within execution window", () => {
+    it("returns Ready within execution window", async () => {
       const now = 1000000;
-      const proposal = createProposal(
+      const proposal = await createProposal(
         TimelockAction.Pause,
         {},
         defaultConfig,
@@ -262,9 +268,9 @@ describe("SDK Timelock Module", () => {
       );
     });
 
-    it("returns Expired after grace period", () => {
+    it("returns Expired after grace period", async () => {
       const now = 1000000;
-      const proposal = createProposal(
+      const proposal = await createProposal(
         TimelockAction.Pause,
         {},
         defaultConfig,
@@ -276,8 +282,8 @@ describe("SDK Timelock Module", () => {
       );
     });
 
-    it("preserves Executed status", () => {
-      const proposal = createProposal(
+    it("preserves Executed status", async () => {
+      const proposal = await createProposal(
         TimelockAction.Pause,
         {},
         defaultConfig,
@@ -291,8 +297,8 @@ describe("SDK Timelock Module", () => {
       );
     });
 
-    it("preserves Cancelled status", () => {
-      const proposal = createProposal(
+    it("preserves Cancelled status", async () => {
+      const proposal = await createProposal(
         TimelockAction.Pause,
         {},
         defaultConfig,
@@ -307,9 +313,9 @@ describe("SDK Timelock Module", () => {
   });
 
   describe("getTimeRemaining", () => {
-    it("returns correct time to ready", () => {
+    it("returns correct time to ready", async () => {
       const now = 1000000;
-      const proposal = createProposal(
+      const proposal = await createProposal(
         TimelockAction.Pause,
         {},
         defaultConfig,
@@ -321,9 +327,9 @@ describe("SDK Timelock Module", () => {
       expect(remaining.toReady).to.equal(ONE_DAY - 1000);
     });
 
-    it("returns zero toReady when already ready", () => {
+    it("returns zero toReady when already ready", async () => {
       const now = 1000000;
-      const proposal = createProposal(
+      const proposal = await createProposal(
         TimelockAction.Pause,
         {},
         defaultConfig,
@@ -338,9 +344,9 @@ describe("SDK Timelock Module", () => {
       expect(remaining.toReady).to.equal(0);
     });
 
-    it("returns correct time to expiry", () => {
+    it("returns correct time to expiry", async () => {
       const now = 1000000;
-      const proposal = createProposal(
+      const proposal = await createProposal(
         TimelockAction.Pause,
         {},
         defaultConfig,
@@ -352,9 +358,9 @@ describe("SDK Timelock Module", () => {
       expect(remaining.toExpiry).to.equal(ONE_DAY); // Grace period
     });
 
-    it("returns zero when expired", () => {
+    it("returns zero when expired", async () => {
       const now = 1000000;
-      const proposal = createProposal(
+      const proposal = await createProposal(
         TimelockAction.Pause,
         {},
         defaultConfig,
@@ -369,11 +375,11 @@ describe("SDK Timelock Module", () => {
   });
 
   describe("TimelockManager", () => {
-    it("proposes and retrieves proposal", () => {
+    it("proposes and retrieves proposal", async () => {
       const manager = new TimelockManager(defaultConfig);
       const now = 1000000;
 
-      const proposal = manager.propose(
+      const proposal = await manager.propose(
         TimelockAction.TransferAuthority,
         { newAuthority: NEW_AUTHORITY.toBase58() },
         now,
@@ -385,11 +391,11 @@ describe("SDK Timelock Module", () => {
       expect(retrieved!.action).to.equal(TimelockAction.TransferAuthority);
     });
 
-    it("executes ready proposal", () => {
+    it("executes ready proposal", async () => {
       const manager = new TimelockManager(defaultConfig);
       const now = 1000000;
 
-      const proposal = manager.propose(TimelockAction.Pause, {}, now);
+      const proposal = await manager.propose(TimelockAction.Pause, {}, now);
 
       const result = manager.execute(proposal.id, proposal.executeAfter);
 
@@ -399,11 +405,11 @@ describe("SDK Timelock Module", () => {
       expect(updated!.status).to.equal(ProposalStatus.Executed);
     });
 
-    it("rejects execution before ready", () => {
+    it("rejects execution before ready", async () => {
       const manager = new TimelockManager(defaultConfig);
       const now = 1000000;
 
-      const proposal = manager.propose(TimelockAction.Pause, {}, now);
+      const proposal = await manager.propose(TimelockAction.Pause, {}, now);
 
       const result = manager.execute(proposal.id, now + 100);
 
@@ -411,11 +417,11 @@ describe("SDK Timelock Module", () => {
       expect(result.waitTime).to.be.greaterThan(0);
     });
 
-    it("cancels proposal", () => {
+    it("cancels proposal", async () => {
       const manager = new TimelockManager(defaultConfig);
       const now = 1000000;
 
-      const proposal = manager.propose(TimelockAction.Pause, {}, now);
+      const proposal = await manager.propose(TimelockAction.Pause, {}, now);
 
       const cancelled = manager.cancel(proposal.id);
 
@@ -425,11 +431,11 @@ describe("SDK Timelock Module", () => {
       expect(updated!.status).to.equal(ProposalStatus.Cancelled);
     });
 
-    it("cannot cancel executed proposal", () => {
+    it("cannot cancel executed proposal", async () => {
       const manager = new TimelockManager(defaultConfig);
       const now = 1000000;
 
-      const proposal = manager.propose(TimelockAction.Pause, {}, now);
+      const proposal = await manager.propose(TimelockAction.Pause, {}, now);
       manager.execute(proposal.id, proposal.executeAfter);
 
       const cancelled = manager.cancel(proposal.id);
@@ -437,49 +443,49 @@ describe("SDK Timelock Module", () => {
       expect(cancelled).to.be.false;
     });
 
-    it("returns pending proposals", () => {
+    it("returns pending proposals", async () => {
       const manager = new TimelockManager(defaultConfig);
       const now = 1000000;
 
-      manager.propose(TimelockAction.Pause, {}, now);
-      manager.propose(TimelockAction.Unpause, {}, now);
+      await manager.propose(TimelockAction.Pause, {}, now);
+      await manager.propose(TimelockAction.Unpause, {}, now);
 
       const pending = manager.getPendingProposals(now + 100);
 
       expect(pending.length).to.equal(2);
     });
 
-    it("returns ready proposals", () => {
+    it("returns ready proposals", async () => {
       const manager = new TimelockManager(defaultConfig);
       const now = 1000000;
 
-      const p1 = manager.propose(TimelockAction.Pause, {}, now);
-      const p2 = manager.propose(TimelockAction.Unpause, {}, now);
+      const p1 = await manager.propose(TimelockAction.Pause, {}, now);
+      const p2 = await manager.propose(TimelockAction.Unpause, {}, now);
 
       const ready = manager.getReadyProposals(p1.executeAfter + 100);
 
       expect(ready.length).to.equal(2);
     });
 
-    it("filters proposals by action", () => {
+    it("filters proposals by action", async () => {
       const manager = new TimelockManager(defaultConfig);
       const now = 1000000;
 
-      manager.propose(TimelockAction.Pause, {}, now);
-      manager.propose(TimelockAction.Unpause, {}, now);
-      manager.propose(TimelockAction.TransferAuthority, {}, now);
+      await manager.propose(TimelockAction.Pause, {}, now);
+      await manager.propose(TimelockAction.Unpause, {}, now);
+      await manager.propose(TimelockAction.TransferAuthority, {}, now);
 
       const pauseProposals = manager.getAllProposals(TimelockAction.Pause);
 
       expect(pauseProposals.length).to.equal(1);
     });
 
-    it("cleans up expired proposals", () => {
+    it("cleans up expired proposals", async () => {
       const manager = new TimelockManager(defaultConfig);
       const now = 1000000;
 
-      manager.propose(TimelockAction.Pause, {}, now);
-      manager.propose(TimelockAction.Unpause, {}, now);
+      await manager.propose(TimelockAction.Pause, {}, now);
+      await manager.propose(TimelockAction.Unpause, {}, now);
 
       // Fast forward past expiry
       const expiredTime = now + ONE_DAY + ONE_DAY + 1000;
@@ -525,13 +531,13 @@ describe("SDK Timelock Module", () => {
   });
 
   describe("Multiple Concurrent Proposals", () => {
-    it("handles multiple proposals independently", () => {
+    it("handles multiple proposals independently", async () => {
       const manager = new TimelockManager(defaultConfig);
       const now = 1000000;
 
-      const p1 = manager.propose(TimelockAction.Pause, {}, now);
-      const p2 = manager.propose(TimelockAction.UpdateFees, { fee: 100 }, now);
-      const p3 = manager.propose(
+      const p1 = await manager.propose(TimelockAction.Pause, {}, now);
+      const p2 = await manager.propose(TimelockAction.UpdateFees, { fee: 100 }, now);
+      const p3 = await manager.propose(
         TimelockAction.TransferAuthority,
         { newAuthority: NEW_AUTHORITY.toBase58() },
         now,
@@ -561,13 +567,13 @@ describe("SDK Timelock Module", () => {
       );
     });
 
-    it("each proposal has unique ID", () => {
+    it("each proposal has unique ID", async () => {
       const manager = new TimelockManager(defaultConfig);
       const now = 1000000;
 
       const ids = new Set<string>();
       for (let i = 0; i < 100; i++) {
-        const p = manager.propose(TimelockAction.Pause, { index: i }, now);
+        const p = await manager.propose(TimelockAction.Pause, { index: i }, now);
         ids.add(p.id);
       }
 

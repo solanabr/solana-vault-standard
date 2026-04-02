@@ -55,4 +55,16 @@ pub enum VaultError {
 
     #[msg("Caller is not the pending authority")]
     InvalidPendingAuthority,
+
+    #[msg("No accumulated fees to collect")]
+    NoFeesToCollect,
+
+    #[msg("Fee recipient does not match vault's designated fee recipient")]
+    InvalidFeeRecipient,
+
+    #[msg("Fee recipient has not been set — call set_fee_recipient first")]
+    FeeRecipientNotSet,
+
+    #[msg("Cannot use deprecated transfer while a two-step transfer is pending")]
+    PendingTransferExists,
 }

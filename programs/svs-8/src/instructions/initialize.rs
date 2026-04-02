@@ -29,7 +29,9 @@ pub fn handler(
     vault.vault_id = vault_id;
     vault.num_assets = 0;
     vault.base_decimals = base_decimals;
-    vault._reserved = [0u8; 64];
+    vault.weights_valid = false;
+    vault.pending_authority = Pubkey::default();
+    vault._reserved = [0u8; 31];
 
     emit!(VaultInitialized {
         vault: vault.key(),

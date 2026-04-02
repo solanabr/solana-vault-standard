@@ -115,18 +115,18 @@ Optional on-chain modules for additional functionality:
 
 | Program | ID |
 |---------|-----|
-| SVS-1 | `Bv8aVSQ3DJUe3B7TqQZRZgrNvVTh8TjfpwpoeR1ckDMC` |
-| SVS-2 | `3UrYrxh1HmVgq7WPygZ5x1gNEaWFwqTMs7geNqMnsrtD` |
-| SVS-3 | `EcpnYtaCBrZ4p4uq7dDr55D3fL9nsxbCNqpyUREGpPkh` |
-| SVS-4 | `2WP7LXWqrp1W4CwEJuVt2SxWPNY2n6AYmijh6Z4EeidY` |
-| SVS-5 | `3XQX3ZKGcy618XyWMmQiukYohJNSh3JNWoffq8ZeFdcS` |
-| SVS-6 | `2w7aL5ZrD2i9RpzQBGSPAg7s61wVc8Qs8gtuQUTojEDE` |
-| SVS-7 | `6v6FHxx26oqjJEjZa3S2XiuWSuDbYScd9VB7kLa4yzmE` |
-| SVS-8 | `E8bGqwitsaFELBtuhbwAKwVBKjAjGzrfcnBPishvvRsA` |
-| SVS-9 | `CZweMiLWPPgKMiQXVNSuuwaoiHUyKWZzoBhhFg2D1VaU` |
-| SVS-10 | `CpjFjyxRwTGYxR6JWXpfQ1923z5wVwpyBvgPFjm9jamJ` |
-| SVS-11 | `Bf17gDR2JdKTWdoTWK3Va9YQtkpePRAAVxMCaokj8ZFW` |
-| SVS-12 | `FM3ZfmPSdQzFniZSDXc6FfXKFvXRSNQXeTdPKC8tz5C` |
+| SVS-1 | `CzZyssz2PdLccWpbVi6a3wFKMmMqdf28U2RapNNRJSPX` |
+| SVS-2 | `7vnZM4aCsRapH9ft7Bo5ibTXNH2dvoxkj96c7JonLhoe` |
+| SVS-3 | `CC4xQGxmwKusLW3ToqUzRAFjh7cL2iKsgfkz6qJSasYs` |
+| SVS-4 | `EqRNvMTwczQjUhQL8wwrxJGALgz5VWsYne3d67e6ruCv` |
+| SVS-5 | `HCp23XHzV4HJHXwLWwQj8aSTU1yjyzj8FCNLe6NybwXt` |
+| SVS-6 | `oaT6wgNiwCqd7EGvB6Wb5ZFYUJXckk6LEhB7MWqXbyC` |
+| SVS-7 | `CR2ccVacmbQ2DaXvR66W7gnmH7KuDCqbVW5VwnTczQUC` |
+| SVS-8 | `HnZ9N8Y1v6jMhwDqo4Y76GfqjRArdinadgK67yLVFZbe` |
+| SVS-9 | `AaADS3DCGkjhDEDbGkygbG9bNaziR9TPK2X7SMBYedws` |
+| SVS-10 | `4G5d6KutMpUaDPTVcv7FJBpPTGZej8rx3GyGnfiRdD6M` |
+| SVS-11 | `CMeQ5Lx7AvjuW3DrzNvEkPZSdqKZjjhaTrAmgqBvPKHD` |
+| SVS-12 | `EPwH58e5V1UXYkkD8JZ4bq7Wr2iRiC9fLj1S6BRRz2R` |
 
 ### Mainnet
 

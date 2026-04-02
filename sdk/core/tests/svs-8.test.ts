@@ -16,7 +16,7 @@ import {
 } from "../src/svs-8";
 
 const PROGRAM_ID = new PublicKey(
-  "E8bGqwitsaFELBtuhbwAKwVBKjAjGzrfcnBPishvvRsA",
+  "HnZ9N8Y1v6jMhwDqo4Y76GfqjRArdinadgK67yLVFZbe",
 );
 const MINT_A = new PublicKey("So11111111111111111111111111111111111111112");
 const MINT_B = new PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");

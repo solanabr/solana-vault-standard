@@ -396,7 +396,7 @@ const [vaultPda] = PublicKey.findProgramAddressSync(
     assetMint.toBuffer(),
     Buffer.from(new Uint8Array(new BigUint64Array([vaultId]).buffer)),
   ],
-  new PublicKey('2w7aL5ZrD2i9RpzQBGSPAg7s61wVc8Qs8gtuQUTojEDE'),
+  new PublicKey('oaT6wgNiwCqd7EGvB6Wb5ZFYUJXckk6LEhB7MWqXbyC'),
 );
 
 // One-time: configure CT on user shares account
@@ -553,7 +553,7 @@ offset = 10^(9 - asset_decimals)
 
 | Item | Value |
 |------|-------|
-| **Program ID** | `2w7aL5ZrD2i9RpzQBGSPAg7s61wVc8Qs8gtuQUTojEDE` |
+| **Program ID** | `oaT6wgNiwCqd7EGvB6Wb5ZFYUJXckk6LEhB7MWqXbyC` |
 | **Network** | Devnet |
 | **SDK Package** | `@stbr/svs-privacy-sdk` |
 | **Class** | `ConfidentialStreamVault` |
@@ -562,10 +562,10 @@ offset = 10^(9 - asset_decimals)
 
 ```bash
 # Verify program deployment
-solana program show 2w7aL5ZrD2i9RpzQBGSPAg7s61wVc8Qs8gtuQUTojEDE --url devnet
+solana program show oaT6wgNiwCqd7EGvB6Wb5ZFYUJXckk6LEhB7MWqXbyC --url devnet
 
 # Anchor verify (if verifiable build available)
-anchor verify 2w7aL5ZrD2i9RpzQBGSPAg7s61wVc8Qs8gtuQUTojEDE --provider.cluster devnet
+anchor verify oaT6wgNiwCqd7EGvB6Wb5ZFYUJXckk6LEhB7MWqXbyC --provider.cluster devnet
 ```
 
 ## Error Codes

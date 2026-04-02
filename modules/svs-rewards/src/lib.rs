@@ -18,14 +18,14 @@
 //! ```
 //! use svs_rewards::{update_accumulated_per_share, on_deposit, on_claim};
 //!
-//! // Add 1000 rewards to pool with 100k shares
-//! let acc = update_accumulated_per_share(0, 1000, 100_000).unwrap();
+//! // Add 1000 rewards to pool with 100k shares (0 carry remainder)
+//! let (acc, remainder) = update_accumulated_per_share(0, 1000, 100_000, 0).unwrap();
 //!
 //! // User deposits 50k shares
 //! let (debt, unclaimed) = on_deposit(0, 50_000, acc, 0, 0).unwrap();
 //!
-//! // More rewards added
-//! let acc2 = update_accumulated_per_share(acc, 1000, 150_000).unwrap();
+//! // More rewards added (carry remainder from previous accumulation)
+//! let (acc2, _) = update_accumulated_per_share(acc, 1000, 150_000, remainder).unwrap();
 //!
 //! // User claims
 //! let (claim, _, _) = on_claim(50_000, acc2, debt, unclaimed).unwrap();

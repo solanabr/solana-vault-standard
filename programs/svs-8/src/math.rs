@@ -101,6 +101,19 @@ pub fn oracle_value_for_amount(
         .map_err(|_| error!(VaultError::MathOverflow))
 }
 
+/// Read the `amount` field from an SPL Token or Token-2022 token account.
+///
+/// # Layout assumption
+/// Both SPL Token and Token-2022 share the same base account layout:
+///   - bytes  0..32: mint (Pubkey)
+///   - bytes 32..64: owner (Pubkey)
+///   - bytes 64..72: amount (u64, little-endian)
+///
+/// Token-2022 accounts may be larger (extensions appended after byte 165),
+/// but the base fields at offsets 0..72 are identical to SPL Token.
+///
+/// The length check (`>= 72`) ensures the account data is large enough
+/// to contain the amount field before reading.
 pub fn read_token_balance(info: &anchor_lang::prelude::AccountInfo) -> Result<u64> {
     let data = info.try_borrow_data()?;
     require!(data.len() >= 72, crate::error::VaultError::MathOverflow);

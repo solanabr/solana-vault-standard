@@ -71,152 +71,73 @@ export const PROOF_DATA_SIZES = {
 /**
  * Create a PubkeyValidityProof
  *
+ * @deprecated Local proof generation is not available. Use
+ * {@link createPubkeyValidityProofViaBackend} for backend-assisted proof generation.
+ *
  * This sigma protocol proof verifies that the user knows the secret key
  * corresponding to their ElGamal public key without revealing it.
  * Required for the ConfigureAccount instruction.
  *
- * Proof Structure (64 bytes total):
- * - pubkey: 32 bytes (compressed Ristretto point)
- * - proof: 32 bytes (Schnorr sigma proof)
- *
- * WARNING: This currently generates PLACEHOLDER proof data that will NOT
- * pass verification by the ZK ElGamal Proof program. For production use,
- * proof generation requires:
- * - Rust: solana-zk-sdk crate with `PubkeyValidityProofData::new(&elgamal_keypair)`
- * - JavaScript: WASM bindings (expected mid-2026) or server-side Rust proxy
- *
- * The instruction format and discriminators are correct - only the cryptographic
- * proof generation is pending JavaScript SDK support.
- *
  * @param elgamalKeypair - The user's ElGamal keypair
- * @returns PubkeyValidityProofData (64 bytes) - PLACEHOLDER DATA
+ * @returns never - always throws
+ * @throws Always throws - local proof generation not available
  */
 export function createPubkeyValidityProofData(
   elgamalKeypair: ElGamalKeypair,
 ): Uint8Array {
-  // PubkeyValidityProofData layout (64 bytes):
-  // [0..32)  - ElGamal public key
-  // [32..64) - Schnorr sigma proof (commitment + response)
-  const proofData = new Uint8Array(PROOF_DATA_SIZES.PubkeyValidityProofData);
-
-  // Set ElGamal public key
-  proofData.set(elgamalKeypair.publicKey, 0);
-
-  // Generate Schnorr sigma proof
-  // NOTE: In production, use solana-zk-sdk:
-  // const proof = PubkeyValidityProofData::new(elgamal_keypair);
-  const proof = generateSchnorrProof(elgamalKeypair);
-  proofData.set(proof, 32);
-
-  return proofData;
+  throw new Error(
+    "Local proof generation not available - use backend proof functions instead",
+  );
 }
 
 /**
  * Create a CiphertextCommitmentEqualityProof
  *
+ * @deprecated Local proof generation is not available. Use
+ * {@link createEqualityProofViaBackend} for backend-assisted proof generation.
+ *
  * This sigma protocol proof verifies that a twisted ElGamal ciphertext
  * encrypts the same value as a Pedersen commitment.
  * Required for withdraw and redeem operations.
  *
- * Proof Structure (192 bytes total):
- * - source_pubkey: 32 bytes (ElGamal pubkey)
- * - source_ciphertext: 64 bytes (ElGamal ciphertext: commitment || handle)
- * - destination_commitment: 32 bytes (Pedersen commitment)
- * - proof: 64 bytes (sigma proof)
- *
- * NOTE: Actual proof generation requires solana-zk-sdk WASM bindings.
- *
  * @param elgamalKeypair - The user's ElGamal keypair
  * @param amount - The amount being withdrawn/redeemed
  * @param currentBalance - Current encrypted balance ciphertext (64 bytes)
- * @returns CiphertextCommitmentEqualityProofData (192 bytes)
+ * @returns never - always throws
+ * @throws Always throws - local proof generation not available
  */
 export function createEqualityProofData(
   elgamalKeypair: ElGamalKeypair,
   amount: BN,
   currentBalance: Uint8Array,
 ): Uint8Array {
-  // CiphertextCommitmentEqualityProofData layout (192 bytes):
-  // [0..32)    - source ElGamal pubkey
-  // [32..96)   - source ciphertext (commitment 32 + handle 32)
-  // [96..128)  - Pedersen commitment
-  // [128..192) - sigma proof
-  const proofData = new Uint8Array(
-    PROOF_DATA_SIZES.CiphertextCommitmentEqualityProofData,
+  throw new Error(
+    "Local proof generation not available - use backend proof functions instead",
   );
-
-  // Set source ElGamal public key
-  proofData.set(elgamalKeypair.publicKey, 0);
-
-  // Set source ciphertext (encrypted balance)
-  proofData.set(currentBalance.slice(0, 64), 32);
-
-  // Compute Pedersen commitment to the amount
-  // NOTE: In production, use solana-zk-sdk:
-  // const commitment = PedersenCommitment::new(amount, blinding);
-  const commitment = computePedersenCommitment(amount);
-  proofData.set(commitment, 96);
-
-  // Generate sigma proof
-  // NOTE: In production, use solana-zk-sdk:
-  // const proof = CiphertextCommitmentEqualityProofData::new(...)
-  const proof = generateEqualityProof(elgamalKeypair, amount, currentBalance);
-  proofData.set(proof, 128);
-
-  return proofData;
 }
 
 /**
  * Create a BatchedRangeProofU64
  *
+ * @deprecated Local proof generation is not available. Use
+ * {@link createRangeProofViaBackend} for backend-assisted proof generation.
+ *
  * This Bulletproof verifies that amounts are within the valid range
  * [0, 2^64 - 1], preventing overflow/underflow attacks.
  * Required for withdraw, redeem, and transfer operations.
  *
- * Proof Size (varies by batch):
- * - 1 amount: 672 bytes
- * - 2 amounts: 736 bytes
- * - Each additional amount: +64 bytes
- *
- * The proof aggregates multiple range proofs for efficiency,
- * proving that the new balance and transfer amount are both non-negative.
- *
- * NOTE: Bulletproof generation requires solana-zk-sdk WASM bindings.
- *
  * @param amounts - Array of amounts to prove range for
  * @param commitmentBlindingFactors - Blinding factors for Pedersen commitments
- * @returns BatchedRangeProofU64Data (672 + 64*(n-1) bytes)
+ * @returns never - always throws
+ * @throws Always throws - local proof generation not available
  */
 export function createRangeProofData(
   amounts: BN[],
   commitmentBlindingFactors: Uint8Array[],
 ): Uint8Array {
-  // BatchedRangeProofU64Data layout:
-  // - Pedersen commitments: 32 bytes each
-  // - Bulletproof: ~640 bytes base + aggregation overhead
-  const baseSize = PROOF_DATA_SIZES.BatchedRangeProofU64Data;
-  const proofSize = baseSize + Math.max(0, amounts.length - 1) * 64;
-  const proofData = new Uint8Array(proofSize);
-
-  // NOTE: In production, use solana-zk-sdk:
-  // const proof = BatchedRangeProofU64Data::new(amounts, blindings);
-
-  // Generate commitments for each amount
-  let offset = 0;
-  for (let i = 0; i < amounts.length; i++) {
-    const commitment = computePedersenCommitment(
-      amounts[i],
-      commitmentBlindingFactors[i],
-    );
-    proofData.set(commitment, offset);
-    offset += 32;
-  }
-
-  // Generate Bulletproof (placeholder)
-  const bulletproof = generateBulletproof(amounts, commitmentBlindingFactors);
-  proofData.set(bulletproof, offset);
-
-  return proofData;
+  throw new Error(
+    "Local proof generation not available - use backend proof functions instead",
+  );
 }
 
 /**
@@ -265,13 +186,21 @@ export async function createProofContextAccount(
     contextAccount.publicKey,
   );
 
+  const { blockhash, lastValidBlockHeight } =
+    await connection.getLatestBlockhash("confirmed");
+
   const transaction = new Transaction().add(createAccountIx, verifyProofIx);
+  transaction.recentBlockhash = blockhash;
+  transaction.feePayer = payer.publicKey;
 
   const signature = await connection.sendTransaction(transaction, [
     payer,
     contextAccount,
   ]);
-  await connection.confirmTransaction(signature);
+  await connection.confirmTransaction(
+    { signature, blockhash, lastValidBlockHeight },
+    "confirmed",
+  );
 
   return {
     contextAccount: contextAccount.publicKey,
@@ -508,11 +437,61 @@ export async function closeProofContextAccount(
     data: Buffer.from([PROOF_INSTRUCTION_DISCRIMINATORS.CloseContextState]), // 0
   });
 
+  const { blockhash, lastValidBlockHeight } =
+    await connection.getLatestBlockhash("confirmed");
+
   const transaction = new Transaction().add(closeIx);
+  transaction.recentBlockhash = blockhash;
+  transaction.feePayer = payer.publicKey;
+
   const signature = await connection.sendTransaction(transaction, [payer]);
-  await connection.confirmTransaction(signature);
+  await connection.confirmTransaction(
+    { signature, blockhash, lastValidBlockHeight },
+    "confirmed",
+  );
 
   return signature;
+}
+
+// ============ Clock Drift Validation ============
+
+/**
+ * Maximum allowed clock drift (in seconds) between local time and cluster time.
+ * If the local clock is off by more than this, proof timestamps may be rejected.
+ */
+const MAX_CLOCK_DRIFT_SECONDS = 60;
+
+/**
+ * Validate that the local clock is reasonably close to cluster time.
+ *
+ * This is a sanity check to prevent proof timestamps from being rejected
+ * by the backend when the client's clock is drastically off. The check is
+ * non-fatal if the RPC call fails (network issues shouldn't block proof
+ * generation), but throws if clock drift exceeds MAX_CLOCK_DRIFT_SECONDS.
+ *
+ * @param connection - Solana connection to query cluster time
+ * @param localTimestamp - Local unix timestamp in seconds
+ * @throws If local clock is more than 60 seconds off from cluster time
+ */
+async function validateClockDrift(
+  connection: Connection,
+  localTimestamp: number,
+): Promise<void> {
+  try {
+    const slot = await connection.getSlot();
+    const blockTime = await connection.getBlockTime(slot);
+    if (blockTime && Math.abs(localTimestamp - blockTime) > MAX_CLOCK_DRIFT_SECONDS) {
+      throw new Error(
+        `Local clock is ${Math.abs(localTimestamp - blockTime)}s off from cluster time — proof timestamps may be rejected`,
+      );
+    }
+  } catch (e) {
+    // Re-throw clock drift errors; swallow RPC failures
+    if (e instanceof Error && e.message.includes("off from cluster time")) {
+      throw e;
+    }
+    // Non-fatal: proceed with local timestamp if RPC check fails
+  }
 }
 
 // ============ Backend Proof Generation ============
@@ -523,11 +502,11 @@ export async function closeProofContextAccount(
  */
 let PROOF_BACKEND_URL =
   typeof process !== "undefined"
-    ? process.env?.PROOF_BACKEND_URL || "http://localhost:3001"
-    : "http://localhost:3001";
+    ? process.env?.PROOF_BACKEND_URL || "https://localhost:3001"
+    : "https://localhost:3001";
 
 let PROOF_BACKEND_API_KEY: string | undefined;
-let PROOF_BACKEND_TRUST_ACKNOWLEDGED = false;
+let PROOF_BACKEND_ALLOW_INSECURE = false;
 
 /**
  * Configure the proof backend URL, API key, and trust acknowledgment.
@@ -537,42 +516,54 @@ let PROOF_BACKEND_TRUST_ACKNOWLEDGED = false;
  * derive ElGamal secret keys) to the configured backend server. The backend can
  * reconstruct the user's ElGamal keypair and decrypt all confidential balances.
  *
- * You MUST explicitly acknowledge this trust model by setting
- * `acknowledgeBackendTrust: true`. Without this, all backend proof generation
- * functions will throw.
- *
  * Consider these mitigations:
  * - Run the proof backend in a trusted execution environment (TEE/SGX)
  * - Use TLS certificate pinning for the backend connection
  * - Audit the backend source code and deploy from verified builds
  * - Prefer client-side WASM proof generation when available
  *
- * @param url - Backend URL (e.g., "https://proofs.example.com")
+ * Each backend proof function requires `acknowledgeBackendTrust: true` as a
+ * parameter to confirm the caller accepts the trust model per-invocation.
+ *
+ * @param url - Backend URL (e.g., "https://proofs.example.com"). Must use HTTPS
+ *   unless `allowInsecure` is set or `NODE_ENV === 'test'`.
  * @param apiKey - Optional API key for authentication
- * @param acknowledgeBackendTrust - Must be `true` to confirm you accept that the
- *   backend receives secret key material and must be fully trusted
+ * @param options - Optional configuration
+ * @param options.allowInsecure - Allow plaintext HTTP URLs (NOT recommended for production)
+ * @throws If URL uses plaintext HTTP without explicit opt-in
  */
 export function configureProofBackend(
   url: string,
   apiKey?: string,
-  acknowledgeBackendTrust = false,
+  options?: { allowInsecure?: boolean },
 ): void {
+  const isTest =
+    typeof process !== "undefined" && process.env?.NODE_ENV === "test";
+  const allowInsecure = options?.allowInsecure === true || isTest;
+
+  if (url.startsWith("http://") && !allowInsecure) {
+    throw new Error(
+      "Proof backend URL must use HTTPS. Plaintext HTTP exposes secret key material in transit. " +
+        "Pass { allowInsecure: true } to override (NOT recommended for production), " +
+        "or set NODE_ENV=test for local development.",
+    );
+  }
+
   PROOF_BACKEND_URL = url;
   PROOF_BACKEND_API_KEY = apiKey;
-  PROOF_BACKEND_TRUST_ACKNOWLEDGED = acknowledgeBackendTrust;
+  PROOF_BACKEND_ALLOW_INSECURE = allowInsecure;
 }
 
 /**
- * Assert that backend trust has been explicitly acknowledged via configureProofBackend().
+ * Assert that backend trust has been explicitly acknowledged per-call.
  * @internal
  */
-function assertBackendTrustAcknowledged(): void {
-  if (!PROOF_BACKEND_TRUST_ACKNOWLEDGED) {
+function assertBackendTrustAcknowledged(acknowledgeBackendTrust: boolean): void {
+  if (!acknowledgeBackendTrust) {
     throw new Error(
       "Backend proof generation sends secret key material to a remote server. " +
         "The backend can reconstruct ElGamal keypairs and decrypt confidential balances. " +
-        'Call configureProofBackend(url, apiKey, true) with acknowledgeBackendTrust=true ' +
-        "to confirm you accept this trust model.",
+        "Pass acknowledgeBackendTrust=true to confirm you accept this trust model.",
     );
   }
 }
@@ -590,29 +581,40 @@ function assertBackendTrustAcknowledged(): void {
  * the user's ElGamal secret key — meaning the backend can decrypt all confidential
  * balances for this token account. The backend MUST be trusted.
  *
- * You must call `configureProofBackend(url, apiKey, true)` with
- * `acknowledgeBackendTrust=true` before using this function.
- *
  * @param wallet - The wallet keypair (for signing the request)
  * @param tokenAccount - The token account being configured
+ * @param acknowledgeBackendTrust - Must be `true` to confirm you accept that the
+ *   backend receives secret key material and must be fully trusted
+ * @param connection - Optional Solana connection for client-side clock drift validation.
+ *   When provided, the local timestamp is checked against cluster time to catch
+ *   clock skew before sending the request to the backend.
  * @returns Object containing proof data and derived ElGamal public key
- * @throws If backend trust has not been acknowledged via configureProofBackend()
+ * @throws If acknowledgeBackendTrust is not true
+ * @throws If local clock is more than 60 seconds off from cluster time (when connection provided)
  */
 export async function createPubkeyValidityProofViaBackend(
   wallet: Keypair,
   tokenAccount: PublicKey,
+  acknowledgeBackendTrust: boolean,
+  connection?: Connection,
 ): Promise<{ proofData: Uint8Array; elgamalPubkey: Uint8Array }> {
-  assertBackendTrustAcknowledged();
+  assertBackendTrustAcknowledged(acknowledgeBackendTrust);
 
   const timestamp = Math.floor(Date.now() / 1000);
 
-  // Sign the request message using nacl
-  const requestMessage = buildRequestMessage(timestamp, tokenAccount);
+  // V5-S11: Sanity check local clock against cluster time if connection available
+  if (connection) {
+    await validateClockDrift(connection, timestamp);
+  }
+  const nonce = crypto.getRandomValues(new Uint8Array(16));
+
+  // Sign the request message using nacl (nonce bound to prevent replay)
+  const requestMessage = buildRequestMessage(timestamp, tokenAccount, nonce);
   const requestSignature = nacl.sign.detached(requestMessage, wallet.secretKey);
 
-  // Sign the ElGamal derivation message
+  // Sign the ElGamal derivation message (bound to same timestamp + nonce)
   // WARNING: The backend uses this signature to derive the ElGamal secret key
-  const elgamalMessage = buildElGamalDerivationMessage(tokenAccount);
+  const elgamalMessage = buildElGamalDerivationMessage(tokenAccount, timestamp, nonce);
   const elgamalSignature = nacl.sign.detached(elgamalMessage, wallet.secretKey);
 
   const response = await fetch(
@@ -624,6 +626,7 @@ export async function createPubkeyValidityProofViaBackend(
         wallet_pubkey: wallet.publicKey.toBase58(),
         token_account: tokenAccount.toBase58(),
         timestamp,
+        nonce: Buffer.from(nonce).toString("base64"),
         request_signature: Buffer.from(requestSignature).toString("base64"),
         elgamal_signature: Buffer.from(elgamalSignature).toString("base64"),
       }),
@@ -652,33 +655,44 @@ export async function createPubkeyValidityProofViaBackend(
  * granting it the ability to decrypt all confidential balances for this token
  * account. The backend MUST be trusted.
  *
- * You must call `configureProofBackend(url, apiKey, true)` with
- * `acknowledgeBackendTrust=true` before using this function.
- *
  * @param wallet - The wallet keypair
  * @param tokenAccount - The token account
  * @param currentCiphertext - Current encrypted balance (64 bytes)
  * @param amount - Amount to prove
+ * @param acknowledgeBackendTrust - Must be `true` to confirm you accept that the
+ *   backend receives secret key material and must be fully trusted
+ * @param connection - Optional Solana connection for client-side clock drift validation.
+ *   When provided, the local timestamp is checked against cluster time to catch
+ *   clock skew before sending the request to the backend.
  * @returns Proof data bytes
- * @throws If backend trust has not been acknowledged via configureProofBackend()
+ * @throws If acknowledgeBackendTrust is not true
+ * @throws If local clock is more than 60 seconds off from cluster time (when connection provided)
  */
 export async function createEqualityProofViaBackend(
   wallet: Keypair,
   tokenAccount: PublicKey,
   currentCiphertext: Uint8Array,
   amount: BN,
+  acknowledgeBackendTrust: boolean,
+  connection?: Connection,
 ): Promise<Uint8Array> {
-  assertBackendTrustAcknowledged();
+  assertBackendTrustAcknowledged(acknowledgeBackendTrust);
 
   const timestamp = Math.floor(Date.now() / 1000);
 
-  // Sign the request message using nacl
-  const requestMessage = buildRequestMessage(timestamp, tokenAccount);
+  // V5-S11: Sanity check local clock against cluster time if connection available
+  if (connection) {
+    await validateClockDrift(connection, timestamp);
+  }
+  const nonce = crypto.getRandomValues(new Uint8Array(16));
+
+  // Sign the request message using nacl (nonce bound to prevent replay)
+  const requestMessage = buildRequestMessage(timestamp, tokenAccount, nonce);
   const requestSignature = nacl.sign.detached(requestMessage, wallet.secretKey);
 
-  // Sign the ElGamal derivation message
+  // Sign the ElGamal derivation message (bound to same timestamp + nonce)
   // WARNING: The backend uses this signature to derive the ElGamal secret key
-  const elgamalMessage = buildElGamalDerivationMessage(tokenAccount);
+  const elgamalMessage = buildElGamalDerivationMessage(tokenAccount, timestamp, nonce);
   const elgamalSignature = nacl.sign.detached(elgamalMessage, wallet.secretKey);
 
   const response = await fetch(`${PROOF_BACKEND_URL}/api/proofs/equality`, {
@@ -688,6 +702,7 @@ export async function createEqualityProofViaBackend(
       wallet_pubkey: wallet.publicKey.toBase58(),
       token_account: tokenAccount.toBase58(),
       timestamp,
+      nonce: Buffer.from(nonce).toString("base64"),
       request_signature: Buffer.from(requestSignature).toString("base64"),
       elgamal_signature: Buffer.from(elgamalSignature).toString("base64"),
       current_ciphertext: Buffer.from(currentCiphertext).toString("base64"),
@@ -713,26 +728,37 @@ export async function createEqualityProofViaBackend(
  * attacker can break the hiding property of the Pedersen commitments and learn
  * the committed amounts. The backend MUST be trusted.
  *
- * You must call `configureProofBackend(url, apiKey, true)` with
- * `acknowledgeBackendTrust=true` before using this function.
- *
  * @param wallet - The wallet keypair
  * @param amounts - Amounts to prove range for
  * @param commitmentBlindings - Blinding factors for Pedersen commitments
+ * @param acknowledgeBackendTrust - Must be `true` to confirm you accept that the
+ *   backend receives secret key material and must be fully trusted
+ * @param connection - Optional Solana connection for client-side clock drift validation.
+ *   When provided, the local timestamp is checked against cluster time to catch
+ *   clock skew before sending the request to the backend.
  * @returns Proof data bytes
- * @throws If backend trust has not been acknowledged via configureProofBackend()
+ * @throws If acknowledgeBackendTrust is not true
+ * @throws If local clock is more than 60 seconds off from cluster time (when connection provided)
  */
 export async function createRangeProofViaBackend(
   wallet: Keypair,
   amounts: BN[],
   commitmentBlindings: Uint8Array[],
+  acknowledgeBackendTrust: boolean,
+  connection?: Connection,
 ): Promise<Uint8Array> {
-  assertBackendTrustAcknowledged();
+  assertBackendTrustAcknowledged(acknowledgeBackendTrust);
 
   const timestamp = Math.floor(Date.now() / 1000);
 
-  // Sign the range request message using nacl
-  const requestMessage = buildRangeRequestMessage(timestamp);
+  // V5-S11: Sanity check local clock against cluster time if connection available
+  if (connection) {
+    await validateClockDrift(connection, timestamp);
+  }
+  const nonce = crypto.getRandomValues(new Uint8Array(16));
+
+  // Sign the range request message using nacl (nonce bound to prevent replay)
+  const requestMessage = buildRangeRequestMessage(timestamp, nonce);
   const requestSignature = nacl.sign.detached(requestMessage, wallet.secretKey);
 
   const response = await fetch(`${PROOF_BACKEND_URL}/api/proofs/range`, {
@@ -741,6 +767,7 @@ export async function createRangeProofViaBackend(
     body: JSON.stringify({
       wallet_pubkey: wallet.publicKey.toBase58(),
       timestamp,
+      nonce: Buffer.from(nonce).toString("base64"),
       request_signature: Buffer.from(requestSignature).toString("base64"),
       amounts: amounts.map((a) => a.toString()),
       commitment_blindings: commitmentBlindings.map((b) =>
@@ -793,39 +820,59 @@ function buildHeaders(): Record<string, string> {
 }
 
 /**
- * Build the request message that must be signed by the wallet
+ * Build the request message that must be signed by the wallet.
+ *
+ * Includes a 16-byte random nonce to prevent replay attacks. The nonce
+ * is sent alongside the signature so the backend can reconstruct the
+ * message for verification.
  */
 function buildRequestMessage(
   timestamp: number,
   tokenAccount: PublicKey,
+  nonce: Uint8Array,
 ): Uint8Array {
   const prefix = Buffer.from("SVS_PROOF_REQUEST");
   const timestampBytes = Buffer.alloc(8);
   timestampBytes.writeBigInt64LE(BigInt(timestamp));
   const accountBytes = tokenAccount.toBuffer();
 
-  return Buffer.concat([prefix, timestampBytes, accountBytes]);
+  return Buffer.concat([prefix, timestampBytes, accountBytes, Buffer.from(nonce)]);
 }
 
 /**
- * Build the message for range proof request signature
+ * Build the message for range proof request signature.
+ *
+ * Includes a 16-byte random nonce to prevent replay attacks.
  */
-function buildRangeRequestMessage(timestamp: number): Uint8Array {
+function buildRangeRequestMessage(
+  timestamp: number,
+  nonce: Uint8Array,
+): Uint8Array {
   const prefix = Buffer.from("SVS_PROOF_REQUEST");
   const timestampBytes = Buffer.alloc(8);
   timestampBytes.writeBigInt64LE(BigInt(timestamp));
   const suffix = Buffer.from("range");
 
-  return Buffer.concat([prefix, timestampBytes, suffix]);
+  return Buffer.concat([prefix, timestampBytes, suffix, Buffer.from(nonce)]);
 }
 
 /**
- * Build the message for ElGamal key derivation signature
- * This matches the standard used by spl-token CLI
+ * Build the message for ElGamal key derivation signature.
+ *
+ * Binds the signature to the specific proof request via the caller's
+ * timestamp and nonce, preventing replay attacks. The backend must
+ * validate that the timestamp is within a reasonable window (e.g., 5 minutes)
+ * and that the nonce has not been seen before.
  */
-function buildElGamalDerivationMessage(tokenAccount: PublicKey): Uint8Array {
+function buildElGamalDerivationMessage(
+  tokenAccount: PublicKey,
+  timestamp: number,
+  nonce: Uint8Array,
+): Uint8Array {
   const prefix = Buffer.from("ElGamalSecretKey");
   const accountBytes = tokenAccount.toBuffer();
+  const timestampBytes = Buffer.alloc(8);
+  timestampBytes.writeBigUInt64LE(BigInt(timestamp));
 
-  return Buffer.concat([prefix, accountBytes]);
+  return Buffer.concat([prefix, accountBytes, timestampBytes, Buffer.from(nonce)]);
 }

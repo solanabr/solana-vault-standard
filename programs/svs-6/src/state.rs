@@ -45,9 +45,11 @@ pub struct ConfidentialStreamVault {
     pub auditor_elgamal_pubkey: Option<[u8; 32]>,
     /// Authority for confidential transfer operations
     pub confidential_authority: Pubkey,
+    /// Pending authority for two-step transfer (default = Pubkey::default() means none)
+    pub pending_authority: Pubkey,
 
     /// Reserved for future upgrades
-    pub _reserved: [u8; 56],
+    pub _reserved: [u8; 24],
 }
 
 impl ConfidentialStreamVault {
@@ -68,7 +70,8 @@ impl ConfidentialStreamVault {
         8 +   // stream_distributed
         1 + 32 + // auditor_elgamal_pubkey (Option<[u8; 32]>)
         32 +  // confidential_authority
-        56; // _reserved
+        32 +  // pending_authority
+        24; // _reserved
 
     pub const SEED_PREFIX: &'static [u8] = VAULT_SEED;
 
@@ -102,14 +105,19 @@ impl ConfidentialStreamVault {
             .checked_sub(self.stream_start)
             .ok_or(VaultError::MathOverflow)?;
         require!(elapsed_i64 >= 0, VaultError::MathOverflow);
-        let elapsed = elapsed_i64 as u64;
+        // V6-P6: Use try_into() for idiomatic i64→u64 conversion (safe after >= 0 check)
+        let elapsed: u64 = elapsed_i64
+            .try_into()
+            .map_err(|_| error!(VaultError::MathOverflow))?;
 
         let duration_i64 = self
             .stream_end
             .checked_sub(self.stream_start)
             .ok_or(VaultError::MathOverflow)?;
         require!(duration_i64 > 0, VaultError::MathOverflow);
-        let duration = duration_i64 as u64;
+        let duration: u64 = duration_i64
+            .try_into()
+            .map_err(|_| error!(VaultError::MathOverflow))?;
 
         // Compute total accrued from original stream params, subtract already distributed
         let total_accrued =

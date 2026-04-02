@@ -16,6 +16,7 @@ pub struct CancelRedeem<'info> {
     pub investor: Signer<'info>,
 
     #[account(
+        mut,
         seeds = [VAULT_SEED, vault.asset_mint.as_ref(), &vault.vault_id.to_le_bytes()],
         bump = vault.bump,
     )]
@@ -66,6 +67,12 @@ pub fn handler(ctx: Context<CancelRedeem>) -> Result<()> {
         ctx.accounts.frozen_check.data_is_empty(),
         VaultError::AccountFrozen
     );
+
+    let vault = &mut ctx.accounts.vault;
+    vault.total_pending_redeems = vault
+        .total_pending_redeems
+        .checked_sub(1)
+        .ok_or(VaultError::MathOverflow)?;
 
     let shares_to_return = ctx.accounts.redemption_request.shares_locked;
 

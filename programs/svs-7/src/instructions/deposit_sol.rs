@@ -32,6 +32,8 @@ pub struct DepositSol<'info> {
     #[account(mut)]
     pub user: Signer<'info>,
 
+    /// V7-P3: Intentionally NOT `mut` — SVS-7 derives total_assets from wsol_vault.amount
+    /// at read time (no stored base_assets). If stored deposit state is ever added, mark `mut`.
     #[account(
         constraint = !vault.paused @ VaultError::VaultPaused,
     )]
@@ -143,7 +145,13 @@ pub fn handler(ctx: Context<DepositSol>, lamports: u64, min_shares_out: u64) -> 
         ctx.accounts.token_program.key,
         ctx.accounts.wsol_vault.to_account_info().key,
     )?;
-    invoke(&sync_ix, &[ctx.accounts.wsol_vault.to_account_info()])?;
+    invoke(
+        &sync_ix,
+        &[
+            ctx.accounts.wsol_vault.to_account_info(),
+            ctx.accounts.token_program.to_account_info(),
+        ],
+    )?;
 
     // 5c. Reload wSOL account data after sync so subsequent reads are accurate
     ctx.accounts.wsol_vault.reload()?;
@@ -165,6 +173,16 @@ pub fn handler(ctx: Context<DepositSol>, lamports: u64, min_shares_out: u64) -> 
             signer_seeds,
         ),
         net_shares,
+    )?;
+
+    // Update per-user cumulative deposit tracking (if caps module is active)
+    #[cfg(feature = "modules")]
+    module_hooks::update_user_deposit(
+        ctx.remaining_accounts,
+        &crate::ID,
+        &ctx.accounts.vault.key(),
+        &ctx.accounts.user.key(),
+        lamports,
     )?;
 
     // 6. EMIT EVENT

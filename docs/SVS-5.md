@@ -222,7 +222,7 @@ const connection = new Connection('https://api.devnet.solana.com');
 const authority = Keypair.fromSecretKey(/* ... */);
 
 // Load existing vault
-const vaultPubkey = new PublicKey('3XQX3ZKGcy618XyWMmQiukYohJNSh3JNWoffq8ZeFdcS');
+const vaultPubkey = new PublicKey('HCp23XHzV4HJHXwLWwQj8aSTU1yjyzj8FCNLe6NybwXt');
 const vault = await StreamingVault.load(connection, vaultPubkey);
 
 // Read stream state
@@ -345,7 +345,7 @@ The SVS-2 sync timing attack (withhold `sync()`, deposit at stale price, then sy
 
 | Item | Value |
 |------|-------|
-| **Program ID** | `3XQX3ZKGcy618XyWMmQiukYohJNSh3JNWoffq8ZeFdcS` |
+| **Program ID** | `HCp23XHzV4HJHXwLWwQj8aSTU1yjyzj8FCNLe6NybwXt` |
 | **Network** | Devnet |
 | **SDK Package** | `@stbr/solana-vault` |
 | **Class** | `StreamingVault` |
@@ -354,10 +354,10 @@ The SVS-2 sync timing attack (withhold `sync()`, deposit at stale price, then sy
 
 ```bash
 # Verify program deployment
-solana program show 3XQX3ZKGcy618XyWMmQiukYohJNSh3JNWoffq8ZeFdcS --url devnet
+solana program show HCp23XHzV4HJHXwLWwQj8aSTU1yjyzj8FCNLe6NybwXt --url devnet
 
 # Anchor verify (if verifiable build available)
-anchor verify 3XQX3ZKGcy618XyWMmQiukYohJNSh3JNWoffq8ZeFdcS --provider.cluster devnet
+anchor verify HCp23XHzV4HJHXwLWwQj8aSTU1yjyzj8FCNLe6NybwXt --provider.cluster devnet
 ```
 
 ### Integration Example
@@ -366,7 +366,7 @@ anchor verify 3XQX3ZKGcy618XyWMmQiukYohJNSh3JNWoffq8ZeFdcS --provider.cluster de
 import { StreamingVault } from '@stbr/solana-vault';
 import { Connection, PublicKey } from '@solana/web3.js';
 
-const DEVNET_PROGRAM_ID = new PublicKey('3XQX3ZKGcy618XyWMmQiukYohJNSh3JNWoffq8ZeFdcS');
+const DEVNET_PROGRAM_ID = new PublicKey('HCp23XHzV4HJHXwLWwQj8aSTU1yjyzj8FCNLe6NybwXt');
 const connection = new Connection('https://api.devnet.solana.com');
 
 // Derive StreamVault PDA

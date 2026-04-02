@@ -14,6 +14,8 @@
     }
   },
 
+  "enableAllProjectMcpServers": true,
+
   "defaultMode": "default",
 
   "enabledPlugins": {

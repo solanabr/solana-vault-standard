@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-04-01
+
+### Security
+- Completed 10 internal audit rounds (v1 through v10), all findings resolved
+- Scrubbed leaked program keypairs from git history
+- Fresh deployment with new program IDs (no upgrade authority on old IDs)
+
+### Changed
+- **Breaking**: All 14 programs redeployed with new program IDs
+- Version bump: 0.2.0 → 2.0.0 across all packages (programs, modules, SDKs)
+
 ### Added
 
 #### SVS-8: Multi-Asset Basket Vault
@@ -42,7 +53,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **scripts/svs-5/**: 9 devnet test scripts (basic, slippage, multi-user, edge-cases, inflation-attack, live-balance, withdraw-mint, view-functions, full-drain)
 - **trident-tests/fuzz_svs5**: 1,524-line fuzz test with 31 flows and 13 end invariants covering streaming yield, fees, caps, locks, access control, inflation attacks, and timing edge cases
 - SVS-5 uses `svs-module-hooks` crate for module integration (same pattern as SVS-1)
-- Program ID (devnet): `3XQX3ZKGcy618XyWMmQiukYohJNSh3JNWoffq8ZeFdcS`
+- Program ID (devnet): `HCp23XHzV4HJHXwLWwQj8aSTU1yjyzj8FCNLe6NybwXt`
 
 ## [0.3.0] - 2026-03-06
 
@@ -168,7 +179,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Checked arithmetic throughout
 - Slippage protection on all user operations
 
-[Unreleased]: https://github.com/solanabr/tokenized-vault-standard/compare/v0.2.2...HEAD
+[Unreleased]: https://github.com/solanabr/tokenized-vault-standard/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/solanabr/tokenized-vault-standard/compare/v0.2.2...v2.0.0
 [0.2.2]: https://github.com/solanabr/tokenized-vault-standard/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/solanabr/tokenized-vault-standard/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/solanabr/tokenized-vault-standard/compare/v0.1.0-beta.1...v0.2.0

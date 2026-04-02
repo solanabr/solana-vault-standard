@@ -95,10 +95,12 @@ pub fn handler(ctx: Context<RebalanceTranches>, amount: u64) -> Result<()> {
 
     let to_tranche = &ctx.accounts.to_tranche;
     if vault.total_assets > 0 {
-        let cap_limit = (vault.total_assets as u128)
+        let cap_limit: u64 = (vault.total_assets as u128)
             .checked_mul(to_tranche.cap_bps as u128)
             .and_then(|v| v.checked_div(crate::constants::BPS_DENOMINATOR as u128))
-            .ok_or(VaultError::MathOverflow)? as u64;
+            .ok_or(VaultError::MathOverflow)?
+            .try_into()
+            .map_err(|_| VaultError::MathOverflow)?;
         require!(
             to_tranche.total_assets_allocated <= cap_limit,
             VaultError::CapExceeded

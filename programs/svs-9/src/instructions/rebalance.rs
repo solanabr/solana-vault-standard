@@ -34,8 +34,12 @@ pub struct Rebalance<'info> {
     )]
     pub idle_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
-    /// CHECK: The child vault for deposit/withdraw CPI. Checked by program CPI.
-    #[account(mut)]
+    /// CHECK: Validated against child_allocation.child_vault
+    #[account(
+        mut,
+        constraint = child_vault.key() == child_allocation.child_vault
+            @ VaultError::InvalidChildVault,
+    )]
     pub child_vault: UncheckedAccount<'info>,
 
     /// CHECK: Target SVS program ID. Checked to match child_allocation.child_program.
@@ -69,6 +73,36 @@ pub struct Rebalance<'info> {
 
 pub fn rebalance_handler(ctx: Context<Rebalance>, min_out: u64) -> Result<()> {
     // 1. VALIDATION (curator + paused + enabled checked by constraints)
+    //
+    // Authenticate child_asset_vault and child_shares_mint against the child
+    // vault's on-chain state to prevent spoofed token accounts.
+    {
+        let vault_data = ctx.accounts.child_vault.try_borrow_data()?;
+        require!(vault_data.len() >= 8, VaultError::InvalidChildVault);
+        let disc = &vault_data[0..8];
+
+        let (asset_vault_offset, shares_mint_offset) = if disc == ALLOCATOR_VAULT_DISCRIMINATOR {
+            (136, 104) // SVS-9: idle_vault @ 136, shares_mint @ 104
+        } else if disc == VAULT_DISCRIMINATOR || disc == CONFIDENTIAL_VAULT_DISCRIMINATOR {
+            (104, 72) // SVS-1: asset_vault @ 104, shares_mint @ 72
+        } else {
+            return Err(VaultError::InvalidChildVault.into());
+        };
+
+        let expected_asset_vault = crate::utils::read_pubkey(&vault_data, asset_vault_offset)?;
+        let expected_shares_mint = crate::utils::read_pubkey(&vault_data, shares_mint_offset)?;
+
+        require_keys_eq!(
+            ctx.accounts.child_asset_vault.key(),
+            expected_asset_vault,
+            VaultError::InvalidRemainingAccounts
+        );
+        require_keys_eq!(
+            ctx.accounts.child_shares_mint.key(),
+            expected_shares_mint,
+            VaultError::InvalidRemainingAccounts
+        );
+    }
 
     // 2. READ STATE
     let idle_amount = ctx.accounts.idle_vault.amount;

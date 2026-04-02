@@ -70,6 +70,11 @@ pub fn set_lock(current_timestamp: i64, lock_duration: i64) -> Result<i64, LockE
         return Err(LockError::InvalidDuration);
     }
 
+    // Enforce maximum lock duration
+    if lock_duration > MAX_LOCK_DURATION {
+        return Err(LockError::DurationExceedsMax);
+    }
+
     // Check overflow
     let locked_until = current_timestamp
         .checked_add(lock_duration)
@@ -186,10 +191,9 @@ pub fn can_redeem(
     // Check lock first
     check_lockup(locked_until, current_timestamp)?;
 
-    // Balance check is done by token program, but we validate here too
+    // V4-M4: Return error on over-redemption instead of silently succeeding
     if shares_to_redeem > user_shares {
-        // This is actually a token error, but we check it anyway
-        return Ok(()); // Let token program handle this
+        return Err(LockError::InsufficientBalance);
     }
 
     Ok(())
@@ -229,6 +233,16 @@ mod tests {
     fn test_set_lock_invalid() {
         // Negative duration
         assert_eq!(set_lock(1000, -100), Err(LockError::InvalidDuration));
+    }
+
+    #[test]
+    fn test_set_lock_exceeds_max_duration() {
+        assert_eq!(
+            set_lock(1000, MAX_LOCK_DURATION + 1),
+            Err(LockError::DurationExceedsMax)
+        );
+        // Exactly at max is fine
+        assert!(set_lock(1000, MAX_LOCK_DURATION).is_ok());
     }
 
     #[test]
@@ -288,6 +302,12 @@ mod tests {
         assert_eq!(
             can_redeem(2000, 1000, 100, 1000),
             Err(LockError::SharesLocked)
+        );
+
+        // Over-redemption: shares_to_redeem > user_shares
+        assert_eq!(
+            can_redeem(0, 1000, 2000, 1000),
+            Err(LockError::InsufficientBalance)
         );
     }
 }

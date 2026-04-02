@@ -108,7 +108,7 @@ async function main() {
     .rpc();
 
   await program.methods
-    .fulfillDeposit(null)
+    .fulfillDeposit(null, new BN(0))
     .accountsStrict({
       operator: payer.publicKey, vault,
       depositRequest: seedRequest,
@@ -300,7 +300,7 @@ async function main() {
 
   try {
     await program.methods
-      .fulfillDeposit(null)
+      .fulfillDeposit(null, new BN(0))
       .accountsStrict({
         operator: payer.publicKey, vault,
         depositRequest: depReq4,

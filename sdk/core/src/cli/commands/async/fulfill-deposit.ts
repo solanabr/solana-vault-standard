@@ -30,6 +30,10 @@ export function registerFulfillDepositCommand(program: Command): void {
     .argument("<vault>", "Vault address or alias")
     .requiredOption("--owner <pubkey>", "Owner of the deposit request")
     .option("--oracle-price <number>", "Oracle price for conversion")
+    .option(
+      "--max-price-per-share <number>",
+      "Maximum acceptable price per share (0 = no limit)",
+    )
     .option("--program-id <pubkey>", "Program ID")
     .option("--asset-mint <pubkey>", "Asset mint")
     .option("--vault-id <number>", "Vault ID", "1")
@@ -81,6 +85,9 @@ export function registerFulfillDepositCommand(program: Command): void {
           owner,
           oraclePrice: opts.oraclePrice
             ? parseOraclePrice(opts.oraclePrice)
+            : undefined,
+          maxPricePerShare: opts.maxPricePerShare
+            ? new BN(opts.maxPricePerShare)
             : undefined,
         });
 

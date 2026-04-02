@@ -64,4 +64,22 @@ pub enum VaultError {
 
     #[msg("Invalid address: cannot be default/zero")]
     InvalidAddress,
+
+    #[msg("No pending authority transfer")]
+    NoPendingTransfer,
+
+    #[msg("Signer does not match pending authority")]
+    InvalidPendingAuthority,
+
+    #[msg("Cannot use deprecated transfer while a two-step transfer is pending")]
+    PendingTransferExists,
+
+    #[msg("Fee recipient not set — call set_fee_recipient first")]
+    FeeRecipientNotSet,
+
+    #[msg("Fee recipient token account does not match vault fee_recipient")]
+    InvalidFeeRecipient,
+
+    #[msg("No fees available to collect")]
+    NoFeesToCollect,
 }

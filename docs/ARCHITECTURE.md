@@ -269,7 +269,8 @@ Approximate CU costs per instruction type:
 
 | Account Type | Size (bytes) | Variants |
 |--------------|-------------|----------|
-| Vault | 219 | SVS-1, SVS-2 |
+| Vault (SVS-1) | 211 | SVS-1 (live balance) |
+| Vault (SVS-2) | 227 | SVS-2 (stored balance) |
 | ConfidentialVault | 252 | SVS-3, SVS-4 |
 | TokenAccount (SPL) | 165 | Asset accounts |
 | TokenAccount (Token-2022) | 165+ | Shares, +CT extension |

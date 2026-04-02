@@ -15,7 +15,7 @@ pub mod state;
 
 use instructions::*;
 
-declare_id!("2w7aL5ZrD2i9RpzQBGSPAg7s61wVc8Qs8gtuQUTojEDE");
+declare_id!("oaT6wgNiwCqd7EGvB6Wb5ZFYUJXckk6LEhB7MWqXbyC");
 
 #[program]
 pub mod svs_6 {
@@ -120,9 +120,25 @@ pub mod svs_6 {
         instructions::admin::unpause(ctx)
     }
 
-    /// Transfer vault authority
+    /// Step 1: Request authority transfer (sets pending_authority)
+    pub fn request_transfer_authority(ctx: Context<Admin>, new_authority: Pubkey) -> Result<()> {
+        instructions::admin::request_transfer_authority(ctx, new_authority)
+    }
+
+    /// Step 2: Accept authority transfer (must be signed by pending authority)
+    pub fn accept_authority(ctx: Context<AcceptAuthority>) -> Result<()> {
+        instructions::admin::accept_authority(ctx)
+    }
+
+    /// Direct transfer authority (deprecated -- prefer two-step transfer)
+    #[allow(deprecated)]
     pub fn transfer_authority(ctx: Context<Admin>, new_authority: Pubkey) -> Result<()> {
         instructions::admin::transfer_authority(ctx, new_authority)
+    }
+
+    /// Cancel a pending two-step authority transfer.
+    pub fn cancel_transfer_authority(ctx: Context<Admin>) -> Result<()> {
+        instructions::admin::cancel_transfer_authority(ctx)
     }
 
     // ============ Module Admin (feature: modules) ============

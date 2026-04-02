@@ -30,8 +30,10 @@ pub struct SolVault {
     pub paused: bool,
     /// Unique vault identifier (allows multiple vaults per authority)
     pub vault_id: u64,
-    /// Reserved for future upgrades (64 bytes)
-    pub _reserved: [u8; 64],
+    /// Pending authority for two-step transfer (default = Pubkey::default() means none)
+    pub pending_authority: Pubkey,
+    /// Reserved for future upgrades
+    pub _reserved: [u8; 32],
 }
 
 impl SolVault {
@@ -43,7 +45,8 @@ impl SolVault {
         + 1   // bump
         + 1   // paused
         + 8   // vault_id
-        + 64; // _reserved
+        + 32  // pending_authority
+        + 32; // _reserved
 
     pub const SEED_PREFIX: &'static [u8] = SOL_VAULT_SEED;
 }

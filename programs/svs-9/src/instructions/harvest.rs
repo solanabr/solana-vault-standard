@@ -69,7 +69,40 @@ pub struct Harvest<'info> {
 }
 
 pub fn harvest_handler(ctx: Context<Harvest>, min_assets_out: u64) -> Result<()> {
-    // 1. VALIDATION (via constraints)
+    // 1. VALIDATION (via constraints + child vault account authentication)
+    //
+    // Authenticate child_asset_vault and child_shares_mint against the child
+    // vault's on-chain state to prevent spoofed token accounts.
+    {
+        let vault_data = ctx.accounts.child_vault.try_borrow_data()?;
+        require!(vault_data.len() >= 8, VaultError::InvalidChildVault);
+        let disc = &vault_data[0..8];
+
+        let (asset_vault_offset, shares_mint_offset) =
+            if disc == crate::constants::ALLOCATOR_VAULT_DISCRIMINATOR {
+                (136, 104) // SVS-9: idle_vault @ 136, shares_mint @ 104
+            } else if disc == crate::constants::VAULT_DISCRIMINATOR
+                || disc == crate::constants::CONFIDENTIAL_VAULT_DISCRIMINATOR
+            {
+                (104, 72) // SVS-1: asset_vault @ 104, shares_mint @ 72
+            } else {
+                return Err(VaultError::InvalidChildVault.into());
+            };
+
+        let expected_asset_vault = crate::utils::read_pubkey(&vault_data, asset_vault_offset)?;
+        let expected_shares_mint = crate::utils::read_pubkey(&vault_data, shares_mint_offset)?;
+
+        require_keys_eq!(
+            ctx.accounts.child_asset_vault.key(),
+            expected_asset_vault,
+            VaultError::InvalidRemainingAccounts
+        );
+        require_keys_eq!(
+            ctx.accounts.child_shares_mint.key(),
+            expected_shares_mint,
+            VaultError::InvalidRemainingAccounts
+        );
+    }
 
     // 2. READ STATE — compute current value of our position in the child
     let (child_total_assets, child_total_shares) = crate::utils::read_child_live_balances(
@@ -190,6 +223,9 @@ pub fn harvest_handler(ctx: Context<Harvest>, min_assets_out: u64) -> Result<()>
         .ok_or(VaultError::MathOverflow)?;
     let child_allocation = &mut ctx.accounts.child_allocation;
 
+    // V9-P14: Integer division truncation causes minor cost basis drift over many
+    // harvest cycles (at most 1 unit per cycle). Direction is vault-favoring
+    // (understates cost basis slightly). Accepted as negligible.
     if our_shares > 0 {
         let new_deposited = (child_allocation.deposited_assets as u128)
             .checked_mul(shares_after as u128)

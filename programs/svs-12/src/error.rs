@@ -82,4 +82,19 @@ pub enum VaultError {
 
     #[msg("Invalid lock configuration")]
     InvalidLockConfig,
+
+    #[msg("No pending authority transfer")]
+    NoPendingTransfer,
+
+    #[msg("Signer does not match pending authority")]
+    InvalidPendingAuthority,
+
+    #[msg("Cannot transfer authority while a two-step transfer is pending")]
+    PendingTransferExists,
+
+    #[msg("Tranche total_shares diverged from shares_mint supply")]
+    SharesMismatch,
+
+    #[msg("Yield distribution cooldown has not elapsed (minimum 1 hour between distributions)")]
+    YieldCooldownNotElapsed,
 }

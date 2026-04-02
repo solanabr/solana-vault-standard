@@ -9,10 +9,12 @@ import {
 } from "@solana/web3.js";
 import {
   TOKEN_2022_PROGRAM_ID,
+  ASSOCIATED_TOKEN_PROGRAM_ID,
   getAssociatedTokenAddressSync,
   createAssociatedTokenAccountIdempotentInstruction,
 } from "@solana/spl-token";
 import { Program, AnchorProvider, BN, Idl, Wallet } from "@coral-xyz/anchor";
+import { getWalletKeypair } from "./wallet-utils";
 import {
   ConfidentialDepositParams,
   ConfidentialDepositResult,
@@ -26,7 +28,6 @@ import {
   AesKey,
 } from "./types";
 import {
-  deriveElGamalKeypair,
   deriveAesKey,
   createDecryptableZeroBalance,
   createDecryptableBalance,
@@ -45,7 +46,7 @@ import { ProofType } from "./types";
  * SVS-3 Program ID
  */
 export const SVS_3_PROGRAM_ID = new PublicKey(
-  "EcpnYtaCBrZ4p4uq7dDr55D3fL9nsxbCNqpyUREGpPkh",
+  "CC4xQGxmwKusLW3ToqUzRAFjh7cL2iKsgfkz6qJSasYs",
 );
 
 /**
@@ -133,6 +134,16 @@ export class ConfidentialSolanaVault {
     elgamalKeypair: ElGamalKeypair;
     aesKey: AesKey;
   }> {
+    if (!params.vault) {
+      throw new Error("configureAccount: vault address is required");
+    }
+    try {
+      // Validate the vault address is a valid public key by accessing it
+      params.vault.toBase58();
+    } catch {
+      throw new Error("configureAccount: vault must be a valid PublicKey");
+    }
+
     const vault = await this.getVault(params.vault);
     const userPubkey = this.wallet.publicKey;
 
@@ -144,16 +155,29 @@ export class ConfidentialSolanaVault {
       TOKEN_2022_PROGRAM_ID,
     );
 
-    // Derive encryption keys
-    const walletKeypair = (this.wallet as any).payer as Keypair;
-    const elgamalKeypair = deriveElGamalKeypair(
-      walletKeypair,
-      userSharesAccount,
-    );
-    const aesKey = deriveAesKey(walletKeypair, userSharesAccount);
+    // Use caller-provided keys if available; otherwise attempt derivation.
+    // ElGamal derivation requires WASM and will throw if keys are not provided.
+    const walletKeypair = getWalletKeypair(this.wallet);
+
+    let elgamalKeypair: ElGamalKeypair;
+    if (params.elgamalKeypair) {
+      elgamalKeypair = params.elgamalKeypair;
+    } else {
+      throw new Error(
+        "ElGamal keypair is required. Derivation requires the @solana/zk-elgamal-proof WASM module " +
+          "which is not yet available. Provide params.elgamalKeypair directly.",
+      );
+    }
+
+    let aesKey: AesKey;
+    if (params.aesKey) {
+      aesKey = params.aesKey;
+    } else {
+      aesKey = await deriveAesKey(walletKeypair, userSharesAccount);
+    }
 
     // Create zero balance ciphertext
-    const decryptableZeroBalance = createDecryptableZeroBalance(aesKey);
+    const decryptableZeroBalance = await createDecryptableZeroBalance(aesKey);
 
     // Create pubkey validity proof
     const proofData = createPubkeyValidityProofData(elgamalKeypair);
@@ -248,10 +272,7 @@ export class ConfidentialSolanaVault {
         userSharesAccount,
         assetTokenProgram: TOKEN_2022_PROGRAM_ID,
         token2022Program: TOKEN_2022_PROGRAM_ID,
-        associatedTokenProgram: getAssociatedTokenAddressSync(
-          vault.assetMint,
-          userPubkey,
-        ),
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
       })
       .rpc();
@@ -439,7 +460,7 @@ export class ConfidentialSolanaVault {
     equalityProofContext: PublicKey;
     rangeProofContext: PublicKey;
   }> {
-    const payer = (this.wallet as any).payer as Keypair;
+    const payer = getWalletKeypair(this.wallet);
 
     // Create equality proof
     const equalityProofData = createEqualityProofData(

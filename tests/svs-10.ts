@@ -234,7 +234,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
 
     it("operator fulfills deposit (vault-priced, oracle_price = null)", async () => {
       await program.methods
-        .fulfillDeposit(null)
+        .fulfillDeposit(null, new BN(0))
         .accountsStrict({
           operator: operator.publicKey,
           vault,
@@ -397,7 +397,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
       [claimableTokens] = getClaimableTokensPDA(vault, payer.publicKey);
 
       await program.methods
-        .fulfillRedeem(null)
+        .fulfillRedeem(null, new BN(0))
         .accountsStrict({
           operator: operator.publicKey,
           vault,
@@ -530,7 +530,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
         .rpc();
 
       await program.methods
-        .fulfillDeposit(oraclePrice)
+        .fulfillDeposit(oraclePrice, new BN(0))
         .accountsStrict({
           operator: operator.publicKey,
           vault,
@@ -587,7 +587,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
         .rpc();
 
       await program.methods
-        .fulfillRedeem(oraclePrice)
+        .fulfillRedeem(oraclePrice, new BN(0))
         .accountsStrict({
           operator: operator.publicKey,
           vault,
@@ -648,7 +648,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
 
       try {
         await program.methods
-          .fulfillDeposit(new BN(0))
+          .fulfillDeposit(new BN(0), new BN(0))
           .accountsStrict({
             operator: operator.publicKey,
             vault,
@@ -769,7 +769,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
         .rpc();
 
       await program.methods
-        .fulfillDeposit(null)
+        .fulfillDeposit(null, new BN(0))
         .accountsStrict({
           operator: operator.publicKey,
           vault,
@@ -825,7 +825,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
         .rpc();
 
       await program.methods
-        .fulfillDeposit(null)
+        .fulfillDeposit(null, new BN(0))
         .accountsStrict({
           operator: operator.publicKey,
           vault,
@@ -1013,7 +1013,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
 
       try {
         await program.methods
-          .fulfillDeposit(null)
+          .fulfillDeposit(null, new BN(0))
           .accountsStrict({
             operator: rando.publicKey,
             vault,
@@ -1167,7 +1167,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
         .rpc();
 
       await program.methods
-        .fulfillDeposit(null)
+        .fulfillDeposit(null, new BN(0))
         .accountsStrict({
           operator: operator.publicKey,
           vault,
@@ -1276,7 +1276,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
 
       // delegatedOp fulfills (not the vault operator)
       await program.methods
-        .fulfillDeposit(null)
+        .fulfillDeposit(null, new BN(0))
         .accountsStrict({
           operator: delegatedOp.publicKey,
           vault,
@@ -1332,7 +1332,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
 
       // delegatedOp fulfills redeem
       await program.methods
-        .fulfillRedeem(null)
+        .fulfillRedeem(null, new BN(0))
         .accountsStrict({
           operator: delegatedOp.publicKey,
           vault,
@@ -1414,7 +1414,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
       // noFulfillOp tries to fulfill — should fail
       try {
         await program.methods
-          .fulfillDeposit(null)
+          .fulfillDeposit(null, new BN(0))
           .accountsStrict({
             operator: noFulfillOp.publicKey,
             vault,
@@ -1475,7 +1475,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
 
       try {
         await program.methods
-          .fulfillDeposit(deviatedPrice)
+          .fulfillDeposit(deviatedPrice, new BN(0))
           .accountsStrict({
             operator: operator.publicKey,
             vault,
@@ -1542,7 +1542,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
         .rpc();
 
       await program.methods
-        .fulfillDeposit(null)
+        .fulfillDeposit(null, new BN(0))
         .accountsStrict({
           operator: operator.publicKey,
           vault,
@@ -1599,7 +1599,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
         .rpc();
 
       await program.methods
-        .fulfillRedeem(null)
+        .fulfillRedeem(null, new BN(0))
         .accountsStrict({
           operator: operator.publicKey,
           vault,
@@ -1687,7 +1687,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
         .rpc();
 
       await program.methods
-        .fulfillDeposit(null)
+        .fulfillDeposit(null, new BN(0))
         .accountsStrict({
           operator: operator.publicKey,
           vault,
@@ -1750,7 +1750,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
         .rpc();
 
       await program.methods
-        .fulfillRedeem(null)
+        .fulfillRedeem(null, new BN(0))
         .accountsStrict({
           operator: operator.publicKey,
           vault,

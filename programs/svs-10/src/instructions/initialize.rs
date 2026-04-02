@@ -204,7 +204,8 @@ pub fn handler(
     vault.cumulative_redeem_fees = 0;
     vault.bump = vault_bump;
     vault.share_escrow_bump = share_escrow_bump;
-    vault._reserved = [0u8; 48];
+    vault.pending_authority = Pubkey::default();
+    vault._reserved = [0u8; 16];
 
     // --- 6. Emit event ---
     emit!(VaultInitialized {
