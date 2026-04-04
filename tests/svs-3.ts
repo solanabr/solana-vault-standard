@@ -136,9 +136,7 @@ describe("svs-3 (Confidential Live Balance)", () => {
     console.log("  Asset Mint:", assetMint.toBase58());
     console.log("  Vault PDA:", vault.toBase58());
     console.log("  Shares Mint:", sharesMint.toBase58());
-    console.log(
-      "  NOTE: SVS-3 uses LIVE balance + Confidential Transfers",
-    );
+    console.log("  NOTE: SVS-3 uses LIVE balance + Confidential Transfers");
   });
 
   // ============ Initialize ============
@@ -170,14 +168,11 @@ describe("svs-3 (Confidential Live Balance)", () => {
       console.log("  Initialize tx:", tx);
 
       // Fetch vault using confidentialVault account type
-      const vaultAccount =
-        await program.account.confidentialVault.fetch(vault);
+      const vaultAccount = await program.account.confidentialVault.fetch(vault);
       expect(vaultAccount.authority.toBase58()).to.equal(
         payer.publicKey.toBase58(),
       );
-      expect(vaultAccount.assetMint.toBase58()).to.equal(
-        assetMint.toBase58(),
-      );
+      expect(vaultAccount.assetMint.toBase58()).to.equal(assetMint.toBase58());
       expect(vaultAccount.sharesMint.toBase58()).to.equal(
         sharesMint.toBase58(),
       );
@@ -276,8 +271,7 @@ describe("svs-3 (Confidential Live Balance)", () => {
         })
         .rpc();
 
-      const vaultAccount =
-        await program.account.confidentialVault.fetch(vault);
+      const vaultAccount = await program.account.confidentialVault.fetch(vault);
       expect(vaultAccount.paused).to.equal(true);
     });
 
@@ -290,8 +284,7 @@ describe("svs-3 (Confidential Live Balance)", () => {
         })
         .rpc();
 
-      const vaultAccount =
-        await program.account.confidentialVault.fetch(vault);
+      const vaultAccount = await program.account.confidentialVault.fetch(vault);
       expect(vaultAccount.paused).to.equal(false);
     });
 
@@ -306,8 +299,7 @@ describe("svs-3 (Confidential Live Balance)", () => {
         })
         .rpc();
 
-      const vaultAccount =
-        await program.account.confidentialVault.fetch(vault);
+      const vaultAccount = await program.account.confidentialVault.fetch(vault);
       expect(vaultAccount.authority.toBase58()).to.equal(
         newAuthority.publicKey.toBase58(),
       );
@@ -322,8 +314,7 @@ describe("svs-3 (Confidential Live Balance)", () => {
         .signers([newAuthority])
         .rpc();
 
-      const vaultAfter =
-        await program.account.confidentialVault.fetch(vault);
+      const vaultAfter = await program.account.confidentialVault.fetch(vault);
       expect(vaultAfter.authority.toBase58()).to.equal(
         payer.publicKey.toBase58(),
       );
@@ -537,16 +528,13 @@ describe("svs-3 (Confidential Live Balance)", () => {
 
   describe("State Struct", () => {
     it("ConfidentialVault has correct field values after init", async () => {
-      const vaultAccount =
-        await program.account.confidentialVault.fetch(vault);
+      const vaultAccount = await program.account.confidentialVault.fetch(vault);
 
       // Verify all fields
       expect(vaultAccount.authority.toBase58()).to.equal(
         payer.publicKey.toBase58(),
       );
-      expect(vaultAccount.assetMint.toBase58()).to.equal(
-        assetMint.toBase58(),
-      );
+      expect(vaultAccount.assetMint.toBase58()).to.equal(assetMint.toBase58());
       expect(vaultAccount.sharesMint.toBase58()).to.equal(
         sharesMint.toBase58(),
       );
@@ -739,9 +727,7 @@ describe("svs-3 (Confidential Live Balance)", () => {
         [Buffer.from("shares"), vault.toBuffer()],
         program.programId,
       );
-      expect(derivedSharesMint.toBase58()).to.equal(
-        sharesMint.toBase58(),
-      );
+      expect(derivedSharesMint.toBase58()).to.equal(sharesMint.toBase58());
     });
   });
 
@@ -758,9 +744,7 @@ describe("svs-3 (Confidential Live Balance)", () => {
         console.log(
           "  ⚠ Proof backend not running — skipping CT deposit tests",
         );
-        console.log(
-          "    Start with: cd proofs-backend && cargo run",
-        );
+        console.log("    Start with: cd proofs-backend && cargo run");
         this.skip();
       }
     });
@@ -769,19 +753,13 @@ describe("svs-3 (Confidential Live Balance)", () => {
       if (!backendAvailable) this.skip();
 
       // Get proof from backend
-      const { proofData, elgamalPubkey } =
-        await requestPubkeyValidityProof(payer, userSharesAccount);
+      const { proofData, elgamalPubkey } = await requestPubkeyValidityProof(
+        payer,
+        userSharesAccount,
+      );
 
-      console.log(
-        "  Proof data size:",
-        proofData.length,
-        "bytes",
-      );
-      console.log(
-        "  ElGamal pubkey size:",
-        elgamalPubkey.length,
-        "bytes",
-      );
+      console.log("  Proof data size:", proofData.length, "bytes");
+      console.log("  ElGamal pubkey size:", elgamalPubkey.length, "bytes");
 
       // Create decryptable zero balance
       const aesKey = deriveAesKeyFromSignature(payer, userSharesAccount);
@@ -883,9 +861,9 @@ describe("svs-3 (Confidential Live Balance)", () => {
         TOKEN_PROGRAM_ID,
       );
 
-      expect(
-        Number(assetBefore.amount) - Number(assetAfter.amount),
-      ).to.equal(depositAmount.toNumber());
+      expect(Number(assetBefore.amount) - Number(assetAfter.amount)).to.equal(
+        depositAmount.toNumber(),
+      );
       expect(
         Number(vaultBalanceAfter.amount) - Number(vaultBalanceBefore.amount),
       ).to.equal(depositAmount.toNumber());
@@ -908,10 +886,7 @@ describe("svs-3 (Confidential Live Balance)", () => {
       );
       expect(Number(mint.supply)).to.be.greaterThan(0);
 
-      console.log(
-        "  Shares minted (now in pending):",
-        Number(mint.supply),
-      );
+      console.log("  Shares minted (now in pending):", Number(mint.supply));
     });
 
     it("apply_pending moves shares from pending to available", async function () {
@@ -994,10 +969,7 @@ describe("svs-3 (Confidential Live Balance)", () => {
       const newBalance = createDecryptableZeroBalance(aesKey);
 
       await program.methods
-        .applyPending(
-          Array.from(newBalance),
-          new BN(2),
-        )
+        .applyPending(Array.from(newBalance), new BN(2))
         .accountsStrict({
           user: payer.publicKey,
           vault: vault,
@@ -1079,7 +1051,8 @@ describe("svs-3 (Confidential Live Balance)", () => {
       contextSize: number,
     ): Promise<PublicKey> {
       const contextKeypair = Keypair.generate();
-      const lamports = await connection.getMinimumBalanceForRentExemption(contextSize);
+      const lamports =
+        await connection.getMinimumBalanceForRentExemption(contextSize);
 
       // Tx 1: Create the account owned by ZK ElGamal proof program
       const createAccountIx = SystemProgram.createAccount({
@@ -1099,7 +1072,11 @@ describe("svs-3 (Confidential Live Balance)", () => {
       const verifyIx = new TransactionInstruction({
         programId: ZK_ELGAMAL_PROOF_PROGRAM_ID,
         keys: [
-          { pubkey: contextKeypair.publicKey, isSigner: false, isWritable: true },
+          {
+            pubkey: contextKeypair.publicKey,
+            isSigner: false,
+            isWritable: true,
+          },
           { pubkey: payer.publicKey, isSigner: false, isWritable: false },
         ],
         data: Buffer.concat([Buffer.from([proofDiscriminator]), proofData]),
@@ -1116,9 +1093,7 @@ describe("svs-3 (Confidential Live Balance)", () => {
         console.log(
           "  ⚠ Proof backend not running — skipping CT withdraw tests",
         );
-        console.log(
-          "    Start with: cd proofs-backend && cargo run",
-        );
+        console.log("    Start with: cd proofs-backend && cargo run");
         this.skip();
       }
     });
@@ -1183,8 +1158,16 @@ describe("svs-3 (Confidential Live Balance)", () => {
       // Create context state accounts with verified proofs
       // discriminator 3 = VerifyCiphertextCommitmentEquality
       // discriminator 6 = VerifyBatchedRangeProofU64
-      const equalityContext = await createProofContext(3, equalityProof, EQUALITY_CONTEXT_SIZE);
-      const rangeContext = await createProofContext(6, rangeProof, RANGE_CONTEXT_SIZE);
+      const equalityContext = await createProofContext(
+        3,
+        equalityProof,
+        EQUALITY_CONTEXT_SIZE,
+      );
+      const rangeContext = await createProofContext(
+        6,
+        rangeProof,
+        RANGE_CONTEXT_SIZE,
+      );
 
       console.log("  Equality context:", equalityContext.toBase58());
       console.log("  Range context:", rangeContext.toBase58());
@@ -1310,8 +1293,16 @@ describe("svs-3 (Confidential Live Balance)", () => {
       );
 
       // Create context state accounts
-      const equalityContext = await createProofContext(3, equalityProof, EQUALITY_CONTEXT_SIZE);
-      const rangeContext = await createProofContext(6, rangeProof, RANGE_CONTEXT_SIZE);
+      const equalityContext = await createProofContext(
+        3,
+        equalityProof,
+        EQUALITY_CONTEXT_SIZE,
+      );
+      const rangeContext = await createProofContext(
+        6,
+        rangeProof,
+        RANGE_CONTEXT_SIZE,
+      );
 
       const remainingShares = currentSharesBalance - sharesToBurn;
       const aesKey = deriveAesKeyFromSignature(payer, userSharesAccount);

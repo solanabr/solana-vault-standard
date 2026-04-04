@@ -408,7 +408,10 @@ describe("svs-7: Native SOL Vault", () => {
       // Shares were minted
       expect(Number(sharesAccount.amount)).to.be.greaterThan(0);
       // wSOL vault reflects the deposited lamports
-      expect(Number(wsolAccount.amount)).to.be.closeTo(depositLamports.toNumber(), 10000);
+      expect(Number(wsolAccount.amount)).to.be.closeTo(
+        depositLamports.toNumber(),
+        10000,
+      );
 
       console.log("  shares minted:", Number(sharesAccount.amount));
       console.log("  wSOL vault balance:", Number(wsolAccount.amount));
@@ -465,7 +468,8 @@ describe("svs-7: Native SOL Vault", () => {
         Number(sharesAfter.amount) - Number(sharesBefore.amount);
       expect(newShares).to.be.greaterThan(0);
       expect(Number(wsolAfter.amount)).to.be.closeTo(
-        Number(wsolBefore.amount) + depositLamports.toNumber(), 10000,
+        Number(wsolBefore.amount) + depositLamports.toNumber(),
+        10000,
       );
 
       // Second deposit of half the original should mint proportional shares
@@ -573,7 +577,8 @@ describe("svs-7: Native SOL Vault", () => {
         Number(sharesBefore.amount),
       );
       expect(Number(wsolAfter.amount)).to.be.closeTo(
-        Number(wsolBefore.amount) + depositAmount.toNumber(), 10000,
+        Number(wsolBefore.amount) + depositAmount.toNumber(),
+        10000,
       );
     });
   });
@@ -640,7 +645,8 @@ describe("svs-7: Native SOL Vault", () => {
         Number(sharesBefore.amount),
       );
       expect(Number(wsolUserAfter.amount)).to.be.closeTo(
-        Number(wsolUserBefore.amount) + withdrawLamports.toNumber(), 10000,
+        Number(wsolUserBefore.amount) + withdrawLamports.toNumber(),
+        10000,
       );
     });
   });

@@ -10,7 +10,12 @@ import {
   getAssociatedTokenAddressSync,
   ASSOCIATED_TOKEN_PROGRAM_ID,
 } from "@solana/spl-token";
-import { Keypair, PublicKey, SystemProgram, SYSVAR_RENT_PUBKEY } from "@solana/web3.js";
+import {
+  Keypair,
+  PublicKey,
+  SystemProgram,
+  SYSVAR_RENT_PUBKEY,
+} from "@solana/web3.js";
 import { expect } from "chai";
 import { Svs12 } from "../target/types/svs_12";
 import {
@@ -43,33 +48,62 @@ describe("svs-12 (Tranched Vault)", () => {
 
   before(async () => {
     assetMint = await createMint(
-      connection, payer, payer.publicKey, null, ASSET_DECIMALS,
-      Keypair.generate(), undefined, TOKEN_PROGRAM_ID
+      connection,
+      payer,
+      payer.publicKey,
+      null,
+      ASSET_DECIMALS,
+      Keypair.generate(),
+      undefined,
+      TOKEN_PROGRAM_ID,
     );
 
     [vault] = getTranchedVaultAddress(program.programId, assetMint, vaultId);
 
     assetVault = getAssociatedTokenAddressSync(
-      assetMint, vault, true, TOKEN_PROGRAM_ID
+      assetMint,
+      vault,
+      true,
+      TOKEN_PROGRAM_ID,
     );
 
     // Mint 10M assets to payer
     const userAtaAccount = await getOrCreateAssociatedTokenAccount(
-      connection, payer, assetMint, payer.publicKey, false,
-      undefined, undefined, TOKEN_PROGRAM_ID
+      connection,
+      payer,
+      assetMint,
+      payer.publicKey,
+      false,
+      undefined,
+      undefined,
+      TOKEN_PROGRAM_ID,
     );
     userAssetAta = userAtaAccount.address;
     await mintTo(
-      connection, payer, assetMint, userAssetAta,
-      payer.publicKey, 10_000_000 * LAMPORTS,
-      [], undefined, TOKEN_PROGRAM_ID
+      connection,
+      payer,
+      assetMint,
+      userAssetAta,
+      payer.publicKey,
+      10_000_000 * LAMPORTS,
+      [],
+      undefined,
+      TOKEN_PROGRAM_ID,
     );
 
     // Derive tranche PDAs
     [seniorTranche] = getTrancheAddress(program.programId, vault, 0);
     [juniorTranche] = getTrancheAddress(program.programId, vault, 1);
-    [seniorSharesMint] = getTrancheSharesMintAddress(program.programId, vault, 0);
-    [juniorSharesMint] = getTrancheSharesMintAddress(program.programId, vault, 1);
+    [seniorSharesMint] = getTrancheSharesMintAddress(
+      program.programId,
+      vault,
+      0,
+    );
+    [juniorSharesMint] = getTrancheSharesMintAddress(
+      program.programId,
+      vault,
+      1,
+    );
   });
 
   // ======================== Initialize ========================
@@ -89,7 +123,9 @@ describe("svs-12 (Tranched Vault)", () => {
       .rpc();
 
     const vaultAccount = await program.account.tranchedVault.fetch(vault);
-    expect(vaultAccount.authority.toString()).to.equal(payer.publicKey.toString());
+    expect(vaultAccount.authority.toString()).to.equal(
+      payer.publicKey.toString(),
+    );
     expect(vaultAccount.numTranches).to.equal(0);
     expect(vaultAccount.paused).to.be.false;
     expect(vaultAccount.wiped).to.be.false;
@@ -101,7 +137,7 @@ describe("svs-12 (Tranched Vault)", () => {
 
   it("adds senior tranche (priority=0, sub=2000bps)", async () => {
     await program.methods
-      .addTranche(0, 2000, 500, 10000)  // priority=0, sub=20%, yield=5%, cap=100%
+      .addTranche(0, 2000, 500, 10000) // priority=0, sub=20%, yield=5%, cap=100%
       .accounts({
         authority: payer.publicKey,
         vault,
@@ -125,7 +161,7 @@ describe("svs-12 (Tranched Vault)", () => {
 
   it("adds junior tranche (priority=1, sub=0)", async () => {
     await program.methods
-      .addTranche(1, 0, 0, 10000)  // priority=1, sub=0%, yield=0% (equity), cap=100%
+      .addTranche(1, 0, 0, 10000) // priority=1, sub=0%, yield=0% (equity), cap=100%
       .accounts({
         authority: payer.publicKey,
         vault,
@@ -144,11 +180,15 @@ describe("svs-12 (Tranched Vault)", () => {
 
   it("rejects duplicate priority", async () => {
     const [fakeTranche] = getTrancheAddress(program.programId, vault, 2);
-    const [fakeSharesMint] = getTrancheSharesMintAddress(program.programId, vault, 2);
+    const [fakeSharesMint] = getTrancheSharesMintAddress(
+      program.programId,
+      vault,
+      2,
+    );
 
     try {
       await program.methods
-        .addTranche(0, 0, 0, 10000)  // priority=0 already taken
+        .addTranche(0, 0, 0, 10000) // priority=0 already taken
         .accounts({
           authority: payer.publicKey,
           vault,
@@ -161,7 +201,9 @@ describe("svs-12 (Tranched Vault)", () => {
         .rpc();
       expect.fail("should have thrown");
     } catch (e: any) {
-      expect(e.error?.errorCode?.code || e.message).to.contain("DuplicatePriority");
+      expect(e.error?.errorCode?.code || e.message).to.contain(
+        "DuplicatePriority",
+      );
     }
   });
 
@@ -170,11 +212,20 @@ describe("svs-12 (Tranched Vault)", () => {
   it("deposits into junior tranche", async () => {
     // Create user shares ATA for junior
     await getOrCreateAssociatedTokenAccount(
-      connection, payer, juniorSharesMint, payer.publicKey, false,
-      undefined, undefined, TOKEN_2022_PROGRAM_ID
+      connection,
+      payer,
+      juniorSharesMint,
+      payer.publicKey,
+      false,
+      undefined,
+      undefined,
+      TOKEN_2022_PROGRAM_ID,
     );
     const userSharesAta = getAssociatedTokenAddressSync(
-      juniorSharesMint, payer.publicKey, false, TOKEN_2022_PROGRAM_ID
+      juniorSharesMint,
+      payer.publicKey,
+      false,
+      TOKEN_2022_PROGRAM_ID,
     );
 
     await program.methods
@@ -197,18 +248,29 @@ describe("svs-12 (Tranched Vault)", () => {
       .rpc();
 
     const tranche = await program.account.tranche.fetch(juniorTranche);
-    expect(tranche.totalAssetsAllocated.toNumber()).to.equal(500_000 * LAMPORTS);
+    expect(tranche.totalAssetsAllocated.toNumber()).to.equal(
+      500_000 * LAMPORTS,
+    );
     expect(tranche.totalShares.toNumber()).to.be.greaterThan(0);
   });
 
   it("deposits into senior tranche", async () => {
     // Create user shares ATA for senior
     await getOrCreateAssociatedTokenAccount(
-      connection, payer, seniorSharesMint, payer.publicKey, false,
-      undefined, undefined, TOKEN_2022_PROGRAM_ID
+      connection,
+      payer,
+      seniorSharesMint,
+      payer.publicKey,
+      false,
+      undefined,
+      undefined,
+      TOKEN_2022_PROGRAM_ID,
     );
     const userSharesAta = getAssociatedTokenAddressSync(
-      seniorSharesMint, payer.publicKey, false, TOKEN_2022_PROGRAM_ID
+      seniorSharesMint,
+      payer.publicKey,
+      false,
+      TOKEN_2022_PROGRAM_ID,
     );
 
     await program.methods
@@ -262,7 +324,9 @@ describe("svs-12 (Tranched Vault)", () => {
     // Senior should get target yield (5% of 1M = 50K), junior gets remainder (50K)
     const senior = await program.account.tranche.fetch(seniorTranche);
     const junior = await program.account.tranche.fetch(juniorTranche);
-    expect(senior.totalAssetsAllocated.toNumber()).to.equal(1_050_000 * LAMPORTS);
+    expect(senior.totalAssetsAllocated.toNumber()).to.equal(
+      1_050_000 * LAMPORTS,
+    );
     expect(junior.totalAssetsAllocated.toNumber()).to.equal(550_000 * LAMPORTS);
   });
 
@@ -290,7 +354,9 @@ describe("svs-12 (Tranched Vault)", () => {
 
     // Senior should be untouched
     const senior = await program.account.tranche.fetch(seniorTranche);
-    expect(senior.totalAssetsAllocated.toNumber()).to.equal(1_050_000 * LAMPORTS);
+    expect(senior.totalAssetsAllocated.toNumber()).to.equal(
+      1_050_000 * LAMPORTS,
+    );
 
     const vaultAccount = await program.account.tranchedVault.fetch(vault);
     expect(vaultAccount.totalAssets.toNumber()).to.equal(1_500_000 * LAMPORTS);
@@ -301,9 +367,17 @@ describe("svs-12 (Tranched Vault)", () => {
 
   it("redeems from junior tranche", async () => {
     const userSharesAta = getAssociatedTokenAddressSync(
-      juniorSharesMint, payer.publicKey, false, TOKEN_2022_PROGRAM_ID
+      juniorSharesMint,
+      payer.publicKey,
+      false,
+      TOKEN_2022_PROGRAM_ID,
     );
-    const sharesAccount = await getAccount(connection, userSharesAta, undefined, TOKEN_2022_PROGRAM_ID);
+    const sharesAccount = await getAccount(
+      connection,
+      userSharesAta,
+      undefined,
+      TOKEN_2022_PROGRAM_ID,
+    );
     // Redeem a small amount
     const redeemShares = new BN(Number(sharesAccount.amount) / 10);
 
@@ -327,7 +401,9 @@ describe("svs-12 (Tranched Vault)", () => {
       .rpc();
 
     const tranche = await program.account.tranche.fetch(juniorTranche);
-    expect(tranche.totalAssetsAllocated.toNumber()).to.be.lessThan(450_000 * LAMPORTS);
+    expect(tranche.totalAssetsAllocated.toNumber()).to.be.lessThan(
+      450_000 * LAMPORTS,
+    );
   });
 
   // ======================== Rebalance ========================
@@ -348,7 +424,9 @@ describe("svs-12 (Tranched Vault)", () => {
       .rpc();
 
     const senior = await program.account.tranche.fetch(seniorTranche);
-    expect(senior.totalAssetsAllocated.toNumber()).to.equal(1_000_000 * LAMPORTS);
+    expect(senior.totalAssetsAllocated.toNumber()).to.equal(
+      1_000_000 * LAMPORTS,
+    );
   });
 
   // ======================== Admin ========================
@@ -397,7 +475,10 @@ describe("svs-12 (Tranched Vault)", () => {
       .rpc();
 
     const userSharesAta = getAssociatedTokenAddressSync(
-      juniorSharesMint, payer.publicKey, false, TOKEN_2022_PROGRAM_ID
+      juniorSharesMint,
+      payer.publicKey,
+      false,
+      TOKEN_2022_PROGRAM_ID,
     );
 
     try {
@@ -433,7 +514,10 @@ describe("svs-12 (Tranched Vault)", () => {
 
   it("rejects zero amount deposit", async () => {
     const userSharesAta = getAssociatedTokenAddressSync(
-      juniorSharesMint, payer.publicKey, false, TOKEN_2022_PROGRAM_ID
+      juniorSharesMint,
+      payer.publicKey,
+      false,
+      TOKEN_2022_PROGRAM_ID,
     );
 
     try {
@@ -463,7 +547,10 @@ describe("svs-12 (Tranched Vault)", () => {
 
   it("rejects unauthorized manager", async () => {
     const fakeManager = Keypair.generate();
-    const sig = await connection.requestAirdrop(fakeManager.publicKey, 1_000_000_000);
+    const sig = await connection.requestAirdrop(
+      fakeManager.publicKey,
+      1_000_000_000,
+    );
     await connection.confirmTransaction(sig);
 
     try {
@@ -493,17 +580,28 @@ describe("svs-12 (Tranched Vault)", () => {
 
   it("rejects zero amount redeem", async () => {
     const userSharesAta = getAssociatedTokenAddressSync(
-      juniorSharesMint, payer.publicKey, false, TOKEN_2022_PROGRAM_ID
+      juniorSharesMint,
+      payer.publicKey,
+      false,
+      TOKEN_2022_PROGRAM_ID,
     );
     try {
       await program.methods
         .redeem(new BN(0), new BN(0))
         .accounts({
-          user: payer.publicKey, vault,
-          targetTranche: juniorTranche, tranche1: seniorTranche, tranche2: null, tranche3: null,
-          assetMint, userAssetAccount: userAssetAta, assetVault,
-          sharesMint: juniorSharesMint, userSharesAccount: userSharesAta,
-          assetTokenProgram: TOKEN_PROGRAM_ID, token2022Program: TOKEN_2022_PROGRAM_ID,
+          user: payer.publicKey,
+          vault,
+          targetTranche: juniorTranche,
+          tranche1: seniorTranche,
+          tranche2: null,
+          tranche3: null,
+          assetMint,
+          userAssetAccount: userAssetAta,
+          assetVault,
+          sharesMint: juniorSharesMint,
+          userSharesAccount: userSharesAta,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
         })
         .rpc();
       expect.fail("should have thrown");
@@ -517,9 +615,15 @@ describe("svs-12 (Tranched Vault)", () => {
       await program.methods
         .distributeYield(new BN(0))
         .accounts({
-          manager: payer.publicKey, vault, assetMint,
-          managerAssetAccount: userAssetAta, assetVault,
-          tranche0: seniorTranche, tranche1: juniorTranche, tranche2: null, tranche3: null,
+          manager: payer.publicKey,
+          vault,
+          assetMint,
+          managerAssetAccount: userAssetAta,
+          assetVault,
+          tranche0: seniorTranche,
+          tranche1: juniorTranche,
+          tranche2: null,
+          tranche3: null,
           assetTokenProgram: TOKEN_PROGRAM_ID,
         })
         .rpc();
@@ -534,8 +638,13 @@ describe("svs-12 (Tranched Vault)", () => {
       await program.methods
         .recordLoss(new BN(0))
         .accounts({
-          manager: payer.publicKey, vault, assetVault,
-          tranche0: seniorTranche, tranche1: juniorTranche, tranche2: null, tranche3: null,
+          manager: payer.publicKey,
+          vault,
+          assetVault,
+          tranche0: seniorTranche,
+          tranche1: juniorTranche,
+          tranche2: null,
+          tranche3: null,
         })
         .rpc();
       expect.fail("should have thrown");
@@ -549,9 +658,12 @@ describe("svs-12 (Tranched Vault)", () => {
       await program.methods
         .rebalanceTranches(new BN(0))
         .accounts({
-          manager: payer.publicKey, vault,
-          fromTranche: seniorTranche, toTranche: juniorTranche,
-          otherTranche0: null, otherTranche1: null,
+          manager: payer.publicKey,
+          vault,
+          fromTranche: seniorTranche,
+          toTranche: juniorTranche,
+          otherTranche0: null,
+          otherTranche1: null,
         })
         .rpc();
       expect.fail("should have thrown");
@@ -561,37 +673,63 @@ describe("svs-12 (Tranched Vault)", () => {
   });
 
   it("rejects redeem when paused", async () => {
-    await program.methods.pause().accounts({ authority: payer.publicKey, vault }).rpc();
+    await program.methods
+      .pause()
+      .accounts({ authority: payer.publicKey, vault })
+      .rpc();
     const userSharesAta = getAssociatedTokenAddressSync(
-      juniorSharesMint, payer.publicKey, false, TOKEN_2022_PROGRAM_ID
+      juniorSharesMint,
+      payer.publicKey,
+      false,
+      TOKEN_2022_PROGRAM_ID,
     );
     try {
       await program.methods
         .redeem(new BN(1000), new BN(0))
         .accounts({
-          user: payer.publicKey, vault,
-          targetTranche: juniorTranche, tranche1: seniorTranche, tranche2: null, tranche3: null,
-          assetMint, userAssetAccount: userAssetAta, assetVault,
-          sharesMint: juniorSharesMint, userSharesAccount: userSharesAta,
-          assetTokenProgram: TOKEN_PROGRAM_ID, token2022Program: TOKEN_2022_PROGRAM_ID,
+          user: payer.publicKey,
+          vault,
+          targetTranche: juniorTranche,
+          tranche1: seniorTranche,
+          tranche2: null,
+          tranche3: null,
+          assetMint,
+          userAssetAccount: userAssetAta,
+          assetVault,
+          sharesMint: juniorSharesMint,
+          userSharesAccount: userSharesAta,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
         })
         .rpc();
       expect.fail("should have thrown");
     } catch (e: any) {
       expect(e.error?.errorCode?.code || e.message).to.contain("VaultPaused");
     }
-    await program.methods.unpause().accounts({ authority: payer.publicKey, vault }).rpc();
+    await program.methods
+      .unpause()
+      .accounts({ authority: payer.publicKey, vault })
+      .rpc();
   });
 
   it("rejects yield distribution when paused", async () => {
-    await program.methods.pause().accounts({ authority: payer.publicKey, vault }).rpc();
+    await program.methods
+      .pause()
+      .accounts({ authority: payer.publicKey, vault })
+      .rpc();
     try {
       await program.methods
         .distributeYield(new BN(1000))
         .accounts({
-          manager: payer.publicKey, vault, assetMint,
-          managerAssetAccount: userAssetAta, assetVault,
-          tranche0: seniorTranche, tranche1: juniorTranche, tranche2: null, tranche3: null,
+          manager: payer.publicKey,
+          vault,
+          assetMint,
+          managerAssetAccount: userAssetAta,
+          assetVault,
+          tranche0: seniorTranche,
+          tranche1: juniorTranche,
+          tranche2: null,
+          tranche3: null,
           assetTokenProgram: TOKEN_PROGRAM_ID,
         })
         .rpc();
@@ -599,43 +737,71 @@ describe("svs-12 (Tranched Vault)", () => {
     } catch (e: any) {
       expect(e.error?.errorCode?.code || e.message).to.contain("VaultPaused");
     }
-    await program.methods.unpause().accounts({ authority: payer.publicKey, vault }).rpc();
+    await program.methods
+      .unpause()
+      .accounts({ authority: payer.publicKey, vault })
+      .rpc();
   });
 
   it("rejects record loss when paused", async () => {
-    await program.methods.pause().accounts({ authority: payer.publicKey, vault }).rpc();
+    await program.methods
+      .pause()
+      .accounts({ authority: payer.publicKey, vault })
+      .rpc();
     try {
       await program.methods
         .recordLoss(new BN(1000))
         .accounts({
-          manager: payer.publicKey, vault, assetVault,
-          tranche0: seniorTranche, tranche1: juniorTranche, tranche2: null, tranche3: null,
+          manager: payer.publicKey,
+          vault,
+          assetVault,
+          tranche0: seniorTranche,
+          tranche1: juniorTranche,
+          tranche2: null,
+          tranche3: null,
         })
         .rpc();
       expect.fail("should have thrown");
     } catch (e: any) {
       expect(e.error?.errorCode?.code || e.message).to.contain("VaultPaused");
     }
-    await program.methods.unpause().accounts({ authority: payer.publicKey, vault }).rpc();
+    await program.methods
+      .unpause()
+      .accounts({ authority: payer.publicKey, vault })
+      .rpc();
   });
 
   it("rejects double pause", async () => {
-    await program.methods.pause().accounts({ authority: payer.publicKey, vault }).rpc();
+    await program.methods
+      .pause()
+      .accounts({ authority: payer.publicKey, vault })
+      .rpc();
     try {
-      await program.methods.pause().accounts({ authority: payer.publicKey, vault }).rpc();
+      await program.methods
+        .pause()
+        .accounts({ authority: payer.publicKey, vault })
+        .rpc();
       expect.fail("should have thrown");
     } catch (e: any) {
       expect(e.error?.errorCode?.code || e.message).to.contain("VaultPaused");
     }
-    await program.methods.unpause().accounts({ authority: payer.publicKey, vault }).rpc();
+    await program.methods
+      .unpause()
+      .accounts({ authority: payer.publicKey, vault })
+      .rpc();
   });
 
   it("rejects unpause when not paused", async () => {
     try {
-      await program.methods.unpause().accounts({ authority: payer.publicKey, vault }).rpc();
+      await program.methods
+        .unpause()
+        .accounts({ authority: payer.publicKey, vault })
+        .rpc();
       expect.fail("should have thrown");
     } catch (e: any) {
-      expect(e.error?.errorCode?.code || e.message).to.contain("VaultNotPaused");
+      expect(e.error?.errorCode?.code || e.message).to.contain(
+        "VaultNotPaused",
+      );
     }
   });
 
@@ -649,9 +815,14 @@ describe("svs-12 (Tranched Vault)", () => {
       .rpc();
 
     let vaultAccount = await program.account.tranchedVault.fetch(vault);
-    expect(vaultAccount.authority.toString()).to.equal(newAuth.publicKey.toString());
+    expect(vaultAccount.authority.toString()).to.equal(
+      newAuth.publicKey.toString(),
+    );
 
-    const airdropSig = await connection.requestAirdrop(newAuth.publicKey, 1_000_000_000);
+    const airdropSig = await connection.requestAirdrop(
+      newAuth.publicKey,
+      1_000_000_000,
+    );
     await connection.confirmTransaction(airdropSig);
 
     await program.methods
@@ -661,12 +832,17 @@ describe("svs-12 (Tranched Vault)", () => {
       .rpc();
 
     vaultAccount = await program.account.tranchedVault.fetch(vault);
-    expect(vaultAccount.authority.toString()).to.equal(payer.publicKey.toString());
+    expect(vaultAccount.authority.toString()).to.equal(
+      payer.publicKey.toString(),
+    );
   });
 
   it("rejects unauthorized authority transfer", async () => {
     const fakeAuth = Keypair.generate();
-    const airdropSig = await connection.requestAirdrop(fakeAuth.publicKey, 1_000_000_000);
+    const airdropSig = await connection.requestAirdrop(
+      fakeAuth.publicKey,
+      1_000_000_000,
+    );
     await connection.confirmTransaction(airdropSig);
 
     try {
@@ -689,7 +865,9 @@ describe("svs-12 (Tranched Vault)", () => {
       .rpc();
 
     const vaultAccount = await program.account.tranchedVault.fetch(vault);
-    expect(vaultAccount.manager.toString()).to.equal(newManager.publicKey.toString());
+    expect(vaultAccount.manager.toString()).to.equal(
+      newManager.publicKey.toString(),
+    );
 
     await program.methods
       .setManager(payer.publicKey)
@@ -701,77 +879,113 @@ describe("svs-12 (Tranched Vault)", () => {
 
   it("rejects invalid subordination bps (> 10000)", async () => {
     const [fakeTranche] = getTrancheAddress(program.programId, vault, 2);
-    const [fakeSharesMint] = getTrancheSharesMintAddress(program.programId, vault, 2);
+    const [fakeSharesMint] = getTrancheSharesMintAddress(
+      program.programId,
+      vault,
+      2,
+    );
     try {
       await program.methods
         .addTranche(2, 10001, 0, 10000)
         .accounts({
-          authority: payer.publicKey, vault,
-          tranche: fakeTranche, sharesMint: fakeSharesMint,
+          authority: payer.publicKey,
+          vault,
+          tranche: fakeTranche,
+          sharesMint: fakeSharesMint,
           token2022Program: TOKEN_2022_PROGRAM_ID,
-          systemProgram: SystemProgram.programId, rent: SYSVAR_RENT_PUBKEY,
+          systemProgram: SystemProgram.programId,
+          rent: SYSVAR_RENT_PUBKEY,
         })
         .rpc();
       expect.fail("should have thrown");
     } catch (e: any) {
-      expect(e.error?.errorCode?.code || e.message).to.contain("InvalidSubordinationConfig");
+      expect(e.error?.errorCode?.code || e.message).to.contain(
+        "InvalidSubordinationConfig",
+      );
     }
   });
 
   it("rejects invalid cap bps (0)", async () => {
     const [fakeTranche] = getTrancheAddress(program.programId, vault, 2);
-    const [fakeSharesMint] = getTrancheSharesMintAddress(program.programId, vault, 2);
+    const [fakeSharesMint] = getTrancheSharesMintAddress(
+      program.programId,
+      vault,
+      2,
+    );
     try {
       await program.methods
         .addTranche(2, 0, 0, 0)
         .accounts({
-          authority: payer.publicKey, vault,
-          tranche: fakeTranche, sharesMint: fakeSharesMint,
+          authority: payer.publicKey,
+          vault,
+          tranche: fakeTranche,
+          sharesMint: fakeSharesMint,
           token2022Program: TOKEN_2022_PROGRAM_ID,
-          systemProgram: SystemProgram.programId, rent: SYSVAR_RENT_PUBKEY,
+          systemProgram: SystemProgram.programId,
+          rent: SYSVAR_RENT_PUBKEY,
         })
         .rpc();
       expect.fail("should have thrown");
     } catch (e: any) {
-      expect(e.error?.errorCode?.code || e.message).to.contain("InvalidCapConfig");
+      expect(e.error?.errorCode?.code || e.message).to.contain(
+        "InvalidCapConfig",
+      );
     }
   });
 
   it("rejects invalid yield bps (> 10000)", async () => {
     const [fakeTranche] = getTrancheAddress(program.programId, vault, 2);
-    const [fakeSharesMint] = getTrancheSharesMintAddress(program.programId, vault, 2);
+    const [fakeSharesMint] = getTrancheSharesMintAddress(
+      program.programId,
+      vault,
+      2,
+    );
     try {
       await program.methods
         .addTranche(2, 0, 10001, 10000)
         .accounts({
-          authority: payer.publicKey, vault,
-          tranche: fakeTranche, sharesMint: fakeSharesMint,
+          authority: payer.publicKey,
+          vault,
+          tranche: fakeTranche,
+          sharesMint: fakeSharesMint,
           token2022Program: TOKEN_2022_PROGRAM_ID,
-          systemProgram: SystemProgram.programId, rent: SYSVAR_RENT_PUBKEY,
+          systemProgram: SystemProgram.programId,
+          rent: SYSVAR_RENT_PUBKEY,
         })
         .rpc();
       expect.fail("should have thrown");
     } catch (e: any) {
-      expect(e.error?.errorCode?.code || e.message).to.contain("InvalidYieldConfig");
+      expect(e.error?.errorCode?.code || e.message).to.contain(
+        "InvalidYieldConfig",
+      );
     }
   });
 
   it("rejects priority >= 8", async () => {
     const [fakeTranche] = getTrancheAddress(program.programId, vault, 2);
-    const [fakeSharesMint] = getTrancheSharesMintAddress(program.programId, vault, 2);
+    const [fakeSharesMint] = getTrancheSharesMintAddress(
+      program.programId,
+      vault,
+      2,
+    );
     try {
       await program.methods
         .addTranche(8, 0, 0, 10000)
         .accounts({
-          authority: payer.publicKey, vault,
-          tranche: fakeTranche, sharesMint: fakeSharesMint,
+          authority: payer.publicKey,
+          vault,
+          tranche: fakeTranche,
+          sharesMint: fakeSharesMint,
           token2022Program: TOKEN_2022_PROGRAM_ID,
-          systemProgram: SystemProgram.programId, rent: SYSVAR_RENT_PUBKEY,
+          systemProgram: SystemProgram.programId,
+          rent: SYSVAR_RENT_PUBKEY,
         })
         .rpc();
       expect.fail("should have thrown");
     } catch (e: any) {
-      expect(e.error?.errorCode?.code || e.message).to.contain("DuplicatePriority");
+      expect(e.error?.errorCode?.code || e.message).to.contain(
+        "DuplicatePriority",
+      );
     }
   });
 
@@ -781,7 +995,9 @@ describe("svs-12 (Tranched Vault)", () => {
     const vaultAccount = await program.account.tranchedVault.fetch(vault);
     const senior = await program.account.tranche.fetch(seniorTranche);
     const junior = await program.account.tranche.fetch(juniorTranche);
-    const sum = senior.totalAssetsAllocated.toNumber() + junior.totalAssetsAllocated.toNumber();
+    const sum =
+      senior.totalAssetsAllocated.toNumber() +
+      junior.totalAssetsAllocated.toNumber();
     expect(vaultAccount.totalAssets.toNumber()).to.equal(sum);
   });
 
@@ -825,75 +1041,176 @@ describe("svs-12 (Tranched Vault)", () => {
 
     before(async () => {
       v2Mint = await createMint(
-        connection, payer, payer.publicKey, null, ASSET_DECIMALS,
-        Keypair.generate(), undefined, TOKEN_PROGRAM_ID
+        connection,
+        payer,
+        payer.publicKey,
+        null,
+        ASSET_DECIMALS,
+        Keypair.generate(),
+        undefined,
+        TOKEN_PROGRAM_ID,
       );
       [v2Vault] = getTranchedVaultAddress(program.programId, v2Mint, v2Id);
-      v2AssetVault = getAssociatedTokenAddressSync(v2Mint, v2Vault, true, TOKEN_PROGRAM_ID);
+      v2AssetVault = getAssociatedTokenAddressSync(
+        v2Mint,
+        v2Vault,
+        true,
+        TOKEN_PROGRAM_ID,
+      );
       const ata = await getOrCreateAssociatedTokenAccount(
-        connection, payer, v2Mint, payer.publicKey, false,
-        undefined, undefined, TOKEN_PROGRAM_ID
+        connection,
+        payer,
+        v2Mint,
+        payer.publicKey,
+        false,
+        undefined,
+        undefined,
+        TOKEN_PROGRAM_ID,
       );
       v2UserAssetAta = ata.address;
-      await mintTo(connection, payer, v2Mint, v2UserAssetAta, payer.publicKey, 10_000_000 * LAMPORTS, [], undefined, TOKEN_PROGRAM_ID);
+      await mintTo(
+        connection,
+        payer,
+        v2Mint,
+        v2UserAssetAta,
+        payer.publicKey,
+        10_000_000 * LAMPORTS,
+        [],
+        undefined,
+        TOKEN_PROGRAM_ID,
+      );
 
       [v2SeniorTranche] = getTrancheAddress(program.programId, v2Vault, 0);
       [v2JuniorTranche] = getTrancheAddress(program.programId, v2Vault, 1);
-      [v2SeniorSharesMint] = getTrancheSharesMintAddress(program.programId, v2Vault, 0);
-      [v2JuniorSharesMint] = getTrancheSharesMintAddress(program.programId, v2Vault, 1);
+      [v2SeniorSharesMint] = getTrancheSharesMintAddress(
+        program.programId,
+        v2Vault,
+        0,
+      );
+      [v2JuniorSharesMint] = getTrancheSharesMintAddress(
+        program.programId,
+        v2Vault,
+        1,
+      );
 
-      await program.methods.initialize(v2Id, 0).accounts({
-        authority: payer.publicKey, vault: v2Vault, assetMint: v2Mint, assetVault: v2AssetVault,
-        assetTokenProgram: TOKEN_PROGRAM_ID, associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-        systemProgram: SystemProgram.programId,
-      }).rpc();
+      await program.methods
+        .initialize(v2Id, 0)
+        .accounts({
+          authority: payer.publicKey,
+          vault: v2Vault,
+          assetMint: v2Mint,
+          assetVault: v2AssetVault,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
 
-      await program.methods.addTranche(0, 0, 500, 10000).accounts({
-        authority: payer.publicKey, vault: v2Vault, tranche: v2SeniorTranche, sharesMint: v2SeniorSharesMint,
-        token2022Program: TOKEN_2022_PROGRAM_ID, systemProgram: SystemProgram.programId, rent: SYSVAR_RENT_PUBKEY,
-      }).rpc();
+      await program.methods
+        .addTranche(0, 0, 500, 10000)
+        .accounts({
+          authority: payer.publicKey,
+          vault: v2Vault,
+          tranche: v2SeniorTranche,
+          sharesMint: v2SeniorSharesMint,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          rent: SYSVAR_RENT_PUBKEY,
+        })
+        .rpc();
 
-      await program.methods.addTranche(1, 0, 0, 10000).accounts({
-        authority: payer.publicKey, vault: v2Vault, tranche: v2JuniorTranche, sharesMint: v2JuniorSharesMint,
-        token2022Program: TOKEN_2022_PROGRAM_ID, systemProgram: SystemProgram.programId, rent: SYSVAR_RENT_PUBKEY,
-      }).rpc();
+      await program.methods
+        .addTranche(1, 0, 0, 10000)
+        .accounts({
+          authority: payer.publicKey,
+          vault: v2Vault,
+          tranche: v2JuniorTranche,
+          sharesMint: v2JuniorSharesMint,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          rent: SYSVAR_RENT_PUBKEY,
+        })
+        .rpc();
 
       // Deposit small amount into junior
       await getOrCreateAssociatedTokenAccount(
-        connection, payer, v2JuniorSharesMint, payer.publicKey, false,
-        undefined, undefined, TOKEN_2022_PROGRAM_ID
+        connection,
+        payer,
+        v2JuniorSharesMint,
+        payer.publicKey,
+        false,
+        undefined,
+        undefined,
+        TOKEN_2022_PROGRAM_ID,
       );
       const userSharesAta = getAssociatedTokenAddressSync(
-        v2JuniorSharesMint, payer.publicKey, false, TOKEN_2022_PROGRAM_ID
+        v2JuniorSharesMint,
+        payer.publicKey,
+        false,
+        TOKEN_2022_PROGRAM_ID,
       );
 
-      await program.methods.deposit(new BN(1000 * LAMPORTS), new BN(0)).accounts({
-        user: payer.publicKey, vault: v2Vault, targetTranche: v2JuniorTranche,
-        tranche1: v2SeniorTranche, tranche2: null, tranche3: null,
-        assetMint: v2Mint, userAssetAccount: v2UserAssetAta, assetVault: v2AssetVault,
-        sharesMint: v2JuniorSharesMint, userSharesAccount: userSharesAta,
-        assetTokenProgram: TOKEN_PROGRAM_ID, token2022Program: TOKEN_2022_PROGRAM_ID,
-      }).rpc();
+      await program.methods
+        .deposit(new BN(1000 * LAMPORTS), new BN(0))
+        .accounts({
+          user: payer.publicKey,
+          vault: v2Vault,
+          targetTranche: v2JuniorTranche,
+          tranche1: v2SeniorTranche,
+          tranche2: null,
+          tranche3: null,
+          assetMint: v2Mint,
+          userAssetAccount: v2UserAssetAta,
+          assetVault: v2AssetVault,
+          sharesMint: v2JuniorSharesMint,
+          userSharesAccount: userSharesAta,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+        })
+        .rpc();
     });
 
     it("rejects redeem exceeding user share balance", async () => {
       const userSharesAta = getAssociatedTokenAddressSync(
-        v2JuniorSharesMint, payer.publicKey, false, TOKEN_2022_PROGRAM_ID
+        v2JuniorSharesMint,
+        payer.publicKey,
+        false,
+        TOKEN_2022_PROGRAM_ID,
       );
-      const sharesAccount = await getAccount(connection, userSharesAta, undefined, TOKEN_2022_PROGRAM_ID);
-      const excessiveShares = new BN(Number(sharesAccount.amount)).add(new BN(1));
+      const sharesAccount = await getAccount(
+        connection,
+        userSharesAta,
+        undefined,
+        TOKEN_2022_PROGRAM_ID,
+      );
+      const excessiveShares = new BN(Number(sharesAccount.amount)).add(
+        new BN(1),
+      );
 
       try {
-        await program.methods.redeem(excessiveShares, new BN(0)).accounts({
-          user: payer.publicKey, vault: v2Vault, targetTranche: v2JuniorTranche,
-          tranche1: v2SeniorTranche, tranche2: null, tranche3: null,
-          assetMint: v2Mint, userAssetAccount: v2UserAssetAta, assetVault: v2AssetVault,
-          sharesMint: v2JuniorSharesMint, userSharesAccount: userSharesAta,
-          assetTokenProgram: TOKEN_PROGRAM_ID, token2022Program: TOKEN_2022_PROGRAM_ID,
-        }).rpc();
+        await program.methods
+          .redeem(excessiveShares, new BN(0))
+          .accounts({
+            user: payer.publicKey,
+            vault: v2Vault,
+            targetTranche: v2JuniorTranche,
+            tranche1: v2SeniorTranche,
+            tranche2: null,
+            tranche3: null,
+            assetMint: v2Mint,
+            userAssetAccount: v2UserAssetAta,
+            assetVault: v2AssetVault,
+            sharesMint: v2JuniorSharesMint,
+            userSharesAccount: userSharesAta,
+            assetTokenProgram: TOKEN_PROGRAM_ID,
+            token2022Program: TOKEN_2022_PROGRAM_ID,
+          })
+          .rpc();
         expect.fail("should have thrown");
       } catch (e: any) {
-        expect(e.error?.errorCode?.code || e.message).to.contain("InsufficientShares");
+        expect(e.error?.errorCode?.code || e.message).to.contain(
+          "InsufficientShares",
+        );
       }
     });
   });
@@ -913,62 +1230,148 @@ describe("svs-12 (Tranched Vault)", () => {
 
     before(async () => {
       v3Mint = await createMint(
-        connection, payer, payer.publicKey, null, ASSET_DECIMALS,
-        Keypair.generate(), undefined, TOKEN_PROGRAM_ID
+        connection,
+        payer,
+        payer.publicKey,
+        null,
+        ASSET_DECIMALS,
+        Keypair.generate(),
+        undefined,
+        TOKEN_PROGRAM_ID,
       );
       [v3Vault] = getTranchedVaultAddress(program.programId, v3Mint, v3Id);
-      v3AssetVault = getAssociatedTokenAddressSync(v3Mint, v3Vault, true, TOKEN_PROGRAM_ID);
+      v3AssetVault = getAssociatedTokenAddressSync(
+        v3Mint,
+        v3Vault,
+        true,
+        TOKEN_PROGRAM_ID,
+      );
       const ata = await getOrCreateAssociatedTokenAccount(
-        connection, payer, v3Mint, payer.publicKey, false,
-        undefined, undefined, TOKEN_PROGRAM_ID
+        connection,
+        payer,
+        v3Mint,
+        payer.publicKey,
+        false,
+        undefined,
+        undefined,
+        TOKEN_PROGRAM_ID,
       );
       v3UserAssetAta = ata.address;
-      await mintTo(connection, payer, v3Mint, v3UserAssetAta, payer.publicKey, 10_000_000 * LAMPORTS, [], undefined, TOKEN_PROGRAM_ID);
+      await mintTo(
+        connection,
+        payer,
+        v3Mint,
+        v3UserAssetAta,
+        payer.publicKey,
+        10_000_000 * LAMPORTS,
+        [],
+        undefined,
+        TOKEN_PROGRAM_ID,
+      );
 
       [v3SeniorTranche] = getTrancheAddress(program.programId, v3Vault, 0);
       [v3JuniorTranche] = getTrancheAddress(program.programId, v3Vault, 1);
-      [v3SeniorSharesMint] = getTrancheSharesMintAddress(program.programId, v3Vault, 0);
-      [v3JuniorSharesMint] = getTrancheSharesMintAddress(program.programId, v3Vault, 1);
+      [v3SeniorSharesMint] = getTrancheSharesMintAddress(
+        program.programId,
+        v3Vault,
+        0,
+      );
+      [v3JuniorSharesMint] = getTrancheSharesMintAddress(
+        program.programId,
+        v3Vault,
+        1,
+      );
 
-      await program.methods.initialize(v3Id, 0).accounts({
-        authority: payer.publicKey, vault: v3Vault, assetMint: v3Mint, assetVault: v3AssetVault,
-        assetTokenProgram: TOKEN_PROGRAM_ID, associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-        systemProgram: SystemProgram.programId,
-      }).rpc();
+      await program.methods
+        .initialize(v3Id, 0)
+        .accounts({
+          authority: payer.publicKey,
+          vault: v3Vault,
+          assetMint: v3Mint,
+          assetVault: v3AssetVault,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
 
-      await program.methods.addTranche(0, 0, 500, 10000).accounts({
-        authority: payer.publicKey, vault: v3Vault, tranche: v3SeniorTranche, sharesMint: v3SeniorSharesMint,
-        token2022Program: TOKEN_2022_PROGRAM_ID, systemProgram: SystemProgram.programId, rent: SYSVAR_RENT_PUBKEY,
-      }).rpc();
+      await program.methods
+        .addTranche(0, 0, 500, 10000)
+        .accounts({
+          authority: payer.publicKey,
+          vault: v3Vault,
+          tranche: v3SeniorTranche,
+          sharesMint: v3SeniorSharesMint,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          rent: SYSVAR_RENT_PUBKEY,
+        })
+        .rpc();
 
-      await program.methods.addTranche(1, 0, 0, 10000).accounts({
-        authority: payer.publicKey, vault: v3Vault, tranche: v3JuniorTranche, sharesMint: v3JuniorSharesMint,
-        token2022Program: TOKEN_2022_PROGRAM_ID, systemProgram: SystemProgram.programId, rent: SYSVAR_RENT_PUBKEY,
-      }).rpc();
+      await program.methods
+        .addTranche(1, 0, 0, 10000)
+        .accounts({
+          authority: payer.publicKey,
+          vault: v3Vault,
+          tranche: v3JuniorTranche,
+          sharesMint: v3JuniorSharesMint,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          rent: SYSVAR_RENT_PUBKEY,
+        })
+        .rpc();
 
       // Deposit into junior
       await getOrCreateAssociatedTokenAccount(
-        connection, payer, v3JuniorSharesMint, payer.publicKey, false,
-        undefined, undefined, TOKEN_2022_PROGRAM_ID
+        connection,
+        payer,
+        v3JuniorSharesMint,
+        payer.publicKey,
+        false,
+        undefined,
+        undefined,
+        TOKEN_2022_PROGRAM_ID,
       );
       const userSharesAta = getAssociatedTokenAddressSync(
-        v3JuniorSharesMint, payer.publicKey, false, TOKEN_2022_PROGRAM_ID
+        v3JuniorSharesMint,
+        payer.publicKey,
+        false,
+        TOKEN_2022_PROGRAM_ID,
       );
 
-      await program.methods.deposit(new BN(1000 * LAMPORTS), new BN(0)).accounts({
-        user: payer.publicKey, vault: v3Vault, targetTranche: v3JuniorTranche,
-        tranche1: v3SeniorTranche, tranche2: null, tranche3: null,
-        assetMint: v3Mint, userAssetAccount: v3UserAssetAta, assetVault: v3AssetVault,
-        sharesMint: v3JuniorSharesMint, userSharesAccount: userSharesAta,
-        assetTokenProgram: TOKEN_PROGRAM_ID, token2022Program: TOKEN_2022_PROGRAM_ID,
-      }).rpc();
+      await program.methods
+        .deposit(new BN(1000 * LAMPORTS), new BN(0))
+        .accounts({
+          user: payer.publicKey,
+          vault: v3Vault,
+          targetTranche: v3JuniorTranche,
+          tranche1: v3SeniorTranche,
+          tranche2: null,
+          tranche3: null,
+          assetMint: v3Mint,
+          userAssetAccount: v3UserAssetAta,
+          assetVault: v3AssetVault,
+          sharesMint: v3JuniorSharesMint,
+          userSharesAccount: userSharesAta,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+        })
+        .rpc();
 
       // Record total loss to wipe the vault
       const vaultAccount = await program.account.tranchedVault.fetch(v3Vault);
-      await program.methods.recordLoss(vaultAccount.totalAssets).accounts({
-        manager: payer.publicKey, vault: v3Vault, assetVault: v3AssetVault,
-        tranche0: v3SeniorTranche, tranche1: v3JuniorTranche, tranche2: null, tranche3: null,
-      }).rpc();
+      await program.methods
+        .recordLoss(vaultAccount.totalAssets)
+        .accounts({
+          manager: payer.publicKey,
+          vault: v3Vault,
+          assetVault: v3AssetVault,
+          tranche0: v3SeniorTranche,
+          tranche1: v3JuniorTranche,
+          tranche2: null,
+          tranche3: null,
+        })
+        .rpc();
 
       const wipedVault = await program.account.tranchedVault.fetch(v3Vault);
       expect(wipedVault.wiped).to.be.true;
@@ -976,17 +1379,31 @@ describe("svs-12 (Tranched Vault)", () => {
 
     it("rejects deposit into wiped vault", async () => {
       const userSharesAta = getAssociatedTokenAddressSync(
-        v3JuniorSharesMint, payer.publicKey, false, TOKEN_2022_PROGRAM_ID
+        v3JuniorSharesMint,
+        payer.publicKey,
+        false,
+        TOKEN_2022_PROGRAM_ID,
       );
 
       try {
-        await program.methods.deposit(new BN(1000 * LAMPORTS), new BN(0)).accounts({
-          user: payer.publicKey, vault: v3Vault, targetTranche: v3JuniorTranche,
-          tranche1: v3SeniorTranche, tranche2: null, tranche3: null,
-          assetMint: v3Mint, userAssetAccount: v3UserAssetAta, assetVault: v3AssetVault,
-          sharesMint: v3JuniorSharesMint, userSharesAccount: userSharesAta,
-          assetTokenProgram: TOKEN_PROGRAM_ID, token2022Program: TOKEN_2022_PROGRAM_ID,
-        }).rpc();
+        await program.methods
+          .deposit(new BN(1000 * LAMPORTS), new BN(0))
+          .accounts({
+            user: payer.publicKey,
+            vault: v3Vault,
+            targetTranche: v3JuniorTranche,
+            tranche1: v3SeniorTranche,
+            tranche2: null,
+            tranche3: null,
+            assetMint: v3Mint,
+            userAssetAccount: v3UserAssetAta,
+            assetVault: v3AssetVault,
+            sharesMint: v3JuniorSharesMint,
+            userSharesAccount: userSharesAta,
+            assetTokenProgram: TOKEN_PROGRAM_ID,
+            token2022Program: TOKEN_2022_PROGRAM_ID,
+          })
+          .rpc();
         expect.fail("should have thrown");
       } catch (e: any) {
         expect(e.error?.errorCode?.code || e.message).to.contain("VaultWiped");
@@ -1009,91 +1426,210 @@ describe("svs-12 (Tranched Vault)", () => {
 
     before(async () => {
       v4Mint = await createMint(
-        connection, payer, payer.publicKey, null, ASSET_DECIMALS,
-        Keypair.generate(), undefined, TOKEN_PROGRAM_ID
+        connection,
+        payer,
+        payer.publicKey,
+        null,
+        ASSET_DECIMALS,
+        Keypair.generate(),
+        undefined,
+        TOKEN_PROGRAM_ID,
       );
       [v4Vault] = getTranchedVaultAddress(program.programId, v4Mint, v4Id);
-      v4AssetVault = getAssociatedTokenAddressSync(v4Mint, v4Vault, true, TOKEN_PROGRAM_ID);
+      v4AssetVault = getAssociatedTokenAddressSync(
+        v4Mint,
+        v4Vault,
+        true,
+        TOKEN_PROGRAM_ID,
+      );
       const ata = await getOrCreateAssociatedTokenAccount(
-        connection, payer, v4Mint, payer.publicKey, false,
-        undefined, undefined, TOKEN_PROGRAM_ID
+        connection,
+        payer,
+        v4Mint,
+        payer.publicKey,
+        false,
+        undefined,
+        undefined,
+        TOKEN_PROGRAM_ID,
       );
       v4UserAssetAta = ata.address;
-      await mintTo(connection, payer, v4Mint, v4UserAssetAta, payer.publicKey, 10_000_000 * LAMPORTS, [], undefined, TOKEN_PROGRAM_ID);
+      await mintTo(
+        connection,
+        payer,
+        v4Mint,
+        v4UserAssetAta,
+        payer.publicKey,
+        10_000_000 * LAMPORTS,
+        [],
+        undefined,
+        TOKEN_PROGRAM_ID,
+      );
 
       [v4SeniorTranche] = getTrancheAddress(program.programId, v4Vault, 0);
       [v4JuniorTranche] = getTrancheAddress(program.programId, v4Vault, 1);
-      [v4SeniorSharesMint] = getTrancheSharesMintAddress(program.programId, v4Vault, 0);
-      [v4JuniorSharesMint] = getTrancheSharesMintAddress(program.programId, v4Vault, 1);
+      [v4SeniorSharesMint] = getTrancheSharesMintAddress(
+        program.programId,
+        v4Vault,
+        0,
+      );
+      [v4JuniorSharesMint] = getTrancheSharesMintAddress(
+        program.programId,
+        v4Vault,
+        1,
+      );
 
       // Senior has 50% subordination requirement — junior must hold >= 50% of total
-      await program.methods.initialize(v4Id, 0).accounts({
-        authority: payer.publicKey, vault: v4Vault, assetMint: v4Mint, assetVault: v4AssetVault,
-        assetTokenProgram: TOKEN_PROGRAM_ID, associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-        systemProgram: SystemProgram.programId,
-      }).rpc();
+      await program.methods
+        .initialize(v4Id, 0)
+        .accounts({
+          authority: payer.publicKey,
+          vault: v4Vault,
+          assetMint: v4Mint,
+          assetVault: v4AssetVault,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
 
-      await program.methods.addTranche(0, 5000, 500, 10000).accounts({
-        authority: payer.publicKey, vault: v4Vault, tranche: v4SeniorTranche, sharesMint: v4SeniorSharesMint,
-        token2022Program: TOKEN_2022_PROGRAM_ID, systemProgram: SystemProgram.programId, rent: SYSVAR_RENT_PUBKEY,
-      }).rpc();
+      await program.methods
+        .addTranche(0, 5000, 500, 10000)
+        .accounts({
+          authority: payer.publicKey,
+          vault: v4Vault,
+          tranche: v4SeniorTranche,
+          sharesMint: v4SeniorSharesMint,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          rent: SYSVAR_RENT_PUBKEY,
+        })
+        .rpc();
 
-      await program.methods.addTranche(1, 0, 0, 10000).accounts({
-        authority: payer.publicKey, vault: v4Vault, tranche: v4JuniorTranche, sharesMint: v4JuniorSharesMint,
-        token2022Program: TOKEN_2022_PROGRAM_ID, systemProgram: SystemProgram.programId, rent: SYSVAR_RENT_PUBKEY,
-      }).rpc();
+      await program.methods
+        .addTranche(1, 0, 0, 10000)
+        .accounts({
+          authority: payer.publicKey,
+          vault: v4Vault,
+          tranche: v4JuniorTranche,
+          sharesMint: v4JuniorSharesMint,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          rent: SYSVAR_RENT_PUBKEY,
+        })
+        .rpc();
 
       // Deposit into junior FIRST (no subordination requirement on junior)
       await getOrCreateAssociatedTokenAccount(
-        connection, payer, v4JuniorSharesMint, payer.publicKey, false,
-        undefined, undefined, TOKEN_2022_PROGRAM_ID
+        connection,
+        payer,
+        v4JuniorSharesMint,
+        payer.publicKey,
+        false,
+        undefined,
+        undefined,
+        TOKEN_2022_PROGRAM_ID,
       );
       const juniorSharesAta = getAssociatedTokenAddressSync(
-        v4JuniorSharesMint, payer.publicKey, false, TOKEN_2022_PROGRAM_ID
+        v4JuniorSharesMint,
+        payer.publicKey,
+        false,
+        TOKEN_2022_PROGRAM_ID,
       );
-      await program.methods.deposit(new BN(500_000 * LAMPORTS), new BN(0)).accounts({
-        user: payer.publicKey, vault: v4Vault, targetTranche: v4JuniorTranche,
-        tranche1: v4SeniorTranche, tranche2: null, tranche3: null,
-        assetMint: v4Mint, userAssetAccount: v4UserAssetAta, assetVault: v4AssetVault,
-        sharesMint: v4JuniorSharesMint, userSharesAccount: juniorSharesAta,
-        assetTokenProgram: TOKEN_PROGRAM_ID, token2022Program: TOKEN_2022_PROGRAM_ID,
-      }).rpc();
+      await program.methods
+        .deposit(new BN(500_000 * LAMPORTS), new BN(0))
+        .accounts({
+          user: payer.publicKey,
+          vault: v4Vault,
+          targetTranche: v4JuniorTranche,
+          tranche1: v4SeniorTranche,
+          tranche2: null,
+          tranche3: null,
+          assetMint: v4Mint,
+          userAssetAccount: v4UserAssetAta,
+          assetVault: v4AssetVault,
+          sharesMint: v4JuniorSharesMint,
+          userSharesAccount: juniorSharesAta,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+        })
+        .rpc();
 
       // Then deposit into senior (subordination satisfied: junior=500K, total=1M, ratio=50%)
       await getOrCreateAssociatedTokenAccount(
-        connection, payer, v4SeniorSharesMint, payer.publicKey, false,
-        undefined, undefined, TOKEN_2022_PROGRAM_ID
+        connection,
+        payer,
+        v4SeniorSharesMint,
+        payer.publicKey,
+        false,
+        undefined,
+        undefined,
+        TOKEN_2022_PROGRAM_ID,
       );
       const seniorSharesAta = getAssociatedTokenAddressSync(
-        v4SeniorSharesMint, payer.publicKey, false, TOKEN_2022_PROGRAM_ID
+        v4SeniorSharesMint,
+        payer.publicKey,
+        false,
+        TOKEN_2022_PROGRAM_ID,
       );
-      await program.methods.deposit(new BN(500_000 * LAMPORTS), new BN(0)).accounts({
-        user: payer.publicKey, vault: v4Vault, targetTranche: v4SeniorTranche,
-        tranche1: v4JuniorTranche, tranche2: null, tranche3: null,
-        assetMint: v4Mint, userAssetAccount: v4UserAssetAta, assetVault: v4AssetVault,
-        sharesMint: v4SeniorSharesMint, userSharesAccount: seniorSharesAta,
-        assetTokenProgram: TOKEN_PROGRAM_ID, token2022Program: TOKEN_2022_PROGRAM_ID,
-      }).rpc();
+      await program.methods
+        .deposit(new BN(500_000 * LAMPORTS), new BN(0))
+        .accounts({
+          user: payer.publicKey,
+          vault: v4Vault,
+          targetTranche: v4SeniorTranche,
+          tranche1: v4JuniorTranche,
+          tranche2: null,
+          tranche3: null,
+          assetMint: v4Mint,
+          userAssetAccount: v4UserAssetAta,
+          assetVault: v4AssetVault,
+          sharesMint: v4SeniorSharesMint,
+          userSharesAccount: seniorSharesAta,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+        })
+        .rpc();
     });
 
     it("rejects junior redeem that would breach senior subordination", async () => {
       const juniorSharesAta = getAssociatedTokenAddressSync(
-        v4JuniorSharesMint, payer.publicKey, false, TOKEN_2022_PROGRAM_ID
+        v4JuniorSharesMint,
+        payer.publicKey,
+        false,
+        TOKEN_2022_PROGRAM_ID,
       );
-      const sharesAccount = await getAccount(connection, juniorSharesAta, undefined, TOKEN_2022_PROGRAM_ID);
+      const sharesAccount = await getAccount(
+        connection,
+        juniorSharesAta,
+        undefined,
+        TOKEN_2022_PROGRAM_ID,
+      );
       const allShares = new BN(Number(sharesAccount.amount));
 
       try {
-        await program.methods.redeem(allShares, new BN(0)).accounts({
-          user: payer.publicKey, vault: v4Vault, targetTranche: v4JuniorTranche,
-          tranche1: v4SeniorTranche, tranche2: null, tranche3: null,
-          assetMint: v4Mint, userAssetAccount: v4UserAssetAta, assetVault: v4AssetVault,
-          sharesMint: v4JuniorSharesMint, userSharesAccount: juniorSharesAta,
-          assetTokenProgram: TOKEN_PROGRAM_ID, token2022Program: TOKEN_2022_PROGRAM_ID,
-        }).rpc();
+        await program.methods
+          .redeem(allShares, new BN(0))
+          .accounts({
+            user: payer.publicKey,
+            vault: v4Vault,
+            targetTranche: v4JuniorTranche,
+            tranche1: v4SeniorTranche,
+            tranche2: null,
+            tranche3: null,
+            assetMint: v4Mint,
+            userAssetAccount: v4UserAssetAta,
+            assetVault: v4AssetVault,
+            sharesMint: v4JuniorSharesMint,
+            userSharesAccount: juniorSharesAta,
+            assetTokenProgram: TOKEN_PROGRAM_ID,
+            token2022Program: TOKEN_2022_PROGRAM_ID,
+          })
+          .rpc();
         expect.fail("should have thrown");
       } catch (e: any) {
-        expect(e.error?.errorCode?.code || e.message).to.contain("SubordinationBreach");
+        expect(e.error?.errorCode?.code || e.message).to.contain(
+          "SubordinationBreach",
+        );
       }
     });
   });
@@ -1113,86 +1649,198 @@ describe("svs-12 (Tranched Vault)", () => {
 
     before(async () => {
       v5Mint = await createMint(
-        connection, payer, payer.publicKey, null, ASSET_DECIMALS,
-        Keypair.generate(), undefined, TOKEN_PROGRAM_ID
+        connection,
+        payer,
+        payer.publicKey,
+        null,
+        ASSET_DECIMALS,
+        Keypair.generate(),
+        undefined,
+        TOKEN_PROGRAM_ID,
       );
       [v5Vault] = getTranchedVaultAddress(program.programId, v5Mint, v5Id);
-      v5AssetVault = getAssociatedTokenAddressSync(v5Mint, v5Vault, true, TOKEN_PROGRAM_ID);
+      v5AssetVault = getAssociatedTokenAddressSync(
+        v5Mint,
+        v5Vault,
+        true,
+        TOKEN_PROGRAM_ID,
+      );
       const ata = await getOrCreateAssociatedTokenAccount(
-        connection, payer, v5Mint, payer.publicKey, false,
-        undefined, undefined, TOKEN_PROGRAM_ID
+        connection,
+        payer,
+        v5Mint,
+        payer.publicKey,
+        false,
+        undefined,
+        undefined,
+        TOKEN_PROGRAM_ID,
       );
       v5UserAssetAta = ata.address;
-      await mintTo(connection, payer, v5Mint, v5UserAssetAta, payer.publicKey, 10_000_000 * LAMPORTS, [], undefined, TOKEN_PROGRAM_ID);
+      await mintTo(
+        connection,
+        payer,
+        v5Mint,
+        v5UserAssetAta,
+        payer.publicKey,
+        10_000_000 * LAMPORTS,
+        [],
+        undefined,
+        TOKEN_PROGRAM_ID,
+      );
 
       [v5SeniorTranche] = getTrancheAddress(program.programId, v5Vault, 0);
       [v5JuniorTranche] = getTrancheAddress(program.programId, v5Vault, 1);
-      [v5SeniorSharesMint] = getTrancheSharesMintAddress(program.programId, v5Vault, 0);
-      [v5JuniorSharesMint] = getTrancheSharesMintAddress(program.programId, v5Vault, 1);
+      [v5SeniorSharesMint] = getTrancheSharesMintAddress(
+        program.programId,
+        v5Vault,
+        0,
+      );
+      [v5JuniorSharesMint] = getTrancheSharesMintAddress(
+        program.programId,
+        v5Vault,
+        1,
+      );
 
-      await program.methods.initialize(v5Id, 0).accounts({
-        authority: payer.publicKey, vault: v5Vault, assetMint: v5Mint, assetVault: v5AssetVault,
-        assetTokenProgram: TOKEN_PROGRAM_ID, associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-        systemProgram: SystemProgram.programId,
-      }).rpc();
+      await program.methods
+        .initialize(v5Id, 0)
+        .accounts({
+          authority: payer.publicKey,
+          vault: v5Vault,
+          assetMint: v5Mint,
+          assetVault: v5AssetVault,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
 
       // Senior tranche with 10% cap (1000 bps)
-      await program.methods.addTranche(0, 0, 500, 1000).accounts({
-        authority: payer.publicKey, vault: v5Vault, tranche: v5SeniorTranche, sharesMint: v5SeniorSharesMint,
-        token2022Program: TOKEN_2022_PROGRAM_ID, systemProgram: SystemProgram.programId, rent: SYSVAR_RENT_PUBKEY,
-      }).rpc();
+      await program.methods
+        .addTranche(0, 0, 500, 1000)
+        .accounts({
+          authority: payer.publicKey,
+          vault: v5Vault,
+          tranche: v5SeniorTranche,
+          sharesMint: v5SeniorSharesMint,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          rent: SYSVAR_RENT_PUBKEY,
+        })
+        .rpc();
 
-      await program.methods.addTranche(1, 0, 0, 10000).accounts({
-        authority: payer.publicKey, vault: v5Vault, tranche: v5JuniorTranche, sharesMint: v5JuniorSharesMint,
-        token2022Program: TOKEN_2022_PROGRAM_ID, systemProgram: SystemProgram.programId, rent: SYSVAR_RENT_PUBKEY,
-      }).rpc();
+      await program.methods
+        .addTranche(1, 0, 0, 10000)
+        .accounts({
+          authority: payer.publicKey,
+          vault: v5Vault,
+          tranche: v5JuniorTranche,
+          sharesMint: v5JuniorSharesMint,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          rent: SYSVAR_RENT_PUBKEY,
+        })
+        .rpc();
 
       // Deposit into junior first to establish total_assets baseline
       await getOrCreateAssociatedTokenAccount(
-        connection, payer, v5JuniorSharesMint, payer.publicKey, false,
-        undefined, undefined, TOKEN_2022_PROGRAM_ID
+        connection,
+        payer,
+        v5JuniorSharesMint,
+        payer.publicKey,
+        false,
+        undefined,
+        undefined,
+        TOKEN_2022_PROGRAM_ID,
       );
       const juniorSharesAta = getAssociatedTokenAddressSync(
-        v5JuniorSharesMint, payer.publicKey, false, TOKEN_2022_PROGRAM_ID
+        v5JuniorSharesMint,
+        payer.publicKey,
+        false,
+        TOKEN_2022_PROGRAM_ID,
       );
-      await program.methods.deposit(new BN(1_000_000 * LAMPORTS), new BN(0)).accounts({
-        user: payer.publicKey, vault: v5Vault, targetTranche: v5JuniorTranche,
-        tranche1: v5SeniorTranche, tranche2: null, tranche3: null,
-        assetMint: v5Mint, userAssetAccount: v5UserAssetAta, assetVault: v5AssetVault,
-        sharesMint: v5JuniorSharesMint, userSharesAccount: juniorSharesAta,
-        assetTokenProgram: TOKEN_PROGRAM_ID, token2022Program: TOKEN_2022_PROGRAM_ID,
-      }).rpc();
+      await program.methods
+        .deposit(new BN(1_000_000 * LAMPORTS), new BN(0))
+        .accounts({
+          user: payer.publicKey,
+          vault: v5Vault,
+          targetTranche: v5JuniorTranche,
+          tranche1: v5SeniorTranche,
+          tranche2: null,
+          tranche3: null,
+          assetMint: v5Mint,
+          userAssetAccount: v5UserAssetAta,
+          assetVault: v5AssetVault,
+          sharesMint: v5JuniorSharesMint,
+          userSharesAccount: juniorSharesAta,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+        })
+        .rpc();
 
       // Deposit into senior up to the cap (10% of total)
       await getOrCreateAssociatedTokenAccount(
-        connection, payer, v5SeniorSharesMint, payer.publicKey, false,
-        undefined, undefined, TOKEN_2022_PROGRAM_ID
+        connection,
+        payer,
+        v5SeniorSharesMint,
+        payer.publicKey,
+        false,
+        undefined,
+        undefined,
+        TOKEN_2022_PROGRAM_ID,
       );
       const seniorSharesAta = getAssociatedTokenAddressSync(
-        v5SeniorSharesMint, payer.publicKey, false, TOKEN_2022_PROGRAM_ID
+        v5SeniorSharesMint,
+        payer.publicKey,
+        false,
+        TOKEN_2022_PROGRAM_ID,
       );
-      await program.methods.deposit(new BN(100_000 * LAMPORTS), new BN(0)).accounts({
-        user: payer.publicKey, vault: v5Vault, targetTranche: v5SeniorTranche,
-        tranche1: v5JuniorTranche, tranche2: null, tranche3: null,
-        assetMint: v5Mint, userAssetAccount: v5UserAssetAta, assetVault: v5AssetVault,
-        sharesMint: v5SeniorSharesMint, userSharesAccount: seniorSharesAta,
-        assetTokenProgram: TOKEN_PROGRAM_ID, token2022Program: TOKEN_2022_PROGRAM_ID,
-      }).rpc();
+      await program.methods
+        .deposit(new BN(100_000 * LAMPORTS), new BN(0))
+        .accounts({
+          user: payer.publicKey,
+          vault: v5Vault,
+          targetTranche: v5SeniorTranche,
+          tranche1: v5JuniorTranche,
+          tranche2: null,
+          tranche3: null,
+          assetMint: v5Mint,
+          userAssetAccount: v5UserAssetAta,
+          assetVault: v5AssetVault,
+          sharesMint: v5SeniorSharesMint,
+          userSharesAccount: seniorSharesAta,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+        })
+        .rpc();
     });
 
     it("rejects deposit that exceeds tranche cap", async () => {
       const seniorSharesAta = getAssociatedTokenAddressSync(
-        v5SeniorSharesMint, payer.publicKey, false, TOKEN_2022_PROGRAM_ID
+        v5SeniorSharesMint,
+        payer.publicKey,
+        false,
+        TOKEN_2022_PROGRAM_ID,
       );
 
       try {
-        await program.methods.deposit(new BN(100_000 * LAMPORTS), new BN(0)).accounts({
-          user: payer.publicKey, vault: v5Vault, targetTranche: v5SeniorTranche,
-          tranche1: v5JuniorTranche, tranche2: null, tranche3: null,
-          assetMint: v5Mint, userAssetAccount: v5UserAssetAta, assetVault: v5AssetVault,
-          sharesMint: v5SeniorSharesMint, userSharesAccount: seniorSharesAta,
-          assetTokenProgram: TOKEN_PROGRAM_ID, token2022Program: TOKEN_2022_PROGRAM_ID,
-        }).rpc();
+        await program.methods
+          .deposit(new BN(100_000 * LAMPORTS), new BN(0))
+          .accounts({
+            user: payer.publicKey,
+            vault: v5Vault,
+            targetTranche: v5SeniorTranche,
+            tranche1: v5JuniorTranche,
+            tranche2: null,
+            tranche3: null,
+            assetMint: v5Mint,
+            userAssetAccount: v5UserAssetAta,
+            assetVault: v5AssetVault,
+            sharesMint: v5SeniorSharesMint,
+            userSharesAccount: seniorSharesAta,
+            assetTokenProgram: TOKEN_PROGRAM_ID,
+            token2022Program: TOKEN_2022_PROGRAM_ID,
+          })
+          .rpc();
         expect.fail("should have thrown");
       } catch (e: any) {
         expect(e.error?.errorCode?.code || e.message).to.contain("CapExceeded");
@@ -1215,71 +1863,169 @@ describe("svs-12 (Tranched Vault)", () => {
 
     before(async () => {
       v6Mint = await createMint(
-        connection, payer, payer.publicKey, null, ASSET_DECIMALS,
-        Keypair.generate(), undefined, TOKEN_PROGRAM_ID
+        connection,
+        payer,
+        payer.publicKey,
+        null,
+        ASSET_DECIMALS,
+        Keypair.generate(),
+        undefined,
+        TOKEN_PROGRAM_ID,
       );
       [v6Vault] = getTranchedVaultAddress(program.programId, v6Mint, v6Id);
-      v6AssetVault = getAssociatedTokenAddressSync(v6Mint, v6Vault, true, TOKEN_PROGRAM_ID);
+      v6AssetVault = getAssociatedTokenAddressSync(
+        v6Mint,
+        v6Vault,
+        true,
+        TOKEN_PROGRAM_ID,
+      );
       const ata = await getOrCreateAssociatedTokenAccount(
-        connection, payer, v6Mint, payer.publicKey, false,
-        undefined, undefined, TOKEN_PROGRAM_ID
+        connection,
+        payer,
+        v6Mint,
+        payer.publicKey,
+        false,
+        undefined,
+        undefined,
+        TOKEN_PROGRAM_ID,
       );
       v6UserAssetAta = ata.address;
-      await mintTo(connection, payer, v6Mint, v6UserAssetAta, payer.publicKey, 10_000_000 * LAMPORTS, [], undefined, TOKEN_PROGRAM_ID);
+      await mintTo(
+        connection,
+        payer,
+        v6Mint,
+        v6UserAssetAta,
+        payer.publicKey,
+        10_000_000 * LAMPORTS,
+        [],
+        undefined,
+        TOKEN_PROGRAM_ID,
+      );
 
       [v6SeniorTranche] = getTrancheAddress(program.programId, v6Vault, 0);
       [v6JuniorTranche] = getTrancheAddress(program.programId, v6Vault, 1);
-      [v6SeniorSharesMint] = getTrancheSharesMintAddress(program.programId, v6Vault, 0);
-      [v6JuniorSharesMint] = getTrancheSharesMintAddress(program.programId, v6Vault, 1);
+      [v6SeniorSharesMint] = getTrancheSharesMintAddress(
+        program.programId,
+        v6Vault,
+        0,
+      );
+      [v6JuniorSharesMint] = getTrancheSharesMintAddress(
+        program.programId,
+        v6Vault,
+        1,
+      );
 
       // Initialize with ProRataYieldSequentialLoss (mode=1)
-      await program.methods.initialize(v6Id, 1).accounts({
-        authority: payer.publicKey, vault: v6Vault, assetMint: v6Mint, assetVault: v6AssetVault,
-        assetTokenProgram: TOKEN_PROGRAM_ID, associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-        systemProgram: SystemProgram.programId,
-      }).rpc();
+      await program.methods
+        .initialize(v6Id, 1)
+        .accounts({
+          authority: payer.publicKey,
+          vault: v6Vault,
+          assetMint: v6Mint,
+          assetVault: v6AssetVault,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
 
-      await program.methods.addTranche(0, 0, 500, 10000).accounts({
-        authority: payer.publicKey, vault: v6Vault, tranche: v6SeniorTranche, sharesMint: v6SeniorSharesMint,
-        token2022Program: TOKEN_2022_PROGRAM_ID, systemProgram: SystemProgram.programId, rent: SYSVAR_RENT_PUBKEY,
-      }).rpc();
+      await program.methods
+        .addTranche(0, 0, 500, 10000)
+        .accounts({
+          authority: payer.publicKey,
+          vault: v6Vault,
+          tranche: v6SeniorTranche,
+          sharesMint: v6SeniorSharesMint,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          rent: SYSVAR_RENT_PUBKEY,
+        })
+        .rpc();
 
-      await program.methods.addTranche(1, 0, 0, 10000).accounts({
-        authority: payer.publicKey, vault: v6Vault, tranche: v6JuniorTranche, sharesMint: v6JuniorSharesMint,
-        token2022Program: TOKEN_2022_PROGRAM_ID, systemProgram: SystemProgram.programId, rent: SYSVAR_RENT_PUBKEY,
-      }).rpc();
+      await program.methods
+        .addTranche(1, 0, 0, 10000)
+        .accounts({
+          authority: payer.publicKey,
+          vault: v6Vault,
+          tranche: v6JuniorTranche,
+          sharesMint: v6JuniorSharesMint,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          rent: SYSVAR_RENT_PUBKEY,
+        })
+        .rpc();
 
       // Deposit 600K into senior
       await getOrCreateAssociatedTokenAccount(
-        connection, payer, v6SeniorSharesMint, payer.publicKey, false,
-        undefined, undefined, TOKEN_2022_PROGRAM_ID
+        connection,
+        payer,
+        v6SeniorSharesMint,
+        payer.publicKey,
+        false,
+        undefined,
+        undefined,
+        TOKEN_2022_PROGRAM_ID,
       );
       const seniorSharesAta = getAssociatedTokenAddressSync(
-        v6SeniorSharesMint, payer.publicKey, false, TOKEN_2022_PROGRAM_ID
+        v6SeniorSharesMint,
+        payer.publicKey,
+        false,
+        TOKEN_2022_PROGRAM_ID,
       );
-      await program.methods.deposit(new BN(600_000 * LAMPORTS), new BN(0)).accounts({
-        user: payer.publicKey, vault: v6Vault, targetTranche: v6SeniorTranche,
-        tranche1: v6JuniorTranche, tranche2: null, tranche3: null,
-        assetMint: v6Mint, userAssetAccount: v6UserAssetAta, assetVault: v6AssetVault,
-        sharesMint: v6SeniorSharesMint, userSharesAccount: seniorSharesAta,
-        assetTokenProgram: TOKEN_PROGRAM_ID, token2022Program: TOKEN_2022_PROGRAM_ID,
-      }).rpc();
+      await program.methods
+        .deposit(new BN(600_000 * LAMPORTS), new BN(0))
+        .accounts({
+          user: payer.publicKey,
+          vault: v6Vault,
+          targetTranche: v6SeniorTranche,
+          tranche1: v6JuniorTranche,
+          tranche2: null,
+          tranche3: null,
+          assetMint: v6Mint,
+          userAssetAccount: v6UserAssetAta,
+          assetVault: v6AssetVault,
+          sharesMint: v6SeniorSharesMint,
+          userSharesAccount: seniorSharesAta,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+        })
+        .rpc();
 
       // Deposit 400K into junior (60/40 split)
       await getOrCreateAssociatedTokenAccount(
-        connection, payer, v6JuniorSharesMint, payer.publicKey, false,
-        undefined, undefined, TOKEN_2022_PROGRAM_ID
+        connection,
+        payer,
+        v6JuniorSharesMint,
+        payer.publicKey,
+        false,
+        undefined,
+        undefined,
+        TOKEN_2022_PROGRAM_ID,
       );
       const juniorSharesAta = getAssociatedTokenAddressSync(
-        v6JuniorSharesMint, payer.publicKey, false, TOKEN_2022_PROGRAM_ID
+        v6JuniorSharesMint,
+        payer.publicKey,
+        false,
+        TOKEN_2022_PROGRAM_ID,
       );
-      await program.methods.deposit(new BN(400_000 * LAMPORTS), new BN(0)).accounts({
-        user: payer.publicKey, vault: v6Vault, targetTranche: v6JuniorTranche,
-        tranche1: v6SeniorTranche, tranche2: null, tranche3: null,
-        assetMint: v6Mint, userAssetAccount: v6UserAssetAta, assetVault: v6AssetVault,
-        sharesMint: v6JuniorSharesMint, userSharesAccount: juniorSharesAta,
-        assetTokenProgram: TOKEN_PROGRAM_ID, token2022Program: TOKEN_2022_PROGRAM_ID,
-      }).rpc();
+      await program.methods
+        .deposit(new BN(400_000 * LAMPORTS), new BN(0))
+        .accounts({
+          user: payer.publicKey,
+          vault: v6Vault,
+          targetTranche: v6JuniorTranche,
+          tranche1: v6SeniorTranche,
+          tranche2: null,
+          tranche3: null,
+          assetMint: v6Mint,
+          userAssetAccount: v6UserAssetAta,
+          assetVault: v6AssetVault,
+          sharesMint: v6JuniorSharesMint,
+          userSharesAccount: juniorSharesAta,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+        })
+        .rpc();
     });
 
     it("distributes yield proportionally to allocation shares", async () => {
@@ -1287,27 +2033,45 @@ describe("svs-12 (Tranched Vault)", () => {
       const juniorBefore = await program.account.tranche.fetch(v6JuniorTranche);
       const yieldAmount = new BN(100_000 * LAMPORTS);
 
-      await program.methods.distributeYield(yieldAmount).accounts({
-        manager: payer.publicKey, vault: v6Vault, assetMint: v6Mint,
-        managerAssetAccount: v6UserAssetAta, assetVault: v6AssetVault,
-        tranche0: v6SeniorTranche, tranche1: v6JuniorTranche, tranche2: null, tranche3: null,
-        assetTokenProgram: TOKEN_PROGRAM_ID,
-      }).rpc();
+      await program.methods
+        .distributeYield(yieldAmount)
+        .accounts({
+          manager: payer.publicKey,
+          vault: v6Vault,
+          assetMint: v6Mint,
+          managerAssetAccount: v6UserAssetAta,
+          assetVault: v6AssetVault,
+          tranche0: v6SeniorTranche,
+          tranche1: v6JuniorTranche,
+          tranche2: null,
+          tranche3: null,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .rpc();
 
       const seniorAfter = await program.account.tranche.fetch(v6SeniorTranche);
       const juniorAfter = await program.account.tranche.fetch(v6JuniorTranche);
 
-      const seniorYield = seniorAfter.totalAssetsAllocated.toNumber() - seniorBefore.totalAssetsAllocated.toNumber();
-      const juniorYield = juniorAfter.totalAssetsAllocated.toNumber() - juniorBefore.totalAssetsAllocated.toNumber();
+      const seniorYield =
+        seniorAfter.totalAssetsAllocated.toNumber() -
+        seniorBefore.totalAssetsAllocated.toNumber();
+      const juniorYield =
+        juniorAfter.totalAssetsAllocated.toNumber() -
+        juniorBefore.totalAssetsAllocated.toNumber();
       const totalYield = seniorYield + juniorYield;
 
       expect(totalYield).to.equal(yieldAmount.toNumber());
 
       // 60/40 split: senior should get ~60% (60K), junior ~40% (40K)
       // Allow 1 unit rounding tolerance
-      const expectedSenior = Math.floor((yieldAmount.toNumber() * 600_000 * LAMPORTS) / (1_000_000 * LAMPORTS));
+      const expectedSenior = Math.floor(
+        (yieldAmount.toNumber() * 600_000 * LAMPORTS) / (1_000_000 * LAMPORTS),
+      );
       expect(seniorYield).to.be.closeTo(expectedSenior, LAMPORTS);
-      expect(juniorYield).to.be.closeTo(yieldAmount.toNumber() - expectedSenior, LAMPORTS);
+      expect(juniorYield).to.be.closeTo(
+        yieldAmount.toNumber() - expectedSenior,
+        LAMPORTS,
+      );
     });
   });
 
@@ -1328,86 +2092,206 @@ describe("svs-12 (Tranched Vault)", () => {
 
     before(async () => {
       t3Mint = await createMint(
-        connection, payer, payer.publicKey, null, ASSET_DECIMALS,
-        Keypair.generate(), undefined, TOKEN_PROGRAM_ID
+        connection,
+        payer,
+        payer.publicKey,
+        null,
+        ASSET_DECIMALS,
+        Keypair.generate(),
+        undefined,
+        TOKEN_PROGRAM_ID,
       );
       [t3Vault] = getTranchedVaultAddress(program.programId, t3Mint, t3Id);
-      t3AssetVault = getAssociatedTokenAddressSync(t3Mint, t3Vault, true, TOKEN_PROGRAM_ID);
+      t3AssetVault = getAssociatedTokenAddressSync(
+        t3Mint,
+        t3Vault,
+        true,
+        TOKEN_PROGRAM_ID,
+      );
       const ata = await getOrCreateAssociatedTokenAccount(
-        connection, payer, t3Mint, payer.publicKey, false,
-        undefined, undefined, TOKEN_PROGRAM_ID
+        connection,
+        payer,
+        t3Mint,
+        payer.publicKey,
+        false,
+        undefined,
+        undefined,
+        TOKEN_PROGRAM_ID,
       );
       t3UserAssetAta = ata.address;
-      await mintTo(connection, payer, t3Mint, t3UserAssetAta, payer.publicKey, 50_000_000 * LAMPORTS, [], undefined, TOKEN_PROGRAM_ID);
+      await mintTo(
+        connection,
+        payer,
+        t3Mint,
+        t3UserAssetAta,
+        payer.publicKey,
+        50_000_000 * LAMPORTS,
+        [],
+        undefined,
+        TOKEN_PROGRAM_ID,
+      );
 
       [t3Senior] = getTrancheAddress(program.programId, t3Vault, 0);
       [t3Mezz] = getTrancheAddress(program.programId, t3Vault, 1);
       [t3Junior] = getTrancheAddress(program.programId, t3Vault, 2);
-      [t3SeniorMint] = getTrancheSharesMintAddress(program.programId, t3Vault, 0);
+      [t3SeniorMint] = getTrancheSharesMintAddress(
+        program.programId,
+        t3Vault,
+        0,
+      );
       [t3MezzMint] = getTrancheSharesMintAddress(program.programId, t3Vault, 1);
-      [t3JuniorMint] = getTrancheSharesMintAddress(program.programId, t3Vault, 2);
+      [t3JuniorMint] = getTrancheSharesMintAddress(
+        program.programId,
+        t3Vault,
+        2,
+      );
 
       // Initialize with sequential waterfall
-      await program.methods.initialize(t3Id, 0).accounts({
-        authority: payer.publicKey, vault: t3Vault, assetMint: t3Mint, assetVault: t3AssetVault,
-        assetTokenProgram: TOKEN_PROGRAM_ID, associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-        systemProgram: SystemProgram.programId,
-      }).rpc();
+      await program.methods
+        .initialize(t3Id, 0)
+        .accounts({
+          authority: payer.publicKey,
+          vault: t3Vault,
+          assetMint: t3Mint,
+          assetVault: t3AssetVault,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
 
       // Senior: priority=0, sub=30%, yield=3%, cap=60%
-      await program.methods.addTranche(0, 3000, 300, 6000).accounts({
-        authority: payer.publicKey, vault: t3Vault, tranche: t3Senior, sharesMint: t3SeniorMint,
-        token2022Program: TOKEN_2022_PROGRAM_ID, systemProgram: SystemProgram.programId, rent: SYSVAR_RENT_PUBKEY,
-      }).rpc();
+      await program.methods
+        .addTranche(0, 3000, 300, 6000)
+        .accounts({
+          authority: payer.publicKey,
+          vault: t3Vault,
+          tranche: t3Senior,
+          sharesMint: t3SeniorMint,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          rent: SYSVAR_RENT_PUBKEY,
+        })
+        .rpc();
 
       // Mezz: priority=1, sub=10%, yield=6%, cap=8000
-      await program.methods.addTranche(1, 1000, 600, 8000).accounts({
-        authority: payer.publicKey, vault: t3Vault, tranche: t3Mezz, sharesMint: t3MezzMint,
-        token2022Program: TOKEN_2022_PROGRAM_ID, systemProgram: SystemProgram.programId, rent: SYSVAR_RENT_PUBKEY,
-      }).rpc();
+      await program.methods
+        .addTranche(1, 1000, 600, 8000)
+        .accounts({
+          authority: payer.publicKey,
+          vault: t3Vault,
+          tranche: t3Mezz,
+          sharesMint: t3MezzMint,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          rent: SYSVAR_RENT_PUBKEY,
+        })
+        .rpc();
 
       // Junior: priority=2, sub=0, yield=0 (equity), cap=100%
-      await program.methods.addTranche(2, 0, 0, 10000).accounts({
-        authority: payer.publicKey, vault: t3Vault, tranche: t3Junior, sharesMint: t3JuniorMint,
-        token2022Program: TOKEN_2022_PROGRAM_ID, systemProgram: SystemProgram.programId, rent: SYSVAR_RENT_PUBKEY,
-      }).rpc();
+      await program.methods
+        .addTranche(2, 0, 0, 10000)
+        .accounts({
+          authority: payer.publicKey,
+          vault: t3Vault,
+          tranche: t3Junior,
+          sharesMint: t3JuniorMint,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          rent: SYSVAR_RENT_PUBKEY,
+        })
+        .rpc();
 
       // Create share ATAs for all tranches
       for (const mint of [t3SeniorMint, t3MezzMint, t3JuniorMint]) {
         await getOrCreateAssociatedTokenAccount(
-          connection, payer, mint, payer.publicKey, false,
-          undefined, undefined, TOKEN_2022_PROGRAM_ID
+          connection,
+          payer,
+          mint,
+          payer.publicKey,
+          false,
+          undefined,
+          undefined,
+          TOKEN_2022_PROGRAM_ID,
         );
       }
 
       // Deposit: junior first (2000), then mezz (3000), then senior (5000)
       // Total = 10000, junior=20%, mezz=30%, senior=50%
-      const juniorSharesAta = getAssociatedTokenAddressSync(t3JuniorMint, payer.publicKey, false, TOKEN_2022_PROGRAM_ID);
-      await program.methods.deposit(new BN(2000 * LAMPORTS), new BN(0)).accounts({
-        user: payer.publicKey, vault: t3Vault, targetTranche: t3Junior,
-        tranche1: t3Senior, tranche2: t3Mezz, tranche3: null,
-        assetMint: t3Mint, userAssetAccount: t3UserAssetAta, assetVault: t3AssetVault,
-        sharesMint: t3JuniorMint, userSharesAccount: juniorSharesAta,
-        assetTokenProgram: TOKEN_PROGRAM_ID, token2022Program: TOKEN_2022_PROGRAM_ID,
-      }).rpc();
+      const juniorSharesAta = getAssociatedTokenAddressSync(
+        t3JuniorMint,
+        payer.publicKey,
+        false,
+        TOKEN_2022_PROGRAM_ID,
+      );
+      await program.methods
+        .deposit(new BN(2000 * LAMPORTS), new BN(0))
+        .accounts({
+          user: payer.publicKey,
+          vault: t3Vault,
+          targetTranche: t3Junior,
+          tranche1: t3Senior,
+          tranche2: t3Mezz,
+          tranche3: null,
+          assetMint: t3Mint,
+          userAssetAccount: t3UserAssetAta,
+          assetVault: t3AssetVault,
+          sharesMint: t3JuniorMint,
+          userSharesAccount: juniorSharesAta,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+        })
+        .rpc();
 
-      const mezzSharesAta = getAssociatedTokenAddressSync(t3MezzMint, payer.publicKey, false, TOKEN_2022_PROGRAM_ID);
-      await program.methods.deposit(new BN(3000 * LAMPORTS), new BN(0)).accounts({
-        user: payer.publicKey, vault: t3Vault, targetTranche: t3Mezz,
-        tranche1: t3Senior, tranche2: t3Junior, tranche3: null,
-        assetMint: t3Mint, userAssetAccount: t3UserAssetAta, assetVault: t3AssetVault,
-        sharesMint: t3MezzMint, userSharesAccount: mezzSharesAta,
-        assetTokenProgram: TOKEN_PROGRAM_ID, token2022Program: TOKEN_2022_PROGRAM_ID,
-      }).rpc();
+      const mezzSharesAta = getAssociatedTokenAddressSync(
+        t3MezzMint,
+        payer.publicKey,
+        false,
+        TOKEN_2022_PROGRAM_ID,
+      );
+      await program.methods
+        .deposit(new BN(3000 * LAMPORTS), new BN(0))
+        .accounts({
+          user: payer.publicKey,
+          vault: t3Vault,
+          targetTranche: t3Mezz,
+          tranche1: t3Senior,
+          tranche2: t3Junior,
+          tranche3: null,
+          assetMint: t3Mint,
+          userAssetAccount: t3UserAssetAta,
+          assetVault: t3AssetVault,
+          sharesMint: t3MezzMint,
+          userSharesAccount: mezzSharesAta,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+        })
+        .rpc();
 
-      const seniorSharesAta = getAssociatedTokenAddressSync(t3SeniorMint, payer.publicKey, false, TOKEN_2022_PROGRAM_ID);
-      await program.methods.deposit(new BN(5000 * LAMPORTS), new BN(0)).accounts({
-        user: payer.publicKey, vault: t3Vault, targetTranche: t3Senior,
-        tranche1: t3Mezz, tranche2: t3Junior, tranche3: null,
-        assetMint: t3Mint, userAssetAccount: t3UserAssetAta, assetVault: t3AssetVault,
-        sharesMint: t3SeniorMint, userSharesAccount: seniorSharesAta,
-        assetTokenProgram: TOKEN_PROGRAM_ID, token2022Program: TOKEN_2022_PROGRAM_ID,
-      }).rpc();
+      const seniorSharesAta = getAssociatedTokenAddressSync(
+        t3SeniorMint,
+        payer.publicKey,
+        false,
+        TOKEN_2022_PROGRAM_ID,
+      );
+      await program.methods
+        .deposit(new BN(5000 * LAMPORTS), new BN(0))
+        .accounts({
+          user: payer.publicKey,
+          vault: t3Vault,
+          targetTranche: t3Senior,
+          tranche1: t3Mezz,
+          tranche2: t3Junior,
+          tranche3: null,
+          assetMint: t3Mint,
+          userAssetAccount: t3UserAssetAta,
+          assetVault: t3AssetVault,
+          sharesMint: t3SeniorMint,
+          userSharesAccount: seniorSharesAta,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+        })
+        .rpc();
     });
 
     it("has correct 3-tranche state after deposits", async () => {
@@ -1424,7 +2308,9 @@ describe("svs-12 (Tranched Vault)", () => {
       expect(junior.totalAssetsAllocated.toNumber()).to.equal(2000 * LAMPORTS);
 
       // Verify total_assets invariant
-      const sum = senior.totalAssetsAllocated.add(mezz.totalAssetsAllocated).add(junior.totalAssetsAllocated);
+      const sum = senior.totalAssetsAllocated
+        .add(mezz.totalAssetsAllocated)
+        .add(junior.totalAssetsAllocated);
       expect(sum.toNumber()).to.equal(vaultState.totalAssets.toNumber());
     });
 
@@ -1437,20 +2323,35 @@ describe("svs-12 (Tranched Vault)", () => {
       const mezzBefore = await program.account.tranche.fetch(t3Mezz);
       const juniorBefore = await program.account.tranche.fetch(t3Junior);
 
-      await program.methods.distributeYield(yieldAmount).accounts({
-        manager: payer.publicKey, vault: t3Vault, assetMint: t3Mint,
-        managerAssetAccount: t3UserAssetAta, assetVault: t3AssetVault,
-        tranche0: t3Senior, tranche1: t3Mezz, tranche2: t3Junior, tranche3: null,
-        assetTokenProgram: TOKEN_PROGRAM_ID,
-      }).rpc();
+      await program.methods
+        .distributeYield(yieldAmount)
+        .accounts({
+          manager: payer.publicKey,
+          vault: t3Vault,
+          assetMint: t3Mint,
+          managerAssetAccount: t3UserAssetAta,
+          assetVault: t3AssetVault,
+          tranche0: t3Senior,
+          tranche1: t3Mezz,
+          tranche2: t3Junior,
+          tranche3: null,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .rpc();
 
       const seniorAfter = await program.account.tranche.fetch(t3Senior);
       const mezzAfter = await program.account.tranche.fetch(t3Mezz);
       const juniorAfter = await program.account.tranche.fetch(t3Junior);
 
-      const seniorYield = seniorAfter.totalAssetsAllocated.toNumber() - seniorBefore.totalAssetsAllocated.toNumber();
-      const mezzYield = mezzAfter.totalAssetsAllocated.toNumber() - mezzBefore.totalAssetsAllocated.toNumber();
-      const juniorYield = juniorAfter.totalAssetsAllocated.toNumber() - juniorBefore.totalAssetsAllocated.toNumber();
+      const seniorYield =
+        seniorAfter.totalAssetsAllocated.toNumber() -
+        seniorBefore.totalAssetsAllocated.toNumber();
+      const mezzYield =
+        mezzAfter.totalAssetsAllocated.toNumber() -
+        mezzBefore.totalAssetsAllocated.toNumber();
+      const juniorYield =
+        juniorAfter.totalAssetsAllocated.toNumber() -
+        juniorBefore.totalAssetsAllocated.toNumber();
 
       // Senior entitled: floor(5000 * 300 / 10000) = 150
       expect(seniorYield).to.equal(150 * LAMPORTS);
@@ -1459,7 +2360,9 @@ describe("svs-12 (Tranched Vault)", () => {
       // Junior gets residual: 1000 - 150 - 180 = 670
       expect(juniorYield).to.equal(670 * LAMPORTS);
       // Total yield invariant
-      expect(seniorYield + mezzYield + juniorYield).to.equal(yieldAmount.toNumber());
+      expect(seniorYield + mezzYield + juniorYield).to.equal(
+        yieldAmount.toNumber(),
+      );
     });
 
     it("absorbs loss bottom-up across 3 tranches (spills to mezz)", async () => {
@@ -1467,15 +2370,25 @@ describe("svs-12 (Tranched Vault)", () => {
       // Junior absorbs min(2500, ~2670) → full 2500 absorbed by junior.
       // Actually let's record a loss that spills: 3000 to hit both junior and mezz.
       const juniorBefore = await program.account.tranche.fetch(t3Junior);
-      const lossAmount = juniorBefore.totalAssetsAllocated.add(new BN(500 * LAMPORTS)); // wipe junior + 500 into mezz
+      const lossAmount = juniorBefore.totalAssetsAllocated.add(
+        new BN(500 * LAMPORTS),
+      ); // wipe junior + 500 into mezz
 
       const mezzBefore = await program.account.tranche.fetch(t3Mezz);
       const seniorBefore = await program.account.tranche.fetch(t3Senior);
 
-      await program.methods.recordLoss(lossAmount).accounts({
-        manager: payer.publicKey, vault: t3Vault, assetVault: t3AssetVault,
-        tranche0: t3Senior, tranche1: t3Mezz, tranche2: t3Junior, tranche3: null,
-      }).rpc();
+      await program.methods
+        .recordLoss(lossAmount)
+        .accounts({
+          manager: payer.publicKey,
+          vault: t3Vault,
+          assetVault: t3AssetVault,
+          tranche0: t3Senior,
+          tranche1: t3Mezz,
+          tranche2: t3Junior,
+          tranche3: null,
+        })
+        .rpc();
 
       const seniorAfter = await program.account.tranche.fetch(t3Senior);
       const mezzAfter = await program.account.tranche.fetch(t3Mezz);
@@ -1485,14 +2398,18 @@ describe("svs-12 (Tranched Vault)", () => {
       expect(juniorAfter.totalAssetsAllocated.toNumber()).to.equal(0);
       // Mezz absorbs 500
       expect(mezzAfter.totalAssetsAllocated.toNumber()).to.equal(
-        mezzBefore.totalAssetsAllocated.toNumber() - 500 * LAMPORTS
+        mezzBefore.totalAssetsAllocated.toNumber() - 500 * LAMPORTS,
       );
       // Senior untouched
-      expect(seniorAfter.totalAssetsAllocated.toNumber()).to.equal(seniorBefore.totalAssetsAllocated.toNumber());
+      expect(seniorAfter.totalAssetsAllocated.toNumber()).to.equal(
+        seniorBefore.totalAssetsAllocated.toNumber(),
+      );
 
       // Verify total_assets invariant
       const vaultState = await program.account.tranchedVault.fetch(t3Vault);
-      const sum = seniorAfter.totalAssetsAllocated.add(mezzAfter.totalAssetsAllocated).add(juniorAfter.totalAssetsAllocated);
+      const sum = seniorAfter.totalAssetsAllocated
+        .add(mezzAfter.totalAssetsAllocated)
+        .add(juniorAfter.totalAssetsAllocated);
       expect(sum.toNumber()).to.equal(vaultState.totalAssets.toNumber());
     });
 
@@ -1501,26 +2418,35 @@ describe("svs-12 (Tranched Vault)", () => {
       // A small rebalance (200) would still breach — we need enough to restore the ratio.
       // Required junior for mezz sub: ceil(total * 1000 / 10000)
       const vaultState = await program.account.tranchedVault.fetch(t3Vault);
-      const requiredJunior = Math.ceil(vaultState.totalAssets.toNumber() * 1000 / 10000);
+      const requiredJunior = Math.ceil(
+        (vaultState.totalAssets.toNumber() * 1000) / 10000,
+      );
       const rebalanceAmount = new BN(requiredJunior);
 
       const mezzBefore = await program.account.tranche.fetch(t3Mezz);
       const juniorBefore = await program.account.tranche.fetch(t3Junior);
 
-      await program.methods.rebalanceTranches(rebalanceAmount).accounts({
-        manager: payer.publicKey, vault: t3Vault,
-        fromTranche: t3Mezz, toTranche: t3Junior,
-        otherTranche0: t3Senior, otherTranche1: null,
-      }).rpc();
+      await program.methods
+        .rebalanceTranches(rebalanceAmount)
+        .accounts({
+          manager: payer.publicKey,
+          vault: t3Vault,
+          fromTranche: t3Mezz,
+          toTranche: t3Junior,
+          otherTranche0: t3Senior,
+          otherTranche1: null,
+        })
+        .rpc();
 
       const mezzAfter = await program.account.tranche.fetch(t3Mezz);
       const juniorAfter = await program.account.tranche.fetch(t3Junior);
 
       expect(mezzAfter.totalAssetsAllocated.toNumber()).to.equal(
-        mezzBefore.totalAssetsAllocated.toNumber() - rebalanceAmount.toNumber()
+        mezzBefore.totalAssetsAllocated.toNumber() - rebalanceAmount.toNumber(),
       );
       expect(juniorAfter.totalAssetsAllocated.toNumber()).to.equal(
-        juniorBefore.totalAssetsAllocated.toNumber() + rebalanceAmount.toNumber()
+        juniorBefore.totalAssetsAllocated.toNumber() +
+          rebalanceAmount.toNumber(),
       );
     });
   });
@@ -1544,103 +2470,260 @@ describe("svs-12 (Tranched Vault)", () => {
 
     before(async () => {
       t4Mint = await createMint(
-        connection, payer, payer.publicKey, null, ASSET_DECIMALS,
-        Keypair.generate(), undefined, TOKEN_PROGRAM_ID
+        connection,
+        payer,
+        payer.publicKey,
+        null,
+        ASSET_DECIMALS,
+        Keypair.generate(),
+        undefined,
+        TOKEN_PROGRAM_ID,
       );
       [t4Vault] = getTranchedVaultAddress(program.programId, t4Mint, t4Id);
-      t4AssetVault = getAssociatedTokenAddressSync(t4Mint, t4Vault, true, TOKEN_PROGRAM_ID);
+      t4AssetVault = getAssociatedTokenAddressSync(
+        t4Mint,
+        t4Vault,
+        true,
+        TOKEN_PROGRAM_ID,
+      );
       const ata = await getOrCreateAssociatedTokenAccount(
-        connection, payer, t4Mint, payer.publicKey, false,
-        undefined, undefined, TOKEN_PROGRAM_ID
+        connection,
+        payer,
+        t4Mint,
+        payer.publicKey,
+        false,
+        undefined,
+        undefined,
+        TOKEN_PROGRAM_ID,
       );
       t4UserAssetAta = ata.address;
-      await mintTo(connection, payer, t4Mint, t4UserAssetAta, payer.publicKey, 100_000_000 * LAMPORTS, [], undefined, TOKEN_PROGRAM_ID);
+      await mintTo(
+        connection,
+        payer,
+        t4Mint,
+        t4UserAssetAta,
+        payer.publicKey,
+        100_000_000 * LAMPORTS,
+        [],
+        undefined,
+        TOKEN_PROGRAM_ID,
+      );
 
       [t4Senior] = getTrancheAddress(program.programId, t4Vault, 0);
       [t4SeniorMezz] = getTrancheAddress(program.programId, t4Vault, 1);
       [t4JuniorMezz] = getTrancheAddress(program.programId, t4Vault, 2);
       [t4Equity] = getTrancheAddress(program.programId, t4Vault, 3);
-      [t4SeniorMint] = getTrancheSharesMintAddress(program.programId, t4Vault, 0);
-      [t4SeniorMezzMint] = getTrancheSharesMintAddress(program.programId, t4Vault, 1);
-      [t4JuniorMezzMint] = getTrancheSharesMintAddress(program.programId, t4Vault, 2);
-      [t4EquityMint] = getTrancheSharesMintAddress(program.programId, t4Vault, 3);
+      [t4SeniorMint] = getTrancheSharesMintAddress(
+        program.programId,
+        t4Vault,
+        0,
+      );
+      [t4SeniorMezzMint] = getTrancheSharesMintAddress(
+        program.programId,
+        t4Vault,
+        1,
+      );
+      [t4JuniorMezzMint] = getTrancheSharesMintAddress(
+        program.programId,
+        t4Vault,
+        2,
+      );
+      [t4EquityMint] = getTrancheSharesMintAddress(
+        program.programId,
+        t4Vault,
+        3,
+      );
 
       // Initialize with sequential waterfall
-      await program.methods.initialize(t4Id, 0).accounts({
-        authority: payer.publicKey, vault: t4Vault, assetMint: t4Mint, assetVault: t4AssetVault,
-        assetTokenProgram: TOKEN_PROGRAM_ID, associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-        systemProgram: SystemProgram.programId,
-      }).rpc();
+      await program.methods
+        .initialize(t4Id, 0)
+        .accounts({
+          authority: payer.publicKey,
+          vault: t4Vault,
+          assetMint: t4Mint,
+          assetVault: t4AssetVault,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
 
       // Senior: priority=0, sub=40%, yield=2%, cap=50%
-      await program.methods.addTranche(0, 4000, 200, 5000).accounts({
-        authority: payer.publicKey, vault: t4Vault, tranche: t4Senior, sharesMint: t4SeniorMint,
-        token2022Program: TOKEN_2022_PROGRAM_ID, systemProgram: SystemProgram.programId, rent: SYSVAR_RENT_PUBKEY,
-      }).rpc();
+      await program.methods
+        .addTranche(0, 4000, 200, 5000)
+        .accounts({
+          authority: payer.publicKey,
+          vault: t4Vault,
+          tranche: t4Senior,
+          sharesMint: t4SeniorMint,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          rent: SYSVAR_RENT_PUBKEY,
+        })
+        .rpc();
 
       // Senior Mezz: priority=1, sub=20%, yield=4%, cap=70%
-      await program.methods.addTranche(1, 2000, 400, 7000).accounts({
-        authority: payer.publicKey, vault: t4Vault, tranche: t4SeniorMezz, sharesMint: t4SeniorMezzMint,
-        token2022Program: TOKEN_2022_PROGRAM_ID, systemProgram: SystemProgram.programId, rent: SYSVAR_RENT_PUBKEY,
-      }).rpc();
+      await program.methods
+        .addTranche(1, 2000, 400, 7000)
+        .accounts({
+          authority: payer.publicKey,
+          vault: t4Vault,
+          tranche: t4SeniorMezz,
+          sharesMint: t4SeniorMezzMint,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          rent: SYSVAR_RENT_PUBKEY,
+        })
+        .rpc();
 
       // Junior Mezz: priority=2, sub=10%, yield=8%, cap=80%
-      await program.methods.addTranche(2, 1000, 800, 8000).accounts({
-        authority: payer.publicKey, vault: t4Vault, tranche: t4JuniorMezz, sharesMint: t4JuniorMezzMint,
-        token2022Program: TOKEN_2022_PROGRAM_ID, systemProgram: SystemProgram.programId, rent: SYSVAR_RENT_PUBKEY,
-      }).rpc();
+      await program.methods
+        .addTranche(2, 1000, 800, 8000)
+        .accounts({
+          authority: payer.publicKey,
+          vault: t4Vault,
+          tranche: t4JuniorMezz,
+          sharesMint: t4JuniorMezzMint,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          rent: SYSVAR_RENT_PUBKEY,
+        })
+        .rpc();
 
       // Equity: priority=3, sub=0, yield=0 (residual), cap=100%
-      await program.methods.addTranche(3, 0, 0, 10000).accounts({
-        authority: payer.publicKey, vault: t4Vault, tranche: t4Equity, sharesMint: t4EquityMint,
-        token2022Program: TOKEN_2022_PROGRAM_ID, systemProgram: SystemProgram.programId, rent: SYSVAR_RENT_PUBKEY,
-      }).rpc();
+      await program.methods
+        .addTranche(3, 0, 0, 10000)
+        .accounts({
+          authority: payer.publicKey,
+          vault: t4Vault,
+          tranche: t4Equity,
+          sharesMint: t4EquityMint,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          rent: SYSVAR_RENT_PUBKEY,
+        })
+        .rpc();
 
       // Create share ATAs for all 4 tranches
-      for (const mint of [t4SeniorMint, t4SeniorMezzMint, t4JuniorMezzMint, t4EquityMint]) {
+      for (const mint of [
+        t4SeniorMint,
+        t4SeniorMezzMint,
+        t4JuniorMezzMint,
+        t4EquityMint,
+      ]) {
         await getOrCreateAssociatedTokenAccount(
-          connection, payer, mint, payer.publicKey, false,
-          undefined, undefined, TOKEN_2022_PROGRAM_ID
+          connection,
+          payer,
+          mint,
+          payer.publicKey,
+          false,
+          undefined,
+          undefined,
+          TOKEN_2022_PROGRAM_ID,
         );
       }
 
       // Deposit into all tranches: equity first, then upward
       // Total = 10000, equity=1500(15%), jrMezz=1500(15%), srMezz=2500(25%), senior=4500(45%)
-      const equitySharesAta = getAssociatedTokenAddressSync(t4EquityMint, payer.publicKey, false, TOKEN_2022_PROGRAM_ID);
-      await program.methods.deposit(new BN(1500 * LAMPORTS), new BN(0)).accounts({
-        user: payer.publicKey, vault: t4Vault, targetTranche: t4Equity,
-        tranche1: t4Senior, tranche2: t4SeniorMezz, tranche3: t4JuniorMezz,
-        assetMint: t4Mint, userAssetAccount: t4UserAssetAta, assetVault: t4AssetVault,
-        sharesMint: t4EquityMint, userSharesAccount: equitySharesAta,
-        assetTokenProgram: TOKEN_PROGRAM_ID, token2022Program: TOKEN_2022_PROGRAM_ID,
-      }).rpc();
+      const equitySharesAta = getAssociatedTokenAddressSync(
+        t4EquityMint,
+        payer.publicKey,
+        false,
+        TOKEN_2022_PROGRAM_ID,
+      );
+      await program.methods
+        .deposit(new BN(1500 * LAMPORTS), new BN(0))
+        .accounts({
+          user: payer.publicKey,
+          vault: t4Vault,
+          targetTranche: t4Equity,
+          tranche1: t4Senior,
+          tranche2: t4SeniorMezz,
+          tranche3: t4JuniorMezz,
+          assetMint: t4Mint,
+          userAssetAccount: t4UserAssetAta,
+          assetVault: t4AssetVault,
+          sharesMint: t4EquityMint,
+          userSharesAccount: equitySharesAta,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+        })
+        .rpc();
 
-      const jrMezzSharesAta = getAssociatedTokenAddressSync(t4JuniorMezzMint, payer.publicKey, false, TOKEN_2022_PROGRAM_ID);
-      await program.methods.deposit(new BN(1500 * LAMPORTS), new BN(0)).accounts({
-        user: payer.publicKey, vault: t4Vault, targetTranche: t4JuniorMezz,
-        tranche1: t4Senior, tranche2: t4SeniorMezz, tranche3: t4Equity,
-        assetMint: t4Mint, userAssetAccount: t4UserAssetAta, assetVault: t4AssetVault,
-        sharesMint: t4JuniorMezzMint, userSharesAccount: jrMezzSharesAta,
-        assetTokenProgram: TOKEN_PROGRAM_ID, token2022Program: TOKEN_2022_PROGRAM_ID,
-      }).rpc();
+      const jrMezzSharesAta = getAssociatedTokenAddressSync(
+        t4JuniorMezzMint,
+        payer.publicKey,
+        false,
+        TOKEN_2022_PROGRAM_ID,
+      );
+      await program.methods
+        .deposit(new BN(1500 * LAMPORTS), new BN(0))
+        .accounts({
+          user: payer.publicKey,
+          vault: t4Vault,
+          targetTranche: t4JuniorMezz,
+          tranche1: t4Senior,
+          tranche2: t4SeniorMezz,
+          tranche3: t4Equity,
+          assetMint: t4Mint,
+          userAssetAccount: t4UserAssetAta,
+          assetVault: t4AssetVault,
+          sharesMint: t4JuniorMezzMint,
+          userSharesAccount: jrMezzSharesAta,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+        })
+        .rpc();
 
-      const srMezzSharesAta = getAssociatedTokenAddressSync(t4SeniorMezzMint, payer.publicKey, false, TOKEN_2022_PROGRAM_ID);
-      await program.methods.deposit(new BN(2500 * LAMPORTS), new BN(0)).accounts({
-        user: payer.publicKey, vault: t4Vault, targetTranche: t4SeniorMezz,
-        tranche1: t4Senior, tranche2: t4JuniorMezz, tranche3: t4Equity,
-        assetMint: t4Mint, userAssetAccount: t4UserAssetAta, assetVault: t4AssetVault,
-        sharesMint: t4SeniorMezzMint, userSharesAccount: srMezzSharesAta,
-        assetTokenProgram: TOKEN_PROGRAM_ID, token2022Program: TOKEN_2022_PROGRAM_ID,
-      }).rpc();
+      const srMezzSharesAta = getAssociatedTokenAddressSync(
+        t4SeniorMezzMint,
+        payer.publicKey,
+        false,
+        TOKEN_2022_PROGRAM_ID,
+      );
+      await program.methods
+        .deposit(new BN(2500 * LAMPORTS), new BN(0))
+        .accounts({
+          user: payer.publicKey,
+          vault: t4Vault,
+          targetTranche: t4SeniorMezz,
+          tranche1: t4Senior,
+          tranche2: t4JuniorMezz,
+          tranche3: t4Equity,
+          assetMint: t4Mint,
+          userAssetAccount: t4UserAssetAta,
+          assetVault: t4AssetVault,
+          sharesMint: t4SeniorMezzMint,
+          userSharesAccount: srMezzSharesAta,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+        })
+        .rpc();
 
-      const seniorSharesAta = getAssociatedTokenAddressSync(t4SeniorMint, payer.publicKey, false, TOKEN_2022_PROGRAM_ID);
-      await program.methods.deposit(new BN(4500 * LAMPORTS), new BN(0)).accounts({
-        user: payer.publicKey, vault: t4Vault, targetTranche: t4Senior,
-        tranche1: t4SeniorMezz, tranche2: t4JuniorMezz, tranche3: t4Equity,
-        assetMint: t4Mint, userAssetAccount: t4UserAssetAta, assetVault: t4AssetVault,
-        sharesMint: t4SeniorMint, userSharesAccount: seniorSharesAta,
-        assetTokenProgram: TOKEN_PROGRAM_ID, token2022Program: TOKEN_2022_PROGRAM_ID,
-      }).rpc();
+      const seniorSharesAta = getAssociatedTokenAddressSync(
+        t4SeniorMint,
+        payer.publicKey,
+        false,
+        TOKEN_2022_PROGRAM_ID,
+      );
+      await program.methods
+        .deposit(new BN(4500 * LAMPORTS), new BN(0))
+        .accounts({
+          user: payer.publicKey,
+          vault: t4Vault,
+          targetTranche: t4Senior,
+          tranche1: t4SeniorMezz,
+          tranche2: t4JuniorMezz,
+          tranche3: t4Equity,
+          assetMint: t4Mint,
+          userAssetAccount: t4UserAssetAta,
+          assetVault: t4AssetVault,
+          sharesMint: t4SeniorMint,
+          userSharesAccount: seniorSharesAta,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+        })
+        .rpc();
     });
 
     it("has correct 4-tranche state after deposits", async () => {
@@ -1670,16 +2753,30 @@ describe("svs-12 (Tranched Vault)", () => {
 
     it("rejects adding a 5th tranche (max 4)", async () => {
       const [fifthTranche] = getTrancheAddress(program.programId, t4Vault, 4);
-      const [fifthMint] = getTrancheSharesMintAddress(program.programId, t4Vault, 4);
+      const [fifthMint] = getTrancheSharesMintAddress(
+        program.programId,
+        t4Vault,
+        4,
+      );
 
       try {
-        await program.methods.addTranche(4, 0, 0, 10000).accounts({
-          authority: payer.publicKey, vault: t4Vault, tranche: fifthTranche, sharesMint: fifthMint,
-          token2022Program: TOKEN_2022_PROGRAM_ID, systemProgram: SystemProgram.programId, rent: SYSVAR_RENT_PUBKEY,
-        }).rpc();
+        await program.methods
+          .addTranche(4, 0, 0, 10000)
+          .accounts({
+            authority: payer.publicKey,
+            vault: t4Vault,
+            tranche: fifthTranche,
+            sharesMint: fifthMint,
+            token2022Program: TOKEN_2022_PROGRAM_ID,
+            systemProgram: SystemProgram.programId,
+            rent: SYSVAR_RENT_PUBKEY,
+          })
+          .rpc();
         expect.fail("should have thrown");
       } catch (e: any) {
-        expect(e.error?.errorCode?.code || e.message).to.contain("MaxTranchesReached");
+        expect(e.error?.errorCode?.code || e.message).to.contain(
+          "MaxTranchesReached",
+        );
       }
     });
 
@@ -1694,22 +2791,39 @@ describe("svs-12 (Tranched Vault)", () => {
       const jrMezzBefore = await program.account.tranche.fetch(t4JuniorMezz);
       const equityBefore = await program.account.tranche.fetch(t4Equity);
 
-      await program.methods.distributeYield(yieldAmount).accounts({
-        manager: payer.publicKey, vault: t4Vault, assetMint: t4Mint,
-        managerAssetAccount: t4UserAssetAta, assetVault: t4AssetVault,
-        tranche0: t4Senior, tranche1: t4SeniorMezz, tranche2: t4JuniorMezz, tranche3: t4Equity,
-        assetTokenProgram: TOKEN_PROGRAM_ID,
-      }).rpc();
+      await program.methods
+        .distributeYield(yieldAmount)
+        .accounts({
+          manager: payer.publicKey,
+          vault: t4Vault,
+          assetMint: t4Mint,
+          managerAssetAccount: t4UserAssetAta,
+          assetVault: t4AssetVault,
+          tranche0: t4Senior,
+          tranche1: t4SeniorMezz,
+          tranche2: t4JuniorMezz,
+          tranche3: t4Equity,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .rpc();
 
       const seniorAfter = await program.account.tranche.fetch(t4Senior);
       const srMezzAfter = await program.account.tranche.fetch(t4SeniorMezz);
       const jrMezzAfter = await program.account.tranche.fetch(t4JuniorMezz);
       const equityAfter = await program.account.tranche.fetch(t4Equity);
 
-      const seniorYield = seniorAfter.totalAssetsAllocated.toNumber() - seniorBefore.totalAssetsAllocated.toNumber();
-      const srMezzYield = srMezzAfter.totalAssetsAllocated.toNumber() - srMezzBefore.totalAssetsAllocated.toNumber();
-      const jrMezzYield = jrMezzAfter.totalAssetsAllocated.toNumber() - jrMezzBefore.totalAssetsAllocated.toNumber();
-      const equityYield = equityAfter.totalAssetsAllocated.toNumber() - equityBefore.totalAssetsAllocated.toNumber();
+      const seniorYield =
+        seniorAfter.totalAssetsAllocated.toNumber() -
+        seniorBefore.totalAssetsAllocated.toNumber();
+      const srMezzYield =
+        srMezzAfter.totalAssetsAllocated.toNumber() -
+        srMezzBefore.totalAssetsAllocated.toNumber();
+      const jrMezzYield =
+        jrMezzAfter.totalAssetsAllocated.toNumber() -
+        jrMezzBefore.totalAssetsAllocated.toNumber();
+      const equityYield =
+        equityAfter.totalAssetsAllocated.toNumber() -
+        equityBefore.totalAssetsAllocated.toNumber();
 
       // Senior: floor(4500 * 200 / 10000) = 90
       expect(seniorYield).to.equal(90 * LAMPORTS);
@@ -1720,7 +2834,9 @@ describe("svs-12 (Tranched Vault)", () => {
       // Equity: 2000 - 90 - 100 - 120 = 1690
       expect(equityYield).to.equal(1690 * LAMPORTS);
       // Total invariant
-      expect(seniorYield + srMezzYield + jrMezzYield + equityYield).to.equal(yieldAmount.toNumber());
+      expect(seniorYield + srMezzYield + jrMezzYield + equityYield).to.equal(
+        yieldAmount.toNumber(),
+      );
     });
 
     it("absorbs loss bottom-up across 4 tranches (contained in equity)", async () => {
@@ -1734,10 +2850,18 @@ describe("svs-12 (Tranched Vault)", () => {
       // Loss of 1000 — equity has ~3190, so this is easily absorbed
       const lossAmount = new BN(1000 * LAMPORTS);
 
-      await program.methods.recordLoss(lossAmount).accounts({
-        manager: payer.publicKey, vault: t4Vault, assetVault: t4AssetVault,
-        tranche0: t4Senior, tranche1: t4SeniorMezz, tranche2: t4JuniorMezz, tranche3: t4Equity,
-      }).rpc();
+      await program.methods
+        .recordLoss(lossAmount)
+        .accounts({
+          manager: payer.publicKey,
+          vault: t4Vault,
+          assetVault: t4AssetVault,
+          tranche0: t4Senior,
+          tranche1: t4SeniorMezz,
+          tranche2: t4JuniorMezz,
+          tranche3: t4Equity,
+        })
+        .rpc();
 
       const seniorAfter = await program.account.tranche.fetch(t4Senior);
       const srMezzAfter = await program.account.tranche.fetch(t4SeniorMezz);
@@ -1746,12 +2870,18 @@ describe("svs-12 (Tranched Vault)", () => {
 
       // Equity absorbed all loss
       expect(equityAfter.totalAssetsAllocated.toNumber()).to.equal(
-        equityBefore.totalAssetsAllocated.toNumber() - lossAmount.toNumber()
+        equityBefore.totalAssetsAllocated.toNumber() - lossAmount.toNumber(),
       );
       // All other tranches untouched
-      expect(seniorAfter.totalAssetsAllocated.toNumber()).to.equal(seniorBefore.totalAssetsAllocated.toNumber());
-      expect(srMezzAfter.totalAssetsAllocated.toNumber()).to.equal(srMezzBefore.totalAssetsAllocated.toNumber());
-      expect(jrMezzAfter.totalAssetsAllocated.toNumber()).to.equal(jrMezzBefore.totalAssetsAllocated.toNumber());
+      expect(seniorAfter.totalAssetsAllocated.toNumber()).to.equal(
+        seniorBefore.totalAssetsAllocated.toNumber(),
+      );
+      expect(srMezzAfter.totalAssetsAllocated.toNumber()).to.equal(
+        srMezzBefore.totalAssetsAllocated.toNumber(),
+      );
+      expect(jrMezzAfter.totalAssetsAllocated.toNumber()).to.equal(
+        jrMezzBefore.totalAssetsAllocated.toNumber(),
+      );
 
       // Verify total_assets invariant
       const vaultState = await program.account.tranchedVault.fetch(t4Vault);
@@ -1767,26 +2897,46 @@ describe("svs-12 (Tranched Vault)", () => {
       const vaultBefore = await program.account.tranchedVault.fetch(t4Vault);
       const redeemShares = new BN(10 * LAMPORTS * 1000); // small redeem (shares at 9 decimals)
 
-      const seniorSharesAta = getAssociatedTokenAddressSync(t4SeniorMint, payer.publicKey, false, TOKEN_2022_PROGRAM_ID);
+      const seniorSharesAta = getAssociatedTokenAddressSync(
+        t4SeniorMint,
+        payer.publicKey,
+        false,
+        TOKEN_2022_PROGRAM_ID,
+      );
 
-      await program.methods.redeem(redeemShares, new BN(0)).accounts({
-        user: payer.publicKey, vault: t4Vault, targetTranche: t4Senior,
-        tranche1: t4SeniorMezz, tranche2: t4JuniorMezz, tranche3: t4Equity,
-        assetMint: t4Mint, userAssetAccount: t4UserAssetAta, assetVault: t4AssetVault,
-        sharesMint: t4SeniorMint, userSharesAccount: seniorSharesAta,
-        assetTokenProgram: TOKEN_PROGRAM_ID, token2022Program: TOKEN_2022_PROGRAM_ID,
-      }).rpc();
+      await program.methods
+        .redeem(redeemShares, new BN(0))
+        .accounts({
+          user: payer.publicKey,
+          vault: t4Vault,
+          targetTranche: t4Senior,
+          tranche1: t4SeniorMezz,
+          tranche2: t4JuniorMezz,
+          tranche3: t4Equity,
+          assetMint: t4Mint,
+          userAssetAccount: t4UserAssetAta,
+          assetVault: t4AssetVault,
+          sharesMint: t4SeniorMint,
+          userSharesAccount: seniorSharesAta,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+        })
+        .rpc();
 
       const seniorAfter = await program.account.tranche.fetch(t4Senior);
       const vaultAfter = await program.account.tranchedVault.fetch(t4Vault);
 
       // Senior allocation decreased
       expect(seniorAfter.totalAssetsAllocated.toNumber()).to.be.lessThan(
-        seniorBefore.totalAssetsAllocated.toNumber()
+        seniorBefore.totalAssetsAllocated.toNumber(),
       );
       // Vault total decreased by same amount
-      const assetsDelta = seniorBefore.totalAssetsAllocated.toNumber() - seniorAfter.totalAssetsAllocated.toNumber();
-      expect(vaultBefore.totalAssets.toNumber() - vaultAfter.totalAssets.toNumber()).to.equal(assetsDelta);
+      const assetsDelta =
+        seniorBefore.totalAssetsAllocated.toNumber() -
+        seniorAfter.totalAssetsAllocated.toNumber();
+      expect(
+        vaultBefore.totalAssets.toNumber() - vaultAfter.totalAssets.toNumber(),
+      ).to.equal(assetsDelta);
     });
   });
 });

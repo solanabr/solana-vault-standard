@@ -26,42 +26,42 @@ pub struct Deposit<'info> {
         constraint = !vault.paused @ VaultError::VaultPaused,
         constraint = !vault.wiped @ VaultError::VaultWiped,
     )]
-    pub vault: Account<'info, TranchedVault>,
+    pub vault: Box<Account<'info, TranchedVault>>,
 
     #[account(
         mut,
         has_one = vault @ VaultError::TrancheVaultMismatch,
     )]
-    pub target_tranche: Account<'info, Tranche>,
+    pub target_tranche: Box<Account<'info, Tranche>>,
 
     // Other tranches for subordination check (read-only)
-    pub tranche_1: Option<Account<'info, Tranche>>,
-    pub tranche_2: Option<Account<'info, Tranche>>,
-    pub tranche_3: Option<Account<'info, Tranche>>,
+    pub tranche_1: Option<Box<Account<'info, Tranche>>>,
+    pub tranche_2: Option<Box<Account<'info, Tranche>>>,
+    pub tranche_3: Option<Box<Account<'info, Tranche>>>,
 
     #[account(
         constraint = asset_mint.key() == vault.asset_mint,
     )]
-    pub asset_mint: InterfaceAccount<'info, Mint>,
+    pub asset_mint: Box<InterfaceAccount<'info, Mint>>,
 
     #[account(
         mut,
         constraint = user_asset_account.mint == vault.asset_mint,
         constraint = user_asset_account.owner == user.key(),
     )]
-    pub user_asset_account: InterfaceAccount<'info, TokenAccount>,
+    pub user_asset_account: Box<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(
         mut,
         constraint = asset_vault.key() == vault.asset_vault,
     )]
-    pub asset_vault: InterfaceAccount<'info, TokenAccount>,
+    pub asset_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(
         mut,
         constraint = shares_mint.key() == target_tranche.shares_mint,
     )]
-    pub shares_mint: InterfaceAccount<'info, Mint>,
+    pub shares_mint: Box<InterfaceAccount<'info, Mint>>,
 
     #[account(
         mut,
@@ -69,7 +69,7 @@ pub struct Deposit<'info> {
         associated_token::authority = user,
         associated_token::token_program = token_2022_program,
     )]
-    pub user_shares_account: InterfaceAccount<'info, TokenAccount>,
+    pub user_shares_account: Box<InterfaceAccount<'info, TokenAccount>>,
 
     pub asset_token_program: Interface<'info, TokenInterface>,
     pub token_2022_program: Program<'info, Token2022>,

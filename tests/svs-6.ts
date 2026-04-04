@@ -131,9 +131,7 @@ describe("svs-6 (Confidential Streaming Yield Vault)", () => {
     console.log("  Asset Mint:", assetMint.toBase58());
     console.log("  Vault PDA:", vault.toBase58());
     console.log("  Shares Mint:", sharesMint.toBase58());
-    console.log(
-      "  NOTE: SVS-6 uses streaming yield + confidential transfers",
-    );
+    console.log("  NOTE: SVS-6 uses streaming yield + confidential transfers");
   });
 
   // ============ Initialize ============
@@ -166,9 +164,7 @@ describe("svs-6 (Confidential Streaming Yield Vault)", () => {
       expect(vaultAccount.authority.toBase58()).to.equal(
         payer.publicKey.toBase58(),
       );
-      expect(vaultAccount.assetMint.toBase58()).to.equal(
-        assetMint.toBase58(),
-      );
+      expect(vaultAccount.assetMint.toBase58()).to.equal(assetMint.toBase58());
       expect(vaultAccount.sharesMint.toBase58()).to.equal(
         sharesMint.toBase58(),
       );
@@ -182,7 +178,12 @@ describe("svs-6 (Confidential Streaming Yield Vault)", () => {
 
       // Streaming fields zeroed
       expect(vaultAccount.baseAssets.toNumber()).to.equal(0);
-      const mintInfo = await getMint(connection, sharesMint, undefined, TOKEN_2022_PROGRAM_ID);
+      const mintInfo = await getMint(
+        connection,
+        sharesMint,
+        undefined,
+        TOKEN_2022_PROGRAM_ID,
+      );
       expect(Number(mintInfo.supply)).to.equal(0);
       expect(vaultAccount.streamAmount.toNumber()).to.equal(0);
       expect(vaultAccount.streamStart.toNumber()).to.equal(0);
@@ -224,10 +225,7 @@ describe("svs-6 (Confidential Streaming Yield Vault)", () => {
       auditorPubkey.fill(0xab);
 
       await program.methods
-        .initialize(
-          new BN(2),
-          Array.from(auditorPubkey),
-        )
+        .initialize(new BN(2), Array.from(auditorPubkey))
         .accountsStrict({
           authority: payer.publicKey,
           vault: vault2,
@@ -246,7 +244,12 @@ describe("svs-6 (Confidential Streaming Yield Vault)", () => {
         await program.account.confidentialStreamVault.fetch(vault2);
       expect(vaultAccount.auditorElgamalPubkey).to.not.equal(null);
       expect(vaultAccount.decimalsOffset).to.equal(0); // 9 - 9 = 0
-      const mintInfo2 = await getMint(connection, sharesMint2, undefined, TOKEN_2022_PROGRAM_ID);
+      const mintInfo2 = await getMint(
+        connection,
+        sharesMint2,
+        undefined,
+        TOKEN_2022_PROGRAM_ID,
+      );
       expect(Number(mintInfo2.supply)).to.equal(0);
     });
   });
@@ -468,18 +471,9 @@ describe("svs-6 (Confidential Streaming Yield Vault)", () => {
       const vaultAccount =
         await program.account.confidentialStreamVault.fetch(vault);
       console.log("  Stream info:");
-      console.log(
-        "    streamAmount:",
-        vaultAccount.streamAmount.toNumber(),
-      );
-      console.log(
-        "    streamStart:",
-        vaultAccount.streamStart.toNumber(),
-      );
-      console.log(
-        "    streamEnd:",
-        vaultAccount.streamEnd.toNumber(),
-      );
+      console.log("    streamAmount:", vaultAccount.streamAmount.toNumber());
+      console.log("    streamStart:", vaultAccount.streamStart.toNumber());
+      console.log("    streamEnd:", vaultAccount.streamEnd.toNumber());
     });
 
     it("view functions return 0 when paused", async () => {
@@ -535,9 +529,7 @@ describe("svs-6 (Confidential Streaming Yield Vault)", () => {
       expect(vaultAccount.authority.toBase58()).to.equal(
         payer.publicKey.toBase58(),
       );
-      expect(vaultAccount.assetMint.toBase58()).to.equal(
-        assetMint.toBase58(),
-      );
+      expect(vaultAccount.assetMint.toBase58()).to.equal(assetMint.toBase58());
       expect(vaultAccount.sharesMint.toBase58()).to.equal(
         sharesMint.toBase58(),
       );
@@ -545,7 +537,12 @@ describe("svs-6 (Confidential Streaming Yield Vault)", () => {
         assetVault.toBase58(),
       );
       expect(vaultAccount.baseAssets.toNumber()).to.equal(0);
-      const initMint = await getMint(connection, sharesMint, undefined, TOKEN_2022_PROGRAM_ID);
+      const initMint = await getMint(
+        connection,
+        sharesMint,
+        undefined,
+        TOKEN_2022_PROGRAM_ID,
+      );
       expect(Number(initMint.supply)).to.equal(0);
       expect(vaultAccount.decimalsOffset).to.equal(3);
       expect(vaultAccount.paused).to.equal(false);
@@ -587,9 +584,7 @@ describe("svs-6 (Confidential Streaming Yield Vault)", () => {
         [Buffer.from("shares"), vault.toBuffer()],
         program.programId,
       );
-      expect(derivedSharesMint.toBase58()).to.equal(
-        sharesMint.toBase58(),
-      );
+      expect(derivedSharesMint.toBase58()).to.equal(sharesMint.toBase58());
     });
   });
 
@@ -699,11 +694,7 @@ describe("svs-6 (Confidential Streaming Yield Vault)", () => {
 
       try {
         await program.methods
-          .withdraw(
-            new BN(0),
-            new BN(0),
-            Array.from(new Uint8Array(36)),
-          )
+          .withdraw(new BN(0), new BN(0), Array.from(new Uint8Array(36)))
           .accountsStrict({
             user: payer.publicKey,
             vault: vault,
@@ -732,11 +723,7 @@ describe("svs-6 (Confidential Streaming Yield Vault)", () => {
 
       try {
         await program.methods
-          .redeem(
-            new BN(0),
-            new BN(0),
-            Array.from(new Uint8Array(36)),
-          )
+          .redeem(new BN(0), new BN(0), Array.from(new Uint8Array(36)))
           .accountsStrict({
             user: payer.publicKey,
             vault: vault,
@@ -942,12 +929,8 @@ describe("svs-6 (Confidential Streaming Yield Vault)", () => {
     before(async function () {
       backendAvailable = await isBackendAvailable();
       if (!backendAvailable) {
-        console.log(
-          "  Proof backend not running -- skipping CT flow tests",
-        );
-        console.log(
-          "    Start with: cd proofs-backend && cargo run",
-        );
+        console.log("  Proof backend not running -- skipping CT flow tests");
+        console.log("    Start with: cd proofs-backend && cargo run");
         this.skip();
       }
     });
@@ -957,8 +940,10 @@ describe("svs-6 (Confidential Streaming Yield Vault)", () => {
     it("configure_account enables confidential transfers on shares account", async function () {
       if (!backendAvailable) this.skip();
 
-      const { proofData, elgamalPubkey } =
-        await requestPubkeyValidityProof(payer, userSharesAccount);
+      const { proofData, elgamalPubkey } = await requestPubkeyValidityProof(
+        payer,
+        userSharesAccount,
+      );
 
       console.log("  Proof data size:", proofData.length, "bytes");
       console.log("  ElGamal pubkey size:", elgamalPubkey.length, "bytes");
@@ -977,10 +962,7 @@ describe("svs-6 (Confidential Streaming Yield Vault)", () => {
       });
 
       const configureIx = await program.methods
-        .configureAccount(
-          Array.from(decryptableZeroBalance),
-          -1,
-        )
+        .configureAccount(Array.from(decryptableZeroBalance), -1)
         .accountsStrict({
           user: payer.publicKey,
           vault: vault,
@@ -1054,9 +1036,9 @@ describe("svs-6 (Confidential Streaming Yield Vault)", () => {
         TOKEN_PROGRAM_ID,
       );
 
-      expect(
-        Number(assetBefore.amount) - Number(assetAfter.amount),
-      ).to.equal(depositAmount.toNumber());
+      expect(Number(assetBefore.amount) - Number(assetAfter.amount)).to.equal(
+        depositAmount.toNumber(),
+      );
       expect(
         Number(vaultBalanceAfter.amount) - Number(vaultBalanceBefore.amount),
       ).to.equal(depositAmount.toNumber());
@@ -1085,17 +1067,19 @@ describe("svs-6 (Confidential Streaming Yield Vault)", () => {
       expect(vaultAccount.baseAssets.toNumber()).to.equal(
         depositAmount.toNumber(),
       );
-      const depositMint = await getMint(connection, sharesMint, undefined, TOKEN_2022_PROGRAM_ID);
+      const depositMint = await getMint(
+        connection,
+        sharesMint,
+        undefined,
+        TOKEN_2022_PROGRAM_ID,
+      );
       expect(Number(depositMint.supply)).to.be.greaterThan(0);
 
       console.log(
         "  baseAssets:",
         vaultAccount.baseAssets.toNumber() / 10 ** ASSET_DECIMALS,
       );
-      console.log(
-        "  totalShares:",
-        Number(depositMint.supply) / 10 ** 9,
-      );
+      console.log("  totalShares:", Number(depositMint.supply) / 10 ** 9);
     });
 
     it("apply_pending moves shares from pending to available", async function () {
@@ -1163,7 +1147,12 @@ describe("svs-6 (Confidential Streaming Yield Vault)", () => {
 
       const vaultAfter =
         await program.account.confidentialStreamVault.fetch(vault);
-      const mintBefore = await getMint(connection, sharesMint, undefined, TOKEN_2022_PROGRAM_ID);
+      const mintBefore = await getMint(
+        connection,
+        sharesMint,
+        undefined,
+        TOKEN_2022_PROGRAM_ID,
+      );
       expect(vaultAfter.baseAssets.toNumber()).to.be.greaterThan(
         vaultBefore.baseAssets.toNumber(),
       );
@@ -1182,10 +1171,7 @@ describe("svs-6 (Confidential Streaming Yield Vault)", () => {
       const newBalance = createDecryptableZeroBalance(aesKey);
 
       await program.methods
-        .applyPending(
-          Array.from(newBalance),
-          new BN(pendingCreditCounter),
-        )
+        .applyPending(Array.from(newBalance), new BN(pendingCreditCounter))
         .accountsStrict({
           user: payer.publicKey,
           vault: vault,
@@ -1362,10 +1348,7 @@ describe("svs-6 (Confidential Streaming Yield Vault)", () => {
       const newBalance = createDecryptableZeroBalance(aesKey);
 
       await program.methods
-        .applyPending(
-          Array.from(newBalance),
-          new BN(pendingCreditCounter),
-        )
+        .applyPending(Array.from(newBalance), new BN(pendingCreditCounter))
         .accountsStrict({
           user: payer.publicKey,
           vault: vault,
@@ -1400,7 +1383,12 @@ describe("svs-6 (Confidential Streaming Yield Vault)", () => {
         userSharesAccount,
       );
 
-      const withdrawMintInfo = await getMint(connection, sharesMint, undefined, TOKEN_2022_PROGRAM_ID);
+      const withdrawMintInfo = await getMint(
+        connection,
+        sharesMint,
+        undefined,
+        TOKEN_2022_PROGRAM_ID,
+      );
       const currentBalance = Number(withdrawMintInfo.supply);
 
       const { equalityProof, rangeProof } = await requestWithdrawProof(
@@ -1491,7 +1479,12 @@ describe("svs-6 (Confidential Streaming Yield Vault)", () => {
 
       const vaultAfter =
         await program.account.confidentialStreamVault.fetch(vault);
-      const withdrawMintAfter = await getMint(connection, sharesMint, undefined, TOKEN_2022_PROGRAM_ID);
+      const withdrawMintAfter = await getMint(
+        connection,
+        sharesMint,
+        undefined,
+        TOKEN_2022_PROGRAM_ID,
+      );
       expect(Number(withdrawMintAfter.supply)).to.be.lessThan(currentBalance);
 
       console.log(
@@ -1526,13 +1519,16 @@ describe("svs-6 (Confidential Streaming Yield Vault)", () => {
         TOKEN_PROGRAM_ID,
       );
 
-      const redeemMintInfo = await getMint(connection, sharesMint, undefined, TOKEN_2022_PROGRAM_ID);
+      const redeemMintInfo = await getMint(
+        connection,
+        sharesMint,
+        undefined,
+        TOKEN_2022_PROGRAM_ID,
+      );
       const redeemTotalShares = Number(redeemMintInfo.supply);
 
       // Redeem 10% of remaining shares
-      const redeemShares = new BN(
-        Math.floor(redeemTotalShares / 10),
-      );
+      const redeemShares = new BN(Math.floor(redeemTotalShares / 10));
 
       const currentCiphertext = await readAvailableBalanceCiphertext(
         connection,
@@ -1566,10 +1562,9 @@ describe("svs-6 (Confidential Streaming Yield Vault)", () => {
         ],
         data: Buffer.concat([Buffer.from([3]), equalityProof]),
       });
-      await provider.sendAndConfirm(
-        new Transaction().add(verifyEqualityIx),
-        [equalityProofContext],
-      );
+      await provider.sendAndConfirm(new Transaction().add(verifyEqualityIx), [
+        equalityProofContext,
+      ]);
 
       const verifyRangeIx = new TransactionInstruction({
         programId: ZK_ELGAMAL_PROOF_PROGRAM_ID,
@@ -1582,10 +1577,9 @@ describe("svs-6 (Confidential Streaming Yield Vault)", () => {
         ],
         data: Buffer.concat([Buffer.from([7]), rangeProof]),
       });
-      await provider.sendAndConfirm(
-        new Transaction().add(verifyRangeIx),
-        [rangeProofContext],
-      );
+      await provider.sendAndConfirm(new Transaction().add(verifyRangeIx), [
+        rangeProofContext,
+      ]);
 
       const aesKey = deriveAesKeyFromSignature(payer, userSharesAccount);
       const newDecryptableBalance = createDecryptableBalance(
@@ -1594,11 +1588,7 @@ describe("svs-6 (Confidential Streaming Yield Vault)", () => {
       );
 
       await program.methods
-        .redeem(
-          redeemShares,
-          new BN(0),
-          Array.from(newDecryptableBalance),
-        )
+        .redeem(redeemShares, new BN(0), Array.from(newDecryptableBalance))
         .accountsStrict({
           user: payer.publicKey,
           vault: vault,
@@ -1626,7 +1616,12 @@ describe("svs-6 (Confidential Streaming Yield Vault)", () => {
 
       const vaultAfter =
         await program.account.confidentialStreamVault.fetch(vault);
-      const redeemMintAfter = await getMint(connection, sharesMint, undefined, TOKEN_2022_PROGRAM_ID);
+      const redeemMintAfter = await getMint(
+        connection,
+        sharesMint,
+        undefined,
+        TOKEN_2022_PROGRAM_ID,
+      );
       expect(Number(redeemMintAfter.supply)).to.be.lessThan(redeemTotalShares);
 
       console.log(
@@ -1691,7 +1686,12 @@ describe("svs-6 (Confidential Streaming Yield Vault)", () => {
       const vaultAccount =
         await program.account.confidentialStreamVault.fetch(vault);
       expect(vaultAccount.baseAssets.toNumber()).to.be.greaterThan(0);
-      const viewMintInfo = await getMint(connection, sharesMint, undefined, TOKEN_2022_PROGRAM_ID);
+      const viewMintInfo = await getMint(
+        connection,
+        sharesMint,
+        undefined,
+        TOKEN_2022_PROGRAM_ID,
+      );
       expect(Number(viewMintInfo.supply)).to.be.greaterThan(0);
 
       await program.methods
@@ -1722,10 +1722,7 @@ describe("svs-6 (Confidential Streaming Yield Vault)", () => {
         "  baseAssets:",
         vaultAccount.baseAssets.toNumber() / 10 ** ASSET_DECIMALS,
       );
-      console.log(
-        "  totalShares:",
-        Number(viewMintInfo.supply) / 10 ** 9,
-      );
+      console.log("  totalShares:", Number(viewMintInfo.supply) / 10 ** 9);
     });
   });
 });

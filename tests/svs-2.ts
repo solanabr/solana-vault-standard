@@ -11,7 +11,12 @@ import {
   ASSOCIATED_TOKEN_PROGRAM_ID,
   transfer,
 } from "@solana/spl-token";
-import { Keypair, PublicKey, SystemProgram, SYSVAR_RENT_PUBKEY } from "@solana/web3.js";
+import {
+  Keypair,
+  PublicKey,
+  SystemProgram,
+  SYSVAR_RENT_PUBKEY,
+} from "@solana/web3.js";
 import { expect } from "chai";
 import { Svs2 } from "../target/types/svs_2";
 
@@ -33,17 +38,24 @@ describe("svs-2 (Stored Balance - Sync Required)", () => {
   const vaultId = new BN(1);
   const ASSET_DECIMALS = 6;
 
-  const getVaultPDA = (assetMint: PublicKey, vaultId: BN): [PublicKey, number] => {
+  const getVaultPDA = (
+    assetMint: PublicKey,
+    vaultId: BN,
+  ): [PublicKey, number] => {
     return PublicKey.findProgramAddressSync(
-      [Buffer.from("vault"), assetMint.toBuffer(), vaultId.toArrayLike(Buffer, "le", 8)],
-      program.programId
+      [
+        Buffer.from("vault"),
+        assetMint.toBuffer(),
+        vaultId.toArrayLike(Buffer, "le", 8),
+      ],
+      program.programId,
     );
   };
 
   const getSharesMintPDA = (vault: PublicKey): [PublicKey, number] => {
     return PublicKey.findProgramAddressSync(
       [Buffer.from("shares"), vault.toBuffer()],
-      program.programId
+      program.programId,
     );
   };
 
@@ -57,7 +69,7 @@ describe("svs-2 (Stored Balance - Sync Required)", () => {
       ASSET_DECIMALS,
       Keypair.generate(),
       undefined,
-      TOKEN_PROGRAM_ID
+      TOKEN_PROGRAM_ID,
     );
 
     [vault] = getVaultPDA(assetMint, vaultId);
@@ -72,7 +84,7 @@ describe("svs-2 (Stored Balance - Sync Required)", () => {
       false,
       undefined,
       undefined,
-      TOKEN_PROGRAM_ID
+      TOKEN_PROGRAM_ID,
     );
     userAssetAccount = userAssetAta.address;
 
@@ -86,7 +98,7 @@ describe("svs-2 (Stored Balance - Sync Required)", () => {
       1_000_000 * 10 ** ASSET_DECIMALS,
       [],
       undefined,
-      TOKEN_PROGRAM_ID
+      TOKEN_PROGRAM_ID,
     );
 
     // Derive asset vault ATA
@@ -101,7 +113,7 @@ describe("svs-2 (Stored Balance - Sync Required)", () => {
       payer.publicKey,
       false,
       TOKEN_2022_PROGRAM_ID,
-      ASSOCIATED_TOKEN_PROGRAM_ID
+      ASSOCIATED_TOKEN_PROGRAM_ID,
     );
 
     console.log("Setup:");
@@ -115,7 +127,12 @@ describe("svs-2 (Stored Balance - Sync Required)", () => {
   describe("Initialize", () => {
     it("creates a new vault", async () => {
       const tx = await program.methods
-        .initialize(vaultId, "SVS-2 Vault", "svVault2", "https://example.com/vault2.json")
+        .initialize(
+          vaultId,
+          "SVS-2 Vault",
+          "svVault2",
+          "https://example.com/vault2.json",
+        )
         .accountsStrict({
           authority: payer.publicKey,
           vault: vault,
@@ -133,9 +150,13 @@ describe("svs-2 (Stored Balance - Sync Required)", () => {
       console.log("Initialize tx:", tx);
 
       const vaultAccount = await program.account.vault.fetch(vault);
-      expect(vaultAccount.authority.toBase58()).to.equal(payer.publicKey.toBase58());
+      expect(vaultAccount.authority.toBase58()).to.equal(
+        payer.publicKey.toBase58(),
+      );
       expect(vaultAccount.assetMint.toBase58()).to.equal(assetMint.toBase58());
-      expect(vaultAccount.sharesMint.toBase58()).to.equal(sharesMint.toBase58());
+      expect(vaultAccount.sharesMint.toBase58()).to.equal(
+        sharesMint.toBase58(),
+      );
       expect(vaultAccount.totalAssets.toNumber()).to.equal(0);
       expect(vaultAccount.paused).to.equal(false);
       expect(vaultAccount.vaultId.toNumber()).to.equal(vaultId.toNumber());
@@ -143,7 +164,10 @@ describe("svs-2 (Stored Balance - Sync Required)", () => {
       // Asset vault should be empty
       const assetVaultAccount = await getAccount(connection, assetVault);
       expect(Number(assetVaultAccount.amount)).to.equal(0);
-      console.log("  Stored total_assets:", vaultAccount.totalAssets.toNumber());
+      console.log(
+        "  Stored total_assets:",
+        vaultAccount.totalAssets.toNumber(),
+      );
       console.log("  Actual vault balance:", Number(assetVaultAccount.amount));
     });
   });
@@ -151,8 +175,14 @@ describe("svs-2 (Stored Balance - Sync Required)", () => {
   describe("Deposit", () => {
     before(async () => {
       await getOrCreateAssociatedTokenAccount(
-        connection, payer, sharesMint, payer.publicKey,
-        false, undefined, undefined, TOKEN_2022_PROGRAM_ID
+        connection,
+        payer,
+        sharesMint,
+        payer.publicKey,
+        false,
+        undefined,
+        undefined,
+        TOKEN_2022_PROGRAM_ID,
       );
     });
 
@@ -177,23 +207,44 @@ describe("svs-2 (Stored Balance - Sync Required)", () => {
         .rpc();
 
       const userAssetAfter = await getAccount(connection, userAssetAccount);
-      const userSharesAfter = await getAccount(connection, userSharesAccount, undefined, TOKEN_2022_PROGRAM_ID);
+      const userSharesAfter = await getAccount(
+        connection,
+        userSharesAccount,
+        undefined,
+        TOKEN_2022_PROGRAM_ID,
+      );
 
-      const assetsDeposited = Number(userAssetBefore.amount) - Number(userAssetAfter.amount);
+      const assetsDeposited =
+        Number(userAssetBefore.amount) - Number(userAssetAfter.amount);
       expect(assetsDeposited).to.equal(depositAmount.toNumber());
       expect(Number(userSharesAfter.amount)).to.be.greaterThan(0);
 
       // SVS-2: stored total_assets should update
       const vaultAccount = await program.account.vault.fetch(vault);
-      expect(vaultAccount.totalAssets.toNumber()).to.equal(depositAmount.toNumber());
+      expect(vaultAccount.totalAssets.toNumber()).to.equal(
+        depositAmount.toNumber(),
+      );
 
       // Actual vault balance should match
       const assetVaultAccount = await getAccount(connection, assetVault);
-      expect(Number(assetVaultAccount.amount)).to.equal(depositAmount.toNumber());
+      expect(Number(assetVaultAccount.amount)).to.equal(
+        depositAmount.toNumber(),
+      );
 
-      console.log("  Deposited:", assetsDeposited / 10 ** ASSET_DECIMALS, "assets");
-      console.log("  Received:", Number(userSharesAfter.amount) / 10 ** 9, "shares");
-      console.log("  Stored total_assets:", vaultAccount.totalAssets.toNumber() / 10 ** ASSET_DECIMALS);
+      console.log(
+        "  Deposited:",
+        assetsDeposited / 10 ** ASSET_DECIMALS,
+        "assets",
+      );
+      console.log(
+        "  Received:",
+        Number(userSharesAfter.amount) / 10 ** 9,
+        "shares",
+      );
+      console.log(
+        "  Stored total_assets:",
+        vaultAccount.totalAssets.toNumber() / 10 ** ASSET_DECIMALS,
+      );
     });
 
     it("second deposit updates stored total correctly", async () => {
@@ -217,9 +268,12 @@ describe("svs-2 (Stored Balance - Sync Required)", () => {
 
       const vaultAfter = await program.account.vault.fetch(vault);
       expect(vaultAfter.totalAssets.toNumber()).to.equal(
-        vaultBefore.totalAssets.toNumber() + depositAmount.toNumber()
+        vaultBefore.totalAssets.toNumber() + depositAmount.toNumber(),
       );
-      console.log("  Stored total_assets now:", vaultAfter.totalAssets.toNumber() / 10 ** ASSET_DECIMALS);
+      console.log(
+        "  Stored total_assets now:",
+        vaultAfter.totalAssets.toNumber() / 10 ** ASSET_DECIMALS,
+      );
     });
   });
 
@@ -239,7 +293,7 @@ describe("svs-2 (Stored Balance - Sync Required)", () => {
         donationAmount,
         [],
         undefined,
-        TOKEN_PROGRAM_ID
+        TOKEN_PROGRAM_ID,
       );
 
       // Stored total_assets should be UNCHANGED
@@ -250,9 +304,19 @@ describe("svs-2 (Stored Balance - Sync Required)", () => {
       const assetVaultAccount = await getAccount(connection, assetVault);
       expect(Number(assetVaultAccount.amount)).to.be.greaterThan(storedBefore);
 
-      console.log("  Stored total_assets (unchanged):", vaultAfterDonation.totalAssets.toNumber() / 10 ** ASSET_DECIMALS);
-      console.log("  Actual vault balance:", Number(assetVaultAccount.amount) / 10 ** ASSET_DECIMALS);
-      console.log("  Unrecognized yield:", (Number(assetVaultAccount.amount) - storedBefore) / 10 ** ASSET_DECIMALS);
+      console.log(
+        "  Stored total_assets (unchanged):",
+        vaultAfterDonation.totalAssets.toNumber() / 10 ** ASSET_DECIMALS,
+      );
+      console.log(
+        "  Actual vault balance:",
+        Number(assetVaultAccount.amount) / 10 ** ASSET_DECIMALS,
+      );
+      console.log(
+        "  Unrecognized yield:",
+        (Number(assetVaultAccount.amount) - storedBefore) /
+          10 ** ASSET_DECIMALS,
+      );
     });
 
     it("sync() updates stored total_assets to actual balance", async () => {
@@ -272,12 +336,23 @@ describe("svs-2 (Stored Balance - Sync Required)", () => {
       const assetVaultAccount = await getAccount(connection, assetVault);
 
       // Stored total now matches actual balance
-      expect(vaultAfterSync.totalAssets.toNumber()).to.equal(Number(assetVaultAccount.amount));
-      expect(vaultAfterSync.totalAssets.toNumber()).to.be.greaterThan(storedBefore);
+      expect(vaultAfterSync.totalAssets.toNumber()).to.equal(
+        Number(assetVaultAccount.amount),
+      );
+      expect(vaultAfterSync.totalAssets.toNumber()).to.be.greaterThan(
+        storedBefore,
+      );
 
       console.log("  Before sync:", storedBefore / 10 ** ASSET_DECIMALS);
-      console.log("  After sync:", vaultAfterSync.totalAssets.toNumber() / 10 ** ASSET_DECIMALS);
-      console.log("  Yield recognized:", (vaultAfterSync.totalAssets.toNumber() - storedBefore) / 10 ** ASSET_DECIMALS);
+      console.log(
+        "  After sync:",
+        vaultAfterSync.totalAssets.toNumber() / 10 ** ASSET_DECIMALS,
+      );
+      console.log(
+        "  Yield recognized:",
+        (vaultAfterSync.totalAssets.toNumber() - storedBefore) /
+          10 ** ASSET_DECIMALS,
+      );
     });
 
     it("sync increases share value for existing holders", async () => {
@@ -285,20 +360,35 @@ describe("svs-2 (Stored Balance - Sync Required)", () => {
       // but total_shares stayed the same
       const vaultAccount = await program.account.vault.fetch(vault);
       const assetVaultAccount = await getAccount(connection, assetVault);
-      const userShares = await getAccount(connection, userSharesAccount, undefined, TOKEN_2022_PROGRAM_ID);
+      const userShares = await getAccount(
+        connection,
+        userSharesAccount,
+        undefined,
+        TOKEN_2022_PROGRAM_ID,
+      );
 
       // Share price = total_assets / total_shares (simplified)
       // After sync, total_assets > sum of deposits, so share price > 1
-      expect(vaultAccount.totalAssets.toNumber()).to.equal(Number(assetVaultAccount.amount));
+      expect(vaultAccount.totalAssets.toNumber()).to.equal(
+        Number(assetVaultAccount.amount),
+      );
 
-      console.log("  Total assets:", vaultAccount.totalAssets.toNumber() / 10 ** ASSET_DECIMALS);
+      console.log(
+        "  Total assets:",
+        vaultAccount.totalAssets.toNumber() / 10 ** ASSET_DECIMALS,
+      );
       console.log("  User shares:", Number(userShares.amount) / 10 ** 9);
     });
   });
 
   describe("Redeem", () => {
     it("redeems shares for assets", async () => {
-      const sharesBefore = await getAccount(connection, userSharesAccount, undefined, TOKEN_2022_PROGRAM_ID);
+      const sharesBefore = await getAccount(
+        connection,
+        userSharesAccount,
+        undefined,
+        TOKEN_2022_PROGRAM_ID,
+      );
       const assetsBefore = await getAccount(connection, userAssetAccount);
       const vaultBefore = await program.account.vault.fetch(vault);
 
@@ -320,29 +410,50 @@ describe("svs-2 (Stored Balance - Sync Required)", () => {
         })
         .rpc();
 
-      const sharesAfter = await getAccount(connection, userSharesAccount, undefined, TOKEN_2022_PROGRAM_ID);
+      const sharesAfter = await getAccount(
+        connection,
+        userSharesAccount,
+        undefined,
+        TOKEN_2022_PROGRAM_ID,
+      );
       const assetsAfter = await getAccount(connection, userAssetAccount);
       const vaultAfter = await program.account.vault.fetch(vault);
 
-      const sharesBurned = Number(sharesBefore.amount) - Number(sharesAfter.amount);
-      const assetsReceived = Number(assetsAfter.amount) - Number(assetsBefore.amount);
+      const sharesBurned =
+        Number(sharesBefore.amount) - Number(sharesAfter.amount);
+      const assetsReceived =
+        Number(assetsAfter.amount) - Number(assetsBefore.amount);
 
       expect(sharesBurned).to.equal(redeemShares.toNumber());
       expect(assetsReceived).to.be.greaterThan(0);
 
       // SVS-2: stored total_assets should decrease
       expect(vaultAfter.totalAssets.toNumber()).to.equal(
-        vaultBefore.totalAssets.toNumber() - assetsReceived
+        vaultBefore.totalAssets.toNumber() - assetsReceived,
       );
 
-      console.log("  Redeemed:", sharesBurned / 10 ** 9, "shares for", assetsReceived / 10 ** ASSET_DECIMALS, "assets");
-      console.log("  Stored total_assets now:", vaultAfter.totalAssets.toNumber() / 10 ** ASSET_DECIMALS);
+      console.log(
+        "  Redeemed:",
+        sharesBurned / 10 ** 9,
+        "shares for",
+        assetsReceived / 10 ** ASSET_DECIMALS,
+        "assets",
+      );
+      console.log(
+        "  Stored total_assets now:",
+        vaultAfter.totalAssets.toNumber() / 10 ** ASSET_DECIMALS,
+      );
     });
   });
 
   describe("Withdraw", () => {
     it("withdraws exact assets", async () => {
-      const sharesBefore = await getAccount(connection, userSharesAccount, undefined, TOKEN_2022_PROGRAM_ID);
+      const sharesBefore = await getAccount(
+        connection,
+        userSharesAccount,
+        undefined,
+        TOKEN_2022_PROGRAM_ID,
+      );
       const assetsBefore = await getAccount(connection, userAssetAccount);
 
       const withdrawAssets = new BN(10_000 * 10 ** ASSET_DECIMALS);
@@ -363,19 +474,32 @@ describe("svs-2 (Stored Balance - Sync Required)", () => {
         .rpc();
 
       const assetsAfter = await getAccount(connection, userAssetAccount);
-      const assetsReceived = Number(assetsAfter.amount) - Number(assetsBefore.amount);
+      const assetsReceived =
+        Number(assetsAfter.amount) - Number(assetsBefore.amount);
       expect(assetsReceived).to.equal(withdrawAssets.toNumber());
 
       // Verify stored total decreased
       const vaultAfter = await program.account.vault.fetch(vault);
-      console.log("  Withdrew:", assetsReceived / 10 ** ASSET_DECIMALS, "assets");
-      console.log("  Stored total_assets now:", vaultAfter.totalAssets.toNumber() / 10 ** ASSET_DECIMALS);
+      console.log(
+        "  Withdrew:",
+        assetsReceived / 10 ** ASSET_DECIMALS,
+        "assets",
+      );
+      console.log(
+        "  Stored total_assets now:",
+        vaultAfter.totalAssets.toNumber() / 10 ** ASSET_DECIMALS,
+      );
     });
   });
 
   describe("Mint", () => {
     it("mints exact shares", async () => {
-      const sharesBefore = await getAccount(connection, userSharesAccount, undefined, TOKEN_2022_PROGRAM_ID);
+      const sharesBefore = await getAccount(
+        connection,
+        userSharesAccount,
+        undefined,
+        TOKEN_2022_PROGRAM_ID,
+      );
       const assetsBefore = await getAccount(connection, userAssetAccount);
 
       const mintShares = new BN(1000 * 10 ** 9);
@@ -395,14 +519,23 @@ describe("svs-2 (Stored Balance - Sync Required)", () => {
         })
         .rpc();
 
-      const sharesAfter = await getAccount(connection, userSharesAccount, undefined, TOKEN_2022_PROGRAM_ID);
-      const sharesMinted = Number(sharesAfter.amount) - Number(sharesBefore.amount);
+      const sharesAfter = await getAccount(
+        connection,
+        userSharesAccount,
+        undefined,
+        TOKEN_2022_PROGRAM_ID,
+      );
+      const sharesMinted =
+        Number(sharesAfter.amount) - Number(sharesBefore.amount);
       expect(sharesMinted).to.equal(mintShares.toNumber());
 
       // Verify stored total increased
       const vaultAfter = await program.account.vault.fetch(vault);
       console.log("  Minted:", sharesMinted / 10 ** 9, "shares");
-      console.log("  Stored total_assets now:", vaultAfter.totalAssets.toNumber() / 10 ** ASSET_DECIMALS);
+      console.log(
+        "  Stored total_assets now:",
+        vaultAfter.totalAssets.toNumber() / 10 ** ASSET_DECIMALS,
+      );
     });
   });
 
@@ -467,8 +600,13 @@ describe("svs-2 (Stored Balance - Sync Required)", () => {
         .rpc();
 
       let vaultAccount = await program.account.vault.fetch(vault);
-      expect(vaultAccount.authority.toBase58()).to.equal(newAuthority.publicKey.toBase58());
-      console.log("  Authority transferred to:", newAuthority.publicKey.toBase58().slice(0, 16) + "...");
+      expect(vaultAccount.authority.toBase58()).to.equal(
+        newAuthority.publicKey.toBase58(),
+      );
+      console.log(
+        "  Authority transferred to:",
+        newAuthority.publicKey.toBase58().slice(0, 16) + "...",
+      );
 
       // Transfer back
       await program.methods
@@ -481,7 +619,9 @@ describe("svs-2 (Stored Balance - Sync Required)", () => {
         .rpc();
 
       vaultAccount = await program.account.vault.fetch(vault);
-      expect(vaultAccount.authority.toBase58()).to.equal(payer.publicKey.toBase58());
+      expect(vaultAccount.authority.toBase58()).to.equal(
+        payer.publicKey.toBase58(),
+      );
       console.log("  Authority transferred back");
     });
 
@@ -577,8 +717,14 @@ describe("svs-2 (Stored Balance - Sync Required)", () => {
       const assetVaultAccount = await getAccount(connection, assetVault);
 
       // SVS-2: total_assets view returns STORED value
-      console.log("  Stored total_assets:", vaultAccount.totalAssets.toNumber() / 10 ** ASSET_DECIMALS);
-      console.log("  Actual vault balance:", Number(assetVaultAccount.amount) / 10 ** ASSET_DECIMALS);
+      console.log(
+        "  Stored total_assets:",
+        vaultAccount.totalAssets.toNumber() / 10 ** ASSET_DECIMALS,
+      );
+      console.log(
+        "  Actual vault balance:",
+        Number(assetVaultAccount.amount) / 10 ** ASSET_DECIMALS,
+      );
     });
 
     it("max deposit returns u64::MAX when not paused", async () => {
@@ -689,7 +835,9 @@ describe("svs-2 (Stored Balance - Sync Required)", () => {
         .rpc();
 
       const vaultAfter = await program.account.vault.fetch(vault);
-      expect(vaultAfter.totalAssets.toNumber()).to.equal(vaultBefore.totalAssets.toNumber());
+      expect(vaultAfter.totalAssets.toNumber()).to.equal(
+        vaultBefore.totalAssets.toNumber(),
+      );
       console.log("  Sync with no new donations: total_assets unchanged");
     });
 
@@ -705,7 +853,7 @@ describe("svs-2 (Stored Balance - Sync Required)", () => {
         donationAmount,
         [],
         undefined,
-        TOKEN_PROGRAM_ID
+        TOKEN_PROGRAM_ID,
       );
 
       // First sync
@@ -731,8 +879,13 @@ describe("svs-2 (Stored Balance - Sync Required)", () => {
         .rpc();
 
       const afterSecondSync = await program.account.vault.fetch(vault);
-      expect(afterSecondSync.totalAssets.toNumber()).to.equal(afterFirstSync.totalAssets.toNumber());
-      console.log("  Sequential syncs idempotent:", afterSecondSync.totalAssets.toNumber() / 10 ** ASSET_DECIMALS);
+      expect(afterSecondSync.totalAssets.toNumber()).to.equal(
+        afterFirstSync.totalAssets.toNumber(),
+      );
+      console.log(
+        "  Sequential syncs idempotent:",
+        afterSecondSync.totalAssets.toNumber() / 10 ** ASSET_DECIMALS,
+      );
     });
   });
 

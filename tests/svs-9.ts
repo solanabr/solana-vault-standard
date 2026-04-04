@@ -50,7 +50,7 @@ describe("svs-9", () => {
   let childVaultAddress: PublicKey;
   let childSharesMintAddress: PublicKey;
   const SVS1_ID = new PublicKey("CzZyssz2PdLccWpbVi6a3wFKMmMqdf28U2RapNNRJSPX");
-  
+
   // ─── PDAs and Derived Accounts ───
   let childAllocationPDA: PublicKey;
   let userSharesAccount: PublicKey;
@@ -64,7 +64,7 @@ describe("svs-9", () => {
     for (const kp of [authority, curator, user, impostor]) {
       const sig = await provider.connection.requestAirdrop(
         kp.publicKey,
-        airdropAmount
+        airdropAmount,
       );
       await provider.connection.confirmTransaction(sig);
     }
@@ -75,7 +75,7 @@ describe("svs-9", () => {
       authority,
       authority.publicKey,
       null,
-      6
+      6,
     );
 
     // Initialize a real SVS-1 Vault for child vault testing
@@ -87,7 +87,8 @@ describe("svs-9", () => {
       uri: "https://svs.example.com",
     });
     // @ts-ignore - The client might not have authority field exposed if type is narrow
-    const childAuthority = (childVaultClient as any).authority || authority.publicKey;
+    const childAuthority =
+      (childVaultClient as any).authority || authority.publicKey;
     childVaultAddress = childVaultClient.vault;
     childSharesMintAddress = childVaultClient.sharesMint;
 
@@ -96,7 +97,7 @@ describe("svs-9", () => {
       provider.connection,
       authority,
       assetMint,
-      user.publicKey
+      user.publicKey,
     );
     userAssetAccount = userAta.address;
 
@@ -106,7 +107,7 @@ describe("svs-9", () => {
       assetMint,
       userAssetAccount,
       authority,
-      10_000 * 10 ** 6
+      10_000 * 10 ** 6,
     );
 
     // Derive PDAs
@@ -116,7 +117,7 @@ describe("svs-9", () => {
         assetMint.toBuffer(),
         vaultId.toArrayLike(Buffer, "le", 8),
       ],
-      program.programId
+      program.programId,
     );
 
     [childAllocationPDA] = PublicKey.findProgramAddressSync(
@@ -125,18 +126,18 @@ describe("svs-9", () => {
         allocatorVaultPDA.toBuffer(),
         childVaultAddress.toBuffer(),
       ],
-      program.programId
+      program.programId,
     );
 
     sharesMint = PublicKey.findProgramAddressSync(
       [Buffer.from("shares_mint"), allocatorVaultPDA.toBuffer()],
-      program.programId
+      program.programId,
     )[0];
 
     idleVaultATA = getAssociatedTokenAddressSync(
       assetMint,
       allocatorVaultPDA,
-      true
+      true,
     );
   });
 
@@ -154,17 +155,43 @@ describe("svs-9", () => {
     for (const alloc of childAllocations) {
       if (alloc.account.enabled) {
         // Read child vault state to get its asset_vault and shares_mint
-        const childVaultInfo = await provider.connection.getAccountInfo(alloc.account.childVault as PublicKey);
+        const childVaultInfo = await provider.connection.getAccountInfo(
+          alloc.account.childVault as PublicKey,
+        );
         if (!childVaultInfo) continue;
         // SVS-1 Vault layout: discrim(8) + authority(32) + asset_mint(32) + shares_mint(32) + asset_vault(32)
-        const childAssetVault = new PublicKey(childVaultInfo.data.subarray(104, 136));
-        const childSharesMint = new PublicKey(childVaultInfo.data.subarray(72, 104));
+        const childAssetVault = new PublicKey(
+          childVaultInfo.data.subarray(104, 136),
+        );
+        const childSharesMint = new PublicKey(
+          childVaultInfo.data.subarray(72, 104),
+        );
 
-        remainingAccounts.push({ pubkey: alloc.publicKey, isSigner: false, isWritable: false });
-        remainingAccounts.push({ pubkey: alloc.account.childVault as PublicKey, isSigner: false, isWritable: false });
-        remainingAccounts.push({ pubkey: alloc.account.childSharesAccount as PublicKey, isSigner: false, isWritable: false });
-        remainingAccounts.push({ pubkey: childAssetVault, isSigner: false, isWritable: false });
-        remainingAccounts.push({ pubkey: childSharesMint, isSigner: false, isWritable: false });
+        remainingAccounts.push({
+          pubkey: alloc.publicKey,
+          isSigner: false,
+          isWritable: false,
+        });
+        remainingAccounts.push({
+          pubkey: alloc.account.childVault as PublicKey,
+          isSigner: false,
+          isWritable: false,
+        });
+        remainingAccounts.push({
+          pubkey: alloc.account.childSharesAccount as PublicKey,
+          isSigner: false,
+          isWritable: false,
+        });
+        remainingAccounts.push({
+          pubkey: childAssetVault,
+          isSigner: false,
+          isWritable: false,
+        });
+        remainingAccounts.push({
+          pubkey: childSharesMint,
+          isSigner: false,
+          isWritable: false,
+        });
       }
     }
     return remainingAccounts;
@@ -191,7 +218,8 @@ describe("svs-9", () => {
       .signers([authority])
       .rpc();
 
-    const state: any = await program.account.allocatorVault.fetch(allocatorVaultPDA);
+    const state: any =
+      await program.account.allocatorVault.fetch(allocatorVaultPDA);
     expect(state.authority.toBase58()).to.equal(authority.publicKey.toBase58());
     expect(state.curator.toBase58()).to.equal(curator.publicKey.toBase58());
     expect(state.vaultId.toNumber()).to.equal(1);
@@ -208,7 +236,7 @@ describe("svs-9", () => {
       childSharesMintAddress,
       allocatorVaultPDA,
       true,
-      TOKEN_2022_PROGRAM_ID
+      TOKEN_2022_PROGRAM_ID,
     );
 
     await program.methods
@@ -230,16 +258,14 @@ describe("svs-9", () => {
       .signers([authority])
       .rpc();
 
-    const allocation = await program.account.childAllocation.fetch(
-      childAllocationPDA
-    );
+    const allocation =
+      await program.account.childAllocation.fetch(childAllocationPDA);
     expect(allocation.maxWeightBps).to.equal(5000);
     expect(allocation.enabled).to.be.true;
     expect(allocation.depositedAssets.toNumber()).to.equal(0);
 
-    const vaultState = await program.account.allocatorVault.fetch(
-      allocatorVaultPDA
-    );
+    const vaultState =
+      await program.account.allocatorVault.fetch(allocatorVaultPDA);
     expect(vaultState.numChildren).to.equal(1);
   });
 
@@ -256,7 +282,7 @@ describe("svs-9", () => {
       false,
       undefined,
       undefined,
-      TOKEN_2022_PROGRAM_ID
+      TOKEN_2022_PROGRAM_ID,
     );
     userSharesAccount = userSharesAta.address;
 
@@ -280,14 +306,12 @@ describe("svs-9", () => {
       .signers([user])
       .rpc();
 
-    const vaultState: any = await program.account.allocatorVault.fetch(
-      allocatorVaultPDA
-    );
+    const vaultState: any =
+      await program.account.allocatorVault.fetch(allocatorVaultPDA);
     expect(vaultState.totalShares?.toNumber() || 0).to.equal(1_000 * 10 ** 9);
 
-    const idleBalance = await provider.connection.getTokenAccountBalance(
-      idleVaultATA
-    );
+    const idleBalance =
+      await provider.connection.getTokenAccountBalance(idleVaultATA);
     expect(idleBalance.value.amount).to.equal((1_000 * 10 ** 6).toString());
   });
 
@@ -320,7 +344,7 @@ describe("svs-9", () => {
   });
 
   it("Rejects deposit below minimum amount", async () => {
-    const tinyAmount = new BN(100); 
+    const tinyAmount = new BN(100);
 
     try {
       await program.methods
@@ -369,7 +393,12 @@ describe("svs-9", () => {
           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           rent: SYSVAR_RENT_PUBKEY,
-          allocatorChildSharesAccount: getAssociatedTokenAddressSync(childSharesMintAddress, allocatorVaultPDA, true, TOKEN_2022_PROGRAM_ID),
+          allocatorChildSharesAccount: getAssociatedTokenAddressSync(
+            childSharesMintAddress,
+            allocatorVaultPDA,
+            true,
+            TOKEN_2022_PROGRAM_ID,
+          ),
         } as any)
         .remainingAccounts(await getRemainingAccounts())
         .signers([impostor])
@@ -381,7 +410,7 @@ describe("svs-9", () => {
           msg.includes("Unauthorized") ||
           msg.includes("has_one") ||
           msg.includes("6004") ||
-          msg.includes("2001")
+          msg.includes("2001"),
       );
     }
   });
@@ -451,7 +480,12 @@ describe("svs-9", () => {
         allocatorVault: allocatorVaultPDA,
         childAllocation: childAllocationPDA,
         childVault: childVaultAddress,
-        allocatorChildSharesAccount: getAssociatedTokenAddressSync(childSharesMintAddress, allocatorVaultPDA, true, TOKEN_2022_PROGRAM_ID),
+        allocatorChildSharesAccount: getAssociatedTokenAddressSync(
+          childSharesMintAddress,
+          allocatorVaultPDA,
+          true,
+          TOKEN_2022_PROGRAM_ID,
+        ),
       } as any)
       .signers([authority])
       .rpc();
@@ -463,7 +497,8 @@ describe("svs-9", () => {
       expect(err.toString()).to.include("Account does not exist");
     }
 
-    const state: any = await program.account.allocatorVault.fetch(allocatorVaultPDA);
+    const state: any =
+      await program.account.allocatorVault.fetch(allocatorVaultPDA);
     expect(state.numChildren).to.equal(0);
     expect(state.totalShares.toNumber()).to.equal(1_000 * 10 ** 9);
   });
@@ -488,7 +523,9 @@ describe("svs-9", () => {
   // ═══════════════════════════════════════════
   it("Redeems shares for assets", async () => {
     const redeemAmount = new BN(100 * 10 ** 9);
-    const initialUserIdle = (await provider.connection.getTokenAccountBalance(userAssetAccount)).value.uiAmount;
+    const initialUserIdle = (
+      await provider.connection.getTokenAccountBalance(userAssetAccount)
+    ).value.uiAmount;
 
     await program.methods
       .redeem(redeemAmount, new BN(0))
@@ -508,7 +545,9 @@ describe("svs-9", () => {
       .signers([user])
       .rpc();
 
-    const currentUserIdle = (await provider.connection.getTokenAccountBalance(userAssetAccount)).value.uiAmount;
+    const currentUserIdle = (
+      await provider.connection.getTokenAccountBalance(userAssetAccount)
+    ).value.uiAmount;
     expect(currentUserIdle!).to.be.approximately(initialUserIdle! + 100, 0.001);
   });
 });

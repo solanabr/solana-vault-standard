@@ -32,7 +32,7 @@ import {
 } from "../sdk/core/src/credit-vault-pda";
 
 const ATTESTATION_PROGRAM_ID = new PublicKey(
-  "GTTMWDHTZibyEpqNRr33RnBhgms262U6qHaGrjoHqEXg"
+  "GTTMWDHTZibyEpqNRr33RnBhgms262U6qHaGrjoHqEXg",
 );
 const PRICE_SCALE = new BN(1_000_000_000);
 const FAR_FUTURE_EXPIRY = new BN(4_102_444_800); // ~year 2100
@@ -43,7 +43,8 @@ describe("svs-11 (Credit Markets Vault)", () => {
 
   const program = anchor.workspace.Svs11 as Program<Svs11>;
   const oracleProgram = anchor.workspace.MockOracle as Program<MockOracle>;
-  const attestationMockProgram = anchor.workspace.MockSas as Program<MockAttestation>;
+  const attestationMockProgram = anchor.workspace
+    .MockSas as Program<MockAttestation>;
   const connection = provider.connection;
   const payer = (provider.wallet as anchor.Wallet).payer;
 
@@ -87,10 +88,14 @@ describe("svs-11 (Credit Markets Vault)", () => {
   const getRedemptionEscrowPDA = (): [PublicKey, number] =>
     getRedemptionEscrowAddress(program.programId, vault);
 
-  const getInvestmentRequestPDA = (investorKey: PublicKey): [PublicKey, number] =>
+  const getInvestmentRequestPDA = (
+    investorKey: PublicKey,
+  ): [PublicKey, number] =>
     getInvestmentRequestAddress(program.programId, vault, investorKey);
 
-  const getRedemptionRequestPDA = (investorKey: PublicKey): [PublicKey, number] =>
+  const getRedemptionRequestPDA = (
+    investorKey: PublicKey,
+  ): [PublicKey, number] =>
     getRedemptionRequestAddress(program.programId, vault, investorKey);
 
   const getClaimableTokensPDA = (investorKey: PublicKey): [PublicKey, number] =>
@@ -102,14 +107,14 @@ describe("svs-11 (Credit Markets Vault)", () => {
   const getOracleDataPDA = (vaultPda: PublicKey): [PublicKey, number] => {
     return PublicKey.findProgramAddressSync(
       [Buffer.from("oracle"), vaultPda.toBuffer()],
-      oracleProgram.programId
+      oracleProgram.programId,
     );
   };
 
   const getAttestationPDA = (
     subject: PublicKey,
     issuer: PublicKey,
-    attestationType: number = 0
+    attestationType: number = 0,
   ): [PublicKey, number] => {
     return PublicKey.findProgramAddressSync(
       [
@@ -118,7 +123,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
         issuer.toBuffer(),
         Buffer.from([attestationType]),
       ],
-      ATTESTATION_PROGRAM_ID
+      ATTESTATION_PROGRAM_ID,
     );
   };
 
@@ -131,13 +136,13 @@ describe("svs-11 (Credit Markets Vault)", () => {
     // Fund manager and investor
     const airdropManager = await connection.requestAirdrop(
       manager.publicKey,
-      10 * anchor.web3.LAMPORTS_PER_SOL
+      10 * anchor.web3.LAMPORTS_PER_SOL,
     );
     await connection.confirmTransaction(airdropManager);
 
     const airdropInvestor = await connection.requestAirdrop(
       investor.publicKey,
-      10 * anchor.web3.LAMPORTS_PER_SOL
+      10 * anchor.web3.LAMPORTS_PER_SOL,
     );
     await connection.confirmTransaction(airdropInvestor);
 
@@ -150,7 +155,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
       ASSET_DECIMALS,
       Keypair.generate(),
       undefined,
-      TOKEN_PROGRAM_ID
+      TOKEN_PROGRAM_ID,
     );
 
     // Derive PDAs
@@ -162,21 +167,18 @@ describe("svs-11 (Credit Markets Vault)", () => {
     [redemptionRequest] = getRedemptionRequestPDA(investor.publicKey);
     [claimableTokens] = getClaimableTokensPDA(investor.publicKey);
     [frozenAccount] = getFrozenAccountPDA(investor.publicKey);
-    [attestation] = getAttestationPDA(
-      investor.publicKey,
-      attester.publicKey
-    );
+    [attestation] = getAttestationPDA(investor.publicKey, attester.publicKey);
 
     [vaultConfig] = PublicKey.findProgramAddressSync(
       [Buffer.from("vault_config"), vault.toBuffer()],
-      program.programId
+      program.programId,
     );
 
     depositVault = getAssociatedTokenAddressSync(
       assetMint,
       vault,
       true,
-      TOKEN_PROGRAM_ID
+      TOKEN_PROGRAM_ID,
     );
 
     // Create investor token account and mint assets
@@ -188,7 +190,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
       false,
       undefined,
       undefined,
-      TOKEN_PROGRAM_ID
+      TOKEN_PROGRAM_ID,
     );
     investorTokenAccount = investorAta.address;
 
@@ -201,7 +203,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
       BigInt(depositAmount.toString()) * BigInt(10),
       [],
       undefined,
-      TOKEN_PROGRAM_ID
+      TOKEN_PROGRAM_ID,
     );
 
     // Create manager token account and mint assets (for repay)
@@ -213,7 +215,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
       false,
       undefined,
       undefined,
-      TOKEN_PROGRAM_ID
+      TOKEN_PROGRAM_ID,
     );
     managerTokenAccount = managerAta.address;
 
@@ -226,7 +228,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
       BigInt(depositAmount.toString()) * BigInt(10),
       [],
       undefined,
-      TOKEN_PROGRAM_ID
+      TOKEN_PROGRAM_ID,
     );
 
     // Set oracle price (1:1)
@@ -242,12 +244,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
 
     // Create attestation for investor
     await attestationMockProgram.methods
-      .createAttestation(
-        attester.publicKey,
-        0,
-        [66, 82],
-        FAR_FUTURE_EXPIRY
-      )
+      .createAttestation(attester.publicKey, 0, [66, 82], FAR_FUTURE_EXPIRY)
       .accountsPartial({
         authority: payer.publicKey,
         attestation,
@@ -260,11 +257,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
   describe("Initialization", () => {
     it("initializes vault correctly", async () => {
       await program.methods
-        .initializePool(
-          vaultId,
-          minimumInvestment,
-          maxStaleness
-        )
+        .initializePool(vaultId, minimumInvestment, maxStaleness)
         .accountsPartial({
           authority: payer.publicKey,
           manager: manager.publicKey,
@@ -287,35 +280,31 @@ describe("svs-11 (Credit Markets Vault)", () => {
 
       const vaultAccount = await program.account.creditVault.fetch(vault);
       expect(vaultAccount.authority.toBase58()).to.equal(
-        payer.publicKey.toBase58()
+        payer.publicKey.toBase58(),
       );
       expect(vaultAccount.manager.toBase58()).to.equal(
-        manager.publicKey.toBase58()
+        manager.publicKey.toBase58(),
       );
-      expect(vaultAccount.assetMint.toBase58()).to.equal(
-        assetMint.toBase58()
-      );
+      expect(vaultAccount.assetMint.toBase58()).to.equal(assetMint.toBase58());
       expect(vaultAccount.sharesMint.toBase58()).to.equal(
-        sharesMint.toBase58()
+        sharesMint.toBase58(),
       );
-      expect(vaultAccount.navOracle.toBase58()).to.equal(
-        navOracle.toBase58()
-      );
+      expect(vaultAccount.navOracle.toBase58()).to.equal(navOracle.toBase58());
       expect(vaultAccount.oracleProgram.toBase58()).to.equal(
-        oracleProgram.programId.toBase58()
+        oracleProgram.programId.toBase58(),
       );
       expect(vaultAccount.attester.toBase58()).to.equal(
-        attester.publicKey.toBase58()
+        attester.publicKey.toBase58(),
       );
       expect(vaultAccount.attestationProgram.toBase58()).to.equal(
-        attestationProgramId.toBase58()
+        attestationProgramId.toBase58(),
       );
       expect(vaultAccount.vaultId.toNumber()).to.equal(1);
       expect(vaultAccount.totalAssets.toNumber()).to.equal(0);
       expect(vaultAccount.totalShares.toNumber()).to.equal(0);
       expect(vaultAccount.totalPendingDeposits.toNumber()).to.equal(0);
       expect(vaultAccount.minimumInvestment.toNumber()).to.equal(
-        minimumInvestment.toNumber()
+        minimumInvestment.toNumber(),
       );
       expect(vaultAccount.investmentWindowOpen).to.equal(false);
       expect(vaultAccount.paused).to.equal(false);
@@ -424,29 +413,28 @@ describe("svs-11 (Credit Markets Vault)", () => {
         .signers([investor])
         .rpc();
 
-      const request = await program.account.investmentRequest.fetch(
-        investmentRequest
-      );
+      const request =
+        await program.account.investmentRequest.fetch(investmentRequest);
       expect(request.investor.toBase58()).to.equal(
-        investor.publicKey.toBase58()
+        investor.publicKey.toBase58(),
       );
       expect(request.amountLocked.toString()).to.equal(
-        depositAmount.toString()
+        depositAmount.toString(),
       );
       expect(request.sharesClaimable.toNumber()).to.equal(0);
       expect(JSON.stringify(request.status)).to.equal(
-        JSON.stringify({ pending: {} })
+        JSON.stringify({ pending: {} }),
       );
 
       const balanceAfter = await getAccount(connection, investorTokenAccount);
       expect(
         BigInt(balanceBefore.amount.toString()) -
-          BigInt(balanceAfter.amount.toString())
+          BigInt(balanceAfter.amount.toString()),
       ).to.equal(BigInt(depositAmount.toString()));
 
       const vaultAccount = await program.account.creditVault.fetch(vault);
       expect(vaultAccount.totalPendingDeposits.toString()).to.equal(
-        depositAmount.toString()
+        depositAmount.toString(),
       );
     });
 
@@ -466,21 +454,20 @@ describe("svs-11 (Credit Markets Vault)", () => {
         .signers([manager])
         .rpc();
 
-      const request = await program.account.investmentRequest.fetch(
-        investmentRequest
-      );
+      const request =
+        await program.account.investmentRequest.fetch(investmentRequest);
       expect(JSON.stringify(request.status)).to.equal(
-        JSON.stringify({ approved: {} })
+        JSON.stringify({ approved: {} }),
       );
       expect(request.sharesClaimable.toString()).to.equal(
-        expectedShares.toString()
+        expectedShares.toString(),
       );
 
       const vaultAccount = await program.account.creditVault.fetch(vault);
       expect(vaultAccount.totalAssets.toNumber()).to.equal(0);
       expect(vaultAccount.totalShares.toNumber()).to.equal(0);
       expect(vaultAccount.totalApprovedDeposits.toString()).to.equal(
-        depositAmount.toString()
+        depositAmount.toString(),
       );
       expect(vaultAccount.totalPendingDeposits.toNumber()).to.equal(0);
     });
@@ -494,7 +481,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
         false,
         undefined,
         undefined,
-        TOKEN_2022_PROGRAM_ID
+        TOKEN_2022_PROGRAM_ID,
       );
       investorSharesAccount = ata.address;
 
@@ -516,10 +503,10 @@ describe("svs-11 (Credit Markets Vault)", () => {
         connection,
         investorSharesAccount,
         undefined,
-        TOKEN_2022_PROGRAM_ID
+        TOKEN_2022_PROGRAM_ID,
       );
       expect(sharesBalance.amount.toString()).to.equal(
-        expectedShares.toString()
+        expectedShares.toString(),
       );
     });
 
@@ -539,7 +526,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
       rejectInvestor = Keypair.generate();
       const airdrop = await connection.requestAirdrop(
         rejectInvestor.publicKey,
-        5 * anchor.web3.LAMPORTS_PER_SOL
+        5 * anchor.web3.LAMPORTS_PER_SOL,
       );
       await connection.confirmTransaction(airdrop);
 
@@ -551,7 +538,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
         false,
         undefined,
         undefined,
-        TOKEN_PROGRAM_ID
+        TOKEN_PROGRAM_ID,
       );
       rejectInvestorTokenAccount = ata.address;
 
@@ -564,24 +551,19 @@ describe("svs-11 (Credit Markets Vault)", () => {
         BigInt(depositAmount.toString()),
         [],
         undefined,
-        TOKEN_PROGRAM_ID
+        TOKEN_PROGRAM_ID,
       );
 
       [rejectInvestmentRequest] = getInvestmentRequestPDA(
-        rejectInvestor.publicKey
+        rejectInvestor.publicKey,
       );
       [rejectAttestation] = getAttestationPDA(
         rejectInvestor.publicKey,
-        attester.publicKey
+        attester.publicKey,
       );
 
       await attestationMockProgram.methods
-        .createAttestation(
-          attester.publicKey,
-          0,
-          [66, 82],
-          FAR_FUTURE_EXPIRY
-        )
+        .createAttestation(attester.publicKey, 0, [66, 82], FAR_FUTURE_EXPIRY)
         .accountsPartial({
           authority: payer.publicKey,
           attestation: rejectAttestation,
@@ -612,7 +594,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
     it("manager rejects deposit", async () => {
       const balanceBefore = await getAccount(
         connection,
-        rejectInvestorTokenAccount
+        rejectInvestorTokenAccount,
       );
 
       await program.methods
@@ -632,11 +614,11 @@ describe("svs-11 (Credit Markets Vault)", () => {
 
       const balanceAfter = await getAccount(
         connection,
-        rejectInvestorTokenAccount
+        rejectInvestorTokenAccount,
       );
       expect(
         BigInt(balanceAfter.amount.toString()) -
-          BigInt(balanceBefore.amount.toString())
+          BigInt(balanceBefore.amount.toString()),
       ).to.equal(BigInt(depositAmount.toString()));
 
       const info = await connection.getAccountInfo(rejectInvestmentRequest);
@@ -654,7 +636,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
       cancelInvestor = Keypair.generate();
       const airdrop = await connection.requestAirdrop(
         cancelInvestor.publicKey,
-        5 * anchor.web3.LAMPORTS_PER_SOL
+        5 * anchor.web3.LAMPORTS_PER_SOL,
       );
       await connection.confirmTransaction(airdrop);
 
@@ -666,7 +648,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
         false,
         undefined,
         undefined,
-        TOKEN_PROGRAM_ID
+        TOKEN_PROGRAM_ID,
       );
       cancelInvestorTokenAccount = ata.address;
 
@@ -679,24 +661,19 @@ describe("svs-11 (Credit Markets Vault)", () => {
         BigInt(depositAmount.toString()),
         [],
         undefined,
-        TOKEN_PROGRAM_ID
+        TOKEN_PROGRAM_ID,
       );
 
       [cancelInvestmentRequest] = getInvestmentRequestPDA(
-        cancelInvestor.publicKey
+        cancelInvestor.publicKey,
       );
       [cancelAttestation] = getAttestationPDA(
         cancelInvestor.publicKey,
-        attester.publicKey
+        attester.publicKey,
       );
 
       await attestationMockProgram.methods
-        .createAttestation(
-          attester.publicKey,
-          0,
-          [66, 82],
-          FAR_FUTURE_EXPIRY
-        )
+        .createAttestation(attester.publicKey, 0, [66, 82], FAR_FUTURE_EXPIRY)
         .accountsPartial({
           authority: payer.publicKey,
           attestation: cancelAttestation,
@@ -730,7 +707,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
 
       const balanceBefore = await getAccount(
         connection,
-        cancelInvestorTokenAccount
+        cancelInvestorTokenAccount,
       );
 
       await program.methods
@@ -749,11 +726,11 @@ describe("svs-11 (Credit Markets Vault)", () => {
 
       const balanceAfter = await getAccount(
         connection,
-        cancelInvestorTokenAccount
+        cancelInvestorTokenAccount,
       );
       expect(
         BigInt(balanceAfter.amount.toString()) -
-          BigInt(balanceBefore.amount.toString())
+          BigInt(balanceBefore.amount.toString()),
       ).to.equal(BigInt(depositAmount.toString()));
 
       const info = await connection.getAccountInfo(cancelInvestmentRequest);
@@ -767,7 +744,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
         connection,
         investorSharesAccount,
         undefined,
-        TOKEN_2022_PROGRAM_ID
+        TOKEN_2022_PROGRAM_ID,
       );
       const sharesToRedeem = new BN(sharesBefore.amount.toString());
 
@@ -789,25 +766,24 @@ describe("svs-11 (Credit Markets Vault)", () => {
         .signers([investor])
         .rpc();
 
-      const request = await program.account.redemptionRequest.fetch(
-        redemptionRequest
-      );
+      const request =
+        await program.account.redemptionRequest.fetch(redemptionRequest);
       expect(request.investor.toBase58()).to.equal(
-        investor.publicKey.toBase58()
+        investor.publicKey.toBase58(),
       );
       expect(request.sharesLocked.toString()).to.equal(
-        sharesToRedeem.toString()
+        sharesToRedeem.toString(),
       );
       expect(request.assetsClaimable.toNumber()).to.equal(0);
       expect(JSON.stringify(request.status)).to.equal(
-        JSON.stringify({ pending: {} })
+        JSON.stringify({ pending: {} }),
       );
 
       const sharesAfter = await getAccount(
         connection,
         investorSharesAccount,
         undefined,
-        TOKEN_2022_PROGRAM_ID
+        TOKEN_2022_PROGRAM_ID,
       );
       expect(sharesAfter.amount.toString()).to.equal("0");
     });
@@ -836,14 +812,13 @@ describe("svs-11 (Credit Markets Vault)", () => {
         .signers([manager])
         .rpc();
 
-      const request = await program.account.redemptionRequest.fetch(
-        redemptionRequest
-      );
+      const request =
+        await program.account.redemptionRequest.fetch(redemptionRequest);
       expect(JSON.stringify(request.status)).to.equal(
-        JSON.stringify({ approved: {} })
+        JSON.stringify({ approved: {} }),
       );
       expect(request.assetsClaimable.toString()).to.equal(
-        depositAmount.toString()
+        depositAmount.toString(),
       );
 
       const vaultAccount = await program.account.creditVault.fetch(vault);
@@ -873,7 +848,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
       const balanceAfter = await getAccount(connection, investorTokenAccount);
       expect(
         BigInt(balanceAfter.amount.toString()) -
-          BigInt(balanceBefore.amount.toString())
+          BigInt(balanceBefore.amount.toString()),
       ).to.equal(BigInt(depositAmount.toString()));
 
       const requestInfo = await connection.getAccountInfo(redemptionRequest);
@@ -943,7 +918,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
         connection,
         investorSharesAccount,
         undefined,
-        TOKEN_2022_PROGRAM_ID
+        TOKEN_2022_PROGRAM_ID,
       );
 
       await program.methods
@@ -985,11 +960,9 @@ describe("svs-11 (Credit Markets Vault)", () => {
         connection,
         investorSharesAccount,
         undefined,
-        TOKEN_2022_PROGRAM_ID
+        TOKEN_2022_PROGRAM_ID,
       );
-      expect(sharesAfter.amount.toString()).to.equal(
-        expectedShares.toString()
-      );
+      expect(sharesAfter.amount.toString()).to.equal(expectedShares.toString());
 
       const info = await connection.getAccountInfo(redemptionRequest);
       expect(info).to.be.null;
@@ -1016,9 +989,10 @@ describe("svs-11 (Credit Markets Vault)", () => {
 
       const depositVaultAccount = await getAccount(connection, depositVault);
       const expectedBalance =
-        BigInt(depositVaultBefore.amount.toString()) - BigInt(drawAmount.toString());
+        BigInt(depositVaultBefore.amount.toString()) -
+        BigInt(drawAmount.toString());
       expect(depositVaultAccount.amount.toString()).to.equal(
-        expectedBalance.toString()
+        expectedBalance.toString(),
       );
     });
 
@@ -1040,7 +1014,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
 
       const vaultAccount = await program.account.creditVault.fetch(vault);
       expect(vaultAccount.totalAssets.toString()).to.equal(
-        new BN(100_000_000_000).toString()
+        new BN(100_000_000_000).toString(),
       );
     });
 
@@ -1084,11 +1058,9 @@ describe("svs-11 (Credit Markets Vault)", () => {
 
       const frozen = await program.account.frozenAccount.fetch(frozenAccount);
       expect(frozen.investor.toBase58()).to.equal(
-        investor.publicKey.toBase58()
+        investor.publicKey.toBase58(),
       );
-      expect(frozen.frozenBy.toBase58()).to.equal(
-        manager.publicKey.toBase58()
-      );
+      expect(frozen.frozenBy.toBase58()).to.equal(manager.publicKey.toBase58());
     });
 
     it("frozen account cannot request deposit", async () => {
@@ -1195,13 +1167,13 @@ describe("svs-11 (Credit Markets Vault)", () => {
 
       const vaultAccount = await program.account.creditVault.fetch(vault);
       expect(vaultAccount.authority.toBase58()).to.equal(
-        newAuthority.publicKey.toBase58()
+        newAuthority.publicKey.toBase58(),
       );
 
       // Transfer back
       const airdrop = await connection.requestAirdrop(
         newAuthority.publicKey,
-        2 * anchor.web3.LAMPORTS_PER_SOL
+        2 * anchor.web3.LAMPORTS_PER_SOL,
       );
       await connection.confirmTransaction(airdrop);
 
@@ -1228,7 +1200,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
 
       const vaultAccount = await program.account.creditVault.fetch(vault);
       expect(vaultAccount.manager.toBase58()).to.equal(
-        newManager.publicKey.toBase58()
+        newManager.publicKey.toBase58(),
       );
 
       // Set back to original manager for remaining tests
@@ -1257,10 +1229,10 @@ describe("svs-11 (Credit Markets Vault)", () => {
 
       const vaultAccount = await program.account.creditVault.fetch(vault);
       expect(vaultAccount.attester.toBase58()).to.equal(
-        newAttester.publicKey.toBase58()
+        newAttester.publicKey.toBase58(),
       );
       expect(vaultAccount.attestationProgram.toBase58()).to.equal(
-        newAttestationProgram.toBase58()
+        newAttestationProgram.toBase58(),
       );
 
       // Restore original attester
@@ -1280,7 +1252,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
       const zeroInvestor = Keypair.generate();
       const airdrop = await connection.requestAirdrop(
         zeroInvestor.publicKey,
-        5 * anchor.web3.LAMPORTS_PER_SOL
+        5 * anchor.web3.LAMPORTS_PER_SOL,
       );
       await connection.confirmTransaction(airdrop);
 
@@ -1292,7 +1264,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
         false,
         undefined,
         undefined,
-        TOKEN_PROGRAM_ID
+        TOKEN_PROGRAM_ID,
       );
 
       await mintTo(
@@ -1304,22 +1276,17 @@ describe("svs-11 (Credit Markets Vault)", () => {
         BigInt(depositAmount.toString()),
         [],
         undefined,
-        TOKEN_PROGRAM_ID
+        TOKEN_PROGRAM_ID,
       );
 
       const [zeroRequest] = getInvestmentRequestPDA(zeroInvestor.publicKey);
       const [zeroAttestation] = getAttestationPDA(
         zeroInvestor.publicKey,
-        attester.publicKey
+        attester.publicKey,
       );
 
       await attestationMockProgram.methods
-        .createAttestation(
-          attester.publicKey,
-          0,
-          [66, 82],
-          FAR_FUTURE_EXPIRY
-        )
+        .createAttestation(attester.publicKey, 0, [66, 82], FAR_FUTURE_EXPIRY)
         .accountsPartial({
           authority: payer.publicKey,
           attestation: zeroAttestation,
@@ -1356,7 +1323,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
       const smallInvestor = Keypair.generate();
       const airdrop = await connection.requestAirdrop(
         smallInvestor.publicKey,
-        5 * anchor.web3.LAMPORTS_PER_SOL
+        5 * anchor.web3.LAMPORTS_PER_SOL,
       );
       await connection.confirmTransaction(airdrop);
 
@@ -1368,7 +1335,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
         false,
         undefined,
         undefined,
-        TOKEN_PROGRAM_ID
+        TOKEN_PROGRAM_ID,
       );
 
       await mintTo(
@@ -1380,22 +1347,17 @@ describe("svs-11 (Credit Markets Vault)", () => {
         BigInt(depositAmount.toString()),
         [],
         undefined,
-        TOKEN_PROGRAM_ID
+        TOKEN_PROGRAM_ID,
       );
 
       const [smallRequest] = getInvestmentRequestPDA(smallInvestor.publicKey);
       const [smallAttestation] = getAttestationPDA(
         smallInvestor.publicKey,
-        attester.publicKey
+        attester.publicKey,
       );
 
       await attestationMockProgram.methods
-        .createAttestation(
-          attester.publicKey,
-          0,
-          [66, 82],
-          FAR_FUTURE_EXPIRY
-        )
+        .createAttestation(attester.publicKey, 0, [66, 82], FAR_FUTURE_EXPIRY)
         .accountsPartial({
           authority: payer.publicKey,
           attestation: smallAttestation,
@@ -1432,23 +1394,18 @@ describe("svs-11 (Credit Markets Vault)", () => {
       const zeroRedeemer = Keypair.generate();
       const airdrop = await connection.requestAirdrop(
         zeroRedeemer.publicKey,
-        5 * anchor.web3.LAMPORTS_PER_SOL
+        5 * anchor.web3.LAMPORTS_PER_SOL,
       );
       await connection.confirmTransaction(airdrop);
 
       const [zeroRedemption] = getRedemptionRequestPDA(zeroRedeemer.publicKey);
       const [zeroAttestation] = getAttestationPDA(
         zeroRedeemer.publicKey,
-        attester.publicKey
+        attester.publicKey,
       );
 
       await attestationMockProgram.methods
-        .createAttestation(
-          attester.publicKey,
-          0,
-          [66, 82],
-          FAR_FUTURE_EXPIRY
-        )
+        .createAttestation(attester.publicKey, 0, [66, 82], FAR_FUTURE_EXPIRY)
         .accountsPartial({
           authority: payer.publicKey,
           attestation: zeroAttestation,
@@ -1465,7 +1422,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
         false,
         undefined,
         undefined,
-        TOKEN_2022_PROGRAM_ID
+        TOKEN_2022_PROGRAM_ID,
       );
       const zeroSharesAccount = zeroSharesAta.address;
 
@@ -1545,7 +1502,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
       statusInvestor = Keypair.generate();
       const airdrop = await connection.requestAirdrop(
         statusInvestor.publicKey,
-        5 * anchor.web3.LAMPORTS_PER_SOL
+        5 * anchor.web3.LAMPORTS_PER_SOL,
       );
       await connection.confirmTransaction(airdrop);
 
@@ -1557,7 +1514,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
         false,
         undefined,
         undefined,
-        TOKEN_PROGRAM_ID
+        TOKEN_PROGRAM_ID,
       );
       statusInvestorTokenAccount = ata.address;
 
@@ -1570,24 +1527,19 @@ describe("svs-11 (Credit Markets Vault)", () => {
         BigInt(depositAmount.toString()) * BigInt(3),
         [],
         undefined,
-        TOKEN_PROGRAM_ID
+        TOKEN_PROGRAM_ID,
       );
 
       [statusInvestmentRequest] = getInvestmentRequestPDA(
-        statusInvestor.publicKey
+        statusInvestor.publicKey,
       );
       [statusAttestation] = getAttestationPDA(
         statusInvestor.publicKey,
-        attester.publicKey
+        attester.publicKey,
       );
 
       await attestationMockProgram.methods
-        .createAttestation(
-          attester.publicKey,
-          0,
-          [66, 82],
-          FAR_FUTURE_EXPIRY
-        )
+        .createAttestation(attester.publicKey, 0, [66, 82], FAR_FUTURE_EXPIRY)
         .accountsPartial({
           authority: payer.publicKey,
           attestation: statusAttestation,
@@ -1604,7 +1556,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
         false,
         undefined,
         undefined,
-        TOKEN_2022_PROGRAM_ID
+        TOKEN_2022_PROGRAM_ID,
       );
       statusInvestorSharesAccount = sharesAta.address;
     });
@@ -1682,7 +1634,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
 
       // Create a new pending request
       [statusInvestmentRequest] = getInvestmentRequestPDA(
-        statusInvestor.publicKey
+        statusInvestor.publicKey,
       );
 
       await program.methods
@@ -1789,7 +1741,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
       liqInvestor = Keypair.generate();
       const airdrop = await connection.requestAirdrop(
         liqInvestor.publicKey,
-        5 * anchor.web3.LAMPORTS_PER_SOL
+        5 * anchor.web3.LAMPORTS_PER_SOL,
       );
       await connection.confirmTransaction(airdrop);
 
@@ -1801,7 +1753,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
         false,
         undefined,
         undefined,
-        TOKEN_PROGRAM_ID
+        TOKEN_PROGRAM_ID,
       );
       liqInvestorTokenAccount = ata.address;
 
@@ -1816,7 +1768,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
         BigInt(liqDepositAmount.toString()),
         [],
         undefined,
-        TOKEN_PROGRAM_ID
+        TOKEN_PROGRAM_ID,
       );
 
       [liqInvestmentRequest] = getInvestmentRequestPDA(liqInvestor.publicKey);
@@ -1824,16 +1776,11 @@ describe("svs-11 (Credit Markets Vault)", () => {
       [liqClaimableTokens] = getClaimableTokensPDA(liqInvestor.publicKey);
       [liqAttestation] = getAttestationPDA(
         liqInvestor.publicKey,
-        attester.publicKey
+        attester.publicKey,
       );
 
       await attestationMockProgram.methods
-        .createAttestation(
-          attester.publicKey,
-          0,
-          [66, 82],
-          FAR_FUTURE_EXPIRY
-        )
+        .createAttestation(attester.publicKey, 0, [66, 82], FAR_FUTURE_EXPIRY)
         .accountsPartial({
           authority: payer.publicKey,
           attestation: liqAttestation,
@@ -1850,7 +1797,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
         false,
         undefined,
         undefined,
-        TOKEN_2022_PROGRAM_ID
+        TOKEN_2022_PROGRAM_ID,
       );
       liqInvestorSharesAccount = liqSharesAta.address;
 
@@ -1924,7 +1871,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
         BigInt(vaultAccount.totalApprovedDeposits.toString());
       // Draw down ~15% of total_assets to stay within 2000bps deviation
       const totalAssets = BigInt(vaultAccount.totalAssets.toString());
-      const drawAmount = totalAssets * BigInt(15) / BigInt(100);
+      const drawAmount = (totalAssets * BigInt(15)) / BigInt(100);
 
       if (drawAmount > BigInt(0) && drawAmount < available) {
         await program.methods
@@ -1947,7 +1894,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
         connection,
         liqInvestorSharesAccount,
         undefined,
-        TOKEN_2022_PROGRAM_ID
+        TOKEN_2022_PROGRAM_ID,
       );
 
       await program.methods
@@ -2021,7 +1968,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
       frozenInvestor = Keypair.generate();
       const airdrop = await connection.requestAirdrop(
         frozenInvestor.publicKey,
-        5 * anchor.web3.LAMPORTS_PER_SOL
+        5 * anchor.web3.LAMPORTS_PER_SOL,
       );
       await connection.confirmTransaction(airdrop);
 
@@ -2033,7 +1980,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
         false,
         undefined,
         undefined,
-        TOKEN_PROGRAM_ID
+        TOKEN_PROGRAM_ID,
       );
       frozenInvestorTokenAccount = ata.address;
 
@@ -2046,27 +1993,22 @@ describe("svs-11 (Credit Markets Vault)", () => {
         BigInt(depositAmount.toString()) * BigInt(2),
         [],
         undefined,
-        TOKEN_PROGRAM_ID
+        TOKEN_PROGRAM_ID,
       );
 
       [frozenInvRequest] = getInvestmentRequestPDA(frozenInvestor.publicKey);
       [frozenRedRequest] = getRedemptionRequestPDA(frozenInvestor.publicKey);
       [frozenInvAttestation] = getAttestationPDA(
         frozenInvestor.publicKey,
-        attester.publicKey
+        attester.publicKey,
       );
       [frozenInvFrozenAccount] = getFrozenAccountPDA(frozenInvestor.publicKey);
       [frozenInvClaimableTokens] = getClaimableTokensPDA(
-        frozenInvestor.publicKey
+        frozenInvestor.publicKey,
       );
 
       await attestationMockProgram.methods
-        .createAttestation(
-          attester.publicKey,
-          0,
-          [66, 82],
-          FAR_FUTURE_EXPIRY
-        )
+        .createAttestation(attester.publicKey, 0, [66, 82], FAR_FUTURE_EXPIRY)
         .accountsPartial({
           authority: payer.publicKey,
           attestation: frozenInvAttestation,
@@ -2083,7 +2025,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
         false,
         undefined,
         undefined,
-        TOKEN_2022_PROGRAM_ID
+        TOKEN_2022_PROGRAM_ID,
       );
       frozenInvestorSharesAccount = frozenSharesAta.address;
 
@@ -2105,8 +2047,11 @@ describe("svs-11 (Credit Markets Vault)", () => {
       const vaultAfterRepay = await program.account.creditVault.fetch(vault);
       if (vaultAfterRepay.totalShares.toNumber() > 0) {
         const expectedPrice = new BN(
-          (BigInt(vaultAfterRepay.totalAssets.toString()) * BigInt(PRICE_SCALE.toString()) /
-            BigInt(vaultAfterRepay.totalShares.toString())).toString()
+          (
+            (BigInt(vaultAfterRepay.totalAssets.toString()) *
+              BigInt(PRICE_SCALE.toString())) /
+            BigInt(vaultAfterRepay.totalShares.toString())
+          ).toString(),
         );
         await oracleProgram.methods
           .setPrice(expectedPrice)
@@ -2260,7 +2205,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
         connection,
         frozenInvestorSharesAccount,
         undefined,
-        TOKEN_2022_PROGRAM_ID
+        TOKEN_2022_PROGRAM_ID,
       );
 
       await program.methods
@@ -2407,7 +2352,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
       const tempInvestor = Keypair.generate();
       const airdrop = await connection.requestAirdrop(
         tempInvestor.publicKey,
-        5 * anchor.web3.LAMPORTS_PER_SOL
+        5 * anchor.web3.LAMPORTS_PER_SOL,
       );
       await connection.confirmTransaction(airdrop);
 
@@ -2419,7 +2364,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
         false,
         undefined,
         undefined,
-        TOKEN_PROGRAM_ID
+        TOKEN_PROGRAM_ID,
       );
 
       await mintTo(
@@ -2431,22 +2376,17 @@ describe("svs-11 (Credit Markets Vault)", () => {
         BigInt(depositAmount.toString()),
         [],
         undefined,
-        TOKEN_PROGRAM_ID
+        TOKEN_PROGRAM_ID,
       );
 
       const [tempRequest] = getInvestmentRequestPDA(tempInvestor.publicKey);
       const [tempAttestation] = getAttestationPDA(
         tempInvestor.publicKey,
-        attester.publicKey
+        attester.publicKey,
       );
 
       await attestationMockProgram.methods
-        .createAttestation(
-          attester.publicKey,
-          0,
-          [66, 82],
-          FAR_FUTURE_EXPIRY
-        )
+        .createAttestation(attester.publicKey, 0, [66, 82], FAR_FUTURE_EXPIRY)
         .accountsPartial({
           authority: payer.publicKey,
           attestation: tempAttestation,
@@ -2531,7 +2471,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
       const tempInvestor2 = Keypair.generate();
       const airdrop = await connection.requestAirdrop(
         tempInvestor2.publicKey,
-        5 * anchor.web3.LAMPORTS_PER_SOL
+        5 * anchor.web3.LAMPORTS_PER_SOL,
       );
       await connection.confirmTransaction(airdrop);
 
@@ -2543,7 +2483,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
         false,
         undefined,
         undefined,
-        TOKEN_PROGRAM_ID
+        TOKEN_PROGRAM_ID,
       );
 
       await mintTo(
@@ -2555,22 +2495,17 @@ describe("svs-11 (Credit Markets Vault)", () => {
         BigInt(depositAmount.toString()),
         [],
         undefined,
-        TOKEN_PROGRAM_ID
+        TOKEN_PROGRAM_ID,
       );
 
       const [tempRequest2] = getInvestmentRequestPDA(tempInvestor2.publicKey);
       const [tempAttestation2] = getAttestationPDA(
         tempInvestor2.publicKey,
-        attester.publicKey
+        attester.publicKey,
       );
 
       await attestationMockProgram.methods
-        .createAttestation(
-          attester.publicKey,
-          0,
-          [66, 82],
-          FAR_FUTURE_EXPIRY
-        )
+        .createAttestation(attester.publicKey, 0, [66, 82], FAR_FUTURE_EXPIRY)
         .accountsPartial({
           authority: payer.publicKey,
           attestation: tempAttestation2,
@@ -2674,7 +2609,9 @@ describe("svs-11 (Credit Markets Vault)", () => {
           .rpc();
         expect.fail("should have thrown");
       } catch (err: any) {
-        expect(err.error.errorCode.code).to.equal("UnauthorizedComplianceAction");
+        expect(err.error.errorCode.code).to.equal(
+          "UnauthorizedComplianceAction",
+        );
       }
     });
 
@@ -2757,7 +2694,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
       staleInvestor = Keypair.generate();
       const airdrop = await connection.requestAirdrop(
         staleInvestor.publicKey,
-        5 * anchor.web3.LAMPORTS_PER_SOL
+        5 * anchor.web3.LAMPORTS_PER_SOL,
       );
       await connection.confirmTransaction(airdrop);
 
@@ -2769,7 +2706,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
         false,
         undefined,
         undefined,
-        TOKEN_PROGRAM_ID
+        TOKEN_PROGRAM_ID,
       );
       staleInvestorTokenAccount = ata.address;
 
@@ -2782,24 +2719,19 @@ describe("svs-11 (Credit Markets Vault)", () => {
         BigInt(depositAmount.toString()),
         [],
         undefined,
-        TOKEN_PROGRAM_ID
+        TOKEN_PROGRAM_ID,
       );
 
       [staleInvestmentRequest] = getInvestmentRequestPDA(
-        staleInvestor.publicKey
+        staleInvestor.publicKey,
       );
       [staleAttestation] = getAttestationPDA(
         staleInvestor.publicKey,
-        attester.publicKey
+        attester.publicKey,
       );
 
       await attestationMockProgram.methods
-        .createAttestation(
-          attester.publicKey,
-          0,
-          [66, 82],
-          FAR_FUTURE_EXPIRY
-        )
+        .createAttestation(attester.publicKey, 0, [66, 82], FAR_FUTURE_EXPIRY)
         .accountsPartial({
           authority: payer.publicKey,
           attestation: staleAttestation,
@@ -2866,10 +2798,16 @@ describe("svs-11 (Credit Markets Vault)", () => {
       // Restore oracle to current time with price matching vault's expected price
       const vaultState = await program.account.creditVault.fetch(vault);
       let oraclePrice = PRICE_SCALE;
-      if (vaultState.totalShares.toNumber() > 0 && vaultState.totalAssets.toNumber() > 0) {
+      if (
+        vaultState.totalShares.toNumber() > 0 &&
+        vaultState.totalAssets.toNumber() > 0
+      ) {
         oraclePrice = new BN(
-          (BigInt(vaultState.totalAssets.toString()) * BigInt(PRICE_SCALE.toString()) /
-            BigInt(vaultState.totalShares.toString())).toString()
+          (
+            (BigInt(vaultState.totalAssets.toString()) *
+              BigInt(PRICE_SCALE.toString())) /
+            BigInt(vaultState.totalShares.toString())
+          ).toString(),
         );
       }
       await oracleProgram.methods
@@ -2898,10 +2836,10 @@ describe("svs-11 (Credit Markets Vault)", () => {
         .rpc();
 
       const request = await program.account.investmentRequest.fetch(
-        staleInvestmentRequest
+        staleInvestmentRequest,
       );
       expect(JSON.stringify(request.status)).to.equal(
-        JSON.stringify({ approved: {} })
+        JSON.stringify({ approved: {} }),
       );
 
       // Clean up: claim deposit
@@ -2913,7 +2851,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
         false,
         undefined,
         undefined,
-        TOKEN_2022_PROGRAM_ID
+        TOKEN_2022_PROGRAM_ID,
       );
 
       await program.methods
@@ -2942,7 +2880,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
       expInvestor = Keypair.generate();
       const airdrop = await connection.requestAirdrop(
         expInvestor.publicKey,
-        5 * anchor.web3.LAMPORTS_PER_SOL
+        5 * anchor.web3.LAMPORTS_PER_SOL,
       );
       await connection.confirmTransaction(airdrop);
 
@@ -2954,7 +2892,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
         false,
         undefined,
         undefined,
-        TOKEN_PROGRAM_ID
+        TOKEN_PROGRAM_ID,
       );
       expInvestorTokenAccount = ata.address;
 
@@ -2967,7 +2905,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
         BigInt(depositAmount.toString()),
         [],
         undefined,
-        TOKEN_PROGRAM_ID
+        TOKEN_PROGRAM_ID,
       );
 
       [expInvestmentRequest] = getInvestmentRequestPDA(expInvestor.publicKey);
@@ -2976,7 +2914,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
       [expAttestation] = getAttestationPDA(
         expInvestor.publicKey,
         attester.publicKey,
-        1
+        1,
       );
 
       await attestationMockProgram.methods
@@ -2984,7 +2922,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
           attester.publicKey,
           1,
           [66, 82],
-          new BN(1_000_000) // far in the past
+          new BN(1_000_000), // far in the past
         )
         .accountsPartial({
           authority: payer.publicKey,
@@ -3031,7 +2969,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
       revInvestor = Keypair.generate();
       const airdrop = await connection.requestAirdrop(
         revInvestor.publicKey,
-        5 * anchor.web3.LAMPORTS_PER_SOL
+        5 * anchor.web3.LAMPORTS_PER_SOL,
       );
       await connection.confirmTransaction(airdrop);
 
@@ -3043,7 +2981,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
         false,
         undefined,
         undefined,
-        TOKEN_PROGRAM_ID
+        TOKEN_PROGRAM_ID,
       );
       revInvestorTokenAccount = ata.address;
 
@@ -3056,23 +2994,18 @@ describe("svs-11 (Credit Markets Vault)", () => {
         BigInt(depositAmount.toString()),
         [],
         undefined,
-        TOKEN_PROGRAM_ID
+        TOKEN_PROGRAM_ID,
       );
 
       [revInvestmentRequest] = getInvestmentRequestPDA(revInvestor.publicKey);
       [revAttestation] = getAttestationPDA(
         revInvestor.publicKey,
-        attester.publicKey
+        attester.publicKey,
       );
 
       // Create valid attestation with far-future expiry
       await attestationMockProgram.methods
-        .createAttestation(
-          attester.publicKey,
-          0,
-          [66, 82],
-          FAR_FUTURE_EXPIRY
-        )
+        .createAttestation(attester.publicKey, 0, [66, 82], FAR_FUTURE_EXPIRY)
         .accountsPartial({
           authority: payer.publicKey,
           attestation: revAttestation,

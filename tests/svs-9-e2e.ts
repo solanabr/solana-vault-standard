@@ -19,7 +19,11 @@ import {
 
 import { Svs1 } from "../target/types/svs_1";
 import { Svs9 } from "../target/types/svs_9";
-import { SolanaVault, AllocatorVaultClient, getChildAllocationAddress } from "../sdk/core/src/index";
+import {
+  SolanaVault,
+  AllocatorVaultClient,
+  getChildAllocationAddress,
+} from "../sdk/core/src/index";
 
 describe("SVS-9 E2E CPI CPI Test", () => {
   const provider = anchor.AnchorProvider.env();
@@ -56,7 +60,7 @@ describe("SVS-9 E2E CPI CPI Test", () => {
       ASSET_DECIMALS,
       Keypair.generate(),
       undefined,
-      TOKEN_PROGRAM_ID
+      TOKEN_PROGRAM_ID,
     );
 
     // 2. Setup User Asset Account & Mint Tokens
@@ -68,7 +72,7 @@ describe("SVS-9 E2E CPI CPI Test", () => {
       false,
       undefined,
       undefined,
-      TOKEN_PROGRAM_ID
+      TOKEN_PROGRAM_ID,
     );
     userAssetAccount = userAssetAta.address;
 
@@ -81,7 +85,7 @@ describe("SVS-9 E2E CPI CPI Test", () => {
       1_000_000 * 10 ** ASSET_DECIMALS,
       [],
       undefined,
-      TOKEN_PROGRAM_ID
+      TOKEN_PROGRAM_ID,
     );
 
     // 3. Initialize SVS-1 Vault (Child)
@@ -93,18 +97,25 @@ describe("SVS-9 E2E CPI CPI Test", () => {
       uri: "https://example.com/s1.json",
     });
 
-    console.log("SVS-1 Vault initialized at:", childVaultClient.vault.toBase58());
+    console.log(
+      "SVS-1 Vault initialized at:",
+      childVaultClient.vault.toBase58(),
+    );
 
     // 4. Initialize SVS-9 Allocator Vault
     // Use raw instruction since SDK create() doesn't pass the sharesMintKeypair signer
     const allocatorPDA = PublicKey.findProgramAddressSync(
-      [Buffer.from("allocator_vault"), assetMint.toBuffer(), allocatorVaultId.toArrayLike(Buffer, "le", 8)],
-      svs9Program.programId
+      [
+        Buffer.from("allocator_vault"),
+        assetMint.toBuffer(),
+        allocatorVaultId.toArrayLike(Buffer, "le", 8),
+      ],
+      svs9Program.programId,
     )[0];
 
     [allocatorSharesMint] = PublicKey.findProgramAddressSync(
       [Buffer.from("shares_mint"), allocatorPDA.toBuffer()],
-      svs9Program.programId
+      svs9Program.programId,
     );
 
     const idleVault = getAssociatedTokenAddressSync(
@@ -112,7 +123,7 @@ describe("SVS-9 E2E CPI CPI Test", () => {
       allocatorPDA,
       true,
       TOKEN_PROGRAM_ID,
-      ASSOCIATED_TOKEN_PROGRAM_ID
+      ASSOCIATED_TOKEN_PROGRAM_ID,
     );
 
     await (svs9Program.methods as any)
@@ -133,8 +144,15 @@ describe("SVS-9 E2E CPI CPI Test", () => {
       .rpc();
 
     // Load client
-    allocatorClient = await AllocatorVaultClient.load(svs9Program, assetMint, allocatorVaultId);
-    console.log("SVS-9 Allocator initialized at:", allocatorClient.allocatorVault.toBase58());
+    allocatorClient = await AllocatorVaultClient.load(
+      svs9Program,
+      assetMint,
+      allocatorVaultId,
+    );
+    console.log(
+      "SVS-9 Allocator initialized at:",
+      allocatorClient.allocatorVault.toBase58(),
+    );
 
     // User's allocator shares account
     const userSharesAta = await getOrCreateAssociatedTokenAccount(
@@ -145,7 +163,7 @@ describe("SVS-9 E2E CPI CPI Test", () => {
       false,
       undefined,
       undefined,
-      TOKEN_2022_PROGRAM_ID
+      TOKEN_2022_PROGRAM_ID,
     );
     userAllocatorSharesAccount = userSharesAta.address;
   });
@@ -165,7 +183,7 @@ describe("SVS-9 E2E CPI CPI Test", () => {
       true, // allowOwnerOffCurve
       undefined,
       undefined,
-      TOKEN_2022_PROGRAM_ID
+      TOKEN_2022_PROGRAM_ID,
     );
 
     const state = await allocatorClient.refresh();
@@ -174,7 +192,7 @@ describe("SVS-9 E2E CPI CPI Test", () => {
 
   it("2. Deposits into SVS-9", async () => {
     const depositAmount = new BN(10_000 * 10 ** ASSET_DECIMALS);
-    
+
     await allocatorClient.deposit({
       assets: depositAmount,
       minSharesOut: new BN(0),
@@ -190,7 +208,7 @@ describe("SVS-9 E2E CPI CPI Test", () => {
   it("3. Rejects allocation exceeding max_weight_bps", async () => {
     // idle is 10k. Max weight is 50% = 5k. Try to allocate 6k.
     const excessAllocateAmount = new BN(6_000 * 10 ** ASSET_DECIMALS);
-    
+
     try {
       await allocatorClient.allocate({
         assets: excessAllocateAmount,
@@ -203,7 +221,10 @@ describe("SVS-9 E2E CPI CPI Test", () => {
       });
       expect.fail("Should have thrown MaxWeightExceeded");
     } catch (e: any) {
-      expect(e.toString()).to.include("MaxWeightExceeded", "Expected max weight exceeded error");
+      expect(e.toString()).to.include(
+        "MaxWeightExceeded",
+        "Expected max weight exceeded error",
+      );
     }
   });
 
@@ -214,7 +235,11 @@ describe("SVS-9 E2E CPI CPI Test", () => {
       .accountsPartial({
         authority: payer.publicKey,
         allocatorVault: allocatorClient.allocatorVault,
-        childAllocation: getChildAllocationAddress(svs9Program.programId, allocatorClient.allocatorVault, childVaultClient.vault)[0],
+        childAllocation: getChildAllocationAddress(
+          svs9Program.programId,
+          allocatorClient.allocatorVault,
+          childVaultClient.vault,
+        )[0],
         childVault: childVaultClient.vault,
       })
       .rpc();
@@ -234,7 +259,10 @@ describe("SVS-9 E2E CPI CPI Test", () => {
       });
       expect.fail("Should have thrown InsufficientBuffer");
     } catch (e: any) {
-      expect(e.toString()).to.include("InsufficientBuffer", "Expected insufficient buffer error");
+      expect(e.toString()).to.include(
+        "InsufficientBuffer",
+        "Expected insufficient buffer error",
+      );
     }
 
     // Restore max weight back to 5000 for test 4
@@ -243,7 +271,11 @@ describe("SVS-9 E2E CPI CPI Test", () => {
       .accountsPartial({
         authority: payer.publicKey,
         allocatorVault: allocatorClient.allocatorVault,
-        childAllocation: getChildAllocationAddress(svs9Program.programId, allocatorClient.allocatorVault, childVaultClient.vault)[0],
+        childAllocation: getChildAllocationAddress(
+          svs9Program.programId,
+          allocatorClient.allocatorVault,
+          childVaultClient.vault,
+        )[0],
         childVault: childVaultClient.vault,
       })
       .rpc();
@@ -253,7 +285,9 @@ describe("SVS-9 E2E CPI CPI Test", () => {
     // Allocate 4k. 4k / 10k = 40% (under 50% max).
     const allocateAmount = new BN(4_000 * 10 ** ASSET_DECIMALS);
     const idleBefore = await allocatorClient.getIdleBalance();
-    const childAssetVaultBefore = await connection.getTokenAccountBalance(childVaultClient.assetVault);
+    const childAssetVaultBefore = await connection.getTokenAccountBalance(
+      childVaultClient.assetVault,
+    );
 
     await allocatorClient.allocate({
       assets: allocateAmount,
@@ -266,12 +300,16 @@ describe("SVS-9 E2E CPI CPI Test", () => {
     });
 
     const idleAfter = await allocatorClient.getIdleBalance();
-    const childAssetVaultAfter = await connection.getTokenAccountBalance(childVaultClient.assetVault);
+    const childAssetVaultAfter = await connection.getTokenAccountBalance(
+      childVaultClient.assetVault,
+    );
 
     // Verify balances shifted correctly via CPI
-    expect(idleAfter.toNumber()).to.equal(idleBefore.toNumber() - allocateAmount.toNumber());
+    expect(idleAfter.toNumber()).to.equal(
+      idleBefore.toNumber() - allocateAmount.toNumber(),
+    );
     expect(Number(childAssetVaultAfter.value.amount)).to.equal(
-      Number(childAssetVaultBefore.value.amount) + allocateAmount.toNumber()
+      Number(childAssetVaultBefore.value.amount) + allocateAmount.toNumber(),
     );
   });
 
@@ -287,11 +325,13 @@ describe("SVS-9 E2E CPI CPI Test", () => {
       profitAmount,
       [],
       undefined,
-      TOKEN_PROGRAM_ID
+      TOKEN_PROGRAM_ID,
     );
 
     const idleBefore = await allocatorClient.getIdleBalance();
-    const childAssetVaultBefore = await connection.getTokenAccountBalance(childVaultClient.assetVault);
+    const childAssetVaultBefore = await connection.getTokenAccountBalance(
+      childVaultClient.assetVault,
+    );
 
     // Harvest should pull out exactly the profit.
     await allocatorClient.harvest({
@@ -304,10 +344,10 @@ describe("SVS-9 E2E CPI CPI Test", () => {
     });
 
     const idleAfter = await allocatorClient.getIdleBalance();
-    
+
     // The allocator should have received the yield
     const pulledYield = idleAfter.toNumber() - idleBefore.toNumber();
-    
+
     // Because of standard share math and SVS-1 live balance, pulled yield might have tiny rounding,
     // but should be practically equal to profitAmount.
     expect(pulledYield).to.be.closeTo(profitAmount, 10);
@@ -320,19 +360,23 @@ describe("SVS-9 E2E CPI CPI Test", () => {
 
     const vaultBId = new BN(99);
     const vaultBPDA = PublicKey.findProgramAddressSync(
-      [Buffer.from("allocator_vault"), assetMint.toBuffer(), vaultBId.toArrayLike(Buffer, "le", 8)],
-      svs9Program.programId
+      [
+        Buffer.from("allocator_vault"),
+        assetMint.toBuffer(),
+        vaultBId.toArrayLike(Buffer, "le", 8),
+      ],
+      svs9Program.programId,
     )[0];
     const vaultBSharesMint = PublicKey.findProgramAddressSync(
       [Buffer.from("shares_mint"), vaultBPDA.toBuffer()],
-      svs9Program.programId
+      svs9Program.programId,
     )[0];
     const vaultBIdleVault = getAssociatedTokenAddressSync(
       assetMint,
       vaultBPDA,
       true,
       TOKEN_PROGRAM_ID,
-      ASSOCIATED_TOKEN_PROGRAM_ID
+      ASSOCIATED_TOKEN_PROGRAM_ID,
     );
 
     // Initialize vaultB
@@ -356,14 +400,14 @@ describe("SVS-9 E2E CPI CPI Test", () => {
     const vaultBChildAlloc = getChildAllocationAddress(
       svs9Program.programId,
       vaultBPDA,
-      childVaultClient.vault
+      childVaultClient.vault,
     )[0];
     const vaultBChildSharesAta = getAssociatedTokenAddressSync(
       childVaultClient.sharesMint,
       vaultBPDA,
       true,
       TOKEN_2022_PROGRAM_ID,
-      ASSOCIATED_TOKEN_PROGRAM_ID
+      ASSOCIATED_TOKEN_PROGRAM_ID,
     );
 
     await (svs9Program.methods as any)
@@ -390,8 +434,16 @@ describe("SVS-9 E2E CPI CPI Test", () => {
       { pubkey: vaultBChildAlloc, isSigner: false, isWritable: false },
       { pubkey: childVaultClient.vault, isSigner: false, isWritable: false },
       { pubkey: vaultBChildSharesAta, isSigner: false, isWritable: false },
-      { pubkey: childVaultClient.assetVault, isSigner: false, isWritable: false },
-      { pubkey: childVaultClient.sharesMint, isSigner: false, isWritable: false },
+      {
+        pubkey: childVaultClient.assetVault,
+        isSigner: false,
+        isWritable: false,
+      },
+      {
+        pubkey: childVaultClient.sharesMint,
+        isSigner: false,
+        isWritable: false,
+      },
     ];
 
     try {
@@ -412,7 +464,9 @@ describe("SVS-9 E2E CPI CPI Test", () => {
         })
         .remainingAccounts(forgedRemainingAccounts)
         .rpc();
-      expect.fail("Should have rejected cross-vault ChildAllocation substitution");
+      expect.fail(
+        "Should have rejected cross-vault ChildAllocation substitution",
+      );
     } catch (e: any) {
       expect(e.toString()).to.include("InvalidRemainingAccounts");
     }

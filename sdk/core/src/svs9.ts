@@ -115,7 +115,9 @@ function parseChildVaultFields(data: Buffer): {
   }
   const discriminator = data.subarray(0, ANCHOR_DISCRIMINATOR_SIZE);
   if (discriminator.every((b) => b === 0)) {
-    throw new Error("Child vault account has zero discriminator (uninitialized)");
+    throw new Error(
+      "Child vault account has zero discriminator (uninitialized)",
+    );
   }
 
   switch (data.length) {
@@ -124,10 +126,16 @@ function parseChildVaultFields(data: Buffer): {
     case VAULT_DATA_LEN_SVS3_CONFIDENTIAL:
       return {
         sharesMint: new PublicKey(
-          data.subarray(SHARES_MINT_OFFSET_STANDARD, SHARES_MINT_OFFSET_STANDARD + 32),
+          data.subarray(
+            SHARES_MINT_OFFSET_STANDARD,
+            SHARES_MINT_OFFSET_STANDARD + 32,
+          ),
         ),
         assetVault: new PublicKey(
-          data.subarray(ASSET_VAULT_OFFSET_STANDARD, ASSET_VAULT_OFFSET_STANDARD + 32),
+          data.subarray(
+            ASSET_VAULT_OFFSET_STANDARD,
+            ASSET_VAULT_OFFSET_STANDARD + 32,
+          ),
         ),
       };
 
@@ -135,10 +143,16 @@ function parseChildVaultFields(data: Buffer): {
     case VAULT_DATA_LEN_SVS6_CONF_STREAMING:
       return {
         sharesMint: new PublicKey(
-          data.subarray(SHARES_MINT_OFFSET_STREAMING, SHARES_MINT_OFFSET_STREAMING + 32),
+          data.subarray(
+            SHARES_MINT_OFFSET_STREAMING,
+            SHARES_MINT_OFFSET_STREAMING + 32,
+          ),
         ),
         assetVault: new PublicKey(
-          data.subarray(ASSET_VAULT_OFFSET_STREAMING, ASSET_VAULT_OFFSET_STREAMING + 32),
+          data.subarray(
+            ASSET_VAULT_OFFSET_STREAMING,
+            ASSET_VAULT_OFFSET_STREAMING + 32,
+          ),
         ),
       };
 
@@ -757,7 +771,9 @@ export class AllocatorVaultClient {
     );
     if (!vaultData) throw new Error("Child vault not found");
 
-    const { sharesMint: childSharesMint } = parseChildVaultFields(vaultData.data);
+    const { sharesMint: childSharesMint } = parseChildVaultFields(
+      vaultData.data,
+    );
 
     const allocatorChildSharesAccount = getAllocatorChildSharesAddress(
       this.allocatorVault,

@@ -73,8 +73,11 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
   const getClaimableTokensPDA = (v: PublicKey, owner: PublicKey) =>
     getClaimableTokensAddress(program.programId, v, owner);
 
-  const getOperatorApprovalPDA = (v: PublicKey, owner: PublicKey, op: PublicKey) =>
-    getOperatorApprovalAddress(program.programId, v, owner, op);
+  const getOperatorApprovalPDA = (
+    v: PublicKey,
+    owner: PublicKey,
+    op: PublicKey,
+  ) => getOperatorApprovalAddress(program.programId, v, owner, op);
 
   /**
    * Compute the vault's expected price per share (in PRICE_SCALE units),
@@ -100,7 +103,10 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
   };
 
   before(async () => {
-    const airdropSig = await connection.requestAirdrop(operator.publicKey, 2 * anchor.web3.LAMPORTS_PER_SOL);
+    const airdropSig = await connection.requestAirdrop(
+      operator.publicKey,
+      2 * anchor.web3.LAMPORTS_PER_SOL,
+    );
     await connection.confirmTransaction(airdropSig);
     await new Promise((r) => setTimeout(r, 1000));
 
@@ -112,7 +118,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
       ASSET_DECIMALS,
       Keypair.generate(),
       undefined,
-      TOKEN_PROGRAM_ID
+      TOKEN_PROGRAM_ID,
     );
 
     [vault] = getVaultPDA(assetMint, vaultId);
@@ -132,7 +138,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
       false,
       undefined,
       undefined,
-      TOKEN_PROGRAM_ID
+      TOKEN_PROGRAM_ID,
     );
     userAssetAccount = userAssetAta.address;
 
@@ -145,7 +151,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
       10_000_000 * 10 ** ASSET_DECIMALS,
       [],
       undefined,
-      TOKEN_PROGRAM_ID
+      TOKEN_PROGRAM_ID,
     );
 
     userSharesAccount = getAssociatedTokenAddressSync(
@@ -153,7 +159,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
       payer.publicKey,
       false,
       TOKEN_2022_PROGRAM_ID,
-      ASSOCIATED_TOKEN_PROGRAM_ID
+      ASSOCIATED_TOKEN_PROGRAM_ID,
     );
 
     [depositRequest] = getDepositRequestPDA(vault, payer.publicKey);
@@ -190,10 +196,16 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
         .rpc();
 
       const vaultAccount = await program.account.asyncVault.fetch(vault);
-      expect(vaultAccount.authority.toBase58()).to.equal(payer.publicKey.toBase58());
-      expect(vaultAccount.operator.toBase58()).to.equal(operator.publicKey.toBase58());
+      expect(vaultAccount.authority.toBase58()).to.equal(
+        payer.publicKey.toBase58(),
+      );
+      expect(vaultAccount.operator.toBase58()).to.equal(
+        operator.publicKey.toBase58(),
+      );
       expect(vaultAccount.assetMint.toBase58()).to.equal(assetMint.toBase58());
-      expect(vaultAccount.sharesMint.toBase58()).to.equal(sharesMint.toBase58());
+      expect(vaultAccount.sharesMint.toBase58()).to.equal(
+        sharesMint.toBase58(),
+      );
       expect(vaultAccount.paused).to.equal(false);
       expect(vaultAccount.totalAssets.toNumber()).to.equal(0);
       expect(vaultAccount.totalShares.toNumber()).to.equal(0);
@@ -241,7 +253,9 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
 
     it("increments total_pending_deposits on request", async () => {
       const vaultAccount = await program.account.asyncVault.fetch(vault);
-      expect(vaultAccount.totalPendingDeposits.toNumber()).to.equal(depositAmount);
+      expect(vaultAccount.totalPendingDeposits.toNumber()).to.equal(
+        depositAmount,
+      );
     });
 
     it("operator fulfills deposit (vault-priced, oracle_price = null)", async () => {
@@ -266,12 +280,21 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
     it("moves assets from pending to fulfilled bucket on fulfill", async () => {
       const vaultAccount = await program.account.asyncVault.fetch(vault);
       expect(vaultAccount.totalPendingDeposits.toNumber()).to.equal(0);
-      expect(vaultAccount.totalFulfilledDeposits.toNumber()).to.equal(depositAmount);
+      expect(vaultAccount.totalFulfilledDeposits.toNumber()).to.equal(
+        depositAmount,
+      );
       expect(vaultAccount.totalAssets.toNumber()).to.equal(0);
     });
 
     it("receiver claims deposit (shares minted)", async () => {
-      await createAssociatedTokenAccountIdempotent(connection, payer, sharesMint, payer.publicKey, {}, TOKEN_2022_PROGRAM_ID);
+      await createAssociatedTokenAccountIdempotent(
+        connection,
+        payer,
+        sharesMint,
+        payer.publicKey,
+        {},
+        TOKEN_2022_PROGRAM_ID,
+      );
       await program.methods
         .claimDeposit()
         .accountsStrict({
@@ -287,7 +310,12 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
         })
         .rpc();
 
-      const sharesAccount = await getAccount(connection, userSharesAccount, undefined, TOKEN_2022_PROGRAM_ID);
+      const sharesAccount = await getAccount(
+        connection,
+        userSharesAccount,
+        undefined,
+        TOKEN_2022_PROGRAM_ID,
+      );
       expect(Number(sharesAccount.amount)).to.be.greaterThan(0);
       console.log("  Shares received:", Number(sharesAccount.amount));
     });
@@ -320,7 +348,9 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
         .rpc();
 
       const vaultBefore = await program.account.asyncVault.fetch(vault);
-      expect(vaultBefore.totalPendingDeposits.toNumber()).to.equal(cancelDepositAmount);
+      expect(vaultBefore.totalPendingDeposits.toNumber()).to.equal(
+        cancelDepositAmount,
+      );
 
       const userAssetBefore = await getAccount(connection, userAssetAccount);
 
@@ -339,7 +369,8 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
         .rpc();
 
       const userAssetAfter = await getAccount(connection, userAssetAccount);
-      const returned = Number(userAssetAfter.amount) - Number(userAssetBefore.amount);
+      const returned =
+        Number(userAssetAfter.amount) - Number(userAssetBefore.amount);
       expect(returned).to.equal(cancelDepositAmount);
     });
 
@@ -383,7 +414,12 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
     let claimableTokens: PublicKey;
 
     it("user requests redemption", async () => {
-      const sharesAccount = await getAccount(connection, userSharesAccount, undefined, TOKEN_2022_PROGRAM_ID);
+      const sharesAccount = await getAccount(
+        connection,
+        userSharesAccount,
+        undefined,
+        TOKEN_2022_PROGRAM_ID,
+      );
       sharesToRedeem = new BN(Math.floor(Number(sharesAccount.amount) / 10));
 
       await program.methods
@@ -455,7 +491,9 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
         .rpc();
 
       const userAssetAfter = await getAccount(connection, userAssetAccount);
-      expect(Number(userAssetAfter.amount)).to.be.greaterThan(Number(userAssetBefore.amount));
+      expect(Number(userAssetAfter.amount)).to.be.greaterThan(
+        Number(userAssetBefore.amount),
+      );
     });
 
     it("claimable_tokens and RedeemRequest PDAs closed after claim", async () => {
@@ -472,7 +510,12 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
   // =========================================================================
   describe("Redeem Cancellation", () => {
     it("user cancels pending redemption", async () => {
-      const sharesAccount = await getAccount(connection, userSharesAccount, undefined, TOKEN_2022_PROGRAM_ID);
+      const sharesAccount = await getAccount(
+        connection,
+        userSharesAccount,
+        undefined,
+        TOKEN_2022_PROGRAM_ID,
+      );
       const sharesToLock = new BN(Math.floor(Number(sharesAccount.amount) / 4));
 
       await program.methods
@@ -489,7 +532,12 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
         })
         .rpc();
 
-      const sharesBefore = await getAccount(connection, userSharesAccount, undefined, TOKEN_2022_PROGRAM_ID);
+      const sharesBefore = await getAccount(
+        connection,
+        userSharesAccount,
+        undefined,
+        TOKEN_2022_PROGRAM_ID,
+      );
 
       await program.methods
         .cancelRedeem()
@@ -505,8 +553,15 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
         })
         .rpc();
 
-      const sharesAfter = await getAccount(connection, userSharesAccount, undefined, TOKEN_2022_PROGRAM_ID);
-      expect(Number(sharesAfter.amount) - Number(sharesBefore.amount)).to.equal(sharesToLock.toNumber());
+      const sharesAfter = await getAccount(
+        connection,
+        userSharesAccount,
+        undefined,
+        TOKEN_2022_PROGRAM_ID,
+      );
+      expect(Number(sharesAfter.amount) - Number(sharesBefore.amount)).to.equal(
+        sharesToLock.toNumber(),
+      );
     });
 
     it("shares returned to user", async () => {
@@ -541,7 +596,10 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
       const navTotalAssets = vaultState.totalAssets
         .add(vaultState.totalPendingDeposits)
         .add(vaultState.totalFulfilledDeposits);
-      const oraclePrice = computeExpectedPrice(navTotalAssets, vaultState.totalShares);
+      const oraclePrice = computeExpectedPrice(
+        navTotalAssets,
+        vaultState.totalShares,
+      );
       console.log("  Vault price for oracle deposit:", oraclePrice.toString());
 
       await program.methods
@@ -578,8 +636,15 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
     });
 
     it("fulfill_redeem with oracle price", async () => {
-      const sharesAccount = await getAccount(connection, userSharesAccount, undefined, TOKEN_2022_PROGRAM_ID);
-      const sharesToRedeem = new BN(Math.floor(Number(sharesAccount.amount) / 10));
+      const sharesAccount = await getAccount(
+        connection,
+        userSharesAccount,
+        undefined,
+        TOKEN_2022_PROGRAM_ID,
+      );
+      const sharesToRedeem = new BN(
+        Math.floor(Number(sharesAccount.amount) / 10),
+      );
       const [claimableTokens] = getClaimableTokensPDA(vault, payer.publicKey);
 
       await program.methods
@@ -601,8 +666,15 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
       const navTotalAssets = vaultState.totalAssets
         .add(vaultState.totalPendingDeposits)
         .add(vaultState.totalFulfilledDeposits);
-      const sharesMintInfo = await getMint(connection, sharesMint, undefined, TOKEN_2022_PROGRAM_ID);
-      const liveTotalShares = new BN(sharesMintInfo.supply.toString()).sub(vaultState.totalPendingRedeems);
+      const sharesMintInfo = await getMint(
+        connection,
+        sharesMint,
+        undefined,
+        TOKEN_2022_PROGRAM_ID,
+      );
+      const liveTotalShares = new BN(sharesMintInfo.supply.toString()).sub(
+        vaultState.totalPendingRedeems,
+      );
       const oraclePrice = computeExpectedPrice(navTotalAssets, liveTotalShares);
       console.log("  Vault price for oracle redeem:", oraclePrice.toString());
 
@@ -711,7 +783,10 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
     let operatorApprovalPDA: PublicKey;
 
     before(async () => {
-      const airdropSig = await connection.requestAirdrop(user2.publicKey, 2 * anchor.web3.LAMPORTS_PER_SOL);
+      const airdropSig = await connection.requestAirdrop(
+        user2.publicKey,
+        2 * anchor.web3.LAMPORTS_PER_SOL,
+      );
       await connection.confirmTransaction(airdropSig);
       await new Promise((r) => setTimeout(r, 1000));
 
@@ -723,7 +798,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
         false,
         undefined,
         undefined,
-        TOKEN_PROGRAM_ID
+        TOKEN_PROGRAM_ID,
       );
       user2AssetAccount = user2AssetAta.address;
 
@@ -736,7 +811,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
         1_000_000 * 10 ** ASSET_DECIMALS,
         [],
         undefined,
-        TOKEN_PROGRAM_ID
+        TOKEN_PROGRAM_ID,
       );
 
       user2SharesAccount = getAssociatedTokenAddressSync(
@@ -744,11 +819,15 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
         user2.publicKey,
         false,
         TOKEN_2022_PROGRAM_ID,
-        ASSOCIATED_TOKEN_PROGRAM_ID
+        ASSOCIATED_TOKEN_PROGRAM_ID,
       );
 
       [user2DepositRequest] = getDepositRequestPDA(vault, user2.publicKey);
-      [operatorApprovalPDA] = getOperatorApprovalPDA(vault, user2.publicKey, payer.publicKey);
+      [operatorApprovalPDA] = getOperatorApprovalPDA(
+        vault,
+        user2.publicKey,
+        payer.publicKey,
+      );
     });
 
     it("user sets operator approval", async () => {
@@ -763,7 +842,8 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
         .signers([user2])
         .rpc();
 
-      const approval = await program.account.operatorApproval.fetch(operatorApprovalPDA);
+      const approval =
+        await program.account.operatorApproval.fetch(operatorApprovalPDA);
       expect(approval.canClaim).to.equal(true);
       expect(approval.canFulfillDeposit).to.equal(true);
       expect(approval.canFulfillRedeem).to.equal(true);
@@ -801,7 +881,14 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
         .rpc();
 
       // payer (approved operator) claims on behalf of user2
-      await createAssociatedTokenAccountIdempotent(connection, payer, sharesMint, user2.publicKey, {}, TOKEN_2022_PROGRAM_ID);
+      await createAssociatedTokenAccountIdempotent(
+        connection,
+        payer,
+        sharesMint,
+        user2.publicKey,
+        {},
+        TOKEN_2022_PROGRAM_ID,
+      );
       await program.methods
         .claimDeposit()
         .accountsStrict({
@@ -817,13 +904,21 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
         })
         .rpc();
 
-      const sharesAccount = await getAccount(connection, user2SharesAccount, undefined, TOKEN_2022_PROGRAM_ID);
+      const sharesAccount = await getAccount(
+        connection,
+        user2SharesAccount,
+        undefined,
+        TOKEN_2022_PROGRAM_ID,
+      );
       expect(Number(sharesAccount.amount)).to.be.greaterThan(0);
     });
 
     it("unapproved operator rejected", async () => {
       const rando = Keypair.generate();
-      const airdropSig = await connection.requestAirdrop(rando.publicKey, anchor.web3.LAMPORTS_PER_SOL);
+      const airdropSig = await connection.requestAirdrop(
+        rando.publicKey,
+        anchor.web3.LAMPORTS_PER_SOL,
+      );
       await connection.confirmTransaction(airdropSig);
       await new Promise((r) => setTimeout(r, 1000));
 
@@ -917,7 +1012,10 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
     it("rejects requests when paused", async () => {
       try {
         await program.methods
-          .requestDeposit(new BN(10_000 * 10 ** ASSET_DECIMALS), payer.publicKey)
+          .requestDeposit(
+            new BN(10_000 * 10 ** ASSET_DECIMALS),
+            payer.publicKey,
+          )
           .accountsStrict({
             user: payer.publicKey,
             vault,
@@ -960,10 +1058,15 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
         .rpc();
 
       const vaultAccount = await program.account.asyncVault.fetch(vault);
-      expect(vaultAccount.authority.toBase58()).to.equal(newAuthority.publicKey.toBase58());
+      expect(vaultAccount.authority.toBase58()).to.equal(
+        newAuthority.publicKey.toBase58(),
+      );
 
       // Transfer back
-      const airdropSig = await connection.requestAirdrop(newAuthority.publicKey, anchor.web3.LAMPORTS_PER_SOL);
+      const airdropSig = await connection.requestAirdrop(
+        newAuthority.publicKey,
+        anchor.web3.LAMPORTS_PER_SOL,
+      );
       await connection.confirmTransaction(airdropSig);
       await new Promise((r) => setTimeout(r, 1000));
 
@@ -977,7 +1080,9 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
         .rpc();
 
       const vaultAfter = await program.account.asyncVault.fetch(vault);
-      expect(vaultAfter.authority.toBase58()).to.equal(payer.publicKey.toBase58());
+      expect(vaultAfter.authority.toBase58()).to.equal(
+        payer.publicKey.toBase58(),
+      );
     });
 
     it("changes vault operator", async () => {
@@ -992,7 +1097,9 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
         .rpc();
 
       const vaultAccount = await program.account.asyncVault.fetch(vault);
-      expect(vaultAccount.operator.toBase58()).to.equal(newOperator.publicKey.toBase58());
+      expect(vaultAccount.operator.toBase58()).to.equal(
+        newOperator.publicKey.toBase58(),
+      );
 
       // Change back
       await program.methods
@@ -1027,7 +1134,10 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
         .rpc();
 
       const rando = Keypair.generate();
-      const airdropSig = await connection.requestAirdrop(rando.publicKey, anchor.web3.LAMPORTS_PER_SOL);
+      const airdropSig = await connection.requestAirdrop(
+        rando.publicKey,
+        anchor.web3.LAMPORTS_PER_SOL,
+      );
       await connection.confirmTransaction(airdropSig);
       await new Promise((r) => setTimeout(r, 1000));
 
@@ -1066,7 +1176,10 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
 
     it("rejects cancel from non-owner", async () => {
       const rando = Keypair.generate();
-      const airdropSig = await connection.requestAirdrop(rando.publicKey, anchor.web3.LAMPORTS_PER_SOL);
+      const airdropSig = await connection.requestAirdrop(
+        rando.publicKey,
+        anchor.web3.LAMPORTS_PER_SOL,
+      );
       await connection.confirmTransaction(airdropSig);
       await new Promise((r) => setTimeout(r, 1000));
 
@@ -1086,7 +1199,10 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
         .rpc();
 
       // rando tries to cancel payer's request; PDA seeds use rando's key so it won't exist
-      const [randoDepositRequest] = getDepositRequestPDA(vault, rando.publicKey);
+      const [randoDepositRequest] = getDepositRequestPDA(
+        vault,
+        rando.publicKey,
+      );
       try {
         await program.methods
           .cancelDeposit()
@@ -1234,29 +1350,57 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
     let fulfillApprovalPDA: PublicKey;
 
     before(async () => {
-      const airdrop1 = await connection.requestAirdrop(delegatedOp.publicKey, 2 * anchor.web3.LAMPORTS_PER_SOL);
-      const airdrop2 = await connection.requestAirdrop(user3.publicKey, 2 * anchor.web3.LAMPORTS_PER_SOL);
+      const airdrop1 = await connection.requestAirdrop(
+        delegatedOp.publicKey,
+        2 * anchor.web3.LAMPORTS_PER_SOL,
+      );
+      const airdrop2 = await connection.requestAirdrop(
+        user3.publicKey,
+        2 * anchor.web3.LAMPORTS_PER_SOL,
+      );
       await connection.confirmTransaction(airdrop1);
       await connection.confirmTransaction(airdrop2);
       await new Promise((r) => setTimeout(r, 1000));
 
       const user3AssetAta = await getOrCreateAssociatedTokenAccount(
-        connection, payer, assetMint, user3.publicKey, false, undefined, undefined, TOKEN_PROGRAM_ID
+        connection,
+        payer,
+        assetMint,
+        user3.publicKey,
+        false,
+        undefined,
+        undefined,
+        TOKEN_PROGRAM_ID,
       );
       user3AssetAccount = user3AssetAta.address;
 
       await mintTo(
-        connection, payer, assetMint, user3AssetAccount, payer.publicKey,
-        1_000_000 * 10 ** ASSET_DECIMALS, [], undefined, TOKEN_PROGRAM_ID
+        connection,
+        payer,
+        assetMint,
+        user3AssetAccount,
+        payer.publicKey,
+        1_000_000 * 10 ** ASSET_DECIMALS,
+        [],
+        undefined,
+        TOKEN_PROGRAM_ID,
       );
 
       user3SharesAccount = getAssociatedTokenAddressSync(
-        sharesMint, user3.publicKey, false, TOKEN_2022_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID
+        sharesMint,
+        user3.publicKey,
+        false,
+        TOKEN_2022_PROGRAM_ID,
+        ASSOCIATED_TOKEN_PROGRAM_ID,
       );
 
       [user3DepositRequest] = getDepositRequestPDA(vault, user3.publicKey);
       [user3RedeemRequest] = getRedeemRequestPDA(vault, user3.publicKey);
-      [fulfillApprovalPDA] = getOperatorApprovalPDA(vault, user3.publicKey, delegatedOp.publicKey);
+      [fulfillApprovalPDA] = getOperatorApprovalPDA(
+        vault,
+        user3.publicKey,
+        delegatedOp.publicKey,
+      );
     });
 
     it("delegated operator fulfills deposit via OperatorApproval", async () => {
@@ -1272,7 +1416,8 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
         .signers([user3])
         .rpc();
 
-      const approval = await program.account.operatorApproval.fetch(fulfillApprovalPDA);
+      const approval =
+        await program.account.operatorApproval.fetch(fulfillApprovalPDA);
       expect(approval.canFulfillDeposit).to.equal(true);
       expect(approval.canFulfillRedeem).to.equal(true);
       expect(approval.canClaim).to.equal(false);
@@ -1307,12 +1452,20 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
         .signers([delegatedOp])
         .rpc();
 
-      const req = await program.account.depositRequest.fetch(user3DepositRequest);
+      const req =
+        await program.account.depositRequest.fetch(user3DepositRequest);
       expect(JSON.stringify(req.status)).to.include("fulfilled");
       expect(req.sharesClaimable.toNumber()).to.be.greaterThan(0);
 
       // user3 claims their own deposit
-      await createAssociatedTokenAccountIdempotent(connection, payer, sharesMint, user3.publicKey, {}, TOKEN_2022_PROGRAM_ID);
+      await createAssociatedTokenAccountIdempotent(
+        connection,
+        payer,
+        sharesMint,
+        user3.publicKey,
+        {},
+        TOKEN_2022_PROGRAM_ID,
+      );
       await program.methods
         .claimDeposit()
         .accountsStrict({
@@ -1331,8 +1484,15 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
     });
 
     it("delegated operator fulfills redeem via OperatorApproval", async () => {
-      const sharesAccount = await getAccount(connection, user3SharesAccount, undefined, TOKEN_2022_PROGRAM_ID);
-      const sharesToRedeem = new BN(Math.floor(Number(sharesAccount.amount) / 2));
+      const sharesAccount = await getAccount(
+        connection,
+        user3SharesAccount,
+        undefined,
+        TOKEN_2022_PROGRAM_ID,
+      );
+      const sharesToRedeem = new BN(
+        Math.floor(Number(sharesAccount.amount) / 2),
+      );
       const [claimableTokens] = getClaimableTokensPDA(vault, user3.publicKey);
 
       await program.methods
@@ -1397,12 +1557,19 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
 
     it("rejects delegated fulfill without can_fulfill_deposit", async () => {
       const noFulfillOp = Keypair.generate();
-      const airdropSig = await connection.requestAirdrop(noFulfillOp.publicKey, anchor.web3.LAMPORTS_PER_SOL);
+      const airdropSig = await connection.requestAirdrop(
+        noFulfillOp.publicKey,
+        anchor.web3.LAMPORTS_PER_SOL,
+      );
       await connection.confirmTransaction(airdropSig);
       await new Promise((r) => setTimeout(r, 1000));
 
       // user3 grants claim-only approval (no fulfill)
-      const [claimOnlyApproval] = getOperatorApprovalPDA(vault, user3.publicKey, noFulfillOp.publicKey);
+      const [claimOnlyApproval] = getOperatorApprovalPDA(
+        vault,
+        user3.publicKey,
+        noFulfillOp.publicKey,
+      );
       await program.methods
         .approveOperator(noFulfillOp.publicKey, false, false, true)
         .accountsStrict({
@@ -1492,7 +1659,10 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
       const navTotalAssets = vaultState.totalAssets
         .add(vaultState.totalPendingDeposits)
         .add(vaultState.totalFulfilledDeposits);
-      const vaultPrice = computeExpectedPrice(navTotalAssets, vaultState.totalShares);
+      const vaultPrice = computeExpectedPrice(
+        navTotalAssets,
+        vaultState.totalShares,
+      );
 
       // max_deviation_bps = 500 (5%). Use 10% deviation to ensure rejection.
       const deviatedPrice = vaultPrice.mul(new BN(110)).div(new BN(100));
@@ -1539,12 +1709,19 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
     let receiverSharesAccount: PublicKey;
 
     before(async () => {
-      const airdropSig = await connection.requestAirdrop(receiver.publicKey, anchor.web3.LAMPORTS_PER_SOL);
+      const airdropSig = await connection.requestAirdrop(
+        receiver.publicKey,
+        anchor.web3.LAMPORTS_PER_SOL,
+      );
       await connection.confirmTransaction(airdropSig);
       await new Promise((r) => setTimeout(r, 1000));
 
       receiverSharesAccount = getAssociatedTokenAddressSync(
-        sharesMint, receiver.publicKey, false, TOKEN_2022_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID
+        sharesMint,
+        receiver.publicKey,
+        false,
+        TOKEN_2022_PROGRAM_ID,
+        ASSOCIATED_TOKEN_PROGRAM_ID,
       );
     });
 
@@ -1578,7 +1755,14 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
         .rpc();
 
       // receiver claims (receiver is claimant since receiver == deposit_request.receiver)
-      await createAssociatedTokenAccountIdempotent(connection, payer, sharesMint, receiver.publicKey, {}, TOKEN_2022_PROGRAM_ID);
+      await createAssociatedTokenAccountIdempotent(
+        connection,
+        payer,
+        sharesMint,
+        receiver.publicKey,
+        {},
+        TOKEN_2022_PROGRAM_ID,
+      );
       await program.methods
         .claimDeposit()
         .accountsStrict({
@@ -1595,16 +1779,32 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
         .signers([receiver])
         .rpc();
 
-      const sharesAccount = await getAccount(connection, receiverSharesAccount, undefined, TOKEN_2022_PROGRAM_ID);
+      const sharesAccount = await getAccount(
+        connection,
+        receiverSharesAccount,
+        undefined,
+        TOKEN_2022_PROGRAM_ID,
+      );
       expect(Number(sharesAccount.amount)).to.be.greaterThan(0);
       console.log("  Receiver got shares:", Number(sharesAccount.amount));
     });
 
     it("redeem with different receiver gets assets sent to receiver", async () => {
-      const sharesAccount = await getAccount(connection, receiverSharesAccount, undefined, TOKEN_2022_PROGRAM_ID);
+      const sharesAccount = await getAccount(
+        connection,
+        receiverSharesAccount,
+        undefined,
+        TOKEN_2022_PROGRAM_ID,
+      );
       const sharesToRedeem = new BN(Number(sharesAccount.amount));
-      const [receiverRedeemRequest] = getRedeemRequestPDA(vault, receiver.publicKey);
-      const [claimableTokens] = getClaimableTokensPDA(vault, receiver.publicKey);
+      const [receiverRedeemRequest] = getRedeemRequestPDA(
+        vault,
+        receiver.publicKey,
+      );
+      const [claimableTokens] = getClaimableTokensPDA(
+        vault,
+        receiver.publicKey,
+      );
 
       // receiver requests redeem with payer as asset receiver
       await program.methods
@@ -1663,8 +1863,13 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
         .rpc();
 
       const userAssetAfter = await getAccount(connection, userAssetAccount);
-      expect(Number(userAssetAfter.amount)).to.be.greaterThan(Number(userAssetBefore.amount));
-      console.log("  Receiver got assets:", Number(userAssetAfter.amount) - Number(userAssetBefore.amount));
+      expect(Number(userAssetAfter.amount)).to.be.greaterThan(
+        Number(userAssetBefore.amount),
+      );
+      console.log(
+        "  Receiver got assets:",
+        Number(userAssetAfter.amount) - Number(userAssetBefore.amount),
+      );
     });
   });
 
@@ -1674,25 +1879,49 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
   describe("Operator Claim for Redeem", () => {
     it("approved operator claims redeem on behalf of user", async () => {
       const user4 = Keypair.generate();
-      const airdropSig = await connection.requestAirdrop(user4.publicKey, 2 * anchor.web3.LAMPORTS_PER_SOL);
+      const airdropSig = await connection.requestAirdrop(
+        user4.publicKey,
+        2 * anchor.web3.LAMPORTS_PER_SOL,
+      );
       await connection.confirmTransaction(airdropSig);
       await new Promise((r) => setTimeout(r, 1000));
 
       // Fund user4 with assets
       const user4AssetAta = await getOrCreateAssociatedTokenAccount(
-        connection, payer, assetMint, user4.publicKey, false, undefined, undefined, TOKEN_PROGRAM_ID
+        connection,
+        payer,
+        assetMint,
+        user4.publicKey,
+        false,
+        undefined,
+        undefined,
+        TOKEN_PROGRAM_ID,
       );
       await mintTo(
-        connection, payer, assetMint, user4AssetAta.address, payer.publicKey,
-        500_000 * 10 ** ASSET_DECIMALS, [], undefined, TOKEN_PROGRAM_ID
+        connection,
+        payer,
+        assetMint,
+        user4AssetAta.address,
+        payer.publicKey,
+        500_000 * 10 ** ASSET_DECIMALS,
+        [],
+        undefined,
+        TOKEN_PROGRAM_ID,
       );
 
       const user4SharesAccount = getAssociatedTokenAddressSync(
-        sharesMint, user4.publicKey, false, TOKEN_2022_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID
+        sharesMint,
+        user4.publicKey,
+        false,
+        TOKEN_2022_PROGRAM_ID,
+        ASSOCIATED_TOKEN_PROGRAM_ID,
       );
 
       // Deposit flow for user4
-      const [user4DepositRequest] = getDepositRequestPDA(vault, user4.publicKey);
+      const [user4DepositRequest] = getDepositRequestPDA(
+        vault,
+        user4.publicKey,
+      );
       const depositAmount = new BN(100_000 * 10 ** ASSET_DECIMALS);
 
       await program.methods
@@ -1722,7 +1951,14 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
         .signers([operator])
         .rpc();
 
-      await createAssociatedTokenAccountIdempotent(connection, payer, sharesMint, user4.publicKey, {}, TOKEN_2022_PROGRAM_ID);
+      await createAssociatedTokenAccountIdempotent(
+        connection,
+        payer,
+        sharesMint,
+        user4.publicKey,
+        {},
+        TOKEN_2022_PROGRAM_ID,
+      );
       await program.methods
         .claimDeposit()
         .accountsStrict({
@@ -1740,7 +1976,11 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
         .rpc();
 
       // User4 approves payer as claim operator
-      const [claimApproval] = getOperatorApprovalPDA(vault, user4.publicKey, payer.publicKey);
+      const [claimApproval] = getOperatorApprovalPDA(
+        vault,
+        user4.publicKey,
+        payer.publicKey,
+      );
       await program.methods
         .approveOperator(payer.publicKey, false, false, true)
         .accountsStrict({
@@ -1753,7 +1993,12 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
         .rpc();
 
       // Redeem flow
-      const sharesAccount = await getAccount(connection, user4SharesAccount, undefined, TOKEN_2022_PROGRAM_ID);
+      const sharesAccount = await getAccount(
+        connection,
+        user4SharesAccount,
+        undefined,
+        TOKEN_2022_PROGRAM_ID,
+      );
       const sharesToRedeem = new BN(Number(sharesAccount.amount));
       const [user4RedeemRequest] = getRedeemRequestPDA(vault, user4.publicKey);
       const [claimableTokens] = getClaimableTokensPDA(vault, user4.publicKey);
@@ -1794,7 +2039,10 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
         .rpc();
 
       // payer (approved operator) claims redeem on behalf of user4
-      const user4AssetBefore = await getAccount(connection, user4AssetAta.address);
+      const user4AssetBefore = await getAccount(
+        connection,
+        user4AssetAta.address,
+      );
 
       await program.methods
         .claimRedeem()
@@ -1813,9 +2061,17 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
         })
         .rpc();
 
-      const user4AssetAfter = await getAccount(connection, user4AssetAta.address);
-      expect(Number(user4AssetAfter.amount)).to.be.greaterThan(Number(user4AssetBefore.amount));
-      console.log("  Operator claimed assets for user4:", Number(user4AssetAfter.amount) - Number(user4AssetBefore.amount));
+      const user4AssetAfter = await getAccount(
+        connection,
+        user4AssetAta.address,
+      );
+      expect(Number(user4AssetAfter.amount)).to.be.greaterThan(
+        Number(user4AssetBefore.amount),
+      );
+      console.log(
+        "  Operator claimed assets for user4:",
+        Number(user4AssetAfter.amount) - Number(user4AssetBefore.amount),
+      );
     });
   });
 });
