@@ -25,8 +25,12 @@ pub fn handler(ctx: Context<RemoveAsset>) -> Result<()> {
     );
 
     // re-index remaining AssetEntry accounts to close index gaps
+    // Dedupe remaining_accounts by key to prevent double-decrement on duplicates
     let svs8_id = crate::ID;
-    for info in ctx.remaining_accounts.iter() {
+    for (i, info) in ctx.remaining_accounts.iter().enumerate() {
+        for prev in &ctx.remaining_accounts[..i] {
+            require!(prev.key() != info.key(), VaultError::AssetNotFound);
+        }
         require!(info.owner == &svs8_id, VaultError::InvalidOracle);
         let mut entry = AssetEntry::try_deserialize(&mut &info.try_borrow_data()?[..])?;
         // V4-P24: Error on wrong-vault remaining_accounts instead of silently skipping
@@ -57,7 +61,12 @@ pub fn handler(ctx: Context<RemoveAsset>) -> Result<()> {
 
 #[derive(Accounts)]
 pub struct RemoveAsset<'info> {
-    #[account(mut, has_one = authority)]
+    #[account(
+        mut,
+        has_one = authority,
+        seeds = [crate::constants::MULTI_VAULT_SEED, vault.vault_id.to_le_bytes().as_ref()],
+        bump = vault.bump,
+    )]
     pub vault: Account<'info, MultiAssetVault>,
 
     pub authority: Signer<'info>,

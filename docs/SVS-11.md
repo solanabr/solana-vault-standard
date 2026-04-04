@@ -27,6 +27,8 @@ SVS-11 is a manager-approved tokenized vault for credit markets and illiquid ass
 | **RedemptionRequest** | `["redemption_request", vault, investor]` | Vault PDA |
 | **ClaimableTokens** | `["claimable_tokens", vault, investor]` | Vault PDA |
 | **FrozenAccount** | `["frozen_account", vault, investor]` | Vault PDA |
+| **VaultConfig** | `["vault_config", vault]` | Authority |
+| **Attestation** | `["attestation", subject, issuer, attestation_type]` | Attestation program |
 | **FeeConfig** | `["svs_fee_config", vault]` | Vault authority |
 | **CapConfig** | `["svs_cap_config", vault]` | Vault authority |
 | **LockConfig** | `["svs_lock_config", vault]` | Vault authority |
@@ -58,9 +60,26 @@ pub struct CreditVault {
     pub bump: u8,                       // 1 byte
     pub redemption_escrow_bump: u8,     // 1 byte
     pub paused: bool,                   // 1 byte
-    pub _reserved: [u8; 64],            // 64 bytes
+    pub required_attestation_type: u8,  // 1 byte — must match attestation.attestation_type
+    pub _reserved: [u8; 63],            // 63 bytes
 }
 // Total: 345 bytes
+```
+
+```rust
+#[account]
+pub struct VaultConfig {
+    pub vault: Pubkey,              // 32 bytes
+    pub pending_oracle: Pubkey,     // 32 bytes — proposed new oracle (timelock)
+    pub oracle_change_at: i64,      // 8 bytes  — when the change can be applied
+    pub compliance_officer: Pubkey, // 32 bytes — separate compliance officer for freeze/unfreeze
+    pub bump: u8,                   // 1 byte
+    pub _reserved: [u8; 31],        // 31 bytes
+}
+// Total: 136 bytes
+// Seeds: ["vault_config", vault]
+// Required for compliance operations (freeze/unfreeze) and oracle timelock changes.
+// Must be initialized via `initialize_vault_config` after vault creation.
 ```
 
 ```rust

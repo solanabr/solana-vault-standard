@@ -7,15 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [2.0.0] - 2026-04-01
+## [2.0.0] - 2026-04-04
 
 ### Security
 - Completed 10 internal audit rounds (v1 through v10), all findings resolved
 - Scrubbed leaked program keypairs from git history
 - Fresh deployment with new program IDs (no upgrade authority on old IDs)
+- **SVS-11 MEDIUM**: `CreditVault` carries `required_attestation_type: u8` and `validate_attestation` enforces `attestation.attestation_type == vault.required_attestation_type`, preventing low-bar attestations from satisfying higher-bar vaults when the attester issues multiple types.
+- **SVS-9 MEDIUM**: `compute_total_assets` validates `allocation_info.owner == crate::ID` and `shares_info.owner == SPL Token / Token-2022` before deserialization, blocking attacker-forged `ChildAllocation` accounts that could skew NAV via a manipulated `child_decimals_offset`.
+- **SVS-8 LOW**: `remove_asset`, `add_asset`, and `update_weights` dedupe `remaining_accounts` keys before processing, preventing admin self-harm via duplicate entries.
+- **SVS-11 LOW**: `validate_attestation` added a defensive `data.len() >= 8` guard before slicing past the Anchor discriminator.
+- **SVS-8 HIGH**: `redeem_single.user_asset_account` / `user_shares_account` carry `token::mint` + `token::authority` constraints.
+- **SVS-8 LOW**: vault PDA seeds+bump validation added to `add_asset`, `remove_asset`, `update_weights`, `deposit_single`, `redeem_single` account structs.
 
 ### Changed
 - **Breaking**: All 14 programs redeployed with new program IDs
+- **Breaking**: Removed `init_if_needed` on user token accounts — callers must pre-create ATAs before deposit/mint operations (improves security, saves ~5k CU)
+- **Breaking**: All remaining_accounts validated with owner checks before deserialization
+- **Breaking**: SVS-11 attestation PDA seed convention: `["attestation", subject, issuer, attestation_type]`
+- **Breaking**: SVS-11 compliance operations (freeze/unfreeze) require VaultConfig PDA (initialized via `initialize_vault_config`)
+- **Breaking**: SVS-11 CreditVault adds `required_attestation_type: u8` (default 0) — attestation validation now enforces `attestation.attestation_type == vault.required_attestation_type`
 - Version bump: 0.2.0 → 2.0.0 across all packages (programs, modules, SDKs)
 
 ### Added

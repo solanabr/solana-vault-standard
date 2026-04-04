@@ -261,7 +261,7 @@ Approximate CU costs per instruction type:
 **Notes**:
 - SVS-1/2 are significantly cheaper than SVS-3/4
 - Proof verification is the main cost in confidential variants
-- `init_if_needed` on shares account adds ~5k on first deposit
+- v2.0.0: ATAs must be pre-created off-chain (saves ~5k CU vs runtime account creation, improves security)
 
 ---
 

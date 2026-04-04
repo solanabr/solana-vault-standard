@@ -143,10 +143,9 @@ pub struct Deposit<'info> {
     )]
     pub shares_mint: InterfaceAccount<'info, Mint>,
 
-    /// User's shares token account - create if needed
+    /// User's shares token account (v2.0.0: must be pre-created by caller)
     #[account(
-        init_if_needed,
-        payer = user,
+        mut,
         associated_token::mint = shares_mint,
         associated_token::authority = user,
         associated_token::token_program = token_2022_program,
@@ -157,8 +156,6 @@ pub struct Deposit<'info> {
     pub asset_token_program: Interface<'info, TokenInterface>,
     /// Token-2022 for shares (always)
     pub token_2022_program: Program<'info, Token2022>,
-    pub associated_token_program: Program<'info, AssociatedToken>,
-    pub system_program: Program<'info, System>,
 }
 ```
 

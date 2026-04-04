@@ -149,6 +149,13 @@ describe("svs-2 (Stored Balance - Sync Required)", () => {
   });
 
   describe("Deposit", () => {
+    before(async () => {
+      await getOrCreateAssociatedTokenAccount(
+        connection, payer, sharesMint, payer.publicKey,
+        false, undefined, undefined, TOKEN_2022_PROGRAM_ID
+      );
+    });
+
     it("deposits assets and receives shares", async () => {
       const depositAmount = new BN(100_000 * 10 ** ASSET_DECIMALS);
 
@@ -166,8 +173,6 @@ describe("svs-2 (Stored Balance - Sync Required)", () => {
           userSharesAccount: userSharesAccount,
           assetTokenProgram: TOKEN_PROGRAM_ID,
           token2022Program: TOKEN_2022_PROGRAM_ID,
-          associatedTokenProgram: anchor.utils.token.ASSOCIATED_PROGRAM_ID,
-          systemProgram: SystemProgram.programId,
         })
         .rpc();
 
@@ -207,8 +212,6 @@ describe("svs-2 (Stored Balance - Sync Required)", () => {
           userSharesAccount: userSharesAccount,
           assetTokenProgram: TOKEN_PROGRAM_ID,
           token2022Program: TOKEN_2022_PROGRAM_ID,
-          associatedTokenProgram: anchor.utils.token.ASSOCIATED_PROGRAM_ID,
-          systemProgram: SystemProgram.programId,
         })
         .rpc();
 
@@ -389,8 +392,6 @@ describe("svs-2 (Stored Balance - Sync Required)", () => {
           userSharesAccount: userSharesAccount,
           assetTokenProgram: TOKEN_PROGRAM_ID,
           token2022Program: TOKEN_2022_PROGRAM_ID,
-          associatedTokenProgram: anchor.utils.token.ASSOCIATED_PROGRAM_ID,
-          systemProgram: SystemProgram.programId,
         })
         .rpc();
 
@@ -433,8 +434,6 @@ describe("svs-2 (Stored Balance - Sync Required)", () => {
             userSharesAccount: userSharesAccount,
             assetTokenProgram: TOKEN_PROGRAM_ID,
             token2022Program: TOKEN_2022_PROGRAM_ID,
-            associatedTokenProgram: anchor.utils.token.ASSOCIATED_PROGRAM_ID,
-            systemProgram: SystemProgram.programId,
           })
           .rpc();
         expect.fail("Should reject when paused");
@@ -752,8 +751,6 @@ describe("svs-2 (Stored Balance - Sync Required)", () => {
             userSharesAccount: userSharesAccount,
             assetTokenProgram: TOKEN_PROGRAM_ID,
             token2022Program: TOKEN_2022_PROGRAM_ID,
-            associatedTokenProgram: anchor.utils.token.ASSOCIATED_PROGRAM_ID,
-            systemProgram: SystemProgram.programId,
           })
           .rpc();
         expect.fail("Should reject zero deposit");

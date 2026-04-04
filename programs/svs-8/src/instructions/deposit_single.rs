@@ -239,7 +239,11 @@ pub struct DepositSingle<'info> {
     #[account(mut)]
     pub user: Signer<'info>,
 
-    #[account(mut)]
+    #[account(
+        mut,
+        seeds = [crate::constants::MULTI_VAULT_SEED, vault.vault_id.to_le_bytes().as_ref()],
+        bump = vault.bump,
+    )]
     pub vault: Box<Account<'info, MultiAssetVault>>,
 
     #[account(has_one = vault, has_one = asset_mint)]

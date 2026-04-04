@@ -36,6 +36,7 @@ pub fn validate_attestation(
 
     let data = attestation_info.try_borrow_data()?;
     // Skip 8-byte Anchor discriminator
+    require!(data.len() >= 8, VaultError::InvalidAttestation);
     let attestation = Attestation::try_from_slice(&data[8..])
         .map_err(|_| error!(VaultError::InvalidAttestation))?;
 
@@ -57,14 +58,24 @@ pub fn validate_attestation(
         VaultError::AttestationExpired
     );
 
-    // V4-P16 FIX: Verify the attestation account is a canonical PDA derived from
-    // the investor's pubkey under the attestation program. Without this check, any
-    // account owned by the attestation_program that passes the field checks above
-    // would be accepted — a rogue attester could create arbitrary accounts. The
-    // canonical seed convention is [subject_pubkey], matching the SVS attestation
-    // spec (SAS, Civic Pass, etc.).
+    // Enforce attestation_type matches vault's required type. Prevents a low-bar
+    // attestation (e.g. generic KYC) from satisfying a vault that semantically
+    // requires a different type when the attester issues multiple types.
+    require!(
+        attestation.attestation_type == vault.required_attestation_type,
+        VaultError::InvalidAttestation
+    );
+
+    // Verify the attestation account is a canonical PDA derived under the
+    // attestation program. Seed convention: [b"attestation", subject, issuer, attestation_type].
     let expected_pda = Pubkey::create_program_address(
-        &[investor.as_ref(), &[attestation.bump]],
+        &[
+            b"attestation",
+            investor.as_ref(),
+            attestation.issuer.as_ref(),
+            &[attestation.attestation_type],
+            &[attestation.bump],
+        ],
         &vault.attestation_program,
     )
     .map_err(|_| error!(VaultError::InvalidAttestation))?;

@@ -244,7 +244,8 @@ pub fn handler(
     vault.max_deviation_bps = crate::constants::DEFAULT_MAX_DEVIATION_BPS;
     vault.pending_authority = Pubkey::default();
     vault.total_pending_redeems = 0;
-    vault._reserved = [0u8; 24];
+    vault.required_attestation_type = 0;
+    vault._reserved = [0u8; 23];
 
     emit!(VaultInitialized {
         vault: vault.key(),

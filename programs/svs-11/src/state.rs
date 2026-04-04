@@ -49,7 +49,12 @@ pub struct CreditVault {
     pub pending_authority: Pubkey,
     /// Number of pending (not yet approved/rejected/cancelled) redemption requests
     pub total_pending_redeems: u64,
-    pub _reserved: [u8; 24],
+    /// Required attestation_type that investor attestations must match.
+    /// Default 0. Prevents a low-bar attestation (e.g. generic KYC) from
+    /// satisfying a vault that semantically requires a higher-bar type
+    /// (e.g. accredited investor) when the attester issues multiple types.
+    pub required_attestation_type: u8,
+    pub _reserved: [u8; 23],
 }
 
 impl CreditVault {
@@ -78,7 +83,8 @@ impl CreditVault {
         2 +   // max_deviation_bps
         32 +  // pending_authority
         8 +   // total_pending_redeems
-        24; // _reserved
+        1 +   // required_attestation_type
+        23; // _reserved
 
     pub const SEED_PREFIX: &'static [u8] = VAULT_SEED;
 }

@@ -245,7 +245,11 @@ pub struct RedeemSingle<'info> {
     #[account(mut)]
     pub user: Signer<'info>,
 
-    #[account(mut)]
+    #[account(
+        mut,
+        seeds = [crate::constants::MULTI_VAULT_SEED, vault.vault_id.to_le_bytes().as_ref()],
+        bump = vault.bump,
+    )]
     pub vault: Box<Account<'info, MultiAssetVault>>,
 
     #[account(has_one = vault, has_one = asset_mint)]
@@ -271,13 +275,21 @@ pub struct RedeemSingle<'info> {
     )]
     pub asset_vault_account: Box<InterfaceAccount<'info, TokenAccount>>,
 
-    #[account(mut)]
+    #[account(
+        mut,
+        token::mint = asset_mint,
+        token::authority = user,
+    )]
     pub user_asset_account: Box<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(mut, constraint = shares_mint.key() == vault.shares_mint @ VaultError::AssetNotFound)]
     pub shares_mint: Box<InterfaceAccount<'info, Mint>>,
 
-    #[account(mut)]
+    #[account(
+        mut,
+        token::mint = shares_mint,
+        token::authority = user,
+    )]
     pub user_shares_account: Box<InterfaceAccount<'info, TokenAccount>>,
 
     pub token_program: Interface<'info, TokenInterface>,

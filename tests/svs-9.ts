@@ -153,11 +153,18 @@ describe("svs-9", () => {
     const remainingAccounts = [];
     for (const alloc of childAllocations) {
       if (alloc.account.enabled) {
+        // Read child vault state to get its asset_vault and shares_mint
+        const childVaultInfo = await provider.connection.getAccountInfo(alloc.account.childVault as PublicKey);
+        if (!childVaultInfo) continue;
+        // SVS-1 Vault layout: discrim(8) + authority(32) + asset_mint(32) + shares_mint(32) + asset_vault(32)
+        const childAssetVault = new PublicKey(childVaultInfo.data.subarray(104, 136));
+        const childSharesMint = new PublicKey(childVaultInfo.data.subarray(72, 104));
+
         remainingAccounts.push({ pubkey: alloc.publicKey, isSigner: false, isWritable: false });
         remainingAccounts.push({ pubkey: alloc.account.childVault as PublicKey, isSigner: false, isWritable: false });
         remainingAccounts.push({ pubkey: alloc.account.childSharesAccount as PublicKey, isSigner: false, isWritable: false });
-        remainingAccounts.push({ pubkey: idleVaultATA, isSigner: false, isWritable: false }); // mock asset vault
-        remainingAccounts.push({ pubkey: sharesMint, isSigner: false, isWritable: false }); // mock shares mint
+        remainingAccounts.push({ pubkey: childAssetVault, isSigner: false, isWritable: false });
+        remainingAccounts.push({ pubkey: childSharesMint, isSigner: false, isWritable: false });
       }
     }
     return remainingAccounts;
@@ -212,6 +219,7 @@ describe("svs-9", () => {
         childAllocation: childAllocationPDA,
         childVault: childVaultAddress,
         childProgram: SVS1_ID,
+        allowedPrograms: null,
         childSharesMint: childSharesMintAddress,
         allocatorChildSharesAccount,
         tokenProgram: TOKEN_PROGRAM_ID,

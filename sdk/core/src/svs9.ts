@@ -774,6 +774,7 @@ export class AllocatorVaultClient {
         childAllocation,
         childVault: params.childVault,
         childProgram: params.childProgram,
+        allowedPrograms: null,
         childSharesMint,
         allocatorChildSharesAccount,
         tokenProgram: TOKEN_2022_PROGRAM_ID,

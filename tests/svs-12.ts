@@ -276,6 +276,7 @@ describe("svs-12 (Tranched Vault)", () => {
       .accounts({
         manager: payer.publicKey,
         vault,
+        assetVault,
         tranche0: seniorTranche,
         tranche1: juniorTranche,
         tranche2: null,
@@ -533,7 +534,7 @@ describe("svs-12 (Tranched Vault)", () => {
       await program.methods
         .recordLoss(new BN(0))
         .accounts({
-          manager: payer.publicKey, vault,
+          manager: payer.publicKey, vault, assetVault,
           tranche0: seniorTranche, tranche1: juniorTranche, tranche2: null, tranche3: null,
         })
         .rpc();
@@ -607,7 +608,7 @@ describe("svs-12 (Tranched Vault)", () => {
       await program.methods
         .recordLoss(new BN(1000))
         .accounts({
-          manager: payer.publicKey, vault,
+          manager: payer.publicKey, vault, assetVault,
           tranche0: seniorTranche, tranche1: juniorTranche, tranche2: null, tranche3: null,
         })
         .rpc();
@@ -965,7 +966,7 @@ describe("svs-12 (Tranched Vault)", () => {
       // Record total loss to wipe the vault
       const vaultAccount = await program.account.tranchedVault.fetch(v3Vault);
       await program.methods.recordLoss(vaultAccount.totalAssets).accounts({
-        manager: payer.publicKey, vault: v3Vault,
+        manager: payer.publicKey, vault: v3Vault, assetVault: v3AssetVault,
         tranche0: v3SeniorTranche, tranche1: v3JuniorTranche, tranche2: null, tranche3: null,
       }).rpc();
 
@@ -1472,7 +1473,7 @@ describe("svs-12 (Tranched Vault)", () => {
       const seniorBefore = await program.account.tranche.fetch(t3Senior);
 
       await program.methods.recordLoss(lossAmount).accounts({
-        manager: payer.publicKey, vault: t3Vault,
+        manager: payer.publicKey, vault: t3Vault, assetVault: t3AssetVault,
         tranche0: t3Senior, tranche1: t3Mezz, tranche2: t3Junior, tranche3: null,
       }).rpc();
 
@@ -1734,7 +1735,7 @@ describe("svs-12 (Tranched Vault)", () => {
       const lossAmount = new BN(1000 * LAMPORTS);
 
       await program.methods.recordLoss(lossAmount).accounts({
-        manager: payer.publicKey, vault: t4Vault,
+        manager: payer.publicKey, vault: t4Vault, assetVault: t4AssetVault,
         tranche0: t4Senior, tranche1: t4SeniorMezz, tranche2: t4JuniorMezz, tranche3: t4Equity,
       }).rpc();
 

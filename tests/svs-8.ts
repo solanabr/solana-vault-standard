@@ -83,6 +83,10 @@ describe("svs-8 (Multi Asset Basket)", () => {
       [ASSET_ENTRY_SEED, vaultPda.toBuffer(), mintA.toBuffer()],
       program.programId
     );
+    [oraclePriceA] = PublicKey.findProgramAddressSync(
+      [ORACLE_PRICE_SEED, vaultPda.toBuffer(), mintA.toBuffer()],
+      program.programId
+    );
     const assetVaultKeypair = Keypair.generate();
     assetVaultA = assetVaultKeypair.publicKey;
 
@@ -92,7 +96,7 @@ describe("svs-8 (Multi Asset Basket)", () => {
         vault: vaultPda,
         authority: user.publicKey,
         assetMint: mintA,
-        oracle: Keypair.generate().publicKey,
+        oracle: oraclePriceA,
         assetEntry: assetEntryA,
         assetVault: assetVaultA,
         tokenProgram: TOKEN_PROGRAM_ID,
@@ -111,6 +115,10 @@ describe("svs-8 (Multi Asset Basket)", () => {
       [ASSET_ENTRY_SEED, vaultPda.toBuffer(), mintB.toBuffer()],
       program.programId
     );
+    [oraclePriceB] = PublicKey.findProgramAddressSync(
+      [ORACLE_PRICE_SEED, vaultPda.toBuffer(), mintB.toBuffer()],
+      program.programId
+    );
     const assetVaultKeypair = Keypair.generate();
     assetVaultB = assetVaultKeypair.publicKey;
 
@@ -120,13 +128,16 @@ describe("svs-8 (Multi Asset Basket)", () => {
         vault: vaultPda,
         authority: user.publicKey,
         assetMint: mintB,
-        oracle: Keypair.generate().publicKey,
+        oracle: oraclePriceB,
         assetEntry: assetEntryB,
         assetVault: assetVaultB,
         tokenProgram: TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
         rent: anchor.web3.SYSVAR_RENT_PUBKEY,
       })
+      .remainingAccounts([
+        { pubkey: assetEntryA, isWritable: false, isSigner: false },
+      ])
       .signers([assetVaultKeypair])
       .rpc();
 
@@ -134,15 +145,11 @@ describe("svs-8 (Multi Asset Basket)", () => {
     expect(vault.numAssets).to.equal(2);
   });
 
-  it("sets oracle price for asset A", async () => {
-    [oraclePriceA] = PublicKey.findProgramAddressSync(
-      [ORACLE_PRICE_SEED, vaultPda.toBuffer(), mintA.toBuffer()],
-      program.programId
-    );
-
+  it("initializes and sets oracle price for asset A", async () => {
+    // oraclePriceA already derived in addAsset test
     // price = 1.0 = 1_000_000_000 (PRICE_SCALE)
     await program.methods
-      .updateOracle(new BN(1_000_000_000))
+      .initializeOracle(new BN(1_000_000_000))
       .accounts({
         vault: vaultPda,
         authority: user.publicKey,
@@ -157,14 +164,10 @@ describe("svs-8 (Multi Asset Basket)", () => {
     console.log("oracle A set:", oracle.price.toString());
   });
 
-  it("sets oracle price for asset B", async () => {
-    [oraclePriceB] = PublicKey.findProgramAddressSync(
-      [ORACLE_PRICE_SEED, vaultPda.toBuffer(), mintB.toBuffer()],
-      program.programId
-    );
-
+  it("initializes and sets oracle price for asset B", async () => {
+    // oraclePriceB already derived in addAsset test
     await program.methods
-      .updateOracle(new BN(1_000_000_000))
+      .initializeOracle(new BN(1_000_000_000))
       .accounts({
         vault: vaultPda,
         authority: user.publicKey,
@@ -359,18 +362,20 @@ describe("svs-8 (Multi Asset Basket)", () => {
         systemProgram: SystemProgram.programId,
       })
       .remainingAccounts([
-        // Asset A: [AssetEntry, OraclePrice, vault_ata, user_ata, mint]
+        // Asset A: [AssetEntry, OraclePrice, vault_ata, user_ata, mint, token_program]
         { pubkey: assetEntryA, isWritable: false, isSigner: false },
         { pubkey: oraclePriceA, isWritable: false, isSigner: false },
         { pubkey: assetVaultA, isWritable: true, isSigner: false },
         { pubkey: userAtaA, isWritable: true, isSigner: false },
         { pubkey: mintA, isWritable: false, isSigner: false },
-        // Asset B: [AssetEntry, OraclePrice, vault_ata, user_ata, mint]
+        { pubkey: TOKEN_PROGRAM_ID, isWritable: false, isSigner: false },
+        // Asset B: [AssetEntry, OraclePrice, vault_ata, user_ata, mint, token_program]
         { pubkey: assetEntryB, isWritable: false, isSigner: false },
         { pubkey: oraclePriceB, isWritable: false, isSigner: false },
         { pubkey: assetVaultB, isWritable: true, isSigner: false },
         { pubkey: userAtaB, isWritable: true, isSigner: false },
         { pubkey: mintB, isWritable: false, isSigner: false },
+        { pubkey: TOKEN_PROGRAM_ID, isWritable: false, isSigner: false },
       ])
       .rpc();
 
@@ -427,11 +432,13 @@ describe("svs-8 (Multi Asset Basket)", () => {
         { pubkey: assetVaultA, isWritable: true, isSigner: false },
         { pubkey: userAtaA, isWritable: true, isSigner: false },
         { pubkey: mintA, isWritable: false, isSigner: false },
+        { pubkey: TOKEN_PROGRAM_ID, isWritable: false, isSigner: false },
         { pubkey: assetEntryB, isWritable: false, isSigner: false },
         { pubkey: oraclePriceB, isWritable: false, isSigner: false },
         { pubkey: assetVaultB, isWritable: true, isSigner: false },
         { pubkey: userAtaB, isWritable: true, isSigner: false },
         { pubkey: mintB, isWritable: false, isSigner: false },
+        { pubkey: TOKEN_PROGRAM_ID, isWritable: false, isSigner: false },
       ])
       .rpc();
     const mintAfter = await getMint(provider.connection, sharesMint, undefined, TOKEN_2022_PROGRAM_ID);
@@ -466,11 +473,11 @@ describe("svs-8 (Multi Asset Basket)", () => {
       .rpc();
 
     await program.methods.addAsset(10_000)
-      .accountsPartial({ vault: vaultSingle, authority: user.publicKey, assetMint: mintA, oracle: anchor.web3.Keypair.generate().publicKey, assetEntry: assetEntrySingle, assetVault: assetVaultSingleKeypair.publicKey, tokenProgram: TOKEN_PROGRAM_ID, systemProgram: SystemProgram.programId, rent: anchor.web3.SYSVAR_RENT_PUBKEY })
+      .accountsPartial({ vault: vaultSingle, authority: user.publicKey, assetMint: mintA, oracle: oracleSingle, assetEntry: assetEntrySingle, assetVault: assetVaultSingleKeypair.publicKey, tokenProgram: TOKEN_PROGRAM_ID, systemProgram: SystemProgram.programId, rent: anchor.web3.SYSVAR_RENT_PUBKEY })
       .signers([assetVaultSingleKeypair]).rpc();
 
-    await program.methods.updateOracle(new BN(1_000_000_000))
-      .accountsPartial({ vault: vaultSingle, assetMint: mintA, systemProgram: SystemProgram.programId })
+    await program.methods.initializeOracle(new BN(1_000_000_000))
+      .accountsPartial({ vault: vaultSingle, authority: user.publicKey, assetMint: mintA, oraclePrice: oracleSingle, systemProgram: SystemProgram.programId })
       .rpc();
 
     const userSharesSingle = await getOrCreateAssociatedTokenAccount(
@@ -530,12 +537,14 @@ describe("svs-8 (Multi Asset Basket)", () => {
           { pubkey: assetVaultB, isWritable: true, isSigner: false }, // wrong vault_ta
           { pubkey: userAtaA, isWritable: true, isSigner: false },
           { pubkey: mintA, isWritable: false, isSigner: false },
+          { pubkey: TOKEN_PROGRAM_ID, isWritable: false, isSigner: false },
           // Asset B
           { pubkey: assetEntryB, isWritable: false, isSigner: false },
           { pubkey: oraclePriceB, isWritable: false, isSigner: false },
           { pubkey: assetVaultB, isWritable: true, isSigner: false },
           { pubkey: userAtaB, isWritable: true, isSigner: false },
           { pubkey: mintB, isWritable: false, isSigner: false },
+          { pubkey: TOKEN_PROGRAM_ID, isWritable: false, isSigner: false },
         ])
         .rpc();
       expect.fail("should have thrown");
@@ -563,6 +572,7 @@ describe("svs-8 (Multi Asset Basket)", () => {
           { pubkey: assetVaultA, isWritable: true, isSigner: false },
           { pubkey: userAtaA, isWritable: true, isSigner: false },
           { pubkey: mintA, isWritable: false, isSigner: false },
+          { pubkey: TOKEN_PROGRAM_ID, isWritable: false, isSigner: false },
         ])
         .rpc();
       expect.fail("should have thrown");
@@ -589,11 +599,13 @@ describe("svs-8 (Multi Asset Basket)", () => {
           { pubkey: assetVaultA, isWritable: true, isSigner: false },
           { pubkey: userAtaA, isWritable: true, isSigner: false },
           { pubkey: mintB, isWritable: false, isSigner: false }, // wrong mint for asset A
+          { pubkey: TOKEN_PROGRAM_ID, isWritable: false, isSigner: false },
           { pubkey: assetEntryB, isWritable: false, isSigner: false },
           { pubkey: oraclePriceB, isWritable: false, isSigner: false },
           { pubkey: assetVaultB, isWritable: true, isSigner: false },
           { pubkey: userAtaB, isWritable: true, isSigner: false },
           { pubkey: mintB, isWritable: false, isSigner: false },
+          { pubkey: TOKEN_PROGRAM_ID, isWritable: false, isSigner: false },
         ])
         .rpc();
       expect.fail("should have thrown");

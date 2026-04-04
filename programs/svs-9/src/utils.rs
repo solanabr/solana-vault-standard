@@ -143,6 +143,12 @@ pub fn compute_total_assets<'info>(
         processed_children.push(*vault_info.key);
 
         // 1. Deserialize and validate the ChildAllocation PDA
+        // Owner check prevents attacker from forging a ChildAllocation (with
+        // attacker-chosen child_decimals_offset) that would skew NAV computation.
+        require!(
+            allocation_info.owner == &crate::ID,
+            VaultError::InvalidRemainingAccounts
+        );
         let allocation = ChildAllocation::try_deserialize(&mut &allocation_info.data.borrow()[..])?;
 
         // Verify this ChildAllocation belongs to the vault being computed, not a different vault
@@ -209,6 +215,9 @@ pub fn compute_total_assets<'info>(
         }
 
         // 3. Read the allocator's share balance from its ATA
+        let shares_is_token = shares_info.owner == &anchor_spl::token::ID
+            || shares_info.owner == &anchor_spl::token_2022::ID;
+        require!(shares_is_token, VaultError::InvalidRemainingAccounts);
         let shares_account = TokenAccount::try_deserialize(&mut &shares_info.data.borrow()[..])?;
         let our_shares = shares_account.amount;
 

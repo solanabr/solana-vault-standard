@@ -329,9 +329,9 @@ pub struct Deposit<'info> {
     #[account(mut, constraint = shares_mint.key() == vault.shares_mint)]
     pub shares_mint: InterfaceAccount<'info, Mint>,
 
+    /// v2.0.0: ATA must be pre-created by caller
     #[account(
-        init_if_needed,
-        payer = user,
+        mut,
         associated_token::mint = shares_mint,
         associated_token::authority = user,
         associated_token::token_program = token_2022_program,
@@ -340,8 +340,6 @@ pub struct Deposit<'info> {
 
     pub asset_token_program: Interface<'info, TokenInterface>,
     pub token_2022_program: Program<'info, Token2022>,
-    pub associated_token_program: Program<'info, AssociatedToken>,
-    pub system_program: Program<'info, System>,
 }
 ```
 

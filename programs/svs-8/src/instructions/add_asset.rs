@@ -27,7 +27,10 @@ pub fn handler(ctx: Context<AddAsset>, target_weight_bps: u16) -> Result<()> {
 
     let svs8_id = crate::ID;
     let mut current_total_weight: u16 = 0;
-    for info in ctx.remaining_accounts.iter() {
+    for (i, info) in ctx.remaining_accounts.iter().enumerate() {
+        for prev in &ctx.remaining_accounts[..i] {
+            require!(prev.key() != info.key(), VaultError::AssetNotFound);
+        }
         require!(info.owner == &svs8_id, VaultError::InvalidOracle);
         let entry = AssetEntry::try_deserialize(&mut &info.try_borrow_data()?[..])?;
         require!(entry.vault == vault_key, VaultError::AssetNotFound);
@@ -81,7 +84,12 @@ pub fn handler(ctx: Context<AddAsset>, target_weight_bps: u16) -> Result<()> {
 
 #[derive(Accounts)]
 pub struct AddAsset<'info> {
-    #[account(mut, has_one = authority)]
+    #[account(
+        mut,
+        has_one = authority,
+        seeds = [crate::constants::MULTI_VAULT_SEED, vault.vault_id.to_le_bytes().as_ref()],
+        bump = vault.bump,
+    )]
     pub vault: Account<'info, MultiAssetVault>,
 
     #[account(mut)]

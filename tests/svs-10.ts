@@ -7,6 +7,7 @@ import {
   TOKEN_PROGRAM_ID,
   TOKEN_2022_PROGRAM_ID,
   getAccount,
+  getMint,
   getAssociatedTokenAddressSync,
   createAssociatedTokenAccountIdempotent,
   ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -76,14 +77,25 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
     getOperatorApprovalAddress(program.programId, v, owner, op);
 
   /**
-   * Compute the vault's internal price per share (in PRICE_SCALE units).
-   * vault_price = PRICE_SCALE * (total_assets + 1) / (total_shares + 10^offset)
+   * Compute the vault's expected price per share (in PRICE_SCALE units),
+   * mirroring the program's deviation check exactly.
+   *
+   * The program uses nav_total_assets = total_assets + total_pending_deposits +
+   * total_fulfilled_deposits for the numerator. For the denominator, fulfill_deposit
+   * uses vault.total_shares, while fulfill_redeem uses live_total_shares
+   * (shares_mint.supply - total_pending_redeems). Pass the appropriate denominator
+   * via the `totalSharesForPrice` parameter.
+   *
+   * price = PRICE_SCALE * (nav_total_assets + 1) / (totalSharesForPrice + 10^offset)
    */
-  const computeVaultPrice = (totalAssets: BN, totalShares: BN): BN => {
+  const computeExpectedPrice = (
+    navTotalAssets: BN,
+    totalSharesForPrice: BN,
+  ): BN => {
     const PRICE_SCALE = new BN(1_000_000_000);
     const offset = new BN(10).pow(new BN(DECIMALS_OFFSET));
-    const virtualAssets = totalAssets.add(new BN(1));
-    const virtualShares = totalShares.add(offset);
+    const virtualAssets = navTotalAssets.add(new BN(1));
+    const virtualShares = totalSharesForPrice.add(offset);
     return PRICE_SCALE.mul(virtualAssets).div(virtualShares);
   };
 
@@ -372,7 +384,7 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
 
     it("user requests redemption", async () => {
       const sharesAccount = await getAccount(connection, userSharesAccount, undefined, TOKEN_2022_PROGRAM_ID);
-      sharesToRedeem = new BN(Math.floor(Number(sharesAccount.amount) / 2));
+      sharesToRedeem = new BN(Math.floor(Number(sharesAccount.amount) / 10));
 
       await program.methods
         .requestRedeem(sharesToRedeem, payer.publicKey)
@@ -508,11 +520,6 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
   // =========================================================================
   describe("Oracle-Priced Fulfillment", () => {
     it("fulfill_deposit with oracle price", async () => {
-      // Read vault state to compute matching oracle price
-      const vaultState = await program.account.asyncVault.fetch(vault);
-      const oraclePrice = computeVaultPrice(vaultState.totalAssets, vaultState.totalShares);
-      console.log("  Vault price for oracle deposit:", oraclePrice.toString());
-
       const oracleDepositAmount = 10_000 * 10 ** ASSET_DECIMALS;
 
       await program.methods
@@ -528,6 +535,14 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
           systemProgram: SystemProgram.programId,
         })
         .rpc();
+
+      // Read vault state AFTER requestDeposit so nav includes pending deposits
+      const vaultState = await program.account.asyncVault.fetch(vault);
+      const navTotalAssets = vaultState.totalAssets
+        .add(vaultState.totalPendingDeposits)
+        .add(vaultState.totalFulfilledDeposits);
+      const oraclePrice = computeExpectedPrice(navTotalAssets, vaultState.totalShares);
+      console.log("  Vault price for oracle deposit:", oraclePrice.toString());
 
       await program.methods
         .fulfillDeposit(oraclePrice, new BN(0))
@@ -563,11 +578,6 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
     });
 
     it("fulfill_redeem with oracle price", async () => {
-      // Read vault state to compute matching oracle price
-      const vaultState = await program.account.asyncVault.fetch(vault);
-      const oraclePrice = computeVaultPrice(vaultState.totalAssets, vaultState.totalShares);
-      console.log("  Vault price for oracle redeem:", oraclePrice.toString());
-
       const sharesAccount = await getAccount(connection, userSharesAccount, undefined, TOKEN_2022_PROGRAM_ID);
       const sharesToRedeem = new BN(Math.floor(Number(sharesAccount.amount) / 10));
       const [claimableTokens] = getClaimableTokensPDA(vault, payer.publicKey);
@@ -585,6 +595,16 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
           systemProgram: SystemProgram.programId,
         })
         .rpc();
+
+      // Read vault state AFTER requestRedeem so nav and live_total_shares are accurate
+      const vaultState = await program.account.asyncVault.fetch(vault);
+      const navTotalAssets = vaultState.totalAssets
+        .add(vaultState.totalPendingDeposits)
+        .add(vaultState.totalFulfilledDeposits);
+      const sharesMintInfo = await getMint(connection, sharesMint, undefined, TOKEN_2022_PROGRAM_ID);
+      const liveTotalShares = new BN(sharesMintInfo.supply.toString()).sub(vaultState.totalPendingRedeems);
+      const oraclePrice = computeExpectedPrice(navTotalAssets, liveTotalShares);
+      console.log("  Vault price for oracle redeem:", oraclePrice.toString());
 
       await program.methods
         .fulfillRedeem(oraclePrice, new BN(0))
@@ -1452,12 +1472,6 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
   // =========================================================================
   describe("Oracle Deviation Rejection", () => {
     it("rejects oracle price exceeding max_deviation_bps", async () => {
-      const vaultState = await program.account.asyncVault.fetch(vault);
-      const vaultPrice = computeVaultPrice(vaultState.totalAssets, vaultState.totalShares);
-
-      // max_deviation_bps = 500 (5%). Use 10% deviation to ensure rejection.
-      const deviatedPrice = vaultPrice.mul(new BN(110)).div(new BN(100));
-
       const depositAmount = new BN(10_000 * 10 ** ASSET_DECIMALS);
       await program.methods
         .requestDeposit(depositAmount, payer.publicKey)
@@ -1472,6 +1486,16 @@ describe("svs-10 (Async Vault - ERC-7540)", () => {
           systemProgram: SystemProgram.programId,
         })
         .rpc();
+
+      // Compute expected price AFTER requestDeposit so nav includes pending deposits
+      const vaultState = await program.account.asyncVault.fetch(vault);
+      const navTotalAssets = vaultState.totalAssets
+        .add(vaultState.totalPendingDeposits)
+        .add(vaultState.totalFulfilledDeposits);
+      const vaultPrice = computeExpectedPrice(navTotalAssets, vaultState.totalShares);
+
+      // max_deviation_bps = 500 (5%). Use 10% deviation to ensure rejection.
+      const deviatedPrice = vaultPrice.mul(new BN(110)).div(new BN(100));
 
       try {
         await program.methods

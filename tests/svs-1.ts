@@ -146,6 +146,13 @@ describe("svs-1 (Live Balance - No Sync)", () => {
   });
 
   describe("Deposit", () => {
+    before(async () => {
+      await getOrCreateAssociatedTokenAccount(
+        connection, payer, sharesMint, payer.publicKey,
+        false, undefined, undefined, TOKEN_2022_PROGRAM_ID
+      );
+    });
+
     it("deposits assets and receives shares", async () => {
       const depositAmount = new BN(100_000 * 10 ** ASSET_DECIMALS);
 
@@ -163,8 +170,6 @@ describe("svs-1 (Live Balance - No Sync)", () => {
           userSharesAccount: userSharesAccount,
           assetTokenProgram: TOKEN_PROGRAM_ID,
           token2022Program: TOKEN_2022_PROGRAM_ID,
-          associatedTokenProgram: anchor.utils.token.ASSOCIATED_PROGRAM_ID,
-          systemProgram: SystemProgram.programId,
         })
         .rpc();
 
@@ -204,8 +209,6 @@ describe("svs-1 (Live Balance - No Sync)", () => {
           userSharesAccount: userSharesAccount,
           assetTokenProgram: TOKEN_PROGRAM_ID,
           token2022Program: TOKEN_2022_PROGRAM_ID,
-          associatedTokenProgram: anchor.utils.token.ASSOCIATED_PROGRAM_ID,
-          systemProgram: SystemProgram.programId,
         })
         .rpc();
 
@@ -282,13 +285,11 @@ describe("svs-1 (Live Balance - No Sync)", () => {
 
       // Victim tries to deposit
       const victimDeposit = new BN(10_000 * 10 ** ASSET_DECIMALS);
-      const victimSharesAccount = getAssociatedTokenAddressSync(
-        sharesMint,
-        victim.publicKey,
-        false,
-        TOKEN_2022_PROGRAM_ID,
-        ASSOCIATED_TOKEN_PROGRAM_ID
+      const victimSharesAta = await getOrCreateAssociatedTokenAccount(
+        connection, payer, sharesMint, victim.publicKey,
+        false, undefined, undefined, TOKEN_2022_PROGRAM_ID
       );
+      const victimSharesAccount = victimSharesAta.address;
 
       await program.methods
         .deposit(victimDeposit, new BN(0))
@@ -302,8 +303,6 @@ describe("svs-1 (Live Balance - No Sync)", () => {
           userSharesAccount: victimSharesAccount,
           assetTokenProgram: TOKEN_PROGRAM_ID,
           token2022Program: TOKEN_2022_PROGRAM_ID,
-          associatedTokenProgram: anchor.utils.token.ASSOCIATED_PROGRAM_ID,
-          systemProgram: SystemProgram.programId,
         })
         .signers([victim])
         .rpc();
@@ -407,8 +406,6 @@ describe("svs-1 (Live Balance - No Sync)", () => {
           userSharesAccount: userSharesAccount,
           assetTokenProgram: TOKEN_PROGRAM_ID,
           token2022Program: TOKEN_2022_PROGRAM_ID,
-          associatedTokenProgram: anchor.utils.token.ASSOCIATED_PROGRAM_ID,
-          systemProgram: SystemProgram.programId,
         })
         .rpc();
 
@@ -448,8 +445,6 @@ describe("svs-1 (Live Balance - No Sync)", () => {
             userSharesAccount: userSharesAccount,
             assetTokenProgram: TOKEN_PROGRAM_ID,
             token2022Program: TOKEN_2022_PROGRAM_ID,
-            associatedTokenProgram: anchor.utils.token.ASSOCIATED_PROGRAM_ID,
-            systemProgram: SystemProgram.programId,
           })
           .rpc();
         expect.fail("Should reject when paused");

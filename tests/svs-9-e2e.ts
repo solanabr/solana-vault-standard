@@ -374,6 +374,7 @@ describe("SVS-9 E2E CPI CPI Test", () => {
         childAllocation: vaultBChildAlloc,
         childVault: childVaultClient.vault,
         childProgram: svs1Program.programId,
+        allowedPrograms: null,
         childSharesMint: childVaultClient.sharesMint,
         allocatorChildSharesAccount: vaultBChildSharesAta,
         tokenProgram: TOKEN_2022_PROGRAM_ID,

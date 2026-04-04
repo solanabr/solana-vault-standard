@@ -35,6 +35,7 @@ const ATTESTATION_PROGRAM_ID = new PublicKey(
   "GTTMWDHTZibyEpqNRr33RnBhgms262U6qHaGrjoHqEXg"
 );
 const PRICE_SCALE = new BN(1_000_000_000);
+const FAR_FUTURE_EXPIRY = new BN(4_102_444_800); // ~year 2100
 
 describe("svs-11 (Credit Markets Vault)", () => {
   const provider = anchor.AnchorProvider.env();
@@ -71,6 +72,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
   let manager: Keypair;
   let investor: Keypair;
   let managerTokenAccount: PublicKey;
+  let vaultConfig: PublicKey;
 
   // Expected shares from 100,000 assets at 1:1 price
   // shares = assets * PRICE_SCALE / price = 100_000_000_000 * 1e9 / 1e9 = 100_000_000_000
@@ -165,6 +167,11 @@ describe("svs-11 (Credit Markets Vault)", () => {
       attester.publicKey
     );
 
+    [vaultConfig] = PublicKey.findProgramAddressSync(
+      [Buffer.from("vault_config"), vault.toBuffer()],
+      program.programId
+    );
+
     depositVault = getAssociatedTokenAddressSync(
       assetMint,
       vault,
@@ -239,7 +246,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
         attester.publicKey,
         0,
         [66, 82],
-        new BN(0) // expiresAt=0 means no expiry
+        FAR_FUTURE_EXPIRY
       )
       .accountsPartial({
         authority: payer.publicKey,
@@ -312,6 +319,19 @@ describe("svs-11 (Credit Markets Vault)", () => {
       );
       expect(vaultAccount.investmentWindowOpen).to.equal(false);
       expect(vaultAccount.paused).to.equal(false);
+    });
+
+    it("initializes vault config", async () => {
+      await program.methods
+        .initializeVaultConfig()
+        .accountsPartial({
+          authority: payer.publicKey,
+          vault,
+          vaultConfig,
+          payer: payer.publicKey,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
     });
   });
 
@@ -560,7 +580,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
           attester.publicKey,
           0,
           [66, 82],
-          new BN(0)
+          FAR_FUTURE_EXPIRY
         )
         .accountsPartial({
           authority: payer.publicKey,
@@ -675,7 +695,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
           attester.publicKey,
           0,
           [66, 82],
-          new BN(0)
+          FAR_FUTURE_EXPIRY
         )
         .accountsPartial({
           authority: payer.publicKey,
@@ -705,6 +725,9 @@ describe("svs-11 (Credit Markets Vault)", () => {
     });
 
     it("investor cancels pending deposit", async () => {
+      // Wait so clock.unix_timestamp > requested_at (CancelTooEarly guard)
+      await new Promise((r) => setTimeout(r, 4000));
+
       const balanceBefore = await getAccount(
         connection,
         cancelInvestorTokenAccount
@@ -975,7 +998,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
 
   describe("Credit Operations", () => {
     it("manager draws down assets", async () => {
-      const vaultBefore = await program.account.creditVault.fetch(vault);
+      const depositVaultBefore = await getAccount(connection, depositVault);
       const drawAmount = new BN(50_000_000_000); // 50,000 tokens
 
       await program.methods
@@ -993,7 +1016,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
 
       const depositVaultAccount = await getAccount(connection, depositVault);
       const expectedBalance =
-        BigInt(vaultBefore.totalAssets.toString()) - BigInt(drawAmount.toString());
+        BigInt(depositVaultBefore.amount.toString()) - BigInt(drawAmount.toString());
       expect(depositVaultAccount.amount.toString()).to.equal(
         expectedBalance.toString()
       );
@@ -1048,8 +1071,9 @@ describe("svs-11 (Credit Markets Vault)", () => {
       await program.methods
         .freezeAccount()
         .accountsPartial({
-          manager: manager.publicKey,
+          caller: manager.publicKey,
           vault,
+          vaultConfig,
           investor: investor.publicKey,
           frozenAccount,
           systemProgram: SystemProgram.programId,
@@ -1098,8 +1122,9 @@ describe("svs-11 (Credit Markets Vault)", () => {
       await program.methods
         .unfreezeAccount()
         .accountsPartial({
-          manager: manager.publicKey,
+          caller: manager.publicKey,
           vault,
+          vaultConfig,
           frozenAccount,
         })
         .signers([manager])
@@ -1293,7 +1318,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
           attester.publicKey,
           0,
           [66, 82],
-          new BN(0)
+          FAR_FUTURE_EXPIRY
         )
         .accountsPartial({
           authority: payer.publicKey,
@@ -1369,7 +1394,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
           attester.publicKey,
           0,
           [66, 82],
-          new BN(0)
+          FAR_FUTURE_EXPIRY
         )
         .accountsPartial({
           authority: payer.publicKey,
@@ -1422,7 +1447,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
           attester.publicKey,
           0,
           [66, 82],
-          new BN(0)
+          FAR_FUTURE_EXPIRY
         )
         .accountsPartial({
           authority: payer.publicKey,
@@ -1561,7 +1586,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
           attester.publicKey,
           0,
           [66, 82],
-          new BN(0)
+          FAR_FUTURE_EXPIRY
         )
         .accountsPartial({
           authority: payer.publicKey,
@@ -1780,13 +1805,15 @@ describe("svs-11 (Credit Markets Vault)", () => {
       );
       liqInvestorTokenAccount = ata.address;
 
+      const liqDepositAmount = depositAmount.mul(new BN(20));
+
       await mintTo(
         connection,
         payer,
         assetMint,
         liqInvestorTokenAccount,
         payer.publicKey,
-        BigInt(depositAmount.toString()),
+        BigInt(liqDepositAmount.toString()),
         [],
         undefined,
         TOKEN_PROGRAM_ID
@@ -1805,7 +1832,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
           attester.publicKey,
           0,
           [66, 82],
-          new BN(0)
+          FAR_FUTURE_EXPIRY
         )
         .accountsPartial({
           authority: payer.publicKey,
@@ -1827,9 +1854,9 @@ describe("svs-11 (Credit Markets Vault)", () => {
       );
       liqInvestorSharesAccount = liqSharesAta.address;
 
-      // Deposit + approve + claim
+      // Deposit + approve + claim with large amount so liqInvestor dominates total_shares
       await program.methods
-        .requestDeposit(depositAmount)
+        .requestDeposit(liqDepositAmount)
         .accountsPartial({
           investor: liqInvestor.publicKey,
           vault,
@@ -1875,15 +1902,31 @@ describe("svs-11 (Credit Markets Vault)", () => {
         .signers([liqInvestor])
         .rpc();
 
-      // Draw down most of the vault balance
+      // Increase max_deviation_bps to allow oracle price mismatch after drawdown
+      await program.methods
+        .updateOracleParams(null, 2000)
+        .accountsPartial({
+          authority: payer.publicKey,
+          vault,
+        })
+        .rpc();
+
+      // Draw down most assets. The oracle stays at PRICE_SCALE (1:1) while vault's
+      // actual price drops. With max_deviation_bps=2000, the deviation check passes
+      // as long as drawdown is < ~16.6% of total_assets. The redeem will use the
+      // oracle price (PRICE_SCALE) to calculate net_assets, which will exceed
+      // the reduced available balance → InsufficientLiquidity.
       const vaultAccount = await program.account.creditVault.fetch(vault);
       const depositVaultInfo = await getAccount(connection, depositVault);
-      const availableLiquidity =
+      const available =
         BigInt(depositVaultInfo.amount.toString()) -
-        BigInt(vaultAccount.totalPendingDeposits.toString());
-      const drawAmount = availableLiquidity - BigInt(1);
+        BigInt(vaultAccount.totalPendingDeposits.toString()) -
+        BigInt(vaultAccount.totalApprovedDeposits.toString());
+      // Draw down ~15% of total_assets to stay within 2000bps deviation
+      const totalAssets = BigInt(vaultAccount.totalAssets.toString());
+      const drawAmount = totalAssets * BigInt(15) / BigInt(100);
 
-      if (drawAmount > BigInt(0)) {
+      if (drawAmount > BigInt(0) && drawAmount < available) {
         await program.methods
           .drawDown(new BN(drawAmount.toString()))
           .accountsPartial({
@@ -1952,6 +1995,15 @@ describe("svs-11 (Credit Markets Vault)", () => {
       } catch (err: any) {
         expect(err.error.errorCode.code).to.equal("InsufficientLiquidity");
       }
+
+      // Restore max_deviation_bps to default (500)
+      await program.methods
+        .updateOracleParams(null, 500)
+        .accountsPartial({
+          authority: payer.publicKey,
+          vault,
+        })
+        .rpc();
     });
   });
 
@@ -2013,7 +2065,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
           attester.publicKey,
           0,
           [66, 82],
-          new BN(0)
+          FAR_FUTURE_EXPIRY
         )
         .accountsPartial({
           authority: payer.publicKey,
@@ -2048,6 +2100,24 @@ describe("svs-11 (Credit Markets Vault)", () => {
         })
         .signers([manager])
         .rpc();
+
+      // Update oracle to match vault's expected price
+      const vaultAfterRepay = await program.account.creditVault.fetch(vault);
+      if (vaultAfterRepay.totalShares.toNumber() > 0) {
+        const expectedPrice = new BN(
+          (BigInt(vaultAfterRepay.totalAssets.toString()) * BigInt(PRICE_SCALE.toString()) /
+            BigInt(vaultAfterRepay.totalShares.toString())).toString()
+        );
+        await oracleProgram.methods
+          .setPrice(expectedPrice)
+          .accountsPartial({
+            authority: payer.publicKey,
+            oracleData: navOracle,
+            vault: vault,
+            systemProgram: SystemProgram.programId,
+          })
+          .rpc();
+      }
     });
 
     it("rejects approve_deposit for frozen investor", async () => {
@@ -2074,8 +2144,9 @@ describe("svs-11 (Credit Markets Vault)", () => {
       await program.methods
         .freezeAccount()
         .accountsPartial({
-          manager: manager.publicKey,
+          caller: manager.publicKey,
           vault,
+          vaultConfig,
           investor: frozenInvestor.publicKey,
           frozenAccount: frozenInvFrozenAccount,
           systemProgram: SystemProgram.programId,
@@ -2109,8 +2180,9 @@ describe("svs-11 (Credit Markets Vault)", () => {
       await program.methods
         .unfreezeAccount()
         .accountsPartial({
-          manager: manager.publicKey,
+          caller: manager.publicKey,
           vault,
+          vaultConfig,
           frozenAccount: frozenInvFrozenAccount,
         })
         .signers([manager])
@@ -2213,8 +2285,9 @@ describe("svs-11 (Credit Markets Vault)", () => {
       await program.methods
         .freezeAccount()
         .accountsPartial({
-          manager: manager.publicKey,
+          caller: manager.publicKey,
           vault,
+          vaultConfig,
           investor: frozenInvestor.publicKey,
           frozenAccount: frozenInvFrozenAccount,
           systemProgram: SystemProgram.programId,
@@ -2256,8 +2329,9 @@ describe("svs-11 (Credit Markets Vault)", () => {
       await program.methods
         .unfreezeAccount()
         .accountsPartial({
-          manager: manager.publicKey,
+          caller: manager.publicKey,
           vault,
+          vaultConfig,
           frozenAccount: frozenInvFrozenAccount,
         })
         .signers([manager])
@@ -2371,7 +2445,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
           attester.publicKey,
           0,
           [66, 82],
-          new BN(0)
+          FAR_FUTURE_EXPIRY
         )
         .accountsPartial({
           authority: payer.publicKey,
@@ -2495,7 +2569,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
           attester.publicKey,
           0,
           [66, 82],
-          new BN(0)
+          FAR_FUTURE_EXPIRY
         )
         .accountsPartial({
           authority: payer.publicKey,
@@ -2588,8 +2662,9 @@ describe("svs-11 (Credit Markets Vault)", () => {
         await program.methods
           .freezeAccount()
           .accountsPartial({
-            manager: investor.publicKey,
+            caller: investor.publicKey,
             vault,
+            vaultConfig,
             investor: targetInvestor.publicKey,
             frozenAccount: targetFrozen,
             systemProgram: SystemProgram.programId,
@@ -2599,7 +2674,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
           .rpc();
         expect.fail("should have thrown");
       } catch (err: any) {
-        expect(err.error).to.exist;
+        expect(err.error.errorCode.code).to.equal("UnauthorizedComplianceAction");
       }
     });
 
@@ -2723,7 +2798,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
           attester.publicKey,
           0,
           [66, 82],
-          new BN(0)
+          FAR_FUTURE_EXPIRY
         )
         .accountsPartial({
           authority: payer.publicKey,
@@ -2788,9 +2863,17 @@ describe("svs-11 (Credit Markets Vault)", () => {
     });
 
     it("approve_deposit succeeds after oracle timestamp restored", async () => {
-      // Restore oracle to current time by re-setting the price (set_price writes current timestamp)
+      // Restore oracle to current time with price matching vault's expected price
+      const vaultState = await program.account.creditVault.fetch(vault);
+      let oraclePrice = PRICE_SCALE;
+      if (vaultState.totalShares.toNumber() > 0 && vaultState.totalAssets.toNumber() > 0) {
+        oraclePrice = new BN(
+          (BigInt(vaultState.totalAssets.toString()) * BigInt(PRICE_SCALE.toString()) /
+            BigInt(vaultState.totalShares.toString())).toString()
+        );
+      }
       await oracleProgram.methods
-        .setPrice(PRICE_SCALE)
+        .setPrice(oraclePrice)
         .accountsPartial({
           authority: payer.publicKey,
           oracleData: navOracle,
@@ -2982,13 +3065,13 @@ describe("svs-11 (Credit Markets Vault)", () => {
         attester.publicKey
       );
 
-      // Create valid attestation (expires_at=0 means no expiry)
+      // Create valid attestation with far-future expiry
       await attestationMockProgram.methods
         .createAttestation(
           attester.publicKey,
           0,
           [66, 82],
-          new BN(0)
+          FAR_FUTURE_EXPIRY
         )
         .accountsPartial({
           authority: payer.publicKey,
