@@ -23,7 +23,7 @@ pub struct Admin<'info> {
     pub authority: Signer<'info>,
 
     #[account(mut)]
-    pub vault: Account<'info, Vault>,
+    pub vault: Box<Account<'info, Vault>>,
 }
 
 /// V9-P4: Add PDA seeds validation for consistency with SVS-3/4.
@@ -37,7 +37,7 @@ pub struct AcceptAuthority<'info> {
         bump = vault.bump,
         constraint = vault.pending_authority == new_authority.key() @ VaultError::InvalidPendingAuthority,
     )]
-    pub vault: Account<'info, Vault>,
+    pub vault: Box<Account<'info, Vault>>,
 }
 
 #[derive(Accounts)]
@@ -48,12 +48,12 @@ pub struct Sync<'info> {
     pub authority: Signer<'info>,
 
     #[account(mut)]
-    pub vault: Account<'info, Vault>,
+    pub vault: Box<Account<'info, Vault>>,
 
     #[account(
         constraint = asset_vault.key() == vault.asset_vault,
     )]
-    pub asset_vault: InterfaceAccount<'info, TokenAccount>,
+    pub asset_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 }
 
 #[derive(Accounts)]
@@ -63,20 +63,20 @@ pub struct CollectFees<'info> {
         constraint = authority.key() == vault.authority @ VaultError::Unauthorized,
         constraint = vault.fee_recipient != Pubkey::default() @ VaultError::FeeRecipientNotSet,
     )]
-    pub vault: Account<'info, Vault>,
+    pub vault: Box<Account<'info, Vault>>,
 
     pub authority: Signer<'info>,
 
     #[account(
         constraint = asset_mint.key() == vault.asset_mint,
     )]
-    pub asset_mint: InterfaceAccount<'info, Mint>,
+    pub asset_mint: Box<InterfaceAccount<'info, Mint>>,
 
     #[account(
         mut,
         constraint = asset_vault.key() == vault.asset_vault,
     )]
-    pub asset_vault: InterfaceAccount<'info, TokenAccount>,
+    pub asset_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
     /// Fee recipient token account — must match the vault's stored fee_recipient address
     #[account(
@@ -84,7 +84,7 @@ pub struct CollectFees<'info> {
         constraint = fee_recipient.key() == vault.fee_recipient @ VaultError::InvalidFeeRecipient,
         constraint = fee_recipient.mint == vault.asset_mint,
     )]
-    pub fee_recipient: InterfaceAccount<'info, TokenAccount>,
+    pub fee_recipient: Box<InterfaceAccount<'info, TokenAccount>>,
 
     pub token_program: Interface<'info, TokenInterface>,
 }
@@ -97,7 +97,7 @@ pub struct SetFeeRecipient<'info> {
     pub authority: Signer<'info>,
 
     #[account(mut)]
-    pub vault: Account<'info, Vault>,
+    pub vault: Box<Account<'info, Vault>>,
 }
 
 /// Pause all vault operations (emergency circuit breaker)

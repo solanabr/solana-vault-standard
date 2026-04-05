@@ -16,7 +16,7 @@ pub struct InitializeAllowedPrograms<'info> {
     #[account(
         has_one = authority @ VaultError::Unauthorized,
     )]
-    pub allocator_vault: Account<'info, AllocatorVault>,
+    pub allocator_vault: Box<Account<'info, AllocatorVault>>,
 
     #[account(
         init,
@@ -25,7 +25,7 @@ pub struct InitializeAllowedPrograms<'info> {
         seeds = [ALLOWED_PROGRAMS_SEED, allocator_vault.key().as_ref()],
         bump
     )]
-    pub allowed_programs: Account<'info, AllowedPrograms>,
+    pub allowed_programs: Box<Account<'info, AllowedPrograms>>,
 
     pub system_program: Program<'info, System>,
 }
@@ -70,7 +70,7 @@ pub struct AddAllowedProgram<'info> {
     #[account(
         has_one = authority @ VaultError::Unauthorized,
     )]
-    pub allocator_vault: Account<'info, AllocatorVault>,
+    pub allocator_vault: Box<Account<'info, AllocatorVault>>,
 
     #[account(
         mut,
@@ -78,7 +78,7 @@ pub struct AddAllowedProgram<'info> {
         bump = allowed_programs.bump,
         has_one = allocator_vault @ VaultError::Unauthorized,
     )]
-    pub allowed_programs: Account<'info, AllowedPrograms>,
+    pub allowed_programs: Box<Account<'info, AllowedPrograms>>,
 }
 
 pub fn add_allowed_program_handler(
@@ -123,7 +123,7 @@ pub struct RemoveAllowedProgram<'info> {
     #[account(
         has_one = authority @ VaultError::Unauthorized,
     )]
-    pub allocator_vault: Account<'info, AllocatorVault>,
+    pub allocator_vault: Box<Account<'info, AllocatorVault>>,
 
     #[account(
         mut,
@@ -131,7 +131,7 @@ pub struct RemoveAllowedProgram<'info> {
         bump = allowed_programs.bump,
         has_one = allocator_vault @ VaultError::Unauthorized,
     )]
-    pub allowed_programs: Account<'info, AllowedPrograms>,
+    pub allowed_programs: Box<Account<'info, AllowedPrograms>>,
 }
 
 pub fn remove_allowed_program_handler(

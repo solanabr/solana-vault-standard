@@ -37,27 +37,27 @@ pub struct DepositSol<'info> {
     #[account(
         constraint = !vault.paused @ VaultError::VaultPaused,
     )]
-    pub vault: Account<'info, SolVault>,
+    pub vault: Box<Account<'info, SolVault>>,
 
     /// wSOL token account owned by the vault PDA
     #[account(
         mut,
         constraint = wsol_vault.key() == vault.wsol_vault,
     )]
-    pub wsol_vault: InterfaceAccount<'info, TokenAccount>,
+    pub wsol_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(
         mut,
         constraint = shares_mint.key() == vault.shares_mint,
     )]
-    pub shares_mint: InterfaceAccount<'info, Mint>,
+    pub shares_mint: Box<InterfaceAccount<'info, Mint>>,
 
     #[account(
         mut,
         constraint = user_shares_account.mint == shares_mint.key(),
         constraint = user_shares_account.owner == user.key(),
     )]
-    pub user_shares_account: InterfaceAccount<'info, TokenAccount>,
+    pub user_shares_account: Box<InterfaceAccount<'info, TokenAccount>>,
 
     /// SPL Token program (wSOL uses spl-token, NOT token-2022)
     #[account(address = anchor_spl::token::ID @ VaultError::Unauthorized)]

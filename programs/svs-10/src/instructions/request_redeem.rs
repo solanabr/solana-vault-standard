@@ -24,27 +24,27 @@ pub struct RequestRedeem<'info> {
         mut,
         constraint = !vault.paused @ VaultError::VaultPaused,
     )]
-    pub vault: Account<'info, AsyncVault>,
+    pub vault: Box<Account<'info, AsyncVault>>,
 
     #[account(
         mut,
         constraint = shares_mint.key() == vault.shares_mint,
     )]
-    pub shares_mint: InterfaceAccount<'info, Mint>,
+    pub shares_mint: Box<InterfaceAccount<'info, Mint>>,
 
     #[account(
         mut,
         constraint = user_shares_account.mint == vault.shares_mint,
         constraint = user_shares_account.owner == user.key(),
     )]
-    pub user_shares_account: InterfaceAccount<'info, TokenAccount>,
+    pub user_shares_account: Box<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(
         mut,
         seeds = [SHARE_ESCROW_SEED, vault.key().as_ref()],
         bump = vault.share_escrow_bump,
     )]
-    pub share_escrow: InterfaceAccount<'info, TokenAccount>,
+    pub share_escrow: Box<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(
         init,
@@ -53,7 +53,7 @@ pub struct RequestRedeem<'info> {
         seeds = [REDEEM_REQUEST_SEED, vault.key().as_ref(), user.key().as_ref()],
         bump
     )]
-    pub redeem_request: Account<'info, RedeemRequest>,
+    pub redeem_request: Box<Account<'info, RedeemRequest>>,
 
     pub token_2022_program: Program<'info, Token2022>,
     pub system_program: Program<'info, System>,

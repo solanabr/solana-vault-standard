@@ -21,12 +21,12 @@ pub struct DistributeYield<'info> {
         has_one = manager @ VaultError::Unauthorized,
         constraint = !vault.paused @ VaultError::VaultPaused,
     )]
-    pub vault: Account<'info, TranchedVault>,
+    pub vault: Box<Account<'info, TranchedVault>>,
 
     #[account(
         constraint = asset_mint.key() == vault.asset_mint,
     )]
-    pub asset_mint: InterfaceAccount<'info, Mint>,
+    pub asset_mint: Box<InterfaceAccount<'info, Mint>>,
 
     #[account(
         mut,
@@ -34,13 +34,13 @@ pub struct DistributeYield<'info> {
         associated_token::authority = manager,
         associated_token::token_program = asset_token_program,
     )]
-    pub manager_asset_account: InterfaceAccount<'info, TokenAccount>,
+    pub manager_asset_account: Box<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(
         mut,
         constraint = asset_vault.key() == vault.asset_vault,
     )]
-    pub asset_vault: InterfaceAccount<'info, TokenAccount>,
+    pub asset_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(mut)]
     pub tranche_0: Option<Account<'info, Tranche>>,

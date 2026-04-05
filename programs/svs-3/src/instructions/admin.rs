@@ -17,7 +17,7 @@ pub struct Admin<'info> {
     pub authority: Signer<'info>,
 
     #[account(mut)]
-    pub vault: Account<'info, ConfidentialVault>,
+    pub vault: Box<Account<'info, ConfidentialVault>>,
 }
 
 // NOTE: SVS-3 uses live balance from asset_vault.amount
@@ -117,7 +117,7 @@ pub struct AcceptAuthority<'info> {
         bump = vault.bump,
         constraint = vault.pending_authority == new_authority.key() @ VaultError::InvalidPendingAuthority,
     )]
-    pub vault: Account<'info, ConfidentialVault>,
+    pub vault: Box<Account<'info, ConfidentialVault>>,
 }
 
 /// Transfer vault authority to new address (deprecated -- prefer two-step transfer).

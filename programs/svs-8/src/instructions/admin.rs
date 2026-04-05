@@ -126,7 +126,7 @@ pub struct Admin<'info> {
         seeds = [MULTI_VAULT_SEED, vault.vault_id.to_le_bytes().as_ref()],
         bump = vault.bump,
     )]
-    pub vault: Account<'info, MultiAssetVault>,
+    pub vault: Box<Account<'info, MultiAssetVault>>,
     pub authority: Signer<'info>,
 }
 
@@ -138,6 +138,6 @@ pub struct AcceptAuthority<'info> {
         bump = vault.bump,
         constraint = vault.pending_authority == new_authority.key() @ VaultError::InvalidPendingAuthority,
     )]
-    pub vault: Account<'info, MultiAssetVault>,
+    pub vault: Box<Account<'info, MultiAssetVault>>,
     pub new_authority: Signer<'info>,
 }

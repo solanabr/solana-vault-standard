@@ -27,14 +27,14 @@ pub struct FreezeAccount<'info> {
         seeds = [VAULT_SEED, vault.asset_mint.as_ref(), &vault.vault_id.to_le_bytes()],
         bump = vault.bump,
     )]
-    pub vault: Account<'info, CreditVault>,
+    pub vault: Box<Account<'info, CreditVault>>,
 
     #[account(
         has_one = vault,
         seeds = [VAULT_CONFIG_SEED, vault.key().as_ref()],
         bump = vault_config.bump,
     )]
-    pub vault_config: Account<'info, VaultConfig>,
+    pub vault_config: Box<Account<'info, VaultConfig>>,
 
     /// CHECK: investor to freeze
     pub investor: UncheckedAccount<'info>,
@@ -46,7 +46,7 @@ pub struct FreezeAccount<'info> {
         seeds = [FROZEN_ACCOUNT_SEED, vault.key().as_ref(), investor.key().as_ref()],
         bump,
     )]
-    pub frozen_account: Account<'info, FrozenAccount>,
+    pub frozen_account: Box<Account<'info, FrozenAccount>>,
 
     pub system_program: Program<'info, System>,
     pub clock: Sysvar<'info, Clock>,
@@ -87,14 +87,14 @@ pub struct UnfreezeAccount<'info> {
         seeds = [VAULT_SEED, vault.asset_mint.as_ref(), &vault.vault_id.to_le_bytes()],
         bump = vault.bump,
     )]
-    pub vault: Account<'info, CreditVault>,
+    pub vault: Box<Account<'info, CreditVault>>,
 
     #[account(
         has_one = vault,
         seeds = [VAULT_CONFIG_SEED, vault.key().as_ref()],
         bump = vault_config.bump,
     )]
-    pub vault_config: Account<'info, VaultConfig>,
+    pub vault_config: Box<Account<'info, VaultConfig>>,
 
     #[account(
         mut,
@@ -102,7 +102,7 @@ pub struct UnfreezeAccount<'info> {
         seeds = [FROZEN_ACCOUNT_SEED, vault.key().as_ref(), frozen_account.investor.as_ref()],
         bump = frozen_account.bump,
     )]
-    pub frozen_account: Account<'info, FrozenAccount>,
+    pub frozen_account: Box<Account<'info, FrozenAccount>>,
 }
 
 pub fn unfreeze_handler(ctx: Context<UnfreezeAccount>) -> Result<()> {

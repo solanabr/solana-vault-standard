@@ -27,17 +27,17 @@ pub struct ConfigureAccount<'info> {
     #[account(mut)]
     pub user: Signer<'info>,
 
-    pub vault: Account<'info, ConfidentialVault>,
+    pub vault: Box<Account<'info, ConfidentialVault>>,
 
     #[account(constraint = shares_mint.key() == vault.shares_mint)]
-    pub shares_mint: InterfaceAccount<'info, Mint>,
+    pub shares_mint: Box<InterfaceAccount<'info, Mint>>,
 
     #[account(
         mut,
         constraint = user_shares_account.mint == vault.shares_mint,
         constraint = user_shares_account.owner == user.key(),
     )]
-    pub user_shares_account: InterfaceAccount<'info, TokenAccount>,
+    pub user_shares_account: Box<InterfaceAccount<'info, TokenAccount>>,
 
     /// CHECK: Optional pre-verified proof context account.
     /// If provided, skips instruction sysvar proof verification.

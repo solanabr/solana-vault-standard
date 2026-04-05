@@ -11,13 +11,13 @@ use crate::{
 
 #[derive(Accounts)]
 pub struct VaultView<'info> {
-    pub vault: Account<'info, ConfidentialVault>,
+    pub vault: Box<Account<'info, ConfidentialVault>>,
 
     #[account(constraint = shares_mint.key() == vault.shares_mint)]
-    pub shares_mint: InterfaceAccount<'info, Mint>,
+    pub shares_mint: Box<InterfaceAccount<'info, Mint>>,
 
     #[account(constraint = asset_vault.key() == vault.asset_vault)]
-    pub asset_vault: InterfaceAccount<'info, TokenAccount>,
+    pub asset_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 }
 
 /// Preview how many shares would be minted for given assets (floor rounding)

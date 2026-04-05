@@ -21,7 +21,7 @@ pub struct Admin<'info> {
         seeds = [VAULT_SEED, vault.asset_mint.as_ref(), &vault.vault_id.to_le_bytes()],
         bump = vault.bump,
     )]
-    pub vault: Account<'info, StreamVault>,
+    pub vault: Box<Account<'info, StreamVault>>,
 }
 
 #[derive(Accounts)]
@@ -34,7 +34,7 @@ pub struct AcceptAuthority<'info> {
         bump = vault.bump,
         constraint = vault.pending_authority == new_authority.key() @ VaultError::InvalidPendingAuthority,
     )]
-    pub vault: Account<'info, StreamVault>,
+    pub vault: Box<Account<'info, StreamVault>>,
 }
 
 /// Pause all vault operations (emergency circuit breaker)

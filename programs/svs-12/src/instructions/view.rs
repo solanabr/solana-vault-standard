@@ -8,10 +8,10 @@ use crate::state::{Tranche, TranchedVault};
 
 #[derive(Accounts)]
 pub struct TrancheView<'info> {
-    pub vault: Account<'info, TranchedVault>,
+    pub vault: Box<Account<'info, TranchedVault>>,
 
     #[account(has_one = vault @ VaultError::TrancheVaultMismatch)]
-    pub tranche: Account<'info, Tranche>,
+    pub tranche: Box<Account<'info, Tranche>>,
 }
 
 pub fn preview_deposit(ctx: Context<TrancheView>, assets: u64) -> Result<()> {

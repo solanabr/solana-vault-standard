@@ -13,27 +13,27 @@ use crate::{
 
 #[derive(Accounts)]
 pub struct VaultView<'info> {
-    pub vault: Account<'info, SolVault>,
+    pub vault: Box<Account<'info, SolVault>>,
 
     #[account(constraint = shares_mint.key() == vault.shares_mint)]
-    pub shares_mint: InterfaceAccount<'info, Mint>,
+    pub shares_mint: Box<InterfaceAccount<'info, Mint>>,
 
     #[account(constraint = wsol_vault.key() == vault.wsol_vault)]
-    pub wsol_vault: InterfaceAccount<'info, TokenAccount>,
+    pub wsol_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 }
 
 #[derive(Accounts)]
 pub struct VaultViewWithOwner<'info> {
-    pub vault: Account<'info, SolVault>,
+    pub vault: Box<Account<'info, SolVault>>,
 
     #[account(constraint = shares_mint.key() == vault.shares_mint)]
-    pub shares_mint: InterfaceAccount<'info, Mint>,
+    pub shares_mint: Box<InterfaceAccount<'info, Mint>>,
 
     #[account(constraint = wsol_vault.key() == vault.wsol_vault)]
-    pub wsol_vault: InterfaceAccount<'info, TokenAccount>,
+    pub wsol_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(constraint = owner_shares_account.mint == vault.shares_mint)]
-    pub owner_shares_account: InterfaceAccount<'info, TokenAccount>,
+    pub owner_shares_account: Box<InterfaceAccount<'info, TokenAccount>>,
 }
 
 /// Preview how many shares would be minted for given lamports (floor rounding)

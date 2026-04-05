@@ -29,12 +29,12 @@ pub struct RecordLoss<'info> {
         has_one = manager @ VaultError::Unauthorized,
         constraint = !vault.paused @ VaultError::VaultPaused,
     )]
-    pub vault: Account<'info, TranchedVault>,
+    pub vault: Box<Account<'info, TranchedVault>>,
 
     #[account(
         constraint = asset_vault.key() == vault.asset_vault,
     )]
-    pub asset_vault: InterfaceAccount<'info, TokenAccount>,
+    pub asset_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(mut)]
     pub tranche_0: Option<Account<'info, Tranche>>,

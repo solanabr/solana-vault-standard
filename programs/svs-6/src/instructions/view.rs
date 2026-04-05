@@ -11,10 +11,10 @@ use crate::{
 
 #[derive(Accounts)]
 pub struct VaultView<'info> {
-    pub vault: Account<'info, ConfidentialStreamVault>,
+    pub vault: Box<Account<'info, ConfidentialStreamVault>>,
 
     #[account(constraint = shares_mint.key() == vault.shares_mint)]
-    pub shares_mint: InterfaceAccount<'info, Mint>,
+    pub shares_mint: Box<InterfaceAccount<'info, Mint>>,
 }
 
 pub fn preview_deposit(ctx: Context<VaultView>, assets: u64) -> Result<()> {

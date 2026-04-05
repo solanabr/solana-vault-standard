@@ -6,7 +6,7 @@ use crate::state::{AsyncVault, DepositRequest, RedeemRequest, RequestStatus};
 
 #[derive(Accounts)]
 pub struct VaultView<'info> {
-    pub vault: Account<'info, AsyncVault>,
+    pub vault: Box<Account<'info, AsyncVault>>,
 }
 
 pub fn pending_deposit_request(ctx: Context<VaultView>, owner: Pubkey) -> Result<()> {

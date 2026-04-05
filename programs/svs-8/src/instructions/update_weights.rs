@@ -69,10 +69,10 @@ pub struct UpdateWeights<'info> {
         seeds = [crate::constants::MULTI_VAULT_SEED, vault.vault_id.to_le_bytes().as_ref()],
         bump = vault.bump,
     )]
-    pub vault: Account<'info, MultiAssetVault>,
+    pub vault: Box<Account<'info, MultiAssetVault>>,
 
     pub authority: Signer<'info>,
 
     #[account(mut, has_one = vault)]
-    pub asset_entry: Account<'info, AssetEntry>,
+    pub asset_entry: Box<Account<'info, AssetEntry>>,
 }

@@ -16,7 +16,7 @@ pub struct Admin<'info> {
     pub authority: Signer<'info>,
 
     #[account(mut)]
-    pub vault: Account<'info, Vault>,
+    pub vault: Box<Account<'info, Vault>>,
 }
 
 /// V9-P4: Add PDA seeds validation for consistency with SVS-3/4.
@@ -30,7 +30,7 @@ pub struct AcceptAuthority<'info> {
         bump = vault.bump,
         constraint = vault.pending_authority == new_authority.key() @ VaultError::InvalidPendingAuthority,
     )]
-    pub vault: Account<'info, Vault>,
+    pub vault: Box<Account<'info, Vault>>,
 }
 
 // NOTE: SVS-1 uses live balance from asset_vault.amount

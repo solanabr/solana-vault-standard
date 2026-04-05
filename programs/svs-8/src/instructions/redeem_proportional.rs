@@ -289,13 +289,13 @@ pub struct RedeemProportional<'info> {
         seeds = [crate::constants::MULTI_VAULT_SEED, vault.vault_id.to_le_bytes().as_ref()],
         bump = vault.bump,
     )]
-    pub vault: Account<'info, MultiAssetVault>,
+    pub vault: Box<Account<'info, MultiAssetVault>>,
 
     #[account(
         mut,
         constraint = shares_mint.key() == vault.shares_mint @ VaultError::AssetNotFound,
     )]
-    pub shares_mint: InterfaceAccount<'info, Mint>,
+    pub shares_mint: Box<InterfaceAccount<'info, Mint>>,
 
     #[account(
         mut,
@@ -303,7 +303,7 @@ pub struct RedeemProportional<'info> {
         associated_token::authority = user,
         associated_token::token_program = shares_token_program,
     )]
-    pub user_shares_account: InterfaceAccount<'info, TokenAccount>,
+    pub user_shares_account: Box<InterfaceAccount<'info, TokenAccount>>,
 
     /// Token program for shares operations only. Per-asset token programs are
     /// passed via remaining_accounts (sextuplet index 5) so each asset uses

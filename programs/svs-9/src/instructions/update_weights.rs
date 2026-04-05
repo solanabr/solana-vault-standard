@@ -11,7 +11,7 @@ pub struct UpdateWeights<'info> {
     #[account(
         has_one = authority @ VaultError::Unauthorized,
     )]
-    pub allocator_vault: Account<'info, AllocatorVault>,
+    pub allocator_vault: Box<Account<'info, AllocatorVault>>,
 
     #[account(
         mut,
@@ -19,7 +19,7 @@ pub struct UpdateWeights<'info> {
         bump = child_allocation.bump,
         constraint = child_allocation.enabled @ VaultError::ChildAllocationDisabled,
     )]
-    pub child_allocation: Account<'info, ChildAllocation>,
+    pub child_allocation: Box<Account<'info, ChildAllocation>>,
 
     /// CHECK: Public key of the child vault. Used only for PDA derivation.
     pub child_vault: UncheckedAccount<'info>,

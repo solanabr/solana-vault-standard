@@ -31,9 +31,9 @@ pub struct Initialize<'info> {
         seeds = [VAULT_SEED, asset_mint.key().as_ref(), &vault_id.to_le_bytes()],
         bump
     )]
-    pub vault: Account<'info, StreamVault>,
+    pub vault: Box<Account<'info, StreamVault>>,
 
-    pub asset_mint: InterfaceAccount<'info, Mint>,
+    pub asset_mint: Box<InterfaceAccount<'info, Mint>>,
 
     /// CHECK: Shares mint is initialized via CPI in handler
     #[account(
@@ -50,7 +50,7 @@ pub struct Initialize<'info> {
         associated_token::authority = vault,
         associated_token::token_program = asset_token_program,
     )]
-    pub asset_vault: InterfaceAccount<'info, TokenAccount>,
+    pub asset_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
     pub asset_token_program: Interface<'info, TokenInterface>,
     pub token_2022_program: Program<'info, Token2022>,

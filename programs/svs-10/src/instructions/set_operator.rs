@@ -12,7 +12,7 @@ pub struct ApproveOperator<'info> {
     #[account(mut)]
     pub owner: Signer<'info>,
 
-    pub vault: Account<'info, AsyncVault>,
+    pub vault: Box<Account<'info, AsyncVault>>,
 
     #[account(
         init,
@@ -21,7 +21,7 @@ pub struct ApproveOperator<'info> {
         seeds = [OPERATOR_APPROVAL_SEED, vault.key().as_ref(), owner.key().as_ref(), operator.as_ref()],
         bump,
     )]
-    pub operator_approval: Account<'info, OperatorApproval>,
+    pub operator_approval: Box<Account<'info, OperatorApproval>>,
 
     pub system_program: Program<'info, System>,
 }
@@ -57,7 +57,7 @@ pub fn approve_operator(
 pub struct UpdateOperator<'info> {
     pub owner: Signer<'info>,
 
-    pub vault: Account<'info, AsyncVault>,
+    pub vault: Box<Account<'info, AsyncVault>>,
 
     #[account(
         mut,
@@ -65,7 +65,7 @@ pub struct UpdateOperator<'info> {
         seeds = [OPERATOR_APPROVAL_SEED, vault.key().as_ref(), owner.key().as_ref(), operator.as_ref()],
         bump = operator_approval.bump,
     )]
-    pub operator_approval: Account<'info, OperatorApproval>,
+    pub operator_approval: Box<Account<'info, OperatorApproval>>,
 }
 
 pub fn update_operator(
@@ -96,7 +96,7 @@ pub struct RevokeOperator<'info> {
     #[account(mut)]
     pub owner: Signer<'info>,
 
-    pub vault: Account<'info, AsyncVault>,
+    pub vault: Box<Account<'info, AsyncVault>>,
 
     #[account(
         mut,
@@ -105,7 +105,7 @@ pub struct RevokeOperator<'info> {
         seeds = [OPERATOR_APPROVAL_SEED, vault.key().as_ref(), owner.key().as_ref(), operator.as_ref()],
         bump = operator_approval.bump,
     )]
-    pub operator_approval: Account<'info, OperatorApproval>,
+    pub operator_approval: Box<Account<'info, OperatorApproval>>,
 }
 
 pub fn revoke_operator(ctx: Context<RevokeOperator>, operator: Pubkey) -> Result<()> {

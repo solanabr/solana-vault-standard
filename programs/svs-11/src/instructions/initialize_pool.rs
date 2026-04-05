@@ -34,9 +34,9 @@ pub struct InitializePool<'info> {
         seeds = [VAULT_SEED, asset_mint.key().as_ref(), &vault_id.to_le_bytes()],
         bump
     )]
-    pub vault: Account<'info, CreditVault>,
+    pub vault: Box<Account<'info, CreditVault>>,
 
-    pub asset_mint: InterfaceAccount<'info, Mint>,
+    pub asset_mint: Box<InterfaceAccount<'info, Mint>>,
 
     /// CHECK: Shares mint initialized via CPI in handler
     #[account(
@@ -53,7 +53,7 @@ pub struct InitializePool<'info> {
         associated_token::authority = vault,
         associated_token::token_program = asset_token_program,
     )]
-    pub deposit_vault: InterfaceAccount<'info, TokenAccount>,
+    pub deposit_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
     /// CHECK: Redemption escrow initialized via CPI in handler
     #[account(

@@ -17,7 +17,7 @@ pub struct AddChild<'info> {
         has_one = authority,
         constraint = allocator_vault.num_children < 10 @ VaultError::MathOverflow,
     )]
-    pub allocator_vault: Account<'info, AllocatorVault>,
+    pub allocator_vault: Box<Account<'info, AllocatorVault>>,
 
     #[account(
         init,
@@ -26,7 +26,7 @@ pub struct AddChild<'info> {
         seeds = [CHILD_ALLOCATION_SEED, allocator_vault.key().as_ref(), child_vault.key().as_ref()],
         bump
     )]
-    pub child_allocation: Account<'info, ChildAllocation>,
+    pub child_allocation: Box<Account<'info, ChildAllocation>>,
 
     /// CHECK: Public key of the vault being added as a child.
     #[account(
@@ -50,7 +50,7 @@ pub struct AddChild<'info> {
     pub allowed_programs: Option<Account<'info, AllowedPrograms>>,
 
     /// Shares mint of the child vault being added
-    pub child_shares_mint: InterfaceAccount<'info, Mint>,
+    pub child_shares_mint: Box<InterfaceAccount<'info, Mint>>,
 
     /// ATA for the allocator to hold shares in the child vault
     #[account(
@@ -60,7 +60,7 @@ pub struct AddChild<'info> {
         associated_token::authority = allocator_vault,
         associated_token::token_program = token_2022_program,
     )]
-    pub allocator_child_shares_account: InterfaceAccount<'info, TokenAccount>,
+    pub allocator_child_shares_account: Box<InterfaceAccount<'info, TokenAccount>>,
 
     pub token_program: Interface<'info, TokenInterface>,
     pub token_2022_program: Program<'info, Token2022>,

@@ -13,7 +13,7 @@ pub struct InvestmentWindow<'info> {
         bump = vault.bump,
         has_one = manager,
     )]
-    pub vault: Account<'info, CreditVault>,
+    pub vault: Box<Account<'info, CreditVault>>,
     pub manager: Signer<'info>,
 }
 

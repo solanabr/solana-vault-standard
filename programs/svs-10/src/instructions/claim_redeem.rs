@@ -24,12 +24,12 @@ pub struct ClaimRedeem<'info> {
     /// (shares burned, assets computed). Blocking claims during pause would trap user funds.
     /// Pause halts NEW operations (requests, fulfillments), not settlement of committed claims.
     #[account(mut)]
-    pub vault: Account<'info, AsyncVault>,
+    pub vault: Box<Account<'info, AsyncVault>>,
 
     #[account(
         constraint = asset_mint.key() == vault.asset_mint,
     )]
-    pub asset_mint: InterfaceAccount<'info, Mint>,
+    pub asset_mint: Box<InterfaceAccount<'info, Mint>>,
 
     #[account(
         mut,
@@ -38,7 +38,7 @@ pub struct ClaimRedeem<'info> {
         bump = redeem_request.bump,
         constraint = redeem_request.status == RequestStatus::Fulfilled @ VaultError::RequestNotFulfilled,
     )]
-    pub redeem_request: Account<'info, RedeemRequest>,
+    pub redeem_request: Box<Account<'info, RedeemRequest>>,
 
     /// CHECK: Owner receives rent refund on close
     #[account(mut)]
@@ -49,14 +49,14 @@ pub struct ClaimRedeem<'info> {
         seeds = [CLAIMABLE_TOKENS_SEED, vault.key().as_ref(), redeem_request.owner.as_ref()],
         bump,
     )]
-    pub claimable_tokens: InterfaceAccount<'info, TokenAccount>,
+    pub claimable_tokens: Box<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(
         mut,
         constraint = receiver_asset_account.mint == vault.asset_mint,
         constraint = receiver_asset_account.owner == receiver.key(),
     )]
-    pub receiver_asset_account: InterfaceAccount<'info, TokenAccount>,
+    pub receiver_asset_account: Box<InterfaceAccount<'info, TokenAccount>>,
 
     /// CHECK: Receiver derived from redeem_request
     pub receiver: SystemAccount<'info>,

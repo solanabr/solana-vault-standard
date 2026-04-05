@@ -13,7 +13,7 @@ pub struct Checkpoint<'info> {
         seeds = [VAULT_SEED, vault.asset_mint.as_ref(), &vault.vault_id.to_le_bytes()],
         bump = vault.bump,
     )]
-    pub vault: Account<'info, ConfidentialStreamVault>,
+    pub vault: Box<Account<'info, ConfidentialStreamVault>>,
 }
 
 pub fn handler(ctx: Context<Checkpoint>) -> Result<()> {

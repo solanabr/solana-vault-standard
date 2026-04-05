@@ -21,7 +21,7 @@ pub struct Admin<'info> {
         seeds = [VAULT_SEED, vault.asset_mint.as_ref(), &vault.vault_id.to_le_bytes()],
         bump = vault.bump,
     )]
-    pub vault: Account<'info, CreditVault>,
+    pub vault: Box<Account<'info, CreditVault>>,
 }
 
 pub fn pause_handler(ctx: Context<Admin>) -> Result<()> {
@@ -112,7 +112,7 @@ pub struct AcceptAuthority<'info> {
         bump = vault.bump,
         constraint = vault.pending_authority == new_authority.key() @ VaultError::InvalidPendingAuthority,
     )]
-    pub vault: Account<'info, CreditVault>,
+    pub vault: Box<Account<'info, CreditVault>>,
 }
 
 /// Transfer vault authority (deprecated -- prefer two-step transfer).
@@ -184,7 +184,7 @@ pub struct UpdateAttester<'info> {
         seeds = [VAULT_SEED, vault.asset_mint.as_ref(), &vault.vault_id.to_le_bytes()],
         bump = vault.bump,
     )]
-    pub vault: Account<'info, CreditVault>,
+    pub vault: Box<Account<'info, CreditVault>>,
 
     /// CHECK: Validated as executable below
     pub new_attestation_program_account: UncheckedAccount<'info>,
@@ -242,7 +242,7 @@ pub struct UpdateOracleConfig<'info> {
         seeds = [VAULT_SEED, vault.asset_mint.as_ref(), &vault.vault_id.to_le_bytes()],
         bump = vault.bump,
     )]
-    pub vault: Account<'info, CreditVault>,
+    pub vault: Box<Account<'info, CreditVault>>,
 
     /// CHECK: No longer used; kept for IDL backwards compatibility.
     pub new_oracle_program_account: UncheckedAccount<'info>,
@@ -281,7 +281,7 @@ pub struct UpdateOracleParams<'info> {
         seeds = [VAULT_SEED, vault.asset_mint.as_ref(), &vault.vault_id.to_le_bytes()],
         bump = vault.bump,
     )]
-    pub vault: Account<'info, CreditVault>,
+    pub vault: Box<Account<'info, CreditVault>>,
 }
 
 /// Update non-address oracle parameters (max_staleness, max_deviation_bps).
@@ -336,7 +336,7 @@ pub struct InitializeVaultConfig<'info> {
         seeds = [VAULT_SEED, vault.asset_mint.as_ref(), &vault.vault_id.to_le_bytes()],
         bump = vault.bump,
     )]
-    pub vault: Account<'info, CreditVault>,
+    pub vault: Box<Account<'info, CreditVault>>,
 
     #[account(
         init,
@@ -345,7 +345,7 @@ pub struct InitializeVaultConfig<'info> {
         seeds = [VAULT_CONFIG_SEED, vault.key().as_ref()],
         bump,
     )]
-    pub vault_config: Account<'info, VaultConfig>,
+    pub vault_config: Box<Account<'info, VaultConfig>>,
 
     #[account(mut)]
     pub payer: Signer<'info>,
@@ -385,7 +385,7 @@ pub struct RequestOracleChange<'info> {
         seeds = [VAULT_SEED, vault.asset_mint.as_ref(), &vault.vault_id.to_le_bytes()],
         bump = vault.bump,
     )]
-    pub vault: Account<'info, CreditVault>,
+    pub vault: Box<Account<'info, CreditVault>>,
 
     #[account(
         mut,
@@ -393,7 +393,7 @@ pub struct RequestOracleChange<'info> {
         seeds = [VAULT_CONFIG_SEED, vault.key().as_ref()],
         bump = vault_config.bump,
     )]
-    pub vault_config: Account<'info, VaultConfig>,
+    pub vault_config: Box<Account<'info, VaultConfig>>,
 
     /// CHECK: Validated as executable below
     pub new_oracle_program_account: UncheckedAccount<'info>,
@@ -449,7 +449,7 @@ pub struct ApplyOracleChange<'info> {
         seeds = [VAULT_SEED, vault.asset_mint.as_ref(), &vault.vault_id.to_le_bytes()],
         bump = vault.bump,
     )]
-    pub vault: Account<'info, CreditVault>,
+    pub vault: Box<Account<'info, CreditVault>>,
 
     #[account(
         mut,
@@ -457,7 +457,7 @@ pub struct ApplyOracleChange<'info> {
         seeds = [VAULT_CONFIG_SEED, vault.key().as_ref()],
         bump = vault_config.bump,
     )]
-    pub vault_config: Account<'info, VaultConfig>,
+    pub vault_config: Box<Account<'info, VaultConfig>>,
 
     pub clock: Sysvar<'info, Clock>,
 }
@@ -507,7 +507,7 @@ pub struct SetComplianceOfficer<'info> {
         seeds = [VAULT_SEED, vault.asset_mint.as_ref(), &vault.vault_id.to_le_bytes()],
         bump = vault.bump,
     )]
-    pub vault: Account<'info, CreditVault>,
+    pub vault: Box<Account<'info, CreditVault>>,
 
     #[account(
         mut,
@@ -515,7 +515,7 @@ pub struct SetComplianceOfficer<'info> {
         seeds = [VAULT_CONFIG_SEED, vault.key().as_ref()],
         bump = vault_config.bump,
     )]
-    pub vault_config: Account<'info, VaultConfig>,
+    pub vault_config: Box<Account<'info, VaultConfig>>,
 }
 
 pub fn set_compliance_officer_handler(

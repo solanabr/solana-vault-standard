@@ -30,7 +30,7 @@ pub struct InitializeFeeConfig<'info> {
         seeds = [VAULT_SEED, vault.asset_mint.as_ref(), &vault.vault_id.to_le_bytes()],
         bump = vault.bump,
     )]
-    pub vault: Account<'info, StreamVault>,
+    pub vault: Box<Account<'info, StreamVault>>,
 
     #[account(
         init,
@@ -39,7 +39,7 @@ pub struct InitializeFeeConfig<'info> {
         seeds = [FEE_CONFIG_SEED, vault.key().as_ref()],
         bump,
     )]
-    pub fee_config: Account<'info, FeeConfig>,
+    pub fee_config: Box<Account<'info, FeeConfig>>,
 
     /// Fee recipient account
     /// CHECK: Any valid pubkey can receive fees
@@ -86,7 +86,7 @@ pub struct UpdateFeeConfig<'info> {
         seeds = [VAULT_SEED, vault.asset_mint.as_ref(), &vault.vault_id.to_le_bytes()],
         bump = vault.bump,
     )]
-    pub vault: Account<'info, StreamVault>,
+    pub vault: Box<Account<'info, StreamVault>>,
 
     #[account(
         mut,
@@ -94,7 +94,7 @@ pub struct UpdateFeeConfig<'info> {
         bump = fee_config.bump,
         has_one = vault,
     )]
-    pub fee_config: Account<'info, FeeConfig>,
+    pub fee_config: Box<Account<'info, FeeConfig>>,
 }
 
 pub fn update_fee_config(
@@ -136,7 +136,7 @@ pub struct InitializeCapConfig<'info> {
         seeds = [VAULT_SEED, vault.asset_mint.as_ref(), &vault.vault_id.to_le_bytes()],
         bump = vault.bump,
     )]
-    pub vault: Account<'info, StreamVault>,
+    pub vault: Box<Account<'info, StreamVault>>,
 
     #[account(
         init,
@@ -145,7 +145,7 @@ pub struct InitializeCapConfig<'info> {
         seeds = [CAP_CONFIG_SEED, vault.key().as_ref()],
         bump,
     )]
-    pub cap_config: Account<'info, CapConfig>,
+    pub cap_config: Box<Account<'info, CapConfig>>,
 
     pub system_program: Program<'info, System>,
 }
@@ -176,7 +176,7 @@ pub struct UpdateCapConfig<'info> {
         seeds = [VAULT_SEED, vault.asset_mint.as_ref(), &vault.vault_id.to_le_bytes()],
         bump = vault.bump,
     )]
-    pub vault: Account<'info, StreamVault>,
+    pub vault: Box<Account<'info, StreamVault>>,
 
     #[account(
         mut,
@@ -184,7 +184,7 @@ pub struct UpdateCapConfig<'info> {
         bump = cap_config.bump,
         has_one = vault,
     )]
-    pub cap_config: Account<'info, CapConfig>,
+    pub cap_config: Box<Account<'info, CapConfig>>,
 }
 
 pub fn update_cap_config(
@@ -220,7 +220,7 @@ pub struct InitializeLockConfig<'info> {
         seeds = [VAULT_SEED, vault.asset_mint.as_ref(), &vault.vault_id.to_le_bytes()],
         bump = vault.bump,
     )]
-    pub vault: Account<'info, StreamVault>,
+    pub vault: Box<Account<'info, StreamVault>>,
 
     #[account(
         init,
@@ -229,7 +229,7 @@ pub struct InitializeLockConfig<'info> {
         seeds = [LOCK_CONFIG_SEED, vault.key().as_ref()],
         bump,
     )]
-    pub lock_config: Account<'info, LockConfig>,
+    pub lock_config: Box<Account<'info, LockConfig>>,
 
     pub system_program: Program<'info, System>,
 }
@@ -258,7 +258,7 @@ pub struct UpdateLockConfig<'info> {
         seeds = [VAULT_SEED, vault.asset_mint.as_ref(), &vault.vault_id.to_le_bytes()],
         bump = vault.bump,
     )]
-    pub vault: Account<'info, StreamVault>,
+    pub vault: Box<Account<'info, StreamVault>>,
 
     #[account(
         mut,
@@ -266,7 +266,7 @@ pub struct UpdateLockConfig<'info> {
         bump = lock_config.bump,
         has_one = vault,
     )]
-    pub lock_config: Account<'info, LockConfig>,
+    pub lock_config: Box<Account<'info, LockConfig>>,
 }
 
 pub fn update_lock_config(ctx: Context<UpdateLockConfig>, lock_duration: i64) -> Result<()> {
@@ -292,7 +292,7 @@ pub struct InitializeAccessConfig<'info> {
         seeds = [VAULT_SEED, vault.asset_mint.as_ref(), &vault.vault_id.to_le_bytes()],
         bump = vault.bump,
     )]
-    pub vault: Account<'info, StreamVault>,
+    pub vault: Box<Account<'info, StreamVault>>,
 
     #[account(
         init,
@@ -301,7 +301,7 @@ pub struct InitializeAccessConfig<'info> {
         seeds = [ACCESS_CONFIG_SEED, vault.key().as_ref()],
         bump,
     )]
-    pub access_config: Account<'info, AccessConfig>,
+    pub access_config: Box<Account<'info, AccessConfig>>,
 
     pub system_program: Program<'info, System>,
 }
@@ -329,7 +329,7 @@ pub struct UpdateAccessConfig<'info> {
         seeds = [VAULT_SEED, vault.asset_mint.as_ref(), &vault.vault_id.to_le_bytes()],
         bump = vault.bump,
     )]
-    pub vault: Account<'info, StreamVault>,
+    pub vault: Box<Account<'info, StreamVault>>,
 
     #[account(
         mut,
@@ -337,7 +337,7 @@ pub struct UpdateAccessConfig<'info> {
         bump = access_config.bump,
         has_one = vault,
     )]
-    pub access_config: Account<'info, AccessConfig>,
+    pub access_config: Box<Account<'info, AccessConfig>>,
 }
 
 pub fn update_access_config(

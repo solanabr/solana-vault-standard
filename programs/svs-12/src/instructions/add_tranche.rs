@@ -24,7 +24,7 @@ pub struct AddTranche<'info> {
         constraint = !vault.wiped @ VaultError::VaultWiped,
         constraint = vault.num_tranches < MAX_TRANCHES @ VaultError::MaxTranchesReached,
     )]
-    pub vault: Account<'info, TranchedVault>,
+    pub vault: Box<Account<'info, TranchedVault>>,
 
     #[account(
         init,
@@ -33,7 +33,7 @@ pub struct AddTranche<'info> {
         seeds = [TRANCHE_SEED, vault.key().as_ref(), &[vault.num_tranches]],
         bump
     )]
-    pub tranche: Account<'info, Tranche>,
+    pub tranche: Box<Account<'info, Tranche>>,
 
     /// CHECK: Shares mint initialized via CPI
     #[account(

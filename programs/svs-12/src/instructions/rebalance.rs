@@ -15,19 +15,19 @@ pub struct RebalanceTranches<'info> {
         has_one = manager @ VaultError::Unauthorized,
         constraint = !vault.paused @ VaultError::VaultPaused,
     )]
-    pub vault: Account<'info, TranchedVault>,
+    pub vault: Box<Account<'info, TranchedVault>>,
 
     #[account(
         mut,
         has_one = vault @ VaultError::TrancheVaultMismatch,
     )]
-    pub from_tranche: Account<'info, Tranche>,
+    pub from_tranche: Box<Account<'info, Tranche>>,
 
     #[account(
         mut,
         has_one = vault @ VaultError::TrancheVaultMismatch,
     )]
-    pub to_tranche: Account<'info, Tranche>,
+    pub to_tranche: Box<Account<'info, Tranche>>,
 
     // Other tranches for subordination check
     pub other_tranche_0: Option<Account<'info, Tranche>>,

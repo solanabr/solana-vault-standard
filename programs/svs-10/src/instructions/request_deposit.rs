@@ -24,25 +24,25 @@ pub struct RequestDeposit<'info> {
         mut,
         constraint = !vault.paused @ VaultError::VaultPaused,
     )]
-    pub vault: Account<'info, AsyncVault>,
+    pub vault: Box<Account<'info, AsyncVault>>,
 
     #[account(
         constraint = asset_mint.key() == vault.asset_mint,
     )]
-    pub asset_mint: InterfaceAccount<'info, Mint>,
+    pub asset_mint: Box<InterfaceAccount<'info, Mint>>,
 
     #[account(
         mut,
         constraint = user_asset_account.mint == vault.asset_mint,
         constraint = user_asset_account.owner == user.key(),
     )]
-    pub user_asset_account: InterfaceAccount<'info, TokenAccount>,
+    pub user_asset_account: Box<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(
         mut,
         constraint = asset_vault.key() == vault.asset_vault,
     )]
-    pub asset_vault: InterfaceAccount<'info, TokenAccount>,
+    pub asset_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(
         init,
@@ -51,7 +51,7 @@ pub struct RequestDeposit<'info> {
         seeds = [DEPOSIT_REQUEST_SEED, vault.key().as_ref(), user.key().as_ref()],
         bump
     )]
-    pub deposit_request: Account<'info, DepositRequest>,
+    pub deposit_request: Box<Account<'info, DepositRequest>>,
 
     pub asset_token_program: Interface<'info, TokenInterface>,
     pub system_program: Program<'info, System>,

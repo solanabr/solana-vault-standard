@@ -14,13 +14,13 @@ pub struct UpdateTrancheConfig<'info> {
     #[account(
         has_one = authority @ VaultError::Unauthorized,
     )]
-    pub vault: Account<'info, TranchedVault>,
+    pub vault: Box<Account<'info, TranchedVault>>,
 
     #[account(
         mut,
         has_one = vault @ VaultError::TrancheVaultMismatch,
     )]
-    pub target_tranche: Account<'info, Tranche>,
+    pub target_tranche: Box<Account<'info, Tranche>>,
 
     pub tranche_1: Option<Account<'info, Tranche>>,
     pub tranche_2: Option<Account<'info, Tranche>>,

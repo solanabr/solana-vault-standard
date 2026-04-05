@@ -12,34 +12,34 @@ use crate::{
 
 #[derive(Accounts)]
 pub struct VaultView<'info> {
-    pub allocator_vault: Account<'info, AllocatorVault>,
+    pub allocator_vault: Box<Account<'info, AllocatorVault>>,
 
     #[account(constraint = shares_mint.key() == allocator_vault.shares_mint)]
-    pub shares_mint: InterfaceAccount<'info, Mint>,
+    pub shares_mint: Box<InterfaceAccount<'info, Mint>>,
 
     #[account(constraint = idle_vault.key() == allocator_vault.idle_vault)]
-    pub idle_vault: InterfaceAccount<'info, TokenAccount>,
+    pub idle_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 }
 
 #[derive(Accounts)]
 pub struct VaultViewWithOwner<'info> {
-    pub allocator_vault: Account<'info, AllocatorVault>,
+    pub allocator_vault: Box<Account<'info, AllocatorVault>>,
 
     #[account(constraint = shares_mint.key() == allocator_vault.shares_mint)]
-    pub shares_mint: InterfaceAccount<'info, Mint>,
+    pub shares_mint: Box<InterfaceAccount<'info, Mint>>,
 
     #[account(constraint = idle_vault.key() == allocator_vault.idle_vault)]
-    pub idle_vault: InterfaceAccount<'info, TokenAccount>,
+    pub idle_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(
         constraint = owner_shares_account.mint == allocator_vault.shares_mint,
     )]
-    pub owner_shares_account: InterfaceAccount<'info, TokenAccount>,
+    pub owner_shares_account: Box<InterfaceAccount<'info, TokenAccount>>,
 }
 
 #[derive(Accounts)]
 pub struct ChildAllocationView<'info> {
-    pub child_allocation: Account<'info, ChildAllocation>,
+    pub child_allocation: Box<Account<'info, ChildAllocation>>,
 }
 
 /// Preview how many shares would be minted for given assets (floor rounding)

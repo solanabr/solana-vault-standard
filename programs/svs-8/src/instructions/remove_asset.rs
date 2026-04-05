@@ -67,7 +67,7 @@ pub struct RemoveAsset<'info> {
         seeds = [crate::constants::MULTI_VAULT_SEED, vault.vault_id.to_le_bytes().as_ref()],
         bump = vault.bump,
     )]
-    pub vault: Account<'info, MultiAssetVault>,
+    pub vault: Box<Account<'info, MultiAssetVault>>,
 
     pub authority: Signer<'info>,
 
@@ -76,7 +76,7 @@ pub struct RemoveAsset<'info> {
         close = authority,
         has_one = vault,
     )]
-    pub asset_entry: Account<'info, AssetEntry>,
+    pub asset_entry: Box<Account<'info, AssetEntry>>,
 
     /// V9-P7: Constrain asset_vault to asset_entry.asset_vault to prevent passing
     /// a different empty token account while the real vault ATA still holds tokens.
@@ -85,7 +85,7 @@ pub struct RemoveAsset<'info> {
         constraint = asset_vault.key() == asset_entry.asset_vault @ VaultError::AssetNotFound,
         constraint = asset_vault.amount == 0 @ VaultError::AssetVaultNotEmpty,
     )]
-    pub asset_vault: InterfaceAccount<'info, TokenAccount>,
+    pub asset_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
     pub token_program: Interface<'info, TokenInterface>,
     pub system_program: Program<'info, System>,

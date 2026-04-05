@@ -24,25 +24,25 @@ pub struct DistributeYield<'info> {
         constraint = authority.key() == vault.authority @ VaultError::Unauthorized,
         constraint = !vault.paused @ VaultError::VaultPaused,
     )]
-    pub vault: Account<'info, StreamVault>,
+    pub vault: Box<Account<'info, StreamVault>>,
 
     #[account(
         constraint = asset_mint.key() == vault.asset_mint,
     )]
-    pub asset_mint: InterfaceAccount<'info, Mint>,
+    pub asset_mint: Box<InterfaceAccount<'info, Mint>>,
 
     #[account(
         mut,
         constraint = authority_asset_account.mint == vault.asset_mint,
         constraint = authority_asset_account.owner == authority.key(),
     )]
-    pub authority_asset_account: InterfaceAccount<'info, TokenAccount>,
+    pub authority_asset_account: Box<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(
         mut,
         constraint = asset_vault.key() == vault.asset_vault,
     )]
-    pub asset_vault: InterfaceAccount<'info, TokenAccount>,
+    pub asset_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
     pub asset_token_program: Interface<'info, TokenInterface>,
 }

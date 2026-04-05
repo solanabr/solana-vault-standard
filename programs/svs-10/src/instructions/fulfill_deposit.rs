@@ -24,7 +24,7 @@ pub struct FulfillDeposit<'info> {
         mut,
         constraint = !vault.paused @ VaultError::VaultPaused,
     )]
-    pub vault: Account<'info, AsyncVault>,
+    pub vault: Box<Account<'info, AsyncVault>>,
 
     #[account(
         mut,
@@ -32,7 +32,7 @@ pub struct FulfillDeposit<'info> {
         bump = deposit_request.bump,
         constraint = deposit_request.status == RequestStatus::Pending @ VaultError::RequestNotPending,
     )]
-    pub deposit_request: Account<'info, DepositRequest>,
+    pub deposit_request: Box<Account<'info, DepositRequest>>,
 
     /// V9-P3: Manual PDA validation is intentional — Anchor constraints don't support
     /// conditional seeds on `Option<Account>` types. The handler validates the PDA key

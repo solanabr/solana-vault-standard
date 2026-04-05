@@ -24,14 +24,14 @@ pub struct ApplyPending<'info> {
     #[account(mut)]
     pub user: Signer<'info>,
 
-    pub vault: Account<'info, ConfidentialVault>,
+    pub vault: Box<Account<'info, ConfidentialVault>>,
 
     #[account(
         mut,
         constraint = user_shares_account.mint == vault.shares_mint,
         constraint = user_shares_account.owner == user.key(),
     )]
-    pub user_shares_account: InterfaceAccount<'info, TokenAccount>,
+    pub user_shares_account: Box<InterfaceAccount<'info, TokenAccount>>,
 
     pub token_2022_program: Program<'info, Token2022>,
 }

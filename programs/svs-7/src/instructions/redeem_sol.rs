@@ -35,18 +35,18 @@ pub struct RedeemSol<'info> {
     #[account(
         constraint = !vault.paused @ VaultError::VaultPaused,
     )]
-    pub vault: Account<'info, SolVault>,
+    pub vault: Box<Account<'info, SolVault>>,
 
     /// Native SOL mint — needed for transfer_checked
     #[account(address = crate::constants::NATIVE_MINT @ VaultError::Unauthorized)]
-    pub native_mint: InterfaceAccount<'info, Mint>,
+    pub native_mint: Box<InterfaceAccount<'info, Mint>>,
 
     /// Vault's wSOL token account (source)
     #[account(
         mut,
         constraint = wsol_vault.key() == vault.wsol_vault,
     )]
-    pub wsol_vault: InterfaceAccount<'info, TokenAccount>,
+    pub wsol_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
     /// User's wSOL account (temporary; will be closed to unwrap to native SOL).
     ///
@@ -65,14 +65,14 @@ pub struct RedeemSol<'info> {
         mut,
         constraint = shares_mint.key() == vault.shares_mint,
     )]
-    pub shares_mint: InterfaceAccount<'info, Mint>,
+    pub shares_mint: Box<InterfaceAccount<'info, Mint>>,
 
     #[account(
         mut,
         constraint = user_shares_account.mint == vault.shares_mint,
         constraint = user_shares_account.owner == user.key(),
     )]
-    pub user_shares_account: InterfaceAccount<'info, TokenAccount>,
+    pub user_shares_account: Box<InterfaceAccount<'info, TokenAccount>>,
 
     /// SPL Token program (wSOL uses spl-token, NOT token-2022)
     #[account(address = anchor_spl::token::ID @ VaultError::Unauthorized)]

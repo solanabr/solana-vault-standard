@@ -36,12 +36,12 @@ pub struct Initialize<'info> {
         seeds = [SOL_VAULT_SEED, &vault_id.to_le_bytes()],
         bump
     )]
-    pub vault: Account<'info, SolVault>,
+    pub vault: Box<Account<'info, SolVault>>,
 
     /// Native SOL mint (So11111111111111111111111111111111).
     /// Passed so Anchor can derive the wSOL ATA for the vault PDA.
     #[account(address = crate::constants::NATIVE_MINT @ VaultError::Unauthorized)]
-    pub native_mint: InterfaceAccount<'info, Mint>,
+    pub native_mint: Box<InterfaceAccount<'info, Mint>>,
 
     /// CHECK: Shares mint is initialized via CPI in handler.
     /// Seeds: ["shares", vault_key]
@@ -61,7 +61,7 @@ pub struct Initialize<'info> {
         associated_token::authority = vault,
         associated_token::token_program = token_program,
     )]
-    pub wsol_vault: InterfaceAccount<'info, TokenAccount>,
+    pub wsol_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
     /// SPL Token program (wSOL uses the original SPL Token program)
     #[account(address = anchor_spl::token::ID @ VaultError::Unauthorized)]

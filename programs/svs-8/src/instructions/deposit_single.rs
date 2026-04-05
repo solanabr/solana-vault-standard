@@ -249,7 +249,7 @@ pub struct DepositSingle<'info> {
     #[account(has_one = vault, has_one = asset_mint)]
     pub asset_entry: Box<Account<'info, AssetEntry>>,
 
-    pub asset_mint: InterfaceAccount<'info, Mint>,
+    pub asset_mint: Box<InterfaceAccount<'info, Mint>>,
 
     #[account(
         seeds = [

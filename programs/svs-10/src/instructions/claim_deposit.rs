@@ -29,7 +29,7 @@ pub struct ClaimDeposit<'info> {
     /// (assets locked, shares computed). Blocking claims during pause would trap user funds.
     /// Pause halts NEW operations (requests, fulfillments), not settlement of committed claims.
     #[account(mut)]
-    pub vault: Account<'info, AsyncVault>,
+    pub vault: Box<Account<'info, AsyncVault>>,
 
     #[account(
         mut,
@@ -38,7 +38,7 @@ pub struct ClaimDeposit<'info> {
         bump = deposit_request.bump,
         constraint = deposit_request.status == RequestStatus::Fulfilled @ VaultError::RequestNotFulfilled,
     )]
-    pub deposit_request: Account<'info, DepositRequest>,
+    pub deposit_request: Box<Account<'info, DepositRequest>>,
 
     /// CHECK: Owner receives rent refund on close
     #[account(mut)]
@@ -48,14 +48,14 @@ pub struct ClaimDeposit<'info> {
         mut,
         constraint = shares_mint.key() == vault.shares_mint,
     )]
-    pub shares_mint: InterfaceAccount<'info, Mint>,
+    pub shares_mint: Box<InterfaceAccount<'info, Mint>>,
 
     #[account(
         mut,
         constraint = receiver_shares_account.mint == vault.shares_mint,
         constraint = receiver_shares_account.owner == receiver.key(),
     )]
-    pub receiver_shares_account: InterfaceAccount<'info, TokenAccount>,
+    pub receiver_shares_account: Box<InterfaceAccount<'info, TokenAccount>>,
 
     /// CHECK: Receiver derived from deposit_request
     pub receiver: SystemAccount<'info>,

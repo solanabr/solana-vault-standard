@@ -12,23 +12,23 @@ use crate::{
 /// SVS-5 view context: uses effective_total_assets (time-interpolated).
 #[derive(Accounts)]
 pub struct VaultView<'info> {
-    pub vault: Account<'info, StreamVault>,
+    pub vault: Box<Account<'info, StreamVault>>,
 
     #[account(constraint = shares_mint.key() == vault.shares_mint)]
-    pub shares_mint: InterfaceAccount<'info, Mint>,
+    pub shares_mint: Box<InterfaceAccount<'info, Mint>>,
 }
 
 #[derive(Accounts)]
 pub struct VaultViewWithOwner<'info> {
-    pub vault: Account<'info, StreamVault>,
+    pub vault: Box<Account<'info, StreamVault>>,
 
     #[account(constraint = shares_mint.key() == vault.shares_mint)]
-    pub shares_mint: InterfaceAccount<'info, Mint>,
+    pub shares_mint: Box<InterfaceAccount<'info, Mint>>,
 
     #[account(
         constraint = owner_shares_account.mint == vault.shares_mint,
     )]
-    pub owner_shares_account: InterfaceAccount<'info, TokenAccount>,
+    pub owner_shares_account: Box<InterfaceAccount<'info, TokenAccount>>,
 }
 
 /// Preview how many shares would be minted for given assets (floor rounding)

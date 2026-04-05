@@ -19,7 +19,7 @@ pub struct Admin<'info> {
     pub authority: Signer<'info>,
 
     #[account(mut)]
-    pub vault: Account<'info, AsyncVault>,
+    pub vault: Box<Account<'info, AsyncVault>>,
 }
 
 #[derive(Accounts)]
@@ -30,7 +30,7 @@ pub struct AcceptAuthority<'info> {
         mut,
         constraint = vault.pending_authority == new_authority.key() @ VaultError::InvalidPendingAuthority,
     )]
-    pub vault: Account<'info, AsyncVault>,
+    pub vault: Box<Account<'info, AsyncVault>>,
 }
 
 pub fn pause(ctx: Context<Admin>) -> Result<()> {

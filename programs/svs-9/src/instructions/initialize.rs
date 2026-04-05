@@ -23,9 +23,9 @@ pub struct Initialize<'info> {
         seeds = [ALLOCATOR_VAULT_SEED, asset_mint.key().as_ref(), &vault_id.to_le_bytes()],
         bump
     )]
-    pub allocator_vault: Account<'info, AllocatorVault>,
+    pub allocator_vault: Box<Account<'info, AllocatorVault>>,
 
-    pub asset_mint: InterfaceAccount<'info, Mint>,
+    pub asset_mint: Box<InterfaceAccount<'info, Mint>>,
 
     /// Shares mint for SVS-9 (always Token-2022)
     #[account(
@@ -37,7 +37,7 @@ pub struct Initialize<'info> {
         mint::authority = allocator_vault,
         mint::token_program = token_2022_program,
     )]
-    pub shares_mint: InterfaceAccount<'info, Mint>,
+    pub shares_mint: Box<InterfaceAccount<'info, Mint>>,
 
     /// The idle vault is an ATA owned by the allocator_vault to hold unallocated assets
     #[account(
@@ -47,7 +47,7 @@ pub struct Initialize<'info> {
         associated_token::authority = allocator_vault,
         associated_token::token_program = token_program,
     )]
-    pub idle_vault: InterfaceAccount<'info, TokenAccount>,
+    pub idle_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
     /// Token program for asset (can be SPL Token or Token-2022)
     pub token_program: Interface<'info, TokenInterface>,

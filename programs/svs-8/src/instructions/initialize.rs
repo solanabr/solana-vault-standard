@@ -57,7 +57,7 @@ pub struct Initialize<'info> {
         seeds = [MULTI_VAULT_SEED, vault_id.to_le_bytes().as_ref()],
         bump,
     )]
-    pub vault: Account<'info, MultiAssetVault>,
+    pub vault: Box<Account<'info, MultiAssetVault>>,
 
     #[account(
         init,
@@ -69,7 +69,7 @@ pub struct Initialize<'info> {
         mint::freeze_authority = vault,
         mint::token_program = token_program,
     )]
-    pub shares_mint: InterfaceAccount<'info, Mint>,
+    pub shares_mint: Box<InterfaceAccount<'info, Mint>>,
 
     pub token_program: Program<'info, Token2022>,
     pub associated_token_program: Program<'info, AssociatedToken>,

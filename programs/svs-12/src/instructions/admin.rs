@@ -18,7 +18,7 @@ pub struct Admin<'info> {
         mut,
         has_one = authority @ VaultError::Unauthorized,
     )]
-    pub vault: Account<'info, TranchedVault>,
+    pub vault: Box<Account<'info, TranchedVault>>,
 }
 
 pub fn pause(ctx: Context<Admin>) -> Result<()> {
@@ -98,7 +98,7 @@ pub struct AcceptAuthority<'info> {
         mut,
         constraint = vault.pending_authority == new_authority.key() @ VaultError::InvalidPendingAuthority,
     )]
-    pub vault: Account<'info, TranchedVault>,
+    pub vault: Box<Account<'info, TranchedVault>>,
 }
 
 /// Transfer vault authority (deprecated -- prefer two-step transfer).

@@ -55,12 +55,12 @@ pub fn handler(ctx: Context<UpdateOracle>, price: u64) -> Result<()> {
 #[derive(Accounts)]
 pub struct InitializeOracle<'info> {
     #[account(has_one = authority)]
-    pub vault: Account<'info, MultiAssetVault>,
+    pub vault: Box<Account<'info, MultiAssetVault>>,
 
     #[account(mut)]
     pub authority: Signer<'info>,
 
-    pub asset_mint: InterfaceAccount<'info, Mint>,
+    pub asset_mint: Box<InterfaceAccount<'info, Mint>>,
 
     #[account(
         init,
@@ -69,18 +69,18 @@ pub struct InitializeOracle<'info> {
         seeds = [ORACLE_PRICE_SEED, vault.key().as_ref(), asset_mint.key().as_ref()],
         bump,
     )]
-    pub oracle_price: Account<'info, OraclePrice>,
+    pub oracle_price: Box<Account<'info, OraclePrice>>,
 
     pub system_program: Program<'info, System>,
 }
 
 #[derive(Accounts)]
 pub struct UpdateOracle<'info> {
-    pub vault: Account<'info, MultiAssetVault>,
+    pub vault: Box<Account<'info, MultiAssetVault>>,
 
     pub authority: Signer<'info>,
 
-    pub asset_mint: InterfaceAccount<'info, Mint>,
+    pub asset_mint: Box<InterfaceAccount<'info, Mint>>,
 
     #[account(
         mut,
@@ -90,5 +90,5 @@ pub struct UpdateOracle<'info> {
         has_one = asset_mint,
         has_one = authority @ VaultError::Unauthorized,
     )]
-    pub oracle_price: Account<'info, OraclePrice>,
+    pub oracle_price: Box<Account<'info, OraclePrice>>,
 }

@@ -14,7 +14,7 @@ pub struct RemoveChild<'info> {
         mut,
         has_one = authority @ VaultError::Unauthorized,
     )]
-    pub allocator_vault: Account<'info, AllocatorVault>,
+    pub allocator_vault: Box<Account<'info, AllocatorVault>>,
 
     #[account(
         mut,
@@ -23,7 +23,7 @@ pub struct RemoveChild<'info> {
         bump = child_allocation.bump,
         constraint = child_allocation.enabled @ VaultError::ChildAllocationDisabled,
     )]
-    pub child_allocation: Account<'info, ChildAllocation>,
+    pub child_allocation: Box<Account<'info, ChildAllocation>>,
 
     // Safety account to verify 0 shares
     pub allocator_child_shares_account: Option<InterfaceAccount<'info, TokenAccount>>,

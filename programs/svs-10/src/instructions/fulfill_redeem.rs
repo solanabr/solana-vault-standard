@@ -34,7 +34,7 @@ pub struct FulfillRedeem<'info> {
         mut,
         constraint = !vault.paused @ VaultError::VaultPaused,
     )]
-    pub vault: Account<'info, AsyncVault>,
+    pub vault: Box<Account<'info, AsyncVault>>,
 
     #[account(
         mut,
@@ -42,7 +42,7 @@ pub struct FulfillRedeem<'info> {
         bump = redeem_request.bump,
         constraint = redeem_request.status == RequestStatus::Pending @ VaultError::RequestNotPending,
     )]
-    pub redeem_request: Account<'info, RedeemRequest>,
+    pub redeem_request: Box<Account<'info, RedeemRequest>>,
 
     /// V9-P3: Manual PDA validation is intentional — Anchor constraints don't support
     /// conditional seeds on `Option<Account>` types. The handler validates the PDA key
@@ -52,26 +52,26 @@ pub struct FulfillRedeem<'info> {
     #[account(
         constraint = asset_mint.key() == vault.asset_mint,
     )]
-    pub asset_mint: InterfaceAccount<'info, Mint>,
+    pub asset_mint: Box<InterfaceAccount<'info, Mint>>,
 
     #[account(
         mut,
         constraint = asset_vault.key() == vault.asset_vault,
     )]
-    pub asset_vault: InterfaceAccount<'info, TokenAccount>,
+    pub asset_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(
         mut,
         constraint = shares_mint.key() == vault.shares_mint,
     )]
-    pub shares_mint: InterfaceAccount<'info, Mint>,
+    pub shares_mint: Box<InterfaceAccount<'info, Mint>>,
 
     #[account(
         mut,
         seeds = [SHARE_ESCROW_SEED, vault.key().as_ref()],
         bump = vault.share_escrow_bump,
     )]
-    pub share_escrow: InterfaceAccount<'info, TokenAccount>,
+    pub share_escrow: Box<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(
         init,
@@ -82,7 +82,7 @@ pub struct FulfillRedeem<'info> {
         seeds = [CLAIMABLE_TOKENS_SEED, vault.key().as_ref(), redeem_request.owner.as_ref()],
         bump,
     )]
-    pub claimable_tokens: InterfaceAccount<'info, TokenAccount>,
+    pub claimable_tokens: Box<InterfaceAccount<'info, TokenAccount>>,
 
     pub asset_token_program: Interface<'info, TokenInterface>,
     pub token_2022_program: Program<'info, Token2022>,
