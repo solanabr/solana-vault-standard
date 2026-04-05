@@ -20,7 +20,7 @@ pub struct CancelRedeem<'info> {
         seeds = [VAULT_SEED, vault.asset_mint.as_ref(), &vault.vault_id.to_le_bytes()],
         bump = vault.bump,
     )]
-    pub vault: Account<'info, CreditVault>,
+    pub vault: Box<Account<'info, CreditVault>>,
 
     #[account(
         mut,
@@ -31,24 +31,24 @@ pub struct CancelRedeem<'info> {
         constraint = redemption_request.status == RequestStatus::Pending @ VaultError::RequestNotPending,
         constraint = investor.key() == redemption_request.investor,
     )]
-    pub redemption_request: Account<'info, RedemptionRequest>,
+    pub redemption_request: Box<Account<'info, RedemptionRequest>>,
 
     #[account(constraint = shares_mint.key() == vault.shares_mint)]
-    pub shares_mint: InterfaceAccount<'info, Mint>,
+    pub shares_mint: Box<InterfaceAccount<'info, Mint>>,
 
     #[account(
         mut,
         constraint = investor_shares_account.mint == vault.shares_mint,
         constraint = investor_shares_account.owner == investor.key(),
     )]
-    pub investor_shares_account: InterfaceAccount<'info, TokenAccount>,
+    pub investor_shares_account: Box<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(
         mut,
         seeds = [REDEMPTION_ESCROW_SEED, vault.key().as_ref()],
         bump = vault.redemption_escrow_bump,
     )]
-    pub redemption_escrow: InterfaceAccount<'info, TokenAccount>,
+    pub redemption_escrow: Box<InterfaceAccount<'info, TokenAccount>>,
 
     /// CHECK: If data is non-empty, investor is frozen
     #[account(

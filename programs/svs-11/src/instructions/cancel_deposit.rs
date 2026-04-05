@@ -18,7 +18,7 @@ pub struct CancelDeposit<'info> {
         seeds = [VAULT_SEED, vault.asset_mint.as_ref(), &vault.vault_id.to_le_bytes()],
         bump = vault.bump,
     )]
-    pub vault: Account<'info, CreditVault>,
+    pub vault: Box<Account<'info, CreditVault>>,
 
     #[account(
         mut,
@@ -29,23 +29,23 @@ pub struct CancelDeposit<'info> {
         constraint = investment_request.status == RequestStatus::Pending @ VaultError::RequestNotPending,
         constraint = investor.key() == investment_request.investor,
     )]
-    pub investment_request: Account<'info, InvestmentRequest>,
+    pub investment_request: Box<Account<'info, InvestmentRequest>>,
 
     #[account(
         mut,
         constraint = deposit_vault.key() == vault.deposit_vault,
     )]
-    pub deposit_vault: InterfaceAccount<'info, TokenAccount>,
+    pub deposit_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(
         mut,
         constraint = investor_token_account.mint == vault.asset_mint,
         constraint = investor_token_account.owner == investor.key(),
     )]
-    pub investor_token_account: InterfaceAccount<'info, TokenAccount>,
+    pub investor_token_account: Box<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(constraint = asset_mint.key() == vault.asset_mint)]
-    pub asset_mint: InterfaceAccount<'info, Mint>,
+    pub asset_mint: Box<InterfaceAccount<'info, Mint>>,
 
     /// CHECK: If data is non-empty, investor is frozen
     #[account(

@@ -29,7 +29,7 @@ pub struct ApproveRedeem<'info> {
         seeds = [VAULT_SEED, vault.asset_mint.as_ref(), &vault.vault_id.to_le_bytes()],
         bump = vault.bump,
     )]
-    pub vault: Account<'info, CreditVault>,
+    pub vault: Box<Account<'info, CreditVault>>,
 
     #[account(
         mut,
@@ -38,7 +38,7 @@ pub struct ApproveRedeem<'info> {
         bump = redemption_request.bump,
         constraint = redemption_request.status == RequestStatus::Pending @ VaultError::RequestNotPending,
     )]
-    pub redemption_request: Account<'info, RedemptionRequest>,
+    pub redemption_request: Box<Account<'info, RedemptionRequest>>,
 
     #[account(constraint = investor.key() == redemption_request.investor)]
     pub investor: SystemAccount<'info>,

@@ -21,7 +21,7 @@ pub struct ApproveDeposit<'info> {
         seeds = [VAULT_SEED, vault.asset_mint.as_ref(), &vault.vault_id.to_le_bytes()],
         bump = vault.bump,
     )]
-    pub vault: Account<'info, CreditVault>,
+    pub vault: Box<Account<'info, CreditVault>>,
 
     #[account(
         mut,
@@ -30,7 +30,7 @@ pub struct ApproveDeposit<'info> {
         bump = investment_request.bump,
         constraint = investment_request.status == RequestStatus::Pending @ VaultError::RequestNotPending,
     )]
-    pub investment_request: Account<'info, InvestmentRequest>,
+    pub investment_request: Box<Account<'info, InvestmentRequest>>,
 
     #[account(constraint = investor.key() == investment_request.investor)]
     pub investor: SystemAccount<'info>,

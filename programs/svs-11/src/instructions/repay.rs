@@ -18,23 +18,23 @@ pub struct Repay<'info> {
         seeds = [VAULT_SEED, vault.asset_mint.as_ref(), &vault.vault_id.to_le_bytes()],
         bump = vault.bump,
     )]
-    pub vault: Account<'info, CreditVault>,
+    pub vault: Box<Account<'info, CreditVault>>,
 
     #[account(
         mut,
         constraint = manager_token_account.mint == vault.asset_mint,
         constraint = manager_token_account.owner == manager.key(),
     )]
-    pub manager_token_account: InterfaceAccount<'info, TokenAccount>,
+    pub manager_token_account: Box<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(
         mut,
         constraint = deposit_vault.key() == vault.deposit_vault,
     )]
-    pub deposit_vault: InterfaceAccount<'info, TokenAccount>,
+    pub deposit_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(constraint = asset_mint.key() == vault.asset_mint)]
-    pub asset_mint: InterfaceAccount<'info, Mint>,
+    pub asset_mint: Box<InterfaceAccount<'info, Mint>>,
 
     pub asset_token_program: Interface<'info, TokenInterface>,
 }

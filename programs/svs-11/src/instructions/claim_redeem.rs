@@ -21,7 +21,7 @@ pub struct ClaimRedeem<'info> {
         seeds = [VAULT_SEED, vault.asset_mint.as_ref(), &vault.vault_id.to_le_bytes()],
         bump = vault.bump,
     )]
-    pub vault: Account<'info, CreditVault>,
+    pub vault: Box<Account<'info, CreditVault>>,
 
     #[account(
         mut,
@@ -32,24 +32,24 @@ pub struct ClaimRedeem<'info> {
         constraint = redemption_request.status == RequestStatus::Approved @ VaultError::RequestNotApproved,
         constraint = investor.key() == redemption_request.investor,
     )]
-    pub redemption_request: Account<'info, RedemptionRequest>,
+    pub redemption_request: Box<Account<'info, RedemptionRequest>>,
 
     #[account(constraint = asset_mint.key() == vault.asset_mint)]
-    pub asset_mint: InterfaceAccount<'info, Mint>,
+    pub asset_mint: Box<InterfaceAccount<'info, Mint>>,
 
     #[account(
         mut,
         seeds = [CLAIMABLE_TOKENS_SEED, vault.key().as_ref(), investor.key().as_ref()],
         bump,
     )]
-    pub claimable_tokens: InterfaceAccount<'info, TokenAccount>,
+    pub claimable_tokens: Box<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(
         mut,
         constraint = investor_token_account.mint == vault.asset_mint,
         constraint = investor_token_account.owner == investor.key(),
     )]
-    pub investor_token_account: InterfaceAccount<'info, TokenAccount>,
+    pub investor_token_account: Box<InterfaceAccount<'info, TokenAccount>>,
 
     /// CHECK: Validated in handler via validate_attestation
     pub attestation: UncheckedAccount<'info>,

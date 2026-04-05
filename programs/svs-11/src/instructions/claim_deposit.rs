@@ -25,7 +25,7 @@ pub struct ClaimDeposit<'info> {
         seeds = [VAULT_SEED, vault.asset_mint.as_ref(), &vault.vault_id.to_le_bytes()],
         bump = vault.bump,
     )]
-    pub vault: Account<'info, CreditVault>,
+    pub vault: Box<Account<'info, CreditVault>>,
 
     #[account(
         mut,
@@ -36,7 +36,7 @@ pub struct ClaimDeposit<'info> {
         constraint = investment_request.status == RequestStatus::Approved @ VaultError::RequestNotApproved,
         constraint = investor.key() == investment_request.investor,
     )]
-    pub investment_request: Account<'info, InvestmentRequest>,
+    pub investment_request: Box<Account<'info, InvestmentRequest>>,
 
     #[account(
         mut,
@@ -44,7 +44,7 @@ pub struct ClaimDeposit<'info> {
         bump,
         constraint = shares_mint.key() == vault.shares_mint,
     )]
-    pub shares_mint: InterfaceAccount<'info, Mint>,
+    pub shares_mint: Box<InterfaceAccount<'info, Mint>>,
 
     #[account(
         mut,
@@ -52,7 +52,7 @@ pub struct ClaimDeposit<'info> {
         associated_token::authority = investor,
         associated_token::token_program = token_2022_program,
     )]
-    pub investor_shares_account: InterfaceAccount<'info, TokenAccount>,
+    pub investor_shares_account: Box<InterfaceAccount<'info, TokenAccount>>,
 
     /// CHECK: Validated in handler via validate_attestation
     pub attestation: UncheckedAccount<'info>,
