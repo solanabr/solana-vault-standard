@@ -69,8 +69,9 @@ jobs:
 
       - name: Install Solana CLI
         run: |
-          sh -c "$(curl -sSfL https://release.anza.xyz/v3.0.15/install)"
+          sh -c "$(curl -sSfL https://release.anza.xyz/stable/install)"
           echo "$HOME/.local/share/solana/install/active_release/bin" >> $GITHUB_PATH
+          "$HOME/.local/share/solana/install/active_release/bin/solana" --version
 
       - name: Install Anchor CLI
         run: cargo install --git https://github.com/coral-xyz/anchor --tag v0.31.1 anchor-cli
