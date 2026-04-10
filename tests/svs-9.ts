@@ -205,7 +205,7 @@ describe("svs-9", () => {
     );
 
     await program.methods
-      .addChild(5000, 0)
+      .addChild(5000)
       .accounts({
         authority: authority.publicKey,
         allocatorVault: allocatorVaultPDA,
