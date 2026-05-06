@@ -33,7 +33,7 @@ SVS uses a multi-layered testing strategy:
 ## Quick Start
 
 ```bash
-# Run all integration tests (420 active tests + 60 pending)
+# Run all integration tests (416 active tests + 56 pending)
 anchor test
 
 # Run new program tests individually
@@ -692,7 +692,7 @@ grcov . -s . --binary-path ./target/debug/ -t html --branch --ignore-not-existin
 
 | Category | Coverage |
 |----------|----------|
-| Integration Tests (SVS-1/2/3/4/10/11 + supporting programs) | 424 tests |
+| Integration Tests (SVS-1/2/3/4/10/11 + supporting programs) | 416 active + 56 pending |
 | Proof Backend Tests | 19 tests |
 | SDK Tests | 530 tests |
 | Fuzz Tests | 6 binaries, 90+ flows |
