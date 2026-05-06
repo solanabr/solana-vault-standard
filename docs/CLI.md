@@ -1097,6 +1097,146 @@ solana-vault fees show my-vault
 
 ---
 
+## Supporting Program Commands
+
+The CLI also exposes commands for the supporting programs that ship in the workspace.
+
+### `compliance` group — manage the compliance-hook program
+
+```bash
+# Initialize the singleton SanctionsList PDA (one-time per deployment)
+solana-vault compliance init-sanctions-list [--authority <pubkey>]
+
+# Add or remove sanctioned addresses
+solana-vault compliance update-sanctions-list \
+  --add <pk1>,<pk2> \
+  --remove <pk3>
+
+# Freeze / unfreeze an owner globally across hook-bound mints
+solana-vault compliance freeze-account --owner <pubkey>
+solana-vault compliance unfreeze-account --owner <pubkey> [--rent-recipient <pubkey>]
+
+# Create a per-mint config (Permissioned mode requires --pool-policy and trust anchors)
+solana-vault compliance init-mint-config <mint> \
+  --mode <freely-transferable|permissioned> \
+  [--pool-policy <pubkey>] \
+  [--attestation-program <pubkey>] \
+  [--attestation-issuer <pubkey>] \
+  [--required-attestation-type <u8>]
+
+# Provision the Token-2022 ExtraAccountMetaList PDA for a mint
+solana-vault compliance init-eaml <mint>
+```
+
+### `nav` group — manage the nav-oracle program
+
+```bash
+# Create the per-pool NavAccount PDA
+solana-vault nav init <pool> \
+  --publisher <pubkey> \
+  --rotation-authority <pubkey>
+
+# Publish a signed NAV update (requires publisher Keypair file)
+solana-vault nav publish <pool> \
+  --nav-net <u64> --nav-gross <u64> \
+  --ter-bps <u16> --loss-bps <u16> \
+  --nav-type <u8> --timestamp <i64> --sequence <u64> \
+  --merkle-root <hex64> \
+  --publisher-secret <path>
+
+# Rotate the publisher pubkey (caller must be key_rotation_authority)
+solana-vault nav rotate-publisher <pool> --new-publisher <pubkey>
+```
+
+### `derwa` group — manage the derwa-wrapper program
+
+```bash
+# Bind pool ↔ (cPOOL, dePOOL) into a WrapperConfig
+solana-vault derwa init <pool> \
+  --permissioned-mint <pubkey> \
+  --derwa-mint <pubkey>
+
+# Wrap cPOOL into dePOOL 1:1 (caller is the cPOOL holder).
+# If cPOOL has an active Token-2022 TransferHook, pass the hook extras
+# resolved from the cPOOL mint's EAML.
+solana-vault derwa wrap --amount <u64> \
+  --remaining-accounts <comma-separated-pubkeys>
+
+# Unwrap dePOOL back to cPOOL (attestation-gated)
+solana-vault derwa unwrap --amount <u64> \
+  --attestation <pubkey> \
+  --remaining-accounts <comma-separated-pubkeys>
+```
+
+### `set-oracle-source` (SVS-11)
+
+```bash
+# Switch the vault between simple oracle (0) and NavOracle adapter (1)
+solana-vault set-oracle-source <vault> --source <0|1>
+```
+
+### `bootstrap-shares-compliance` (SVS-11)
+
+One-shot operator runbook step that initializes the compliance-hook
+`MintConfig` + `ExtraAccountMetaList` PDAs for the vault's cPOOL shares
+mint. MUST be run after `credit init` (initialize_pool) and BEFORE any
+cPOOL transfer (request_redeem / cancel_redeem) can succeed —
+`initialize_pool` binds the TransferHook extension on cPOOL but
+intentionally defers the per-mint compliance-hook PDAs because the
+vault PDA is the cPOOL mint authority and PDAs cannot top-level-sign
+for compliance-hook's `Signer == mint_authority` constraint. The
+on-chain handler CPIs into compliance-hook with `vault_seeds`,
+satisfying that constraint via Anchor's `invoke_signed`.
+
+```bash
+# FreelyTransferable cPOOL (sanctions + freeze gating only)
+solana-vault credit bootstrap-shares-compliance my-vault \
+  --mode freely-transferable
+
+# Permissioned cPOOL (full per-wallet attestation enforcement)
+solana-vault credit bootstrap-shares-compliance my-vault \
+  --mode permissioned \
+  --pool-policy <PoolPolicyPda> \
+  --attestation-program <SasOrMockSasProgramId> \
+  --attestation-issuer <AttesterPubkey> \
+  --required-attestation-type 0
+```
+
+For Permissioned mode, the operator MUST also issue a system
+attestation for the vault PDA (subject = `vault.key()`) via the
+configured attestation program. Without it, the destination-side
+attestation check on `request_redeem`'s cPOOL transfer rejects with
+`AttestationNotFound` (because `redemption_escrow.owner == vault`).
+This CLI does not issue the vault attestation — it's a separate
+attestation-program call documented in `docs/SVS-11.md::Pool Setup`.
+
+### `cancel-redeem` (SVS-11) — `--remaining-accounts`
+
+`credit cancel-redeem` accepts an optional `--remaining-accounts` flag
+that forwards Token-2022 TransferHook extras to the on-chain handler.
+Required when cPOOL has an active TransferHook extension (always true
+for modern svs-11 deployments). Direction-specific: cancel_redeem
+moves cPOOL from the vault's redemption_escrow back to the investor,
+so the EAML extras must resolve attestation PDAs for
+`(source = vault, destination = investor)` — opposite of
+request_redeem.
+
+```bash
+solana-vault credit cancel-redeem my-vault \
+  --remaining-accounts <pubkey1>,<pubkey2>,<pubkey3>,...
+```
+
+The off-chain SDK helper `resolveHookExtras` (in
+`tests/helpers/hook-mint.ts`) computes the correct address list for
+each direction; production callers typically wire this via a higher-
+level operator script that fetches the EAML and resolves seeds.
+
+All supporting-program commands honor the standard global flags (`--dry-run`, `--yes`, `--keypair`, `--url`, `--output`).
+
+See per-program docs for full account layouts and instruction details: [compliance-hook](./compliance-hook.md), [nav-oracle](./nav-oracle.md), [derwa-wrapper](./derwa-wrapper.md).
+
+---
+
 ## See Also
 
 - [SDK Documentation](./SDK.md) - TypeScript SDK reference

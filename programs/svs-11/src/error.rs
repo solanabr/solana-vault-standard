@@ -138,4 +138,28 @@ pub enum VaultError {
 
     #[msg("Cannot use deprecated transfer while a two-step transfer is pending")]
     PendingTransferExists,
+
+    // -------------------------------------------------------------------------
+    // NavOracle integration error variants
+    // -------------------------------------------------------------------------
+    #[msg("NAV oracle account is missing or empty")]
+    OracleAccountMissing,
+
+    #[msg("NAV oracle account data layout, owner, or PDA derivation invalid")]
+    OracleAccountInvalid,
+
+    #[msg("NAV oracle pool field does not match this vault")]
+    OraclePoolMismatch,
+
+    #[msg("NAV oracle publisher does not match expected publisher")]
+    OraclePublisherMismatch,
+
+    #[msg("NAV oracle sequence has not advanced (replay)")]
+    OracleSequenceStale,
+
+    #[msg("CreditVault.oracle_source must be 0 (mock) or 1 (nav_oracle); other values reserved")]
+    OracleSourceInvalid,
+
+    #[msg("Mint account does not deserialize as a valid Token-2022 mint")]
+    InvalidMintAccount,
 }

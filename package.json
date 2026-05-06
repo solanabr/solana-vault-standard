@@ -2,6 +2,7 @@
   "name": "@stbr/tokenized-vault-standard",
   "version": "2.0.0",
   "private": true,
+  "packageManager": "yarn@1.22.22",
   "description": "Solana Vault Standard (SVS) — ERC-4626 tokenized vaults for Solana. SVS-1/SVS-2 (public), SVS-3/SVS-4 (confidential)",
   "workspaces": [
     "sdk/core",
@@ -57,15 +58,16 @@
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.31.1",
-    "@solana/spl-token": "^0.4.10",
-    "@solana/web3.js": "^1.98.0"
+    "@solana/spl-token": "^0.4.10"
   },
   "devDependencies": {
+    "@solana/web3.js": "^1.98.4",
     "@types/chai": "^4.3.20",
     "@types/mocha": "^10.0.10",
     "chai": "^4.5.0",
     "mocha": "^10.8.2",
     "ts-mocha": "^10.0.0",
+    "tweetnacl": "^1.0.3",
     "typescript": "^5.7.3"
   }
 }

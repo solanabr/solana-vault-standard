@@ -133,7 +133,7 @@ async function main() {
   const redeemShares = new BN(sharesAccount.amount.toString()).div(new BN(2));
 
   const reqRedSig = await program.methods
-    .requestRedeem(redeemShares)
+    .requestRedeem(redeemShares, new BN(0))
     .accountsPartial({
       investor: ctx.investor.publicKey,
       vault: ctx.vault,
@@ -151,8 +151,10 @@ async function main() {
 
   console.log(`  Request redeem: ${explorerUrl(reqRedSig)}`);
 
+  // Pass 1e18 ratio + 0 next-settlement to preserve full-fulfillment
+  // semantics in this smoke-test script.
   const appRedSig = await program.methods
-    .approveRedeem()
+    .approveRedeem(new BN("1000000000000000000"), new BN(0))
     .accountsPartial({
       manager: payer.publicKey,
       vault: ctx.vault,

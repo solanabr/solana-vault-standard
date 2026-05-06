@@ -459,7 +459,7 @@ async function launchToken(
   // This creates natural buy pressure as price rises
 
   // 3. Lock LP tokens (optional, builds trust)
-  // Use a timelock program or Squads multisig
+  // Use a timelock program or a multisig (e.g., Squads)
 
   return { poolAddress, lpMint };
 }

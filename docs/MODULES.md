@@ -398,6 +398,41 @@ Vault exposes `fund_rewards(amount)` (reward authority deposits reward tokens), 
 
 ---
 
+## Supporting Programs
+
+These are full on-chain programs (not Rust modules). They live alongside SVS-1..SVS-12 and provide capabilities that any vault variant can integrate with. Unlike modules above, they are deployed under their own program IDs and reached via CPI or account reads — there is no Cargo `"modules"` feature flag.
+
+### compliance-hook
+
+Token-2022 `TransferHook` extension backend. Holds a per-mint config (`FreelyTransferable` | `Permissioned`) and a sanctions list; Token-2022 invokes the hook on every transfer of a hook-bound mint. SVS-11 uses it to gate cPOOL/dePOOL transfers.
+
+See [compliance-hook.md](compliance-hook.md).
+
+### nav-oracle
+
+Per-pool NAV oracle. Off-chain publisher signs a canonical NAV payload (gross/net NAV, TER, loss provision, sequence, timestamp, loan-tape root); the program verifies via `Ed25519Program` instruction scan and stores the latest reading in a `NavAccount` PDA with strictly monotonic sequence. Used by SVS-11 with `oracle_source = 1`.
+
+See [nav-oracle.md](nav-oracle.md).
+
+### derwa-wrapper
+
+1:1 wrap between a closed permissioned mint and an open Token-2022 mint. Wrap is gated by holding the closed mint; unwrap is attestation-gated. SVS-11 uses it to bridge cPOOL (institutional, locked) to dePOOL (tradeable).
+
+See [derwa-wrapper.md](derwa-wrapper.md).
+
+### Integration Compatibility
+
+| Capability | compliance-hook | nav-oracle | derwa-wrapper |
+|------------|-----------------|------------|---------------|
+| SVS-1..4 | optional (bind to shares mint) | n/a | n/a |
+| SVS-10 | optional | optional | n/a |
+| SVS-11 | required (cPOOL/dePOOL gating) | required when `oracle_source = 1` | required for dePOOL bridging |
+| SVS-12 | optional per tranche | optional | n/a |
+
+Modules in the table above (svs-fees, svs-caps, etc.) compose freely with all three supporting programs — they operate at different layers (modules act inside the vault binary; supporting programs are reached externally).
+
+---
+
 ## Vault Integration Pattern
 
 Modules integrate with vault programs through `remaining_accounts`. This keeps module support fully optional — if a config PDA is not passed, the module check is skipped.

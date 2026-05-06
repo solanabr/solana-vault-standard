@@ -5,8 +5,15 @@
 //! The manager gates actual execution via approve_redeem.
 
 use anchor_lang::prelude::*;
+use anchor_lang::solana_program::program::invoke_signed;
+use anchor_spl::token_2022::spl_token_2022;
+use anchor_spl::token_2022::spl_token_2022::extension::{
+    transfer_hook::TransferHook, BaseStateWithExtensions, StateWithExtensions,
+};
+use anchor_spl::token_2022::spl_token_2022::state::Mint as Token2022Mint;
 use anchor_spl::token_2022::Token2022;
-use anchor_spl::token_interface::{transfer_checked, Mint, TokenAccount, TransferChecked};
+use anchor_spl::token_interface::{Mint, TokenAccount};
+use spl_transfer_hook_interface::onchain::add_extra_accounts_for_execute_cpi;
 
 use crate::attestation::validate_attestation;
 use crate::constants::{
@@ -16,6 +23,30 @@ use crate::constants::{
 use crate::error::VaultError;
 use crate::events::RedemptionRequested;
 use crate::state::{CreditVault, RedemptionRequest, RequestStatus};
+
+/// Extract the hook program ID from a Token-2022 mint's `TransferHook`
+/// extension. Returns `None` for legacy SPL mints, mints without the
+/// extension, or mints with the extension explicitly cleared.
+///
+/// Same helper as `derwa-wrapper::wrap::read_hook_program_id` —
+/// duplicated rather than refactored into a shared module to keep the
+/// CPI extension self-contained at each call site. Mirrored here so
+/// svs-11's redemption flow extends its cPOOL `transfer_checked` ix with
+/// the hook accounts (otherwise the CPI hits "Unknown program" when the
+/// runtime tries to invoke the hook program ID found in the mint's
+/// TransferHook extension).
+fn read_hook_program_id(mint: &AccountInfo) -> Result<Option<Pubkey>> {
+    if mint.owner != &spl_token_2022::ID {
+        return Ok(None);
+    }
+    let data = mint.try_borrow_data()?;
+    let state = StateWithExtensions::<Token2022Mint>::unpack(&data)
+        .map_err(|_| error!(VaultError::InvalidMintAccount))?;
+    match state.get_extension::<TransferHook>() {
+        Ok(ext) => Ok(Option::<Pubkey>::from(ext.program_id)),
+        Err(_) => Ok(None),
+    }
+}
 
 #[cfg(feature = "modules")]
 use svs_module_hooks as module_hooks;
@@ -73,7 +104,11 @@ pub struct RequestRedeem<'info> {
     pub clock: Sysvar<'info, Clock>,
 }
 
-pub fn handler(ctx: Context<RequestRedeem>, shares: u64) -> Result<()> {
+pub fn handler<'info>(
+    ctx: Context<'_, '_, '_, 'info, RequestRedeem<'info>>,
+    shares: u64,
+    queued_for_settlement_at: i64,
+) -> Result<()> {
     require!(shares > 0, VaultError::ZeroAmount);
     require!(!ctx.accounts.vault.paused, VaultError::VaultPaused);
 
@@ -107,19 +142,58 @@ pub fn handler(ctx: Context<RequestRedeem>, shares: u64) -> Result<()> {
         )?;
     }
 
-    transfer_checked(
-        CpiContext::new(
-            ctx.accounts.token_2022_program.to_account_info(),
-            TransferChecked {
-                from: ctx.accounts.investor_shares_account.to_account_info(),
-                mint: ctx.accounts.shares_mint.to_account_info(),
-                to: ctx.accounts.redemption_escrow.to_account_info(),
-                authority: ctx.accounts.investor.to_account_info(),
-            },
-        ),
+    // Transfer cPOOL shares from investor → redemption_escrow.
+    //
+    // The shares mint carries the Token-2022 TransferHook extension
+    // (bound to compliance-hook in Permissioned mode by
+    // `initialize_pool`). Token-2022's `invoke_execute` requires the
+    // hook program account + EAML PDA + resolved EAML extras to be in
+    // the INNER `transfer_checked` ix's keys list — not just in the
+    // surrounding tx accounts. `anchor_spl::token_interface::transfer_checked`
+    // builds the bare ix with only canonical 4 keys, which makes the
+    // CPI fail with "Unknown program" once the cPOOL hook is active.
+    //
+    // We mirror the pattern used in `derwa-wrapper::wrap` /
+    // `derwa-wrapper::unwrap`: build the bare ix from spl-token-2022,
+    // let `add_extra_accounts_for_execute_cpi` extend BOTH the ix keys
+    // list AND the cpi_account_infos with the hook accounts (sourced
+    // from `ctx.remaining_accounts`), then `invoke_signed`. The
+    // off-chain callers pass the EAML extras for the `(source = investor,
+    // destination = redemption_escrow)` direction as `remainingAccounts`
+    // on the request_redeem ix.
+    let mut transfer_ix = spl_token_2022::instruction::transfer_checked(
+        &spl_token_2022::ID,
+        &ctx.accounts.investor_shares_account.key(),
+        &ctx.accounts.shares_mint.key(),
+        &ctx.accounts.redemption_escrow.key(),
+        &ctx.accounts.investor.key(),
+        &[],
         shares,
         SHARES_DECIMALS,
     )?;
+    let mut transfer_account_infos: Vec<AccountInfo<'info>> = vec![
+        ctx.accounts.investor_shares_account.to_account_info(),
+        ctx.accounts.shares_mint.to_account_info(),
+        ctx.accounts.redemption_escrow.to_account_info(),
+        ctx.accounts.investor.to_account_info(),
+    ];
+    if let Some(hook_program_id) =
+        read_hook_program_id(&ctx.accounts.shares_mint.to_account_info())?
+    {
+        add_extra_accounts_for_execute_cpi(
+            &mut transfer_ix,
+            &mut transfer_account_infos,
+            &hook_program_id,
+            ctx.accounts.investor_shares_account.to_account_info(),
+            ctx.accounts.shares_mint.to_account_info(),
+            ctx.accounts.redemption_escrow.to_account_info(),
+            ctx.accounts.investor.to_account_info(),
+            shares,
+            ctx.remaining_accounts,
+        )
+        .map_err(|e| -> Error { e.into() })?;
+    }
+    invoke_signed(&transfer_ix, &transfer_account_infos, &[])?;
 
     // V7-P5: total_pending_redeems tracks REQUEST COUNT (not shares). This differs from
     // SVS-10 which tracks total locked shares. The counter is used for operational
@@ -139,6 +213,18 @@ pub fn handler(ctx: Context<RequestRedeem>, shares: u64) -> Result<()> {
     request.requested_at = ctx.accounts.clock.unix_timestamp;
     request.fulfilled_at = 0;
     request.bump = ctx.bumps.redemption_request;
+
+    // Pro-rata fulfillment + auto-requeue defaults.
+    // `original_shares` snapshots the initial intent and is never
+    // mutated after creation; consumers compare `original_shares` vs
+    // `fulfilled_shares_cumulative` to display per-investor settlement
+    // progress. `queued_for_settlement_at` is computed off-chain by
+    // the backend's redemption-scheduler service and passed in here.
+    // `fulfilled_shares_cumulative` starts at 0; `approve_redeem`
+    // accumulates across one or more partial-fulfillment calls.
+    request.original_shares = shares;
+    request.queued_for_settlement_at = queued_for_settlement_at;
+    request.fulfilled_shares_cumulative = 0;
 
     emit!(RedemptionRequested {
         vault: ctx.accounts.vault.key(),

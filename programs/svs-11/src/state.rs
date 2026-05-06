@@ -55,6 +55,48 @@ pub struct CreditVault {
     /// (e.g. accredited investor) when the attester issues multiple types.
     pub required_attestation_type: u8,
     pub _reserved: [u8; 23],
+
+    // =========================================================================
+    // Oracle extensibility fields
+    // =========================================================================
+    //
+    // SVS-11 keeps the simple oracle path as the neutral upstream default.
+    // Deployments that need richer credit-market NAV semantics can opt into
+    // the NavOracle adapter via `oracle_source = 1`. This is bounded
+    // extensibility (simple oracle + known NavOracle add-on), not an
+    // arbitrary plugin registry. Credit Markets deployments use the richer
+    // adapter as deployment policy, not as a requirement imposed on every
+    // upstream SVS-11 user.
+    /// Last `NavAccount.sequence` the vault has consumed. Updated atomically by
+    /// approve_deposit + approve_redeem after a successful NavOracle read.
+    /// 0 on initialize_pool means "no sequence consumed yet".
+    pub last_seen_nav_sequence: u64,
+
+    /// Last `NavAccount.nav_net` the vault read. Used by the deviation guard so
+    /// we don't accept a NAV that jumps more than `max_deviation_bps` from the
+    /// prior reading. 0 on initialize_pool — first NavOracle read accepts any
+    /// value and bootstraps the deviation baseline.
+    pub last_seen_nav_price: u64,
+
+    /// Per-pool maximum NAV staleness (seconds). Default 45 days =
+    /// 3,888,000 sec (`DEFAULT_MAX_NAV_STALENESS_SECS`). NAV reads older
+    /// than this trip `OracleStale` and block approve_deposit/approve_redeem.
+    pub max_nav_staleness_secs: i64,
+
+    /// Oracle source selector.
+    ///   0 = simple/mock oracle path (neutral upstream default)
+    ///   1 = nav_oracle adapter (optional rich credit-market NAV path)
+    ///   2..255 = reserved → `OracleSourceInvalid`
+    ///
+    /// `initialize_pool` sets this to 0. Deployments that require rich NAV
+    /// semantics call `set_oracle_source(1)` after initializing and publishing
+    /// the pool's NavAccount.
+    pub oracle_source: u8,
+
+    /// Padding so the SPACE bump is a clean multiple of 8 (alignment friendliness).
+    /// Total bump for the four fields above + this padding is exactly
+    /// `8 + 8 + 8 + 1 + 7 = 32` bytes.
+    pub _padding_oracle: [u8; 7],
 }
 
 impl CreditVault {
@@ -84,7 +126,16 @@ impl CreditVault {
         32 +  // pending_authority
         8 +   // total_pending_redeems
         1 +   // required_attestation_type
-        23; // _reserved
+        23 +  // _reserved
+        // ---- NavOracle integration (+32 bytes) ----
+        8 +   // last_seen_nav_sequence
+        8 +   // last_seen_nav_price
+        8 +   // max_nav_staleness_secs
+        1 +   // oracle_source
+        7;    // _padding_oracle
+
+    /// Audit-friendly alias matching the spec language. Identical to `LEN`.
+    pub const SPACE: usize = Self::LEN;
 
     pub const SEED_PREFIX: &'static [u8] = VAULT_SEED;
 }
@@ -131,6 +182,36 @@ pub struct RedemptionRequest {
     pub requested_at: i64,
     pub fulfilled_at: i64,
     pub bump: u8,
+
+    // =========================================================================
+    // Pro-rata fulfillment + auto-requeue (+24 bytes)
+    // =========================================================================
+    //
+    // These three fields support the rolling-notice settlement model
+    // where a single RedemptionRequest may be partially fulfilled
+    // across multiple settlement dates. `original_shares` snapshots the
+    // initial intent (never changes). `fulfilled_shares_cumulative`
+    // accumulates across one or more partial settlements.
+    // `queued_for_settlement_at` is auto-bumped to the next settlement
+    // epoch on partial fulfillment so the request stays in the queue
+    // without a re-request from the investor.
+    //
+    // Realloc forward-reference: the +24 bytes break deserialization of
+    // any RedemptionRequest PDA created before this upgrade. The drain
+    // script empties existing PDAs pre-deploy and a per-pool pause flag
+    // ensures no new PDAs land on the old layout during the deploy
+    // window.
+    /// Snapshot of `shares_locked` at first request (never changes after creation).
+    /// Used by tests + analytics to compare original intent vs fulfilled cumulative.
+    pub original_shares: u64,
+
+    /// Settlement-date epoch this request is currently queued for. Auto-bumps
+    /// to next scheduled date on partial fulfillment via `approve_redeem`.
+    pub queued_for_settlement_at: i64,
+
+    /// Cumulative shares fulfilled across one or more partial settlements.
+    /// `fulfilled_shares_cumulative >= shares_locked` ⇒ request fully fulfilled.
+    pub fulfilled_shares_cumulative: u64,
 }
 
 impl RedemptionRequest {
@@ -142,7 +223,11 @@ impl RedemptionRequest {
         1 +   // status
         8 +   // requested_at
         8 +   // fulfilled_at
-        1; // bump
+        1 +   // bump
+        // ---- Pro-rata fulfillment fields (+24 bytes) ----
+        8 +   // original_shares
+        8 +   // queued_for_settlement_at
+        8;    // fulfilled_shares_cumulative
 
     pub const SEED_PREFIX: &'static [u8] = REDEMPTION_REQUEST_SEED;
 }

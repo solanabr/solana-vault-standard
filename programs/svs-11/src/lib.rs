@@ -27,6 +27,22 @@ pub mod svs_11 {
         instructions::initialize_pool::handler(ctx, vault_id, minimum_investment, max_staleness)
     }
 
+    /// Bootstrap the compliance-hook PDAs (`MintConfig` + `ExtraAccountMetaList`)
+    /// for a CreditVault's cPOOL shares mint. CPIs into compliance-hook
+    /// with `vault_seeds` so the vault PDA — which is the cPOOL mint
+    /// authority — satisfies compliance-hook's `Signer == mint_authority`
+    /// constraint. Must be called once per pool, after `initialize_pool`,
+    /// before any cPOOL transfer can succeed (Token-2022 invokes the hook
+    /// on every transfer, and the hook handler reads MintConfig + EAML).
+    /// See `instructions/bootstrap_shares_compliance.rs` for the full
+    /// architectural rationale.
+    pub fn bootstrap_shares_compliance(
+        ctx: Context<BootstrapSharesCompliance>,
+        args: BootstrapSharesComplianceArgs,
+    ) -> Result<()> {
+        instructions::bootstrap_shares_compliance::handler(ctx, args)
+    }
+
     /// Open the investment window for deposit and redeem requests.
     pub fn open_investment_window(ctx: Context<InvestmentWindow>) -> Result<()> {
         instructions::investment_window::open_handler(ctx)
@@ -63,13 +79,36 @@ pub mod svs_11 {
     }
 
     /// Request a redemption of vault shares.
-    pub fn request_redeem(ctx: Context<RequestRedeem>, shares: u64) -> Result<()> {
-        instructions::request_redeem::handler(ctx, shares)
+    ///
+    /// `queued_for_settlement_at` is computed off-chain by the backend
+    /// redemption-scheduler service and represents the next
+    /// settlement-date epoch this request will be eligible for.
+    /// `approve_redeem` may auto-bump this on partial fulfillment.
+    pub fn request_redeem<'info>(
+        ctx: Context<'_, '_, '_, 'info, RequestRedeem<'info>>,
+        shares: u64,
+        queued_for_settlement_at: i64,
+    ) -> Result<()> {
+        instructions::request_redeem::handler(ctx, shares, queued_for_settlement_at)
     }
 
-    /// Manager approves a pending redemption request.
-    pub fn approve_redeem(ctx: Context<ApproveRedeem>) -> Result<()> {
-        instructions::approve_redeem::handler(ctx)
+    /// Manager approves a pending redemption request with pro-rata fulfillment.
+    ///
+    /// `batch_settlement_ratio_scaled` is a fixed-point ratio scaled to 1e18
+    /// (1e18 = 100% fulfillment). On partial fulfillment, the request stays
+    /// open and `queued_for_settlement_at` auto-bumps to `next_settlement_at`.
+    /// Pass `1_000_000_000_000_000_000` (1e18) plus any `next_settlement_at`
+    /// to preserve old "full fulfillment" semantics.
+    pub fn approve_redeem(
+        ctx: Context<ApproveRedeem>,
+        batch_settlement_ratio_scaled: u128,
+        next_settlement_at: i64,
+    ) -> Result<()> {
+        instructions::approve_redeem::handler(
+            ctx,
+            batch_settlement_ratio_scaled,
+            next_settlement_at,
+        )
     }
 
     /// Claim approved redemption assets.
@@ -83,7 +122,9 @@ pub mod svs_11 {
     }
 
     /// Investor cancels their pending redemption request.
-    pub fn cancel_redeem(ctx: Context<CancelRedeem>) -> Result<()> {
+    pub fn cancel_redeem<'info>(
+        ctx: Context<'_, '_, '_, 'info, CancelRedeem<'info>>,
+    ) -> Result<()> {
         instructions::cancel_redeem::handler(ctx)
     }
 
@@ -105,6 +146,14 @@ pub mod svs_11 {
     /// Unfreeze a previously frozen investor account.
     pub fn unfreeze_account(ctx: Context<UnfreezeAccount>) -> Result<()> {
         instructions::compliance::unfreeze_handler(ctx)
+    }
+
+    /// Switch CreditVault oracle read path between the simple/mock oracle
+    /// (0, neutral upstream default) and the optional NavOracle adapter (1,
+    /// rich credit-market NAV). Authority-gated; does not mutate `nav_oracle`
+    /// or `oracle_program`.
+    pub fn set_oracle_source(ctx: Context<UpdateOracleParams>, source: u8) -> Result<()> {
+        instructions::admin::set_oracle_source_handler(ctx, source)
     }
 
     /// Pause the vault, halting approvals and capital movements.

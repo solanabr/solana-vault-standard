@@ -1,6 +1,6 @@
 # Testing Guide
 
-Comprehensive guide to testing the Solana Vault Standard (SVS-1 through SVS-4, SVS-10).
+Comprehensive guide to testing the Solana Vault Standard (SVS-1 through SVS-4, SVS-10, SVS-11) and the Credit Markets supporting programs (compliance-hook, nav-oracle, derwa-wrapper).
 
 ## Overview
 
@@ -33,8 +33,14 @@ SVS uses a multi-layered testing strategy:
 ## Quick Start
 
 ```bash
-# Run all integration tests (291 tests)
+# Run all integration tests (420 active tests + 60 pending)
 anchor test
+
+# Run new program tests individually
+anchor test -- tests/svs-11.ts                    # SVS-11 CreditVault (58 tests)
+anchor test -- tests/compliance-hook.spec.ts      # compliance-hook (8 active, 9 skipped transfer-hook cases)
+anchor test -- tests/nav-oracle.spec.ts           # nav-oracle (5 tests)
+anchor test -- tests/derwa-wrapper.spec.ts        # derwa-wrapper (4 tests, includes subject-mismatch security check)
 
 # Start proof backend first (required for SVS-3/SVS-4 CT tests)
 cd proofs-backend && cargo run
@@ -88,7 +94,60 @@ Located in `tests/`:
 | `admin-extended.ts` | Admin operations | 10 |
 | `full-lifecycle.ts` | End-to-end flows | 8 |
 | `svs-10.ts` | SVS-10 async vault lifecycle, operators, oracle | 88 |
-| **Total** | | **344** |
+| `svs-11.ts` | SVS-11 CreditVault lifecycle, oracle source toggle, NavOracle opt-in | 58 |
+| `compliance-hook.spec.ts` | TransferHook sanctions list + global freeze registry + active FreelyTransferable / Permissioned hook execution coverage; 9 skipped cases remain visible for deeper negative-path coverage. The skipped cases use `it.skip` so they're visible-but-pending and don't inflate the active test count. | 8 active + 9 skipped |
+| `nav-oracle.spec.ts` | NavOracle publishing, sequence monotonicity, self-consistency, wrong-publisher rejection, wrong-rotation-authority rejection | 5 |
+| `derwa-wrapper.spec.ts` | cPOOL → dePOOL wrap + attestation-gated unwrap + subject-mismatch security check (foreign attestation rejected with `InvalidAttestationSubject` 8005) | 4 |
+| `create-derwa-mint-script.spec.ts` | dePOOL mint creation script (MintConfig + EAML wiring) | 1 |
+| **Total** | (active) | **420** |
+
+**SVS-11 NAV oracle additions:** 3 new test cases were added in this PR to cover the oracle-source toggle and the NavOracle adapter path — `authority can switch oracle source between mock and nav-oracle`, `can opt into NavOracle for credit-market NAV reads`, and `rejects NavOracle opt-in approval when the NavAccount PDA is missing`.
+
+**nav-oracle reviewer-class additions:** 2 additional security-class edge cases were added — `rejects update signed by a key that is NOT the registered publisher` and `rejects rotate_publisher signed by a key that is NOT the rotation authority`.
+
+**derwa-wrapper subject-binding coverage:** 1 new security test covers
+`rejects unwrap when attestation belongs to a DIFFERENT subject (8005)`.
+The unwrap handler must read and enforce the attestation `subject`
+field so a dePOOL holder cannot pass another wallet's valid attestation
+and unwrap into permissioned cPOOL. The test proves that a foreign
+attestation is rejected with `InvalidAttestationSubject`.
+
+**compliance-hook tests are 8 active + 9 skipped transfer-hook cases.** The
+active tests cover sanctions-list authority paths, freeze/unfreeze authority
+paths, FreelyTransferable transfer-hook execution, Permissioned transfer-hook
+execution with valid attestations, destination-missing attestation rejection,
+and canonical EAML creation. The 9 skipped cases remain visible for deeper
+negative-path coverage (sanctioned/frozen execute failures, revoked/expired
+attestations, source-missing symmetry, and re-init behavior). Calling them out
+as skipped (rather than counting them as passing) is the upstream-review-correct
+posture.
+
+**SVS-11 redemption-flow through active Permissioned hook (end-to-end):**
+the full redemption flow is exercised against a live compliance-hook on
+cPOOL via the `bootstrap_shares_compliance` svs-11 instruction. The
+test setup runs `initialize_pool` (binds TransferHook on cPOOL +
+records vault PDA as mint authority), then
+`bootstrap_shares_compliance` (CPIs compliance-hook to init MintConfig
++ EAML signed by the vault PDA), then issues a vault-PDA system
+attestation via mock-sas (parallel to the deRWA wrapper-PDA system
+attestation). All five redemption-flow tests + the cancel-redemption
+test pass end-to-end: `investor requests redemption`, `manager
+approves redemption`, `investor claims redemption`, `manager repays
+assets`, `investor cancels pending redemption`, `rejects
+approve_redeem with insufficient liquidity`, `rejects approve_redeem
+for frozen investor`. Each cPOOL transfer goes through the active
+Permissioned hook with full identity-binding validation (owner /
+subject / issuer / type / canonical PDA).
+
+`bootstrap_shares_compliance` is the canonical bootstrap step.
+Anchor's `init` constraint composes correctly through cross-program
+CPI: the init'd PDA is emitted with `is_signer: false` in the outer
+account-meta list (only the explicit `signer` constraint sets the
+flag), and the PDA's `system_program::create_account` signature is
+supplied INSIDE compliance-hook via
+`CpiContext::with_signer(&[seeds_with_nonce])`. svs-11's CPI just
+needs to satisfy the `Signer == mint_authority` constraint, which it
+does by passing `vault_seeds` to `invoke_signed`.
 
 **Note:** SVS-3/SVS-4 confidential transfer tests require the proof backend running (`cd proofs-backend && cargo run`). Without it, CT-dependent tests are automatically skipped.
 
@@ -633,12 +692,12 @@ grcov . -s . --binary-path ./target/debug/ -t html --branch --ignore-not-existin
 
 | Category | Coverage |
 |----------|----------|
-| Integration Tests (SVS-1/2/3/4/10) | 344 tests |
+| Integration Tests (SVS-1/2/3/4/10/11 + supporting programs) | 424 tests |
 | Proof Backend Tests | 19 tests |
 | SDK Tests | 530 tests |
 | Fuzz Tests | 6 binaries, 90+ flows |
 | Devnet Scripts (SVS-5) | 9 scripts, 50+ test cases |
-| **Total** | **990+ test cases** |
+| **Total** | **1070+ test cases** |
 
 ## Debugging Tests
 

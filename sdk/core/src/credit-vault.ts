@@ -4,6 +4,7 @@ import {
   SystemProgram,
   SYSVAR_RENT_PUBKEY,
   SYSVAR_CLOCK_PUBKEY,
+  type AccountMeta,
 } from "@solana/web3.js";
 import {
   TOKEN_2022_PROGRAM_ID,
@@ -18,6 +19,12 @@ import {
   getClaimableTokensAddress,
   getCreditFrozenAccountAddress,
 } from "./credit-vault-pda";
+import {
+  COMPLIANCE_HOOK_PROGRAM_ID,
+  getExtraAccountMetaListAddress,
+  getMintConfigAddress,
+} from "./compliance-hook-pda";
+import { ComplianceMode } from "./compliance-hook";
 import { getTokenProgramForMint } from "./vault";
 
 export interface CreditVaultState {
@@ -41,6 +48,13 @@ export interface CreditVaultState {
   bump: number;
   redemptionEscrowBump: number;
   paused: boolean;
+  // Oracle extensibility fields. `oracleSource` selects the read path:
+  //   0 = simple/mock oracle (neutral upstream default)
+  //   1 = NavOracle adapter (rich credit-grade NAV)
+  oracleSource: number;
+  lastSeenNavSequence: BN;
+  lastSeenNavPrice: BN;
+  maxNavStalenessSecs: BN;
 }
 
 export interface CreateCreditVaultParams {
@@ -53,6 +67,46 @@ export interface CreateCreditVaultParams {
   attestationProgram: PublicKey;
   minimumInvestment: BN;
   maxStaleness: BN;
+}
+
+/**
+ * Args for {@link CreditVault.bootstrapSharesCompliance}. Mirror of the
+ * on-chain `BootstrapSharesComplianceArgs` shape (svs-11
+ * `instructions/bootstrap_shares_compliance.rs`), with optional defaults
+ * applied for FreelyTransferable callers.
+ *
+ * Trust-anchor invariants enforced by compliance-hook on the inner CPI:
+ *   - `attestationProgram` and `attestationIssuer` MUST NOT be the
+ *     default pubkey when `mode == permissioned`.
+ *   - `poolPolicy` MUST be `Some` when `mode == permissioned` and `None`
+ *     when `mode == freelyTransferable`.
+ *
+ * For `Permissioned` deployments the operator must ALSO issue a
+ * system-attestation for the vault PDA (subject = `vault.key()`) via
+ * the configured `attestationProgram` — the cPOOL hook validates BOTH
+ * transfer owners on every redemption transfer, and
+ * `redemption_escrow.owner == vault`.
+ */
+export interface BootstrapSharesComplianceParams {
+  /** Compliance mode for the cPOOL shares mint. */
+  mode: ComplianceMode;
+  /** Required for `permissioned`; must be `null` for `freelyTransferable`. */
+  poolPolicy?: PublicKey | null;
+  /**
+   * Program owning acceptable attestation accounts. Required (non-default)
+   * for `permissioned`. Defaults to `PublicKey.default` for
+   * `freelyTransferable`.
+   */
+  attestationProgram?: PublicKey;
+  /**
+   * Expected `issuer` field on attestation payloads. Required (non-default)
+   * for `permissioned`.
+   */
+  attestationIssuer?: PublicKey;
+  /**
+   * Required `attestation_type` byte. Defaults to 0 (generic KYC tier).
+   */
+  requiredAttestationType?: number;
 }
 
 export interface InvestmentRequestState {
@@ -190,6 +244,12 @@ export class CreditVault {
       ASSOCIATED_TOKEN_PROGRAM_ID,
     );
 
+    // initialize_pool binds the cPOOL mint's Token-2022 TransferHook
+    // extension to compliance-hook in this tx. The dependent
+    // compliance-hook PDAs (MintConfig, EAML) and infrastructure
+    // attestations (wrapper / vault / admin) are initialized by direct
+    // compliance-hook + attestation-program calls after pool creation.
+    // See svs-11 initialize_pool.rs for the cross-program invariant rationale.
     await program.methods
       .initializePool(id, params.minimumInvestment, params.maxStaleness)
       .accountsPartial({
@@ -213,6 +273,63 @@ export class CreditVault {
       .rpc();
 
     return CreditVault.load(program, params.assetMint, id);
+  }
+
+  /**
+   * Bootstrap the compliance-hook PDAs (`MintConfig` +
+   * `ExtraAccountMetaList`) for the cPOOL shares mint.
+   *
+   * MUST be called after {@link CreditVault.create} and before any
+   * cPOOL transfer (request_redeem / cancel_redeem) can succeed —
+   * `initialize_pool` binds the TransferHook extension on cPOOL but
+   * intentionally does NOT initialize the dependent compliance-hook
+   * PDAs (the vault PDA is the cPOOL mint authority and PDAs cannot
+   * top-level-sign for compliance-hook's `Signer == mint_authority`
+   * constraint). The on-chain `bootstrap_shares_compliance` ix CPIs
+   * into compliance-hook with `vault_seeds`, satisfying that
+   * constraint via Anchor's `invoke_signed`.
+   *
+   * For `mode == permissioned`, the caller must ALSO issue a system
+   * attestation for the vault PDA via the configured attestation
+   * program (subject = `vault.key()`); without it, the destination-
+   * side attestation check on `request_redeem`'s cPOOL transfer
+   * rejects with `AttestationNotFound` (`redemption_escrow.owner ==
+   * vault`).
+   *
+   * Idempotency: the underlying compliance-hook init handlers use
+   * Anchor's `init` constraint, which fails with "account already in
+   * use" on re-invocation. Operators should call this exactly once
+   * per pool.
+   */
+  async bootstrapSharesCompliance(
+    authority: PublicKey,
+    params: BootstrapSharesComplianceParams,
+  ): Promise<string> {
+    const [mintConfig] = getMintConfigAddress(this.sharesMint);
+    const [extraAccountMetaList] = getExtraAccountMetaListAddress(
+      this.sharesMint,
+    );
+    return this.program.methods
+      .bootstrapSharesCompliance({
+        mode: params.mode,
+        poolPolicy: params.poolPolicy ?? null,
+        attestationProgram:
+          params.attestationProgram ?? PublicKey.default,
+        attestationIssuer:
+          params.attestationIssuer ?? PublicKey.default,
+        requiredAttestationType: params.requiredAttestationType ?? 0,
+      })
+      .accountsPartial({
+        authority,
+        vault: this.vault,
+        sharesMint: this.sharesMint,
+        mintConfig,
+        extraAccountMetaList,
+        complianceHookProgram: COMPLIANCE_HOOK_PROGRAM_ID,
+        token2022Program: TOKEN_2022_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+      })
+      .rpc();
   }
 
   async refresh(): Promise<CreditVaultState> {
@@ -292,6 +409,7 @@ export class CreditVault {
     navOracle: PublicKey,
     attestation: PublicKey,
     frozenCheck?: PublicKey,
+    navAccount?: PublicKey,
   ): Promise<string> {
     const [investmentRequest] = getInvestmentRequestAddress(
       this.program.programId,
@@ -307,6 +425,11 @@ export class CreditVault {
         investmentRequest,
         investor,
         navOracle,
+        // nav_account is the NavAccount PDA from the nav-oracle program.
+        // Read only when CreditVault.oracle_source == 1. For
+        // oracle_source == 0 (mock-oracle revert mode) any account works
+        // — we default to the program ID as a non-readable filler.
+        navAccount: navAccount ?? this.program.programId,
         attestation,
         frozenCheck: frozenCheck ?? this.program.programId,
         clock: SYSVAR_CLOCK_PUBKEY,
@@ -395,6 +518,8 @@ export class CreditVault {
     shares: BN,
     attestation: PublicKey,
     frozenCheck?: PublicKey,
+    queuedForSettlementAt?: BN,
+    remainingAccounts?: AccountMeta[],
   ): Promise<string> {
     const [redemptionRequest] = getRedemptionRequestAddress(
       this.program.programId,
@@ -403,8 +528,14 @@ export class CreditVault {
     );
     const investorSharesAccount = this.getInvestorSharesAccount(investor);
 
-    return this.program.methods
-      .requestRedeem(shares)
+    // `queued_for_settlement_at` is computed off-chain by the
+    // redemption-scheduler service. SDK callers without a scheduler can
+    // pass `0` as a sentinel; the manager will set the real settlement
+    // date on first `approveRedeem` partial fulfillment.
+    const queuedAt = queuedForSettlementAt ?? new BN(0);
+
+    const builder = this.program.methods
+      .requestRedeem(shares, queuedAt)
       .accountsPartial({
         investor,
         vault: this.vault,
@@ -417,8 +548,12 @@ export class CreditVault {
         token2022Program: TOKEN_2022_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
         clock: SYSVAR_CLOCK_PUBKEY,
-      })
-      .rpc();
+      });
+
+    return (remainingAccounts?.length
+      ? builder.remainingAccounts(remainingAccounts)
+      : builder
+    ).rpc();
   }
 
   async approveRedeem(
@@ -427,6 +562,14 @@ export class CreditVault {
     navOracle: PublicKey,
     attestation: PublicKey,
     frozenCheck?: PublicKey,
+    navAccount?: PublicKey,
+    /// Fixed-point ratio (1e18 = 100%). Default preserves the original
+    /// "full fulfillment" semantics so existing SDK callers continue to
+    /// work.
+    batchSettlementRatioScaled?: BN,
+    /// Settlement epoch the request auto-requeues to on partial
+    /// fulfillment. Ignored on full fulfillment.
+    nextSettlementAt?: BN,
   ): Promise<string> {
     const [redemptionRequest] = getRedemptionRequestAddress(
       this.program.programId,
@@ -439,8 +582,12 @@ export class CreditVault {
       investor,
     );
 
+    const ratio =
+      batchSettlementRatioScaled ?? new BN("1000000000000000000"); // 1e18 default
+    const nextSettlement = nextSettlementAt ?? new BN(0);
+
     return this.program.methods
-      .approveRedeem()
+      .approveRedeem(ratio, nextSettlement)
       .accountsPartial({
         manager,
         vault: this.vault,
@@ -452,6 +599,8 @@ export class CreditVault {
         assetMint: this.assetMint,
         claimableTokens,
         navOracle,
+        // nav_account — see approveDeposit for full context.
+        navAccount: navAccount ?? this.program.programId,
         attestation,
         frozenCheck: frozenCheck ?? this.program.programId,
         assetTokenProgram: this.assetTokenProgram,
@@ -490,7 +639,21 @@ export class CreditVault {
       .rpc();
   }
 
-  async cancelRedeem(investor: PublicKey): Promise<string> {
+  async cancelRedeem(
+    investor: PublicKey,
+    /// Token-2022 TransferHook extras for the cPOOL `transfer_checked`
+    /// CPI. The cancel-redemption transfer moves cPOOL from the vault's
+    /// redemption escrow back to the investor, so the EAML must resolve
+    /// the attestation PDAs for `(source = vault, destination = investor)`
+    /// — the opposite direction of `requestRedeem`. svs-11's
+    /// `initialize_pool` always binds the TransferHook extension on
+    /// cPOOL, so production callers must always pass the resolved
+    /// extras here; the on-chain handler forwards them through
+    /// `add_extra_accounts_for_execute_cpi` into the inner CPI. The
+    /// optional shape preserves the bare bones for unit tests against
+    /// hookless mints.
+    remainingAccounts?: AccountMeta[],
+  ): Promise<string> {
     const [redemptionRequest] = getRedemptionRequestAddress(
       this.program.programId,
       this.vault,
@@ -498,7 +661,7 @@ export class CreditVault {
     );
     const investorSharesAccount = this.getInvestorSharesAccount(investor);
 
-    return this.program.methods
+    const builder = this.program.methods
       .cancelRedeem()
       .accountsPartial({
         investor,
@@ -509,8 +672,12 @@ export class CreditVault {
         redemptionEscrow: this.redemptionEscrow,
         token2022Program: TOKEN_2022_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
-      })
-      .rpc();
+      });
+
+    return (remainingAccounts?.length
+      ? builder.remainingAccounts(remainingAccounts)
+      : builder
+    ).rpc();
   }
 
   // ============ Manager Operations ============
@@ -631,6 +798,31 @@ export class CreditVault {
   async unpause(authority: PublicKey): Promise<string> {
     return this.program.methods
       .unpause()
+      .accountsPartial({
+        authority,
+        vault: this.vault,
+      })
+      .rpc();
+  }
+
+  /**
+   * Switch the vault's oracle read path between the simple/mock oracle
+   * (`source = 0`, neutral upstream default) and the optional NavOracle
+   * adapter (`source = 1`, rich credit-grade NAV).
+   *
+   * Authority-gated. Does NOT mutate `nav_oracle` or `oracle_program` —
+   * deployments can opt into or out of richer NAV reads without a full
+   * program upgrade. Emits an `OracleSourceChanged` event.
+   *
+   * @param authority - Vault authority (signer)
+   * @param source - 0 (simple/mock) or 1 (NavOracle adapter)
+   */
+  async setOracleSource(
+    authority: PublicKey,
+    source: 0 | 1,
+  ): Promise<string> {
+    return this.program.methods
+      .setOracleSource(source)
       .accountsPartial({
         authority,
         vault: this.vault,

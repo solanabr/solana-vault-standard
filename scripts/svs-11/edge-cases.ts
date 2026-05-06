@@ -128,7 +128,7 @@ async function main() {
 
   const cancelRedeemShares = new BN(100_000_000);
   await program.methods
-    .requestRedeem(cancelRedeemShares)
+    .requestRedeem(cancelRedeemShares, new BN(0))
     .accountsPartial({
       investor: ctx.investor.publicKey,
       vault: ctx.vault,

@@ -15,12 +15,17 @@ import {
   PublicKey,
   SystemProgram,
   SYSVAR_CLOCK_PUBKEY,
+  SYSVAR_INSTRUCTIONS_PUBKEY,
   SYSVAR_RENT_PUBKEY,
+  Ed25519Program,
+  Transaction,
 } from "@solana/web3.js";
+import * as nacl from "tweetnacl";
 import { expect } from "chai";
 import { Svs11 } from "../target/types/svs_11";
 import { MockOracle } from "../target/types/mock_oracle";
 import { MockSas as MockAttestation } from "../target/types/mock_sas";
+import { NavOracle } from "../target/types/nav_oracle";
 import {
   getCreditVaultAddress,
   getCreditSharesMintAddress,
@@ -30,12 +35,21 @@ import {
   getClaimableTokensAddress,
   getCreditFrozenAccountAddress,
 } from "../sdk/core/src/credit-vault-pda";
+import { resolveHookExtras } from "./helpers/hook-mint";
 
 const ATTESTATION_PROGRAM_ID = new PublicKey(
   "GTTMWDHTZibyEpqNRr33RnBhgms262U6qHaGrjoHqEXg",
 );
+// compliance-hook program ID (used by initialize_pool to bind the TransferHook).
+// initialize_pool CPIs into this program for the EAML init + reads its PDAs.
+const COMPLIANCE_HOOK_PROGRAM_ID = new PublicKey(
+  "6JKauKWVJqs9duaCqXCMS6UN9KvqHxMjLS5KwJxGqH5P",
+);
 const PRICE_SCALE = new BN(1_000_000_000);
 const FAR_FUTURE_EXPIRY = new BN(4_102_444_800); // ~year 2100
+// full-fulfillment ratio (1e18). Tests reuse this
+// across all approve_redeem calls to preserve pre-Plan-C semantics.
+const FULL_FULFILLMENT_RATIO = new BN("1000000000000000000");
 
 describe("svs-11 (Credit Markets Vault)", () => {
   const provider = anchor.AnchorProvider.env();
@@ -43,6 +57,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
 
   const program = anchor.workspace.Svs11 as Program<Svs11>;
   const oracleProgram = anchor.workspace.MockOracle as Program<MockOracle>;
+  const navOracleProgram = anchor.workspace.NavOracle as Program<NavOracle>;
   const attestationMockProgram = anchor.workspace
     .MockSas as Program<MockAttestation>;
   const connection = provider.connection;
@@ -60,7 +75,10 @@ describe("svs-11 (Credit Markets Vault)", () => {
   let sharesMint: PublicKey;
   let depositVault: PublicKey;
   let redemptionEscrow: PublicKey;
-  let navOracle: PublicKey;
+  let mockOracleData: PublicKey;
+  let navAccount!: PublicKey;
+  let navPublisher!: Keypair;
+  let navSequence = 0n;
   let investorTokenAccount: PublicKey;
   let investorSharesAccount: PublicKey;
   let investmentRequest: PublicKey;
@@ -111,6 +129,13 @@ describe("svs-11 (Credit Markets Vault)", () => {
     );
   };
 
+  const getNavAccountPDA = (vaultPda: PublicKey): [PublicKey, number] => {
+    return PublicKey.findProgramAddressSync(
+      [Buffer.from("nav_oracle"), vaultPda.toBuffer()],
+      navOracleProgram.programId,
+    );
+  };
+
   const getAttestationPDA = (
     subject: PublicKey,
     issuer: PublicKey,
@@ -125,6 +150,142 @@ describe("svs-11 (Credit Markets Vault)", () => {
       ],
       ATTESTATION_PROGRAM_ID,
     );
+  };
+
+  function buildNavSigningPayload(fields: {
+    pool: PublicKey;
+    navNet: bigint;
+    navGross: bigint;
+    terBps: number;
+    lossBps: number;
+    navType: number;
+    timestamp: bigint;
+    sequence: bigint;
+    publisher: PublicKey;
+    merkleRoot: Buffer;
+  }): Buffer {
+    const buf = Buffer.alloc(133);
+    let off = 0;
+    fields.pool.toBuffer().copy(buf, off);
+    off += 32;
+    buf.writeBigUInt64LE(fields.navNet, off);
+    off += 8;
+    buf.writeBigUInt64LE(fields.navGross, off);
+    off += 8;
+    buf.writeUInt16LE(fields.terBps, off);
+    off += 2;
+    buf.writeUInt16LE(fields.lossBps, off);
+    off += 2;
+    buf.writeUInt8(fields.navType, off);
+    off += 1;
+    buf.writeBigInt64LE(fields.timestamp, off);
+    off += 8;
+    buf.writeBigUInt64LE(fields.sequence, off);
+    off += 8;
+    fields.publisher.toBuffer().copy(buf, off);
+    off += 32;
+    fields.merkleRoot.copy(buf, off);
+    off += 32;
+    return buf.subarray(0, off);
+  }
+
+  async function publishNav(price: BN = PRICE_SCALE): Promise<void> {
+    navSequence += 1n;
+    const merkleRoot = Buffer.alloc(32, Number(navSequence % 255n));
+    const navNet = BigInt(price.toString());
+    const navGross = navNet;
+    const terBps = 0;
+    const lossBps = 0;
+    const timestamp = BigInt(Math.floor(Date.now() / 1000));
+
+    const payload = buildNavSigningPayload({
+      pool: vault,
+      navNet,
+      navGross,
+      terBps,
+      lossBps,
+      navType: 0,
+      timestamp,
+      sequence: navSequence,
+      publisher: navPublisher.publicKey,
+      merkleRoot,
+    });
+    const signature = nacl.sign.detached(payload, navPublisher.secretKey);
+
+    const ed25519Ix = Ed25519Program.createInstructionWithPublicKey({
+      publicKey: navPublisher.publicKey.toBytes(),
+      message: payload,
+      signature,
+    });
+    const updateIx = await navOracleProgram.methods
+      .update({
+        navNet: new BN(navNet.toString()),
+        navGross: new BN(navGross.toString()),
+        terBps,
+        lossBps,
+        navType: 0,
+        timestamp: new BN(timestamp.toString()),
+        sequence: new BN(navSequence.toString()),
+        loanTapeMerkleRoot: Array.from(merkleRoot),
+        signature: Array.from(signature),
+      })
+      .accountsPartial({
+        pool: vault,
+        navAccount,
+        instructionsSysvar: SYSVAR_INSTRUCTIONS_PUBKEY,
+      })
+      .instruction();
+
+    const tx = new Transaction().add(ed25519Ix).add(updateIx);
+    await provider.sendAndConfirm(tx, []);
+  }
+
+  // Hook extras for the cPOOL `transfer_checked` invoked from
+  // request_redeem (source = investor, destination = vault PDA — the
+  // owner of redemption_escrow). Computed per-call because the
+  // source-side attestation PDA depends on the investor pubkey.
+  // The result is appended to the request_redeem ix via
+  // `.remainingAccounts(...)` so svs-11's CPI extension via
+  // `add_extra_accounts_for_execute_cpi` can reach the hook program +
+  // EAML PDA + resolved EAML extras when invoking Token-2022.
+  const requestRedeemHookExtras = (investorKey: PublicKey) => {
+    const [poolPolicyPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("pool_policy_test"), vault.toBuffer()],
+      program.programId,
+    );
+    return resolveHookExtras({
+      complianceHookProgramId: COMPLIANCE_HOOK_PROGRAM_ID,
+      mint: sharesMint,
+      sourceOwner: investorKey,
+      destinationOwner: vault,
+      permissioned: true,
+      attestationProgram: attestationProgramId,
+      attestationIssuer: attester.publicKey,
+      requiredAttestationType: 0,
+      poolPolicy: poolPolicyPda,
+    });
+  };
+
+  // Hook extras for cancel_redeem's cPOOL transfer (source = vault,
+  // destination = investor — opposite direction of request_redeem).
+  // The source-side attestation PDA is now the vault's system
+  // attestation, and destination-side is the investor's.
+  const cancelRedeemHookExtras = (investorKey: PublicKey) => {
+    const [poolPolicyPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("pool_policy_test"), vault.toBuffer()],
+      program.programId,
+    );
+    return resolveHookExtras({
+      complianceHookProgramId: COMPLIANCE_HOOK_PROGRAM_ID,
+      mint: sharesMint,
+      sourceOwner: vault,
+      destinationOwner: investorKey,
+      permissioned: true,
+      attestationProgram: attestationProgramId,
+      attestationIssuer: attester.publicKey,
+      requiredAttestationType: 0,
+      poolPolicy: poolPolicyPda,
+    });
   };
 
   before(async () => {
@@ -162,7 +323,9 @@ describe("svs-11 (Credit Markets Vault)", () => {
     [vault] = getVaultPDA();
     [sharesMint] = getSharesMintPDA();
     [redemptionEscrow] = getRedemptionEscrowPDA();
-    [navOracle] = getOracleDataPDA(vault);
+    [mockOracleData] = getOracleDataPDA(vault);
+    [navAccount] = getNavAccountPDA(vault);
+    navPublisher = Keypair.generate();
     [investmentRequest] = getInvestmentRequestPDA(investor.publicKey);
     [redemptionRequest] = getRedemptionRequestPDA(investor.publicKey);
     [claimableTokens] = getClaimableTokensPDA(investor.publicKey);
@@ -236,7 +399,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
       .setPrice(PRICE_SCALE)
       .accountsPartial({
         authority: payer.publicKey,
-        oracleData: navOracle,
+        oracleData: mockOracleData,
         vault: vault,
         systemProgram: SystemProgram.programId,
       })
@@ -256,6 +419,14 @@ describe("svs-11 (Credit Markets Vault)", () => {
 
   describe("Initialization", () => {
     it("initializes vault correctly", async () => {
+      // initialize_pool binds the cPOOL mint's
+      // Token-2022 TransferHook extension to COMPLIANCE_HOOK_PROGRAM_ID.
+      // The compliance-hook PDAs (MintConfig + EAML) and infrastructure
+      // attestations are initialized by separate follow-up txs in the
+      // deployment runbook — they are NOT part of
+      // initialize_pool's accounts struct.
+      void COMPLIANCE_HOOK_PROGRAM_ID; // referenced via env at deploy time
+
       await program.methods
         .initializePool(vaultId, minimumInvestment, maxStaleness)
         .accountsPartial({
@@ -266,7 +437,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
           sharesMint,
           depositVault,
           redemptionEscrow,
-          navOracle,
+          navOracle: mockOracleData,
           oracleProgram: oracleProgram.programId,
           attester: attester.publicKey,
           attestationProgram: attestationProgramId,
@@ -275,6 +446,113 @@ describe("svs-11 (Credit Markets Vault)", () => {
           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           rent: SYSVAR_RENT_PUBKEY,
+        })
+        .rpc();
+
+      await navOracleProgram.methods
+        .initialize()
+        .accountsPartial({
+          pool: vault,
+          navAccount,
+          publisher: navPublisher.publicKey,
+          keyRotationAuthority: payer.publicKey,
+          payer: payer.publicKey,
+        })
+        .rpc();
+
+      await publishNav();
+
+      // Initialize the singleton compliance-hook SanctionsList if it
+      // doesn't already exist. svs-11.ts runs before
+      // compliance-hook.spec.ts in the anchor test order, so this is
+      // the first place that needs the SanctionsList PDA. Idempotent
+      // against re-runs (and against compliance-hook.spec.ts's own
+      // setup) by tolerating "already in use".
+      try {
+        const [sanctionsListPda] = PublicKey.findProgramAddressSync(
+          [Buffer.from("sanctions_list")],
+          COMPLIANCE_HOOK_PROGRAM_ID,
+        );
+        const complianceHookIdl = require("../target/idl/compliance_hook.json");
+        const complianceHookProg = new anchor.Program(
+          complianceHookIdl,
+          provider,
+        );
+        await complianceHookProg.methods
+          .initializeSanctionsList()
+          .accountsPartial({
+            sanctionsList: sanctionsListPda,
+            authority: payer.publicKey,
+            payer: payer.publicKey,
+            systemProgram: SystemProgram.programId,
+          })
+          .rpc();
+      } catch (_err) {
+        // already initialized — fine
+      }
+
+      // Bootstrap compliance-hook PDAs for the cPOOL shares mint.
+      // This is the operator-runbook step that initializes
+      // MintConfig + EAML on cPOOL — without it, every cPOOL transfer
+      // fails because Token-2022 invokes the hook (which is bound by
+      // initialize_pool) but the hook's MintConfig/EAML PDAs don't
+      // exist. Permissioned mode requires non-default trust anchors.
+      const [poolPolicyPda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("pool_policy_test"), vault.toBuffer()],
+        program.programId,
+      );
+      const [mintConfigPda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("mint_config"), sharesMint.toBuffer()],
+        COMPLIANCE_HOOK_PROGRAM_ID,
+      );
+      const [eamlPda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("extra-account-metas"), sharesMint.toBuffer()],
+        COMPLIANCE_HOOK_PROGRAM_ID,
+      );
+      await program.methods
+        .bootstrapSharesCompliance({
+          mode: { permissioned: {} },
+          poolPolicy: poolPolicyPda,
+          attestationProgram: attestationProgramId,
+          attestationIssuer: attester.publicKey,
+          requiredAttestationType: 0,
+        })
+        .accountsPartial({
+          authority: payer.publicKey,
+          vault,
+          sharesMint,
+          mintConfig: mintConfigPda,
+          extraAccountMetaList: eamlPda,
+          complianceHookProgram: COMPLIANCE_HOOK_PROGRAM_ID,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
+
+      // Issue infrastructure attestation for the vault PDA. Permissioned
+      // hooks validate BOTH transfer owners on every cPOOL transfer;
+      // request_redeem moves cPOOL from investor → redemption_escrow,
+      // and redemption_escrow.owner == vault. Without a vault
+      // attestation, the destination-side check rejects with
+      // AttestationNotFound. mock-sas accepts off-curve PDAs as
+      // subjects, mirroring the wrapper-PDA system attestation pattern
+      // in the deRWA flow.
+      const [vaultAttestation] = PublicKey.findProgramAddressSync(
+        [
+          Buffer.from("attestation"),
+          vault.toBuffer(),
+          attester.publicKey.toBuffer(),
+          Buffer.from([0]),
+        ],
+        attestationProgramId,
+      );
+      await attestationMockProgram.methods
+        .createAttestation(attester.publicKey, 0, [66, 82], FAR_FUTURE_EXPIRY)
+        .accountsPartial({
+          authority: payer.publicKey,
+          attestation: vaultAttestation,
+          subject: vault,
+          systemProgram: SystemProgram.programId,
         })
         .rpc();
 
@@ -289,7 +567,10 @@ describe("svs-11 (Credit Markets Vault)", () => {
       expect(vaultAccount.sharesMint.toBase58()).to.equal(
         sharesMint.toBase58(),
       );
-      expect(vaultAccount.navOracle.toBase58()).to.equal(navOracle.toBase58());
+      expect(vaultAccount.navOracle.toBase58()).to.equal(
+        mockOracleData.toBase58(),
+      );
+      expect(vaultAccount.oracleSource).to.equal(0);
       expect(vaultAccount.oracleProgram.toBase58()).to.equal(
         oracleProgram.programId.toBase58(),
       );
@@ -321,6 +602,30 @@ describe("svs-11 (Credit Markets Vault)", () => {
           systemProgram: SystemProgram.programId,
         })
         .rpc();
+    });
+
+    it("authority can switch oracle source between mock and nav-oracle", async () => {
+      await program.methods
+        .setOracleSource(1)
+        .accountsPartial({
+          authority: payer.publicKey,
+          vault,
+        })
+        .rpc();
+
+      let vaultAccount = await program.account.creditVault.fetch(vault);
+      expect(vaultAccount.oracleSource).to.equal(1);
+
+      await program.methods
+        .setOracleSource(0)
+        .accountsPartial({
+          authority: payer.publicKey,
+          vault,
+        })
+        .rpc();
+
+      vaultAccount = await program.account.creditVault.fetch(vault);
+      expect(vaultAccount.oracleSource).to.equal(0);
     });
   });
 
@@ -446,7 +751,10 @@ describe("svs-11 (Credit Markets Vault)", () => {
           vault,
           investmentRequest,
           investor: investor.publicKey,
-          navOracle,
+          navOracle: mockOracleData,
+          // nav_account slot — vault default oracle_source=0
+          // (mock) so this is unread; use program.programId as filler.
+          navAccount: program.programId,
           attestation,
           frozenCheck: null,
           clock: SYSVAR_CLOCK_PUBKEY,
@@ -470,6 +778,220 @@ describe("svs-11 (Credit Markets Vault)", () => {
         depositAmount.toString(),
       );
       expect(vaultAccount.totalPendingDeposits.toNumber()).to.equal(0);
+    });
+
+    it("can opt into NavOracle for credit-market NAV reads", async () => {
+      const navInvestor = Keypair.generate();
+      const navAirdrop = await connection.requestAirdrop(
+        navInvestor.publicKey,
+        5 * anchor.web3.LAMPORTS_PER_SOL,
+      );
+      await connection.confirmTransaction(navAirdrop);
+      const navInvestorTokenAccount = await getOrCreateAssociatedTokenAccount(
+        connection,
+        payer,
+        assetMint,
+        navInvestor.publicKey,
+        false,
+        undefined,
+        undefined,
+        TOKEN_PROGRAM_ID,
+      );
+      await mintTo(
+        connection,
+        payer,
+        assetMint,
+        navInvestorTokenAccount.address,
+        payer.publicKey,
+        BigInt(minimumInvestment.toString()),
+        [],
+        undefined,
+        TOKEN_PROGRAM_ID,
+      );
+
+      const [navRequest] = getInvestmentRequestPDA(navInvestor.publicKey);
+      const [navFrozen] = getFrozenAccountPDA(navInvestor.publicKey);
+      const [navAttestation] = getAttestationPDA(
+        navInvestor.publicKey,
+        attester.publicKey,
+      );
+
+      await attestationMockProgram.methods
+        .createAttestation(attester.publicKey, 0, [66, 82], FAR_FUTURE_EXPIRY)
+        .accountsPartial({
+          authority: payer.publicKey,
+          attestation: navAttestation,
+          subject: navInvestor.publicKey,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
+
+      await program.methods
+        .setOracleSource(1)
+        .accountsPartial({
+          authority: payer.publicKey,
+          vault,
+        })
+        .rpc();
+
+      try {
+        await publishNav();
+
+        await program.methods
+          .requestDeposit(minimumInvestment)
+          .accountsPartial({
+            investor: navInvestor.publicKey,
+            vault,
+            investmentRequest: navRequest,
+            investorTokenAccount: navInvestorTokenAccount.address,
+            depositVault,
+            assetMint,
+            attestation: navAttestation,
+            frozenCheck: navFrozen,
+            assetTokenProgram: TOKEN_PROGRAM_ID,
+            systemProgram: SystemProgram.programId,
+            clock: SYSVAR_CLOCK_PUBKEY,
+          })
+          .signers([navInvestor])
+          .rpc();
+
+        await program.methods
+          .approveDeposit()
+          .accountsPartial({
+            manager: manager.publicKey,
+            vault,
+            investmentRequest: navRequest,
+            investor: navInvestor.publicKey,
+            navOracle: mockOracleData,
+            navAccount,
+            attestation: navAttestation,
+            frozenCheck: navFrozen,
+            clock: SYSVAR_CLOCK_PUBKEY,
+          })
+          .signers([manager])
+          .rpc();
+
+        const vaultAccount = await program.account.creditVault.fetch(vault);
+        expect(vaultAccount.oracleSource).to.equal(1);
+        expect(vaultAccount.lastSeenNavSequence.toString()).to.equal(
+          navSequence.toString(),
+        );
+      } finally {
+        await program.methods
+          .setOracleSource(0)
+          .accountsPartial({
+            authority: payer.publicKey,
+            vault,
+          })
+          .rpc();
+      }
+    });
+
+    it("rejects NavOracle opt-in approval when the NavAccount PDA is missing", async () => {
+      const missingNavInvestor = Keypair.generate();
+      const missingNavAirdrop = await connection.requestAirdrop(
+        missingNavInvestor.publicKey,
+        5 * anchor.web3.LAMPORTS_PER_SOL,
+      );
+      await connection.confirmTransaction(missingNavAirdrop);
+      const missingNavInvestorTokenAccount = await getOrCreateAssociatedTokenAccount(
+        connection,
+        payer,
+        assetMint,
+        missingNavInvestor.publicKey,
+        false,
+        undefined,
+        undefined,
+        TOKEN_PROGRAM_ID,
+      );
+      await mintTo(
+        connection,
+        payer,
+        assetMint,
+        missingNavInvestorTokenAccount.address,
+        payer.publicKey,
+        BigInt(minimumInvestment.toString()),
+        [],
+        undefined,
+        TOKEN_PROGRAM_ID,
+      );
+
+      const [missingNavRequest] = getInvestmentRequestPDA(
+        missingNavInvestor.publicKey,
+      );
+      const [missingNavFrozen] = getFrozenAccountPDA(
+        missingNavInvestor.publicKey,
+      );
+      const [missingNavAttestation] = getAttestationPDA(
+        missingNavInvestor.publicKey,
+        attester.publicKey,
+      );
+
+      await attestationMockProgram.methods
+        .createAttestation(attester.publicKey, 0, [66, 82], FAR_FUTURE_EXPIRY)
+        .accountsPartial({
+          authority: payer.publicKey,
+          attestation: missingNavAttestation,
+          subject: missingNavInvestor.publicKey,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
+
+      await program.methods
+        .requestDeposit(minimumInvestment)
+        .accountsPartial({
+          investor: missingNavInvestor.publicKey,
+          vault,
+          investmentRequest: missingNavRequest,
+          investorTokenAccount: missingNavInvestorTokenAccount.address,
+          depositVault,
+          assetMint,
+          attestation: missingNavAttestation,
+          frozenCheck: missingNavFrozen,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          clock: SYSVAR_CLOCK_PUBKEY,
+        })
+        .signers([missingNavInvestor])
+        .rpc();
+
+      await program.methods
+        .setOracleSource(1)
+        .accountsPartial({
+          authority: payer.publicKey,
+          vault,
+        })
+        .rpc();
+
+      try {
+        await program.methods
+          .approveDeposit()
+          .accountsPartial({
+            manager: manager.publicKey,
+            vault,
+            investmentRequest: missingNavRequest,
+            investor: missingNavInvestor.publicKey,
+            navOracle: mockOracleData,
+            navAccount: program.programId,
+            attestation: missingNavAttestation,
+            frozenCheck: missingNavFrozen,
+            clock: SYSVAR_CLOCK_PUBKEY,
+          })
+          .signers([manager])
+          .rpc();
+        expect.fail("expected OracleAccountInvalid");
+      } catch (e: any) {
+        const msg = (e?.logs?.join("\n") ?? "") + "\n" + (e?.message ?? "");
+        expect(msg).to.match(/OracleAccountInvalid|oracle account invalid|0x/i);
+      } finally {
+        await program.methods
+          .setOracleSource(0)
+          .accountsPartial({
+            authority: payer.publicKey,
+            vault,
+          })
+          .rpc();
+      }
     });
 
     it("investor claims deposit", async () => {
@@ -749,7 +1271,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
       const sharesToRedeem = new BN(sharesBefore.amount.toString());
 
       await program.methods
-        .requestRedeem(sharesToRedeem)
+        .requestRedeem(sharesToRedeem, new BN(0))
         .accountsPartial({
           investor: investor.publicKey,
           vault,
@@ -763,6 +1285,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
           systemProgram: SystemProgram.programId,
           clock: SYSVAR_CLOCK_PUBKEY,
         })
+        .remainingAccounts(requestRedeemHookExtras(investor.publicKey))
         .signers([investor])
         .rpc();
 
@@ -790,7 +1313,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
 
     it("manager approves redemption", async () => {
       await program.methods
-        .approveRedeem()
+        .approveRedeem(FULL_FULFILLMENT_RATIO, new BN(0))
         .accountsPartial({
           manager: manager.publicKey,
           vault,
@@ -801,7 +1324,8 @@ describe("svs-11 (Credit Markets Vault)", () => {
           depositVault,
           assetMint,
           claimableTokens,
-          navOracle,
+          navOracle: mockOracleData,
+          navAccount: program.programId,
           attestation,
           frozenCheck: null,
           assetTokenProgram: TOKEN_PROGRAM_ID,
@@ -889,7 +1413,8 @@ describe("svs-11 (Credit Markets Vault)", () => {
           vault,
           investmentRequest,
           investor: investor.publicKey,
-          navOracle,
+          navOracle: mockOracleData,
+          navAccount: program.programId,
           attestation,
           frozenCheck: null,
           clock: SYSVAR_CLOCK_PUBKEY,
@@ -922,7 +1447,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
       );
 
       await program.methods
-        .requestRedeem(new BN(shares.amount.toString()))
+        .requestRedeem(new BN(shares.amount.toString()), new BN(0))
         .accountsPartial({
           investor: investor.publicKey,
           vault,
@@ -936,6 +1461,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
           systemProgram: SystemProgram.programId,
           clock: SYSVAR_CLOCK_PUBKEY,
         })
+        .remainingAccounts(requestRedeemHookExtras(investor.publicKey))
         .signers([investor])
         .rpc();
     });
@@ -953,6 +1479,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
           token2022Program: TOKEN_2022_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
         })
+        .remainingAccounts(cancelRedeemHookExtras(investor.publicKey))
         .signers([investor])
         .rpc();
 
@@ -1428,7 +1955,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
 
       try {
         await program.methods
-          .requestRedeem(new BN(0))
+          .requestRedeem(new BN(0), new BN(0))
           .accountsPartial({
             investor: zeroRedeemer.publicKey,
             vault,
@@ -1587,7 +2114,8 @@ describe("svs-11 (Credit Markets Vault)", () => {
           vault,
           investmentRequest: statusInvestmentRequest,
           investor: statusInvestor.publicKey,
-          navOracle,
+          navOracle: mockOracleData,
+          navAccount: program.programId,
           attestation: statusAttestation,
           frozenCheck: null,
           clock: SYSVAR_CLOCK_PUBKEY,
@@ -1603,7 +2131,8 @@ describe("svs-11 (Credit Markets Vault)", () => {
             vault,
             investmentRequest: statusInvestmentRequest,
             investor: statusInvestor.publicKey,
-            navOracle,
+            navOracle: mockOracleData,
+            navAccount: program.programId,
             attestation: statusAttestation,
             frozenCheck: null,
             clock: SYSVAR_CLOCK_PUBKEY,
@@ -1684,7 +2213,8 @@ describe("svs-11 (Credit Markets Vault)", () => {
           vault,
           investmentRequest: statusInvestmentRequest,
           investor: statusInvestor.publicKey,
-          navOracle,
+          navOracle: mockOracleData,
+          navAccount: program.programId,
           attestation: statusAttestation,
           frozenCheck: null,
           clock: SYSVAR_CLOCK_PUBKEY,
@@ -1827,7 +2357,8 @@ describe("svs-11 (Credit Markets Vault)", () => {
           vault,
           investmentRequest: liqInvestmentRequest,
           investor: liqInvestor.publicKey,
-          navOracle,
+          navOracle: mockOracleData,
+          navAccount: program.programId,
           attestation: liqAttestation,
           frozenCheck: null,
           clock: SYSVAR_CLOCK_PUBKEY,
@@ -1898,7 +2429,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
       );
 
       await program.methods
-        .requestRedeem(new BN(shares.amount.toString()))
+        .requestRedeem(new BN(shares.amount.toString()), new BN(0))
         .accountsPartial({
           investor: liqInvestor.publicKey,
           vault,
@@ -1912,12 +2443,13 @@ describe("svs-11 (Credit Markets Vault)", () => {
           systemProgram: SystemProgram.programId,
           clock: SYSVAR_CLOCK_PUBKEY,
         })
+        .remainingAccounts(requestRedeemHookExtras(liqInvestor.publicKey))
         .signers([liqInvestor])
         .rpc();
 
       try {
         await program.methods
-          .approveRedeem()
+          .approveRedeem(FULL_FULFILLMENT_RATIO, new BN(0))
           .accountsPartial({
             manager: manager.publicKey,
             vault,
@@ -1928,7 +2460,8 @@ describe("svs-11 (Credit Markets Vault)", () => {
             depositVault,
             assetMint,
             claimableTokens: liqClaimableTokens,
-            navOracle,
+            navOracle: mockOracleData,
+            navAccount: program.programId,
             attestation: liqAttestation,
             frozenCheck: null,
             assetTokenProgram: TOKEN_PROGRAM_ID,
@@ -2057,7 +2590,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
           .setPrice(expectedPrice)
           .accountsPartial({
             authority: payer.publicKey,
-            oracleData: navOracle,
+            oracleData: mockOracleData,
             vault: vault,
             systemProgram: SystemProgram.programId,
           })
@@ -2109,7 +2642,8 @@ describe("svs-11 (Credit Markets Vault)", () => {
             vault,
             investmentRequest: frozenInvRequest,
             investor: frozenInvestor.publicKey,
-            navOracle,
+            navOracle: mockOracleData,
+            navAccount: program.programId,
             attestation: frozenInvAttestation,
             frozenCheck: frozenInvFrozenAccount,
             clock: SYSVAR_CLOCK_PUBKEY,
@@ -2178,7 +2712,8 @@ describe("svs-11 (Credit Markets Vault)", () => {
           vault,
           investmentRequest: frozenInvRequest,
           investor: frozenInvestor.publicKey,
-          navOracle,
+          navOracle: mockOracleData,
+          navAccount: program.programId,
           attestation: frozenInvAttestation,
           frozenCheck: null,
           clock: SYSVAR_CLOCK_PUBKEY,
@@ -2209,7 +2744,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
       );
 
       await program.methods
-        .requestRedeem(new BN(shares.amount.toString()))
+        .requestRedeem(new BN(shares.amount.toString()), new BN(0))
         .accountsPartial({
           investor: frozenInvestor.publicKey,
           vault,
@@ -2223,6 +2758,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
           systemProgram: SystemProgram.programId,
           clock: SYSVAR_CLOCK_PUBKEY,
         })
+        .remainingAccounts(requestRedeemHookExtras(frozenInvestor.publicKey))
         .signers([frozenInvestor])
         .rpc();
 
@@ -2244,7 +2780,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
       // Try approve redeem with frozen check
       try {
         await program.methods
-          .approveRedeem()
+          .approveRedeem(FULL_FULFILLMENT_RATIO, new BN(0))
           .accountsPartial({
             manager: manager.publicKey,
             vault,
@@ -2255,7 +2791,8 @@ describe("svs-11 (Credit Markets Vault)", () => {
             depositVault,
             assetMint,
             claimableTokens: frozenInvClaimableTokens,
-            navOracle,
+            navOracle: mockOracleData,
+            navAccount: program.programId,
             attestation: frozenInvAttestation,
             frozenCheck: frozenInvFrozenAccount,
             assetTokenProgram: TOKEN_PROGRAM_ID,
@@ -2422,7 +2959,8 @@ describe("svs-11 (Credit Markets Vault)", () => {
             vault,
             investmentRequest: tempRequest,
             investor: tempInvestor.publicKey,
-            navOracle,
+            navOracle: mockOracleData,
+            navAccount: program.programId,
             attestation: tempAttestation,
             frozenCheck: null,
             clock: SYSVAR_CLOCK_PUBKEY,
@@ -2768,7 +3306,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
         .updateTimestamp(staleTimestamp)
         .accountsPartial({
           authority: payer.publicKey,
-          oracleData: navOracle,
+          oracleData: mockOracleData,
           vault: vault,
         })
         .rpc();
@@ -2781,7 +3319,8 @@ describe("svs-11 (Credit Markets Vault)", () => {
             vault,
             investmentRequest: staleInvestmentRequest,
             investor: staleInvestor.publicKey,
-            navOracle,
+            navOracle: mockOracleData,
+            navAccount: program.programId,
             attestation: staleAttestation,
             frozenCheck: null,
             clock: SYSVAR_CLOCK_PUBKEY,
@@ -2814,7 +3353,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
         .setPrice(oraclePrice)
         .accountsPartial({
           authority: payer.publicKey,
-          oracleData: navOracle,
+          oracleData: mockOracleData,
           vault: vault,
           systemProgram: SystemProgram.programId,
         })
@@ -2827,7 +3366,8 @@ describe("svs-11 (Credit Markets Vault)", () => {
           vault,
           investmentRequest: staleInvestmentRequest,
           investor: staleInvestor.publicKey,
-          navOracle,
+          navOracle: mockOracleData,
+          navAccount: program.programId,
           attestation: staleAttestation,
           frozenCheck: null,
           clock: SYSVAR_CLOCK_PUBKEY,

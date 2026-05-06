@@ -6,6 +6,26 @@ use crate::state::CreditVault;
 /// External attestation account layout (owned by any attestation program).
 /// Matches the spec's generic interface — compatible with SAS, Civic Pass, or
 /// any provider that writes accounts in this format.
+///
+/// Field-order invariant: existing field offsets MUST NOT shift. New
+/// metadata fields are appended after `_reserved` (additive-only).
+/// ComplianceHook's `check_attestation` helper and the deRWA wrapper's
+/// `unwrap` instruction read these fields by absolute byte offset;
+/// reordering or inserting in the middle silently breaks them.
+///
+/// Byte offsets (after the 8-byte Anchor discriminator):
+///   0..32    subject (Pubkey)
+///   32..64   issuer (Pubkey)
+///   64       attestation_type (u8)
+///   65..67   country_code ([u8; 2])
+///   67..75   issued_at (i64)
+///   75..83   expires_at (i64)
+///   83       revoked (bool)
+///   84       bump (u8)
+///   85..117  _reserved ([u8; 32])
+///   117..119 jurisdiction ([u8; 2])  -- added with the ComplianceHook metadata extension
+///   119      investor_class (u8)     -- added with the ComplianceHook metadata extension
+///   120      kyc_risk_tier (u8)      -- added with the ComplianceHook metadata extension
 #[derive(AnchorDeserialize)]
 pub struct Attestation {
     pub subject: Pubkey,
@@ -17,10 +37,24 @@ pub struct Attestation {
     pub revoked: bool,
     pub bump: u8,
     pub _reserved: [u8; 32],
+    // ↓ NEW FIELDS APPENDED — order is load-bearing for the
+    // ComplianceHook + deRWA wrapper offset readers. Default-zero values
+    // mean "no policy enforcement" (infrastructure tier / unset
+    // jurisdiction / unset risk tier), preserving backward compatibility
+    // for accounts created before this upgrade (those accounts get
+    // realloc'd in the bundled deploy).
+    /// ISO 3166-1 alpha-2 jurisdiction code (e.g. b"BR", b"CH"). [0, 0] = unset.
+    pub jurisdiction: [u8; 2],
+    /// Investor classification: 0=infrastructure, 1=retail, 2=accredited, 3=qualified.
+    pub investor_class: u8,
+    /// KYC risk tier: 0=unset, 1=low, 2=medium, 3=high.
+    pub kyc_risk_tier: u8,
 }
 
 impl Attestation {
-    pub const LEN: usize = 8 + 32 + 32 + 1 + 2 + 8 + 8 + 1 + 1 + 32;
+    // Original layout (117 bytes): 8 disc + 32 + 32 + 1 + 2 + 8 + 8 + 1 + 1 + 32
+    // ComplianceHook metadata extension (+4 bytes): 2 jurisdiction + 1 investor_class + 1 kyc_risk_tier
+    pub const LEN: usize = 8 + 32 + 32 + 1 + 2 + 8 + 8 + 1 + 1 + 32 + 2 + 1 + 1;
 }
 
 pub fn validate_attestation(

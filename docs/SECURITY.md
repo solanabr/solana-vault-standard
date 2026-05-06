@@ -24,6 +24,51 @@
 ### 6. Fake Proof Context Injection (SVS-3, SVS-4)
 **Mitigation:** Proof context accounts validated via owner check (`account.owner == zk_elgamal_proof_program::id()`). Prevents passing arbitrary accounts as "verified" proofs.
 
+### 7. NAV Oracle Replay (nav-oracle)
+**Vector:** An attacker re-submits an old (lower-sequence) signed NAV payload to manipulate share pricing.
+
+**Mitigation:** `nav_oracle.update` requires `args.sequence > nav.sequence` (strictly increasing). SVS-11's NavOracle reader (`oracle::read_nav_oracle_price`) additionally enforces `nav.sequence > vault.last_seen_nav_sequence` so a single replay across approve_deposit/approve_redeem is rejected.
+
+### 8. Wrong Publisher Signature (nav-oracle)
+**Vector:** An attacker submits a NAV update signed by a key OTHER than the publisher stored on `NavAccount`.
+
+**Mitigation:** `nav_oracle.update` reconstructs the canonical 133-byte payload from `args` + on-chain `pool` + on-chain `publisher` and compares it byte-for-byte with the message inside the preceding `Ed25519Program` verify instruction. If the on-chain publisher doesn't match the signing key, payload reconstruction differs and the verify fails. Publisher rotation is gated by a separate `key_rotation_authority` (typically a multisig) so a compromised publisher cannot rotate itself.
+
+### 9. Wrong Authority on Sanctions / Mint Config (compliance-hook)
+**Vector:** A non-authority account attempts to mutate the sanctions list or mint config.
+
+**Mitigation:** `update_sanctions_list` enforces `authority == sanctions_list.authority`. `initialize_mint_config` enforces signer matches the Token-2022 mint authority (read via `Mint::unpack`). Both checks are signer-required and use Anchor `accountsStrict` to prevent extra account injection.
+
+### 10. TransferHook Bypass via Wrong MintConfig Mode (compliance-hook)
+**Vector:** A `Permissioned` mint is created without the `pool_policy` (or vice versa for `FreelyTransferable`), making the hook either unenforceable or panicky at transfer time.
+
+**Mitigation:** `initialize_mint_config` rejects the `(Permissioned, no pool_policy)` and `(FreelyTransferable, with pool_policy)` combinations at init time. The `execute` handler also reads `MintConfig.mode` via Anchor `Account` constraint (program-owner-checked), so callers cannot pass a forged config account.
+
+### 11. Wrap/Unwrap Supply Conservation (derwa-wrapper)
+**Vector:** An attacker manipulates wrap or unwrap to mint more dePOOL than the locked cPOOL backing, or to extract more cPOOL than they wrapped.
+
+**Mitigation:** `WrapperConfig.locked_supply` is incremented atomically with `dePOOL.mint` on wrap and decremented atomically with `dePOOL.burn` on unwrap. The on-chain invariant `locked_supply == dePOOL.supply` is preserved across every transaction. The wrapper has NO mint authority on cPOOL — unwrap transfers cPOOL OUT of the wrapper-owned escrow, never mints new cPOOL.
+
+### 12. Unwrap Without Attestation (derwa-wrapper)
+**Vector:** A dePOOL holder unwraps to cPOOL into a wallet that has not passed KYC/compliance, defeating the cPOOL gating.
+
+**Mitigation:** `unwrap` requires a valid `Attestation` PDA for the destination wallet (subject = destination, non-revoked, non-expired) before transferring cPOOL out of escrow.
+
+### 13. Stale NAV (svs-11 + nav-oracle)
+**Vector:** A NavAccount is initialized but never updated; SVS-11 approves deposits/redemptions against an arbitrarily old NAV.
+
+**Mitigation:** `CreditVault.max_nav_staleness_secs` (default 45 days, configurable) gates `approve_deposit` / `approve_redeem` when `oracle_source == 1`. `now - nav.timestamp > max_nav_staleness_secs` trips `OracleStale`. Operators must monitor publisher health and rotate or pause if NAV publication stops.
+
+### 14. Stale Mock-Oracle Pricing (svs-11, default path)
+**Vector:** Same staleness concern on the simple/mock oracle path.
+
+**Mitigation:** Existing `vault.max_staleness` field (separate from `max_nav_staleness_secs`) gates the simple oracle path. Both gates ship in this PR; deployments using `oracle_source == 0` only need the `max_staleness` gate.
+
+### 15. Source-Switch Reset Hygiene (test-only)
+**Vector:** A test that flips `oracle_source` to 1 but doesn't reset to 0 leaves later tests reading from an unprovisioned NavAccount.
+
+**Mitigation:** Test conventions require every NavOracle opt-in test to wrap its body in `try { ... } finally { setOracleSource(0) }`. Verified by the SVS-11 source-switch + opt-in tests in this PR.
+
 ---
 
 ## Solana Security Checklist

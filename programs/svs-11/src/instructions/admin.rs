@@ -1,11 +1,14 @@
 use anchor_lang::prelude::*;
 
-use crate::constants::{MAX_DEVIATION_BPS_CAP, ORACLE_TIMELOCK, VAULT_CONFIG_SEED, VAULT_SEED};
+use crate::constants::{
+    MAX_DEVIATION_BPS_CAP, ORACLE_SOURCE_MOCK, ORACLE_SOURCE_NAV_ORACLE, ORACLE_TIMELOCK,
+    VAULT_CONFIG_SEED, VAULT_SEED,
+};
 use crate::error::VaultError;
 use crate::events::{
     AttesterUpdated, AuthorityTransferRequested, AuthorityTransferred, ComplianceOfficerUpdated,
     ManagerChanged, OracleChangeApplied, OracleChangeRequested, OracleConfigUpdated,
-    VaultConfigInitialized, VaultStatusChanged,
+    OracleSourceChanged, VaultConfigInitialized, VaultStatusChanged,
 };
 use crate::state::{CreditVault, VaultConfig};
 
@@ -316,6 +319,30 @@ pub fn update_oracle_params_handler(
         old_program: vault.oracle_program,
         new_program: vault.oracle_program,
         new_max_staleness: vault.max_staleness,
+    });
+
+    Ok(())
+}
+
+/// Switch the vault's oracle read path between the simple/mock oracle path
+/// (`0`) and the optional NavOracle adapter (`1`). This is deliberately
+/// separate from oracle address changes: it does not mutate `nav_oracle` or
+/// `oracle_program`, so deployments can opt into or out of richer NAV reads
+/// without a full program upgrade.
+pub fn set_oracle_source_handler(ctx: Context<UpdateOracleParams>, source: u8) -> Result<()> {
+    require!(
+        source == ORACLE_SOURCE_MOCK || source == ORACLE_SOURCE_NAV_ORACLE,
+        VaultError::OracleSourceInvalid
+    );
+
+    let vault = &mut ctx.accounts.vault;
+    let old_source = vault.oracle_source;
+    vault.oracle_source = source;
+
+    emit!(OracleSourceChanged {
+        vault: vault.key(),
+        old_source,
+        new_source: source,
     });
 
     Ok(())

@@ -357,6 +357,73 @@ See individual spec files (`SVS-N.md`) for details.
 
 ---
 
+## Supporting Programs
+
+Beyond the SVS-1..SVS-12 vault variants, the workspace ships supporting programs that any SVS deployment can compose with. Unlike modules (Rust crates compiled into a vault binary), these are full Anchor programs deployed on their own program IDs and reached via CPI or account reads.
+
+| Program | Purpose | Primary Consumer |
+|---------|---------|------------------|
+| [compliance-hook](compliance-hook.md) | Token-2022 `TransferHook` backend (sanctions list + per-mint policy) | SVS-11 (cPOOL/dePOOL) |
+| [nav-oracle](nav-oracle.md) | Per-pool NAV oracle with signed publisher payloads | SVS-11 (`oracle_source = 1`) |
+| [derwa-wrapper](derwa-wrapper.md) | 1:1 wrap between a closed permissioned mint and an open Token-2022 mint | SVS-11 (cPOOL → dePOOL bridge) |
+| `mock-oracle` | Test oracle implementing the `svs-oracle` account layout | SVS-10/11 tests |
+| `mock-sas` | Test attestation service mock | SVS-11/derwa-wrapper tests |
+
+### compliance-hook
+
+Token-2022 `TransferHook` extension backend. Per-mint configuration (`FreelyTransferable` | `Permissioned`) drives transfer-time policy: sanctions-list gating in both modes, plus attestation gating in `Permissioned` mode. SVS-11 binds compliance-hook to its share mint via the cPOOL/dePOOL pattern.
+
+See [compliance-hook.md](compliance-hook.md) for the per-mint config layout, transfer-hook entrypoint, and attestation-check flow.
+
+### nav-oracle
+
+Per-pool NAV oracle for credit-grade pricing. An off-chain publisher signs a canonical 133-byte payload (gross/net NAV, TER, loss provision, sequence, timestamp, loan-tape Merkle root); the on-chain program verifies the signature via an `Ed25519Program` instruction scan and stores the latest NAV in a `NavAccount` PDA. Sequence numbers are strictly monotonic to prevent replay. SVS-11's `oracle_source = 1` mode reads the `NavAccount` in `approve_deposit` / `approve_redeem` to convert assets ↔ shares.
+
+See [nav-oracle.md](nav-oracle.md) for the payload schema, signature-verification pattern, and `NavAccount` layout.
+
+### derwa-wrapper
+
+1:1 bridge between a closed permissioned mint (e.g. cPOOL — institutional, compliance-locked) and an open Token-2022 mint (e.g. dePOOL — tradeable on DEXes). Wrap (closed → open) is gated by holding the closed mint; unwrap (open → closed) is attestation-gated through compliance-hook. Lets institutional cPOOL holders mint a tradeable dePOOL representation while keeping cPOOL ownership compliance-locked.
+
+See [derwa-wrapper.md](derwa-wrapper.md) for the wrap/unwrap flow and attestation requirements.
+
+### Integration with SVS-11
+
+```
+                       ┌─────────────────────┐
+                       │  off-chain publisher │
+                       │  (signs NAV payload) │
+                       └──────────┬──────────┘
+                                  │ ed25519 sig
+                                  ▼
+   ┌───────────────┐      ┌──────────────────┐
+   │  SVS-11 Vault │◄─────┤   nav-oracle     │  (oracle_source = 1)
+   │  (async pool) │      │   NavAccount PDA │
+   └───────┬───────┘      └──────────────────┘
+           │
+           │ mints / burns
+           ▼
+   ┌───────────────┐      ┌──────────────────┐
+   │  cPOOL mint   │◄─────┤ compliance-hook  │  (TransferHook backend)
+   │  (closed,     │      │ per-mint config  │
+   │  permissioned)│      │ + sanctions list │
+   └───────┬───────┘      └──────────────────┘
+           │
+           │ wrap 1:1
+           ▼
+   ┌───────────────┐
+   │  dePOOL mint  │  (open Token-2022, tradeable)
+   │   ◄── derwa-wrapper, unwrap gated by attestation
+   └───────────────┘
+```
+
+Cross-program calls in the SVS-11 deposit/redeem path:
+1. `approve_deposit` reads `NavAccount` from nav-oracle (no CPI; account read).
+2. `mint_to(cpool_mint, ...)` triggers compliance-hook's `TransferHook` automatically (Token-2022 invokes the hook).
+3. Wrap to dePOOL is an explicit CPI to `derwa-wrapper::wrap`; unwrap calls `derwa-wrapper::unwrap` which itself reads an attestation account checked against compliance-hook policy.
+
+---
+
 ## EVM Reference
 
 SVS is a native Solana port of ERC-4626. Key mappings:

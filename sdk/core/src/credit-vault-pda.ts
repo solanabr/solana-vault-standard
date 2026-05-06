@@ -9,6 +9,9 @@ export const REDEMPTION_REQUEST_SEED = Buffer.from("redemption_request");
 export const CLAIMABLE_TOKENS_SEED = Buffer.from("claimable_tokens");
 export const CREDIT_FROZEN_ACCOUNT_SEED = Buffer.from("frozen_account");
 
+// Cross-program PDA helpers for compliance-hook and mock-sas live in their
+// dedicated PDA modules: `./compliance-hook-pda` and `./mock-sas-pda`.
+
 export function getCreditVaultAddress(
   programId: PublicKey,
   assetMint: PublicKey,

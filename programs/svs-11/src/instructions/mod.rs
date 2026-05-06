@@ -1,6 +1,7 @@
 pub mod admin;
 pub mod approve_deposit;
 pub mod approve_redeem;
+pub mod bootstrap_shares_compliance;
 pub mod cancel_deposit;
 pub mod cancel_redeem;
 pub mod claim_deposit;
@@ -24,6 +25,8 @@ pub use admin::*;
 pub use approve_deposit::*;
 #[allow(ambiguous_glob_reexports)]
 pub use approve_redeem::*;
+#[allow(ambiguous_glob_reexports)]
+pub use bootstrap_shares_compliance::*;
 #[allow(ambiguous_glob_reexports)]
 pub use cancel_deposit::*;
 #[allow(ambiguous_glob_reexports)]

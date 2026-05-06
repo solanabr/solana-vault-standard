@@ -139,6 +139,13 @@ pub enum AccessMode {
 
 ## Instructions
 
+### Pool Setup (one-shot per pool)
+
+| Instruction | Signer | Description |
+|-------------|--------|-------------|
+| `initialize_pool` | `authority` (operator) | Create the vault PDA + shares mint (cPOOL) with TransferHook ext bound to compliance-hook + redemption escrow |
+| `bootstrap_shares_compliance` | `authority` (operator) | Initialize compliance-hook's per-mint `MintConfig` + `ExtraAccountMetaList` PDAs for the cPOOL via CPI signed by vault PDA. Pass `mode` (`FreelyTransferable` or `Permissioned`) and the trust anchors (`attestation_program`, `attestation_issuer`, `required_attestation_type`, `pool_policy`). For `Permissioned` mode, the operator must ALSO issue a system attestation for the vault PDA via the configured attestation program (subject = `vault.key()`) so the hook's destination-side check on cPOOL transfers — destination owner = vault PDA via `redemption_escrow.owner` — passes. |
+
 ### Deposit Flow (Request-Approve-Claim)
 
 | Instruction | Signer | Description |
@@ -153,7 +160,7 @@ pub enum AccessMode {
 
 | Instruction | Signer | Description |
 |-------------|--------|-------------|
-| `request_redeem` | `investor` | Lock shares in redemption escrow (requires KYC attestation, open window) |
+| `request_redeem` | `investor` | Lock shares in redemption escrow (requires KYC attestation; intentionally does not require an open investment window) |
 | `approve_redeem` | `manager` | Burn shares, transfer assets to claimable account via oracle price |
 | `claim_redeem` | `investor` | Withdraw claimable assets to own token account |
 | `cancel_redeem` | `investor` | Cancel own pending request, reclaim locked shares |
@@ -206,7 +213,7 @@ pub fn initialize_pool(
 
 ## Oracle Integration
 
-NAV pricing uses an external oracle account. The vault reads price data directly from the oracle's account data (no CPI).
+NAV pricing uses an external oracle account. The vault reads price data directly from the oracle's account data (no CPI). The shape below describes the simple/mock oracle path (`oracle_source = 0`), which is the neutral upstream default. Deployments that need richer NAV semantics opt into the NavOracle adapter (`oracle_source = 1`) — see "Oracle Extensibility And Credit Markets NavOracle Policy" below.
 
 ```rust
 pub struct NavOracleData {
@@ -228,6 +235,21 @@ assets = shares * price_per_share / PRICE_SCALE
 ```
 
 Where `PRICE_SCALE = 1_000_000_000` (1e9).
+
+## Oracle Extensibility And Credit Markets NavOracle Policy
+
+SVS-11 keeps the simple oracle path as the neutral upstream default.
+Fresh `CreditVault` accounts include oracle-source bookkeeping fields so
+deployments can opt into richer oracle adapters without changing the core
+deposit/redeem state machine.
+
+Credit Markets deployments use the richer NavOracle adapter as deployment
+policy because private-credit NAV needs signed publisher payloads, gross/net
+NAV, TER, loss-provision basis points, sequence monotonicity, stale-NAV
+checks, and loan-tape Merkle commitments. Credit Markets pools should
+initialize a NavAccount, publish the first NAV, then call
+`set_oracle_source(1)` before opening the investment window. Generic SVS-11
+deployments may remain on `oracle_source = 0`.
 
 ## KYC Attestation
 
