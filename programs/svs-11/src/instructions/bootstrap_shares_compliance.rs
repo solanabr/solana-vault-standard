@@ -111,9 +111,7 @@ pub enum BootstrapComplianceMode {
 impl From<BootstrapComplianceMode> for ComplianceHookMode {
     fn from(value: BootstrapComplianceMode) -> Self {
         match value {
-            BootstrapComplianceMode::FreelyTransferable => {
-                ComplianceHookMode::FreelyTransferable
-            }
+            BootstrapComplianceMode::FreelyTransferable => ComplianceHookMode::FreelyTransferable,
             BootstrapComplianceMode::Permissioned => ComplianceHookMode::Permissioned,
         }
     }
@@ -222,23 +220,18 @@ pub fn handler(
     // handler reads MintConfig (just created in step 1) for the mode +
     // trust anchors, and writes the EAML PDA accordingly (4 entries
     // for FreelyTransferable, 8 for Permissioned).
-    compliance_hook::cpi::initialize_extra_account_meta_list(
-        CpiContext::new_with_signer(
-            ctx.accounts.compliance_hook_program.to_account_info(),
-            ComplianceHookInitEaml {
-                extra_account_meta_list: ctx
-                    .accounts
-                    .extra_account_meta_list
-                    .to_account_info(),
-                mint: ctx.accounts.shares_mint.to_account_info(),
-                mint_config: ctx.accounts.mint_config.to_account_info(),
-                mint_authority: ctx.accounts.vault.to_account_info(),
-                payer: ctx.accounts.authority.to_account_info(),
-                system_program: ctx.accounts.system_program.to_account_info(),
-            },
-            vault_signer_seeds,
-        ),
-    )?;
+    compliance_hook::cpi::initialize_extra_account_meta_list(CpiContext::new_with_signer(
+        ctx.accounts.compliance_hook_program.to_account_info(),
+        ComplianceHookInitEaml {
+            extra_account_meta_list: ctx.accounts.extra_account_meta_list.to_account_info(),
+            mint: ctx.accounts.shares_mint.to_account_info(),
+            mint_config: ctx.accounts.mint_config.to_account_info(),
+            mint_authority: ctx.accounts.vault.to_account_info(),
+            payer: ctx.accounts.authority.to_account_info(),
+            system_program: ctx.accounts.system_program.to_account_info(),
+        },
+        vault_signer_seeds,
+    ))?;
 
     msg!(
         "ComplianceHook bootstrap complete | vault={} shares_mint={} mode={:?}",

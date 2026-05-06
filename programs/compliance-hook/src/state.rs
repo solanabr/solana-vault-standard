@@ -101,9 +101,10 @@ pub struct MintConfig {
 
 impl MintConfig {
     pub const SEED_PREFIX: &'static [u8] = b"mint_config";
-    /// 8 (discriminator) + 32 (mint) + 1 (mode) + 1 (Option tag) + 32 (Pubkey)
-    /// + 32 (attestation_program) + 32 (attestation_issuer) + 1 (required_attestation_type)
-    /// = 139 bytes (max-case `Option<Pubkey>` reserves all 33 fixed bytes).
+    /// Account size: 139 bytes. 8 (discriminator), 32 (mint), 1 (mode), 1
+    /// (Option tag), 32 (Pubkey), 32 (attestation_program), 32
+    /// (attestation_issuer), 1 (required_attestation_type). Max-case
+    /// `Option<Pubkey>` reserves all 33 fixed bytes.
     pub const SPACE: usize = 8 + 32 + 1 + 1 + 32 + 32 + 32 + 1;
 }
 

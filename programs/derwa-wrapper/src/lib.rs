@@ -19,10 +19,7 @@ pub mod derwa_wrapper {
     /// required_attestation_type) used by `unwrap` to validate the
     /// destination wallet. One-shot per pool — Anchor's `init` constraint
     /// on `wrapper_config` prevents re-init.
-    pub fn initialize(
-        ctx: Context<InitializeWrapper>,
-        args: InitializeWrapperArgs,
-    ) -> Result<()> {
+    pub fn initialize(ctx: Context<InitializeWrapper>, args: InitializeWrapperArgs) -> Result<()> {
         instructions::initialize::handler(ctx, args)
     }
 
@@ -30,10 +27,7 @@ pub mod derwa_wrapper {
     /// Investor transfers cPOOL into wrapper-PDA-owned ATA; wrapper mints
     /// dePOOL to investor. `locked_supply` increments to enforce the
     /// invariant `locked_supply == dePOOL.supply`.
-    pub fn wrap<'info>(
-        ctx: Context<'_, '_, '_, 'info, Wrap<'info>>,
-        amount: u64,
-    ) -> Result<()> {
+    pub fn wrap<'info>(ctx: Context<'_, '_, '_, 'info, Wrap<'info>>, amount: u64) -> Result<()> {
         instructions::wrap::handler(ctx, amount)
     }
 

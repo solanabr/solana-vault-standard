@@ -187,7 +187,6 @@ pub struct UpdateArgs {
 | 7001 | `InvalidSignature` | Signature does not match publisher key over canonical payload |
 | 7002 | `InconsistentNav` | Self-consistency check failed: `nav_net != nav_gross × (1 − ter − loss)` |
 | 7003 | `UnauthorizedRotation` | Publisher rotation requires the configured `key_rotation_authority` signer |
-| 7004 | `UnauthorizedPublisher` | Caller is not the registered publisher for this NavAccount |
 | 7005 | `TimestampInFuture` | Timestamp must not be in the future |
 
 ## Events

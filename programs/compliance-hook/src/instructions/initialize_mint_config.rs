@@ -88,10 +88,7 @@ pub struct InitializeMintConfig<'info> {
     pub system_program: Program<'info, System>,
 }
 
-pub fn handler(
-    ctx: Context<InitializeMintConfig>,
-    args: InitializeMintConfigArgs,
-) -> Result<()> {
+pub fn handler(ctx: Context<InitializeMintConfig>, args: InitializeMintConfigArgs) -> Result<()> {
     use anchor_lang::solana_program::program_pack::Pack;
     use anchor_spl::token_2022::spl_token_2022;
     use anchor_spl::token_2022::spl_token_2022::state::Mint as Token2022Mint;
@@ -117,8 +114,8 @@ pub fn handler(
     // the binding). We refuse those explicitly. The intermediate
     // `Option<Pubkey>` annotation pins COption's `Into` impl.
     let mint_authority_opt: Option<Pubkey> = mint_state.mint_authority.into();
-    let actual_authority: Pubkey = mint_authority_opt
-        .ok_or(crate::error::ComplianceHookError::UnauthorizedAuthority)?;
+    let actual_authority: Pubkey =
+        mint_authority_opt.ok_or(crate::error::ComplianceHookError::UnauthorizedAuthority)?;
 
     require_keys_eq!(
         actual_authority,
@@ -134,14 +131,10 @@ pub fn handler(
     // Permissioned mode.
     match (args.mode, args.pool_policy) {
         (ComplianceMode::Permissioned, None) => {
-            return err!(
-                crate::error::ComplianceHookError::MissingPoolPolicyForPermissioned
-            );
+            return err!(crate::error::ComplianceHookError::MissingPoolPolicyForPermissioned);
         }
         (ComplianceMode::FreelyTransferable, Some(_)) => {
-            return err!(
-                crate::error::ComplianceHookError::PoolPolicySetOnFreelyTransferable
-            );
+            return err!(crate::error::ComplianceHookError::PoolPolicySetOnFreelyTransferable);
         }
         _ => {}
     }

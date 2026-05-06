@@ -131,9 +131,9 @@ pub fn handler(
     // enough for both the base Mint state AND the hook extension TLV.
     // Without the extension in this calc, the mint would later fail to
     // add the extension during initialize_transfer_hook.
-    let mint_size = ExtensionType::try_calculate_account_len::<spl_token_2022::state::Mint>(
-        &[ExtensionType::TransferHook],
-    )
+    let mint_size = ExtensionType::try_calculate_account_len::<spl_token_2022::state::Mint>(&[
+        ExtensionType::TransferHook,
+    ])
     .map_err(|_| VaultError::MathOverflow)?;
 
     // Token-2022 requires the redemption_escrow account to be sized
@@ -150,11 +150,10 @@ pub fn handler(
     // ix — Token-2022 implicitly initializes the per-account TransferHook
     // state inside `initialize_account3` when the underlying mint has the
     // extension. We just need to allocate the right number of bytes.
-    let token_account_size =
-        ExtensionType::try_calculate_account_len::<spl_token_2022::state::Account>(&[
-            ExtensionType::TransferHookAccount,
-        ])
-        .map_err(|_| VaultError::MathOverflow)?;
+    let token_account_size = ExtensionType::try_calculate_account_len::<
+        spl_token_2022::state::Account,
+    >(&[ExtensionType::TransferHookAccount])
+    .map_err(|_| VaultError::MathOverflow)?;
 
     let rent = &ctx.accounts.rent;
     let mint_lamports = rent.minimum_balance(mint_size);

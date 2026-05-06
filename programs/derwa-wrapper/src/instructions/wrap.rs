@@ -5,9 +5,7 @@ use anchor_spl::token_2022::spl_token_2022::extension::{
     transfer_hook::TransferHook, BaseStateWithExtensions, StateWithExtensions,
 };
 use anchor_spl::token_2022::spl_token_2022::state::Mint as Token2022Mint;
-use anchor_spl::token_interface::{
-    mint_to, Mint, MintTo, TokenAccount, TokenInterface,
-};
+use anchor_spl::token_interface::{mint_to, Mint, MintTo, TokenAccount, TokenInterface};
 use spl_transfer_hook_interface::onchain::add_extra_accounts_for_execute_cpi;
 
 use crate::error::DeRwaError;
@@ -31,31 +29,25 @@ fn read_hook_program_id(mint: &AccountInfo) -> Result<Option<Pubkey>> {
 
 /// Wrap permissioned cPOOL → freely-transferable dePOOL at 1:1.
 ///
-/// Investor transfers `amount` cPOOL to the wrapper PDA's ATA, and the wrapper
-/// program signs a `mint_to` for `amount` dePOOL into the investor's dePOOL ATA.
-/// `locked_supply` increments to maintain the on-chain invariant
-/// `locked_supply == dePOOL.supply`.
+/// Investor transfers `amount` cPOOL to the wrapper PDA's ATA, and the
+/// wrapper program signs a `mint_to` for `amount` dePOOL into the
+/// investor's dePOOL ATA. `locked_supply` increments to maintain the
+/// on-chain invariant `locked_supply == dePOOL.supply`.
 ///
-/// ─── HOOK ACCOUNT FORWARDING ──────────────────────────────────────────────
-/// The cPOOL `transfer_checked` CPI invokes ComplianceHook (typically in
-/// Permissioned mode). Token-2022 auto-resolves the hook's
-/// ExtraAccountMetaList for top-level user txs, but for a CPI the CALLER
-/// must pass the extra accounts in `remaining_accounts`. We forward
-/// `ctx.remaining_accounts` verbatim to the CPI via
-/// `with_remaining_accounts(...)`. Off-chain SDK callers must build the
-/// `wrap` instruction with the resolved EAML extras for the source =
-/// investor → destination = wrapper_signer transfer; the SDK's
-/// `DeRwaWrapper.wrap` helper exposes this as a caller-supplied
-/// `remainingAccounts` parameter.
+/// The wrap is strict 1:1 by design — there is no slippage parameter
+/// because dePOOL is minted at exactly the cPOOL amount transferred in.
 ///
-/// The wrapper PDA (`wrapper_signer`) is the destination of the cPOOL
-/// transfer. In Permissioned mode the hook validates BOTH owners — so the
-/// wrapper deploy must issue a "system attestation" for `wrapper_signer`
-/// in the same attestation program as regular investors (subject =
-/// wrapper_signer, issuer + type matching `WrapperConfig`'s anchors).
-/// Without it, the destination-attestation check fails. The operator
-/// bootstrap flow must create this attestation before opening wrapping.
-/// ──────────────────────────────────────────────────────────────────────────
+/// Hook account forwarding: when the cPOOL mint has a TransferHook
+/// configured, the inner `transfer_checked` CPI must carry the resolved
+/// EAML extras for the source = investor → destination = wrapper_signer
+/// transfer. SDK callers populate `ctx.remaining_accounts` with those
+/// extras; the handler forwards them via `add_extra_accounts_for_execute_cpi`.
+///
+/// In Permissioned mode the hook validates both transfer owners. The
+/// wrapper deploy must issue a system attestation for `wrapper_signer`
+/// (subject = wrapper_signer, issuer + type matching `WrapperConfig`'s
+/// anchors) before the first wrap, otherwise the destination-side hook
+/// check rejects.
 #[derive(Accounts)]
 pub struct Wrap<'info> {
     /// Per-pool wrapper config. Mut because we increment `locked_supply`.
@@ -117,26 +109,13 @@ pub struct Wrap<'info> {
     pub token_program: Interface<'info, TokenInterface>,
 }
 
-pub fn handler<'info>(
-    ctx: Context<'_, '_, '_, 'info, Wrap<'info>>,
-    amount: u64,
-) -> Result<()> {
+pub fn handler<'info>(ctx: Context<'_, '_, '_, 'info, Wrap<'info>>, amount: u64) -> Result<()> {
     require!(amount > 0, DeRwaError::ZeroAmount);
 
-    // 1. Transfer cPOOL from investor → wrapper PDA's ATA.
-    //    `transfer_checked` is the Token-2022 path that respects the
-    //    TransferHook extension. Token-2022's `invoke_execute` looks up
-    //    the hook program + EAML PDA + resolved extras in the INNER ix's
-    //    keys list (not in the surrounding tx accounts), so we cannot
-    //    rely on Anchor's `with_remaining_accounts` alone — that only
-    //    extends the CPI account_infos, not the inner ix's `accounts`
-    //    field. We build the bare `transfer_checked` ix from
-    //    spl-token-2022 and let `add_extra_accounts_for_execute_cpi`
-    //    extend BOTH the ix keys list AND the cpi_account_infos with
-    //    the hook program + EAML + resolved extras (sourced from
-    //    `ctx.remaining_accounts`). The off-chain SDK's `wrap` helper
-    //    builds the corresponding `remainingAccounts` slice so this
-    //    extension finds what it needs.
+    // Transfer cPOOL from investor → wrapper PDA. When the cPOOL mint has
+    // a TransferHook configured, the inner `transfer_checked` ix is
+    // extended with the resolved EAML extras supplied via
+    // `ctx.remaining_accounts`.
     let mut transfer_ix = spl_token_2022::instruction::transfer_checked(
         &spl_token_2022::ID,
         &ctx.accounts.investor_permissioned_ata.key(),
@@ -171,12 +150,8 @@ pub fn handler<'info>(
     }
     invoke_signed(&transfer_ix, &transfer_account_infos, &[])?;
 
-    // 2. Mint dePOOL to investor (1:1).
-    //
-    //    Anchor's `bumps` only contains entries for accounts that were
-    //    derived in this ix's accounts struct. `wrapper_signer` IS one of
-    //    those (via the `seeds = [...]` constraint above), so
-    //    `ctx.bumps.wrapper_signer` is the canonical bump.
+    // Mint dePOOL to investor (1:1). The wrapper PDA signs as the dePOOL
+    // mint authority.
     let pool_key = ctx.accounts.wrapper_config.pool;
     let signer_seeds: &[&[&[u8]]] = &[&[
         b"wrapper_signer",
@@ -194,20 +169,25 @@ pub fn handler<'info>(
     );
     mint_to(cpi_ctx, amount)?;
 
-    // 3. Update locked_supply. Per spec — overflow at u64::MAX cPOOL is
-    //    practically impossible (would require ~1.8e19 token base units of
-    //    real-world credit) and the program panic is acceptable for that
-    //    theoretical edge. If product later wants a graceful error, add a
-    //    `LockedSupplyOverflow` variant to DeRwaError and switch to
-    //    `checked_add(...).ok_or(...)?`.
     let cfg = &mut ctx.accounts.wrapper_config;
-    cfg.locked_supply = cfg.locked_supply.checked_add(amount).unwrap();
+    cfg.locked_supply = cfg
+        .locked_supply
+        .checked_add(amount)
+        .ok_or(DeRwaError::LockedSupplyOverflow)?;
 
-    msg!(
-        "wrap | investor={} amount={} new_locked={}",
-        ctx.accounts.investor.key(),
+    emit!(Wrapped {
+        pool: cfg.pool,
+        investor: ctx.accounts.investor.key(),
         amount,
-        cfg.locked_supply,
-    );
+        locked_supply: cfg.locked_supply,
+    });
     Ok(())
+}
+
+#[event]
+pub struct Wrapped {
+    pub pool: Pubkey,
+    pub investor: Pubkey,
+    pub amount: u64,
+    pub locked_supply: u64,
 }

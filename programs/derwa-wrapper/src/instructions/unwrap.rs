@@ -11,11 +11,8 @@ use spl_transfer_hook_interface::onchain::add_extra_accounts_for_execute_cpi;
 use crate::error::DeRwaError;
 use crate::state::WrapperConfig;
 
-/// Same helper as `wrap.rs::read_hook_program_id` — extract the hook
-/// program from the mint's TransferHook extension. Duplicated rather
-/// than refactored into a shared module to keep the unwrap CPI
-/// self-contained; the function is small enough that the duplication
-/// reads cleaner than a cross-module dependency.
+/// Read the configured TransferHook program from the mint's Token-2022
+/// extension. Returns None when the mint isn't a Token-2022 mint.
 fn read_hook_program_id(mint: &AccountInfo) -> Result<Option<Pubkey>> {
     if mint.owner != &spl_token_2022::ID {
         return Ok(None);
@@ -31,65 +28,19 @@ fn read_hook_program_id(mint: &AccountInfo) -> Result<Option<Pubkey>> {
 
 /// Unwrap dePOOL → cPOOL at 1:1, attestation-gated.
 ///
-/// Burns dePOOL from investor and releases cPOOL from the wrapper PDA back to
-/// the investor — but ONLY if the destination wallet (the investor) has a
-/// valid, non-revoked, non-expired attestation. Without this gate, an attacker
-/// could buy dePOOL on a DEX without ever passing KYB and then unwrap to
-/// receive permissioned cPOOL — the entire point of the Permissioned mode
-/// would be defeated.
+/// Burns dePOOL from the investor and releases cPOOL from the wrapper PDA
+/// back to the investor's cPOOL ATA. The destination wallet must hold a
+/// valid attestation against the wrapper's configured trust anchors; see
+/// `validate_investor_attestation` below for the validation contract.
+/// The handler-level check is redundant with the ComplianceHook on the
+/// cPOOL `transfer_checked` CPI in Permissioned mode and acts as the
+/// authoritative gate when the cPOOL hook is configured as
+/// FreelyTransferable.
 ///
-/// ── DEFENSE-IN-DEPTH ATTESTATION VALIDATION ───────────────────────────
-/// `validate_investor_attestation` below performs FIVE checks that must
-/// all pass before the unwrap proceeds:
-///
-///   1. **Account owner**: `att.owner == wrapper_config.attestation_program`.
-///      Without this, an attacker could pass an account from a foreign
-///      program with attacker-controlled data.
-///
-///   2. **Subject binding**: `payload[0..32] == investor.key()`. This is
-///      the most subtle check, and it is NOT redundant with the canonical
-///      PDA derivation in (5). One might reason that "passing a stranger's
-///      attestation would require finding one whose subject equals the
-///      investor, which is the same as having a real attestation"; that
-///      reasoning is incorrect. Without reading the subject field
-///      directly, the handler accepts any pre-existing valid attestation
-///      (e.g. a friend's KYC'd account) for ANY investor passed as the
-///      tx authority — silently unwrapping permissioned cPOOL into a
-///      non-attested wallet. Re-deriving the canonical PDA in (5) closes
-///      the same hole atomically, but explicit subject comparison
-///      surfaces a clear, mode-specific error code on mismatch
-///      (`InvalidAttestationSubject`) rather than the generic
-///      `InvalidAttestationPda`, which makes downstream incident
-///      response easier.
-///
-///   3. **Issuer match**: `payload[32..64] ==
-///      wrapper_config.attestation_issuer`. Pins the trust anchor to a
-///      specific compliance attester so an attestation from a different
-///      jurisdiction's issuer can't satisfy this pool.
-///
-///   4. **Type match**: `payload[64] ==
-///      wrapper_config.required_attestation_type`. Prevents a low-tier
-///      attestation (generic KYC) from satisfying a vault that
-///      semantically requires a higher tier (accredited investor) when
-///      the same issuer issues multiple types.
-///
-///   5. **Canonical PDA derivation**:
-///      `Pubkey::create_program_address([b"attestation", subject, issuer,
-///      attestation_type, bump], attestation_program) == att.key()`.
-///      Atomically binds checks 1-4 to the same physical account — the
-///      attestation account address is a function of (program, subject,
-///      issuer, type), so a mismatch in any of those produces a
-///      different PDA than the one passed.
-///
-/// Together with the existing `revoked` and `expires_at` checks (6 and 7
-/// in the validation list), this gives the full SVS-11-aligned
-/// attestation enforcement. The check is intentionally redundant with
-/// the on-chain ComplianceHook on the cPOOL `transfer_checked` CPI —
-/// once the hook is fully wired up, both layers will reject an
-/// unauthorized unwrap. Until then, this explicit check is the only
-/// gate on the destination wallet, and a bug here voids the entire
-/// Permissioned-mode invariant.
-/// ────────────────────────────────────────────────────────────────────
+/// The wrap is strict 1:1 by design — there is no slippage parameter
+/// because dePOOL is minted/burned at exactly the cPOOL amount. The 1:1
+/// invariant is asserted by the `locked_supply` arithmetic and the
+/// matched `Burn` / `transfer_checked` amounts in the handler.
 #[derive(Accounts)]
 pub struct Unwrap<'info> {
     #[account(
@@ -140,11 +91,10 @@ pub struct Unwrap<'info> {
     pub investor_derwa_ata: Box<InterfaceAccount<'info, TokenAccount>>,
 
     /// CHECK: Attestation PDA from the configured attestation program.
-    /// Validated comprehensively in the handler against `wrapper_config`'s
-    /// trust anchors (program / issuer / type) AND against the canonical
-    /// PDA derivation `[b"attestation", subject, issuer, attestation_type]`.
-    /// See the DEFENSE-IN-DEPTH ATTESTATION VALIDATION block on `Unwrap`'s
-    /// doc-comment for the full list of checks.
+    /// Validated in the handler against `wrapper_config`'s trust anchors
+    /// (program / issuer / type) and against the canonical PDA derivation
+    /// `[b"attestation", subject, issuer, attestation_type]`. See
+    /// `validate_investor_attestation` below.
     pub investor_attestation: UncheckedAccount<'info>,
 
     pub investor: Signer<'info>,
@@ -152,27 +102,20 @@ pub struct Unwrap<'info> {
     pub token_program: Interface<'info, TokenInterface>,
 }
 
-pub fn handler<'info>(
-    ctx: Context<'_, '_, '_, 'info, Unwrap<'info>>,
-    amount: u64,
-) -> Result<()> {
+pub fn handler<'info>(ctx: Context<'_, '_, '_, 'info, Unwrap<'info>>, amount: u64) -> Result<()> {
     require!(amount > 0, DeRwaError::ZeroAmount);
     require!(
         ctx.accounts.wrapper_config.locked_supply >= amount,
         DeRwaError::InsufficientLockedSupply
     );
 
-    // 1. Validate the investor's attestation against the wrapper's trust
-    //    anchors. Reads the SVS-11-aligned 129-byte attestation payload
-    //    and rejects any of: foreign program owner, mismatched subject /
-    //    issuer / type, revoked, expired, or non-canonical PDA.
     validate_investor_attestation(
         &ctx.accounts.investor_attestation,
         &ctx.accounts.investor.key(),
         &ctx.accounts.wrapper_config,
     )?;
 
-    // 2. Burn dePOOL from investor (investor signs).
+    // Burn dePOOL from the investor.
     let cpi_ctx = CpiContext::new(
         ctx.accounts.token_program.to_account_info(),
         Burn {
@@ -183,22 +126,11 @@ pub fn handler<'info>(
     );
     burn(cpi_ctx, amount)?;
 
-    // 3. Transfer cPOOL from wrapper PDA back to investor (wrapper PDA
-    //    signs via signer_seeds). Goes through ComplianceHook in
-    //    Permissioned mode — investor must be attested AND the wrapper
-    //    PDA itself must hold a system attestation (issued at wrapper
-    //    deploy time). Our explicit check in step 1 already validated the
-    //    investor's attestation; the hook check is defense-in-depth on
-    //    the source side (wrapper_signer) and reaffirms the destination.
-    //
-    //    `ctx.remaining_accounts` carries the EAML extras for the cPOOL
-    //    transfer with `(source = wrapper_signer, destination = investor)`;
-    //    the SDK's `DeRwaWrapper.unwrap` helper exposes these as a
-    //    caller-supplied `remainingAccounts` parameter.
-    // Same CPI-extension dance as `wrap.rs`: build the bare
-    // transfer_checked ix and let `add_extra_accounts_for_execute_cpi`
-    // append the hook program + EAML + resolved extras to the inner ix
-    // keys list. wrapper_signer signs via `signer_seeds`.
+    // Release cPOOL from wrapper PDA back to the investor. When the cPOOL
+    // mint has a TransferHook configured, the inner `transfer_checked` ix
+    // is extended with the resolved EAML extras supplied via
+    // `ctx.remaining_accounts` (source = wrapper_signer, destination =
+    // investor).
     let pool_key = ctx.accounts.wrapper_config.pool;
     let signer_seeds: &[&[&[u8]]] = &[&[
         b"wrapper_signer",
@@ -239,55 +171,65 @@ pub fn handler<'info>(
     }
     invoke_signed(&transfer_ix, &transfer_account_infos, signer_seeds)?;
 
-    // 4. Update locked_supply. The earlier `>= amount` require! ensures this
-    //    underflow check passes; .unwrap() panicking would indicate a bug in
-    //    that earlier check, which we want to fail loud on.
     let cfg = &mut ctx.accounts.wrapper_config;
-    cfg.locked_supply = cfg.locked_supply.checked_sub(amount).unwrap();
+    cfg.locked_supply = cfg
+        .locked_supply
+        .checked_sub(amount)
+        .ok_or(DeRwaError::InsufficientLockedSupply)?;
 
-    msg!(
-        "unwrap | investor={} amount={} new_locked={}",
-        ctx.accounts.investor.key(),
+    emit!(Unwrapped {
+        pool: cfg.pool,
+        investor: ctx.accounts.investor.key(),
         amount,
-        cfg.locked_supply,
-    );
+        locked_supply: cfg.locked_supply,
+    });
     Ok(())
 }
 
-/// Validate an SVS-11-shaped attestation account against a wrapper's
-/// trust anchors and the expected subject (= investor unwrapping).
+#[event]
+pub struct Unwrapped {
+    pub pool: Pubkey,
+    pub investor: Pubkey,
+    pub amount: u64,
+    pub locked_supply: u64,
+}
+
+/// Validate an SVS-11-shaped attestation account against the wrapper's
+/// trust anchors and the unwrapping investor.
 ///
-/// Layout reference (offsets are inside the post-discriminator payload,
-/// so `payload[i] = data[i + 8]`):
-///   0..32    subject (Pubkey)
-///   32..64   issuer (Pubkey)
-///   64       attestation_type (u8)
-///   65..67   country_code ([u8; 2])
-///   67..75   issued_at (i64)
-///   75..83   expires_at (i64)
-///   83       revoked (bool)
-///   84       bump (u8)
-///   85..117  _reserved ([u8; 32])
-///   117..119 jurisdiction ([u8; 2])
-///   119      investor_class (u8)
-///   120      kyc_risk_tier (u8)
-/// Total: 121 bytes payload + 8 disc = 129 bytes minimum.
+/// Account layout (post-discriminator payload, so `payload[i] = data[i + 8]`):
 ///
-/// MUST stay in sync with `programs/svs-11/src/attestation.rs` and
+/// | offset    | field             | size |
+/// |-----------|-------------------|------|
+/// | 0..32     | subject           | 32   |
+/// | 32..64    | issuer            | 32   |
+/// | 64        | attestation_type  | 1    |
+/// | 65..67    | country_code      | 2    |
+/// | 67..75    | issued_at         | 8    |
+/// | 75..83    | expires_at        | 8    |
+/// | 83        | revoked           | 1    |
+/// | 84        | bump              | 1    |
+/// | 85..117   | _reserved         | 32   |
+/// | 117..119  | jurisdiction      | 2    |
+/// | 119       | investor_class    | 1    |
+/// | 120       | kyc_risk_tier     | 1    |
+///
+/// Total: 121-byte payload + 8-byte discriminator = 129 bytes minimum.
+/// Must stay in sync with `programs/svs-11/src/attestation.rs` and
 /// `programs/compliance-hook/src/instructions/execute.rs::check_attestation`.
 fn validate_investor_attestation(
     att: &AccountInfo,
     investor: &Pubkey,
     cfg: &WrapperConfig,
 ) -> Result<()> {
-    // (1) Account owner: must be the configured attestation program.
+    // 1. Account owner: must be the configured attestation program.
     require!(
         att.owner == &cfg.attestation_program,
         DeRwaError::InvalidAttestationProgram
     );
 
-    // Existence + size. A non-existent PDA shows up as a default-zero
-    // system account: lamports == 0, data.len() == 0.
+    // 2. Existence and size. A non-existent PDA shows up as a default-zero
+    //    system account (lamports == 0, data.len() == 0).
     require!(
         att.lamports() > 0 && att.data_len() > 0,
         DeRwaError::AttestationRequired
@@ -297,45 +239,46 @@ fn validate_investor_attestation(
     require!(data.len() >= 129, DeRwaError::AttestationRequired);
     let payload = &data[8..];
 
-    // (2) Subject: payload[0..32] must match the unwrapping investor.
-    // try_into().unwrap() is sound: data.len() >= 129 guarantees 32 bytes.
-    let subject_bytes: [u8; 32] = payload[0..32].try_into().unwrap();
+    // 3. Subject: payload[0..32] must match the unwrapping investor.
+    let subject_bytes: [u8; 32] = payload[0..32]
+        .try_into()
+        .map_err(|_| error!(DeRwaError::AttestationRequired))?;
     let subject = Pubkey::new_from_array(subject_bytes);
-    require!(
-        &subject == investor,
-        DeRwaError::InvalidAttestationSubject
-    );
+    require!(&subject == investor, DeRwaError::InvalidAttestationSubject);
 
-    // (3) Issuer: payload[32..64] must match wrapper-configured issuer.
-    let issuer_bytes: [u8; 32] = payload[32..64].try_into().unwrap();
+    // 4. Issuer: payload[32..64] must match the wrapper-configured issuer.
+    let issuer_bytes: [u8; 32] = payload[32..64]
+        .try_into()
+        .map_err(|_| error!(DeRwaError::AttestationRequired))?;
     let issuer = Pubkey::new_from_array(issuer_bytes);
     require!(
         issuer == cfg.attestation_issuer,
         DeRwaError::InvalidAttestationIssuer
     );
 
-    // (4) Attestation type: payload[64] must match wrapper-required type.
+    // 5. Attestation type: payload[64] must match the wrapper-required type.
     let attestation_type = payload[64];
     require!(
         attestation_type == cfg.required_attestation_type,
         DeRwaError::InvalidAttestationType
     );
 
-    // (6) Revoked: payload[83] must be 0.
+    // 6. Revoked: payload[83] must be 0.
     let revoked = payload[83] != 0;
     require!(!revoked, DeRwaError::AttestationRequired);
 
-    // (7) Not expired: now < payload[75..83] (i64 LE).
-    let expires_at = i64::from_le_bytes(payload[75..83].try_into().unwrap());
+    // 7. Not expired: now < payload[75..83] (i64 LE).
+    let expires_at_bytes: [u8; 8] = payload[75..83]
+        .try_into()
+        .map_err(|_| error!(DeRwaError::AttestationRequired))?;
+    let expires_at = i64::from_le_bytes(expires_at_bytes);
     let now = Clock::get()?.unix_timestamp;
     require!(now < expires_at, DeRwaError::AttestationRequired);
 
-    // (5) Canonical PDA derivation. Re-derives
-    // `[b"attestation", subject, issuer, attestation_type, bump]` against
-    // the configured attestation program and asserts the input account's
-    // address matches. This atomically binds (1)-(4) to the same physical
-    // account — a mismatch in subject / issuer / type would produce a
-    // different PDA, which would not equal `att.key()`.
+    // 8. Canonical PDA derivation. Re-derives
+    //    `[b"attestation", subject, issuer, attestation_type, bump]` and
+    //    asserts the input account's address matches. Atomically binds 3-5
+    //    to the same physical account.
     let bump = payload[84];
     let expected_pda = Pubkey::create_program_address(
         &[
@@ -348,10 +291,7 @@ fn validate_investor_attestation(
         &cfg.attestation_program,
     )
     .map_err(|_| -> Error { error!(DeRwaError::InvalidAttestationPda) })?;
-    require!(
-        att.key() == expected_pda,
-        DeRwaError::InvalidAttestationPda
-    );
+    require!(att.key() == expected_pda, DeRwaError::InvalidAttestationPda);
 
     Ok(())
 }

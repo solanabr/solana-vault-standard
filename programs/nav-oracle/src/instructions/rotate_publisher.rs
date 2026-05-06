@@ -1,6 +1,6 @@
-use anchor_lang::prelude::*;
 use crate::error::NavOracleError;
 use crate::state::NavAccount;
+use anchor_lang::prelude::*;
 
 #[derive(Accounts)]
 pub struct RotatePublisher<'info> {
@@ -29,6 +29,11 @@ pub fn handler(ctx: Context<RotatePublisher>) -> Result<()> {
     let old = nav.publisher;
     nav.publisher = ctx.accounts.new_publisher.key();
 
-    msg!("Publisher rotated | pool={} old={} new={}", nav.pool, old, nav.publisher);
+    msg!(
+        "Publisher rotated | pool={} old={} new={}",
+        nav.pool,
+        old,
+        nav.publisher
+    );
     Ok(())
 }

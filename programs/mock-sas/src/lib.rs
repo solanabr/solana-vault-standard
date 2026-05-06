@@ -16,7 +16,14 @@ pub mod mock_sas {
         // Backward-compatible wrapper. New metadata fields default to zero
         // ("no policy enforcement" / infrastructure tier).
         create_attestation_inner(
-            ctx, issuer, attestation_type, country_code, expires_at, None, None, None,
+            ctx,
+            issuer,
+            attestation_type,
+            country_code,
+            expires_at,
+            None,
+            None,
+            None,
         )
     }
 

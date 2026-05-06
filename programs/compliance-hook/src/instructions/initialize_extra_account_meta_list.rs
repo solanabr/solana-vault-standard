@@ -95,8 +95,8 @@ pub fn handler(ctx: Context<InitializeExtraAccountMetaList>) -> Result<()> {
     let mint_state = Token2022Mint::unpack(&mint_data[..Token2022Mint::LEN])
         .map_err(|_| crate::error::ComplianceHookError::InvalidMintAccount)?;
     let mint_authority_opt: Option<Pubkey> = mint_state.mint_authority.into();
-    let actual_authority: Pubkey = mint_authority_opt
-        .ok_or(crate::error::ComplianceHookError::UnauthorizedAuthority)?;
+    let actual_authority: Pubkey =
+        mint_authority_opt.ok_or(crate::error::ComplianceHookError::UnauthorizedAuthority)?;
     drop(mint_data); // release the borrow before further mut access below.
     require_keys_eq!(
         actual_authority,
@@ -308,9 +308,8 @@ fn build_extra_account_metas(
         // under compliance-hook would resolve the wrong account. A
         // policy rotation therefore requires re-initializing the EAML,
         // which matches the current "set once per mint" posture.
-        let pool_policy = pool_policy.ok_or(
-            crate::error::ComplianceHookError::MissingPoolPolicyForPermissioned,
-        )?;
+        let pool_policy = pool_policy
+            .ok_or(crate::error::ComplianceHookError::MissingPoolPolicyForPermissioned)?;
         v.push(ExtraAccountMeta::new_with_pubkey(
             pool_policy,
             false,

@@ -14,9 +14,6 @@ pub enum NavOracleError {
     #[msg("Publisher rotation requires the configured key_rotation_authority signer")]
     UnauthorizedRotation = 7003,
 
-    #[msg("Caller is not the registered publisher for this NavAccount")]
-    UnauthorizedPublisher = 7004,
-
     #[msg("Timestamp must not be in the future")]
     TimestampInFuture = 7005,
 }

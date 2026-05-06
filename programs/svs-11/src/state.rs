@@ -132,7 +132,7 @@ impl CreditVault {
         8 +   // last_seen_nav_price
         8 +   // max_nav_staleness_secs
         1 +   // oracle_source
-        7;    // _padding_oracle
+        7; // _padding_oracle
 
     /// Audit-friendly alias matching the spec language. Identical to `LEN`.
     pub const SPACE: usize = Self::LEN;
@@ -227,7 +227,7 @@ impl RedemptionRequest {
         // ---- Pro-rata fulfillment fields (+24 bytes) ----
         8 +   // original_shares
         8 +   // queued_for_settlement_at
-        8;    // fulfilled_shares_cumulative
+        8; // fulfilled_shares_cumulative
 
     pub const SEED_PREFIX: &'static [u8] = REDEMPTION_REQUEST_SEED;
 }

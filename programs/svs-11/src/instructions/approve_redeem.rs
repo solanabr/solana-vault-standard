@@ -142,8 +142,7 @@ pub fn handler(
     // remaining shares; cap at 1e18 so a buggy backend doesn't bypass
     // the remaining-shares math.
     require!(
-        batch_settlement_ratio_scaled > 0
-            && batch_settlement_ratio_scaled <= RATIO_SCALE_1E18,
+        batch_settlement_ratio_scaled > 0 && batch_settlement_ratio_scaled <= RATIO_SCALE_1E18,
         VaultError::ZeroAmount
     );
 
@@ -266,12 +265,8 @@ pub fn handler(
     let net_assets = {
         let remaining_accounts = ctx.remaining_accounts;
         let vault_key = ctx.accounts.vault.key();
-        let result = module_hooks::apply_exit_fee(
-            remaining_accounts,
-            &crate::ID,
-            &vault_key,
-            gross_assets,
-        )?;
+        let result =
+            module_hooks::apply_exit_fee(remaining_accounts, &crate::ID, &vault_key, gross_assets)?;
         result.net_assets
     };
     #[cfg(not(feature = "modules"))]

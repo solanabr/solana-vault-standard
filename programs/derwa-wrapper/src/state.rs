@@ -59,10 +59,9 @@ pub struct WrapperConfig {
 impl WrapperConfig {
     pub const SEED_PREFIX: &'static [u8] = b"wrapper_config";
 
-    /// Account size budget for `init` allocation:
-    /// 8 (discriminator) + 32 (pool) + 32 (permissioned_mint) + 32 (derwa_mint)
-    /// + 8 (locked_supply) + 1 (bump) + 32 (attestation_program)
-    /// + 32 (attestation_issuer) + 1 (required_attestation_type)
-    /// = 178 bytes.
+    /// Account size for `init` allocation: 178 bytes. 8 (discriminator), 32
+    /// (pool), 32 (permissioned_mint), 32 (derwa_mint), 8 (locked_supply),
+    /// 1 (bump), 32 (attestation_program), 32 (attestation_issuer), 1
+    /// (required_attestation_type).
     pub const SPACE: usize = 8 + 32 + 32 + 32 + 8 + 1 + 32 + 32 + 1;
 }

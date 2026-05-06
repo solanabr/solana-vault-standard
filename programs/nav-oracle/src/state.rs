@@ -84,19 +84,29 @@ impl NavAccount {
         buf
     }
 
-    /// Verify nav_net ≈ nav_gross × (1 − ter − loss) within 1bps tolerance.
+    /// Verify nav_net ≈ nav_gross × (1 − ter − loss) within 1 bps tolerance.
+    /// Returns false on any arithmetic failure or when ter + loss >= 100%.
     pub fn verify_self_consistency(&self) -> bool {
-        let factor_bps = 10_000_i64
-            .checked_sub(self.ter_bps as i64).unwrap_or(0)
-            .checked_sub(self.loss_provision_bps as i64).unwrap_or(0);
-        if factor_bps <= 0 { return false; }
-        // expected = nav_gross * factor_bps / 10000
-        let expected = (self.nav_gross as u128)
-            .checked_mul(factor_bps as u128).unwrap_or(0)
-            .checked_div(10_000).unwrap_or(0);
-        let nav_net_u128 = self.nav_net as u128;
+        let Some(after_ter) = 10_000_i64.checked_sub(self.ter_bps as i64) else {
+            return false;
+        };
+        let Some(factor_bps) = after_ter.checked_sub(self.loss_provision_bps as i64) else {
+            return false;
+        };
+        if factor_bps <= 0 {
+            return false;
+        }
+        // expected = nav_gross × factor_bps / 10_000
+        let Some(scaled) = (self.nav_gross as u128).checked_mul(factor_bps as u128) else {
+            return false;
+        };
+        let Some(expected) = scaled.checked_div(10_000) else {
+            return false;
+        };
         // Tolerance: 1 bps of nav_gross
-        let tolerance = (self.nav_gross as u128) / 10_000;
-        nav_net_u128.abs_diff(expected) <= tolerance
+        let Some(tolerance) = (self.nav_gross as u128).checked_div(10_000) else {
+            return false;
+        };
+        (self.nav_net as u128).abs_diff(expected) <= tolerance
     }
 }

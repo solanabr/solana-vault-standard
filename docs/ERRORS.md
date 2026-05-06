@@ -162,7 +162,6 @@ These errors live in the SVS-11 `VaultError` enum and back the NavOracle adapter
 | 7001 | `InvalidSignature` | Signature does not match publisher key over canonical payload | Ed25519 precompile scan fails to find a matching `(pubkey, msg, sig)` triple |
 | 7002 | `InconsistentNav` | Self-consistency check failed: nav_net != nav_gross × (1 − ter − loss) | `update` payload fails self-consistency |
 | 7003 | `UnauthorizedRotation` | Publisher rotation requires the configured key_rotation_authority signer | `rotate_publisher` without the rotation authority signer |
-| 7004 | `UnauthorizedPublisher` | Caller is not the registered publisher for this NavAccount | Update signed by a key other than `NavAccount.publisher` |
 | 7005 | `TimestampInFuture` | Timestamp must not be in the future | `update` payload timestamp > on-chain clock |
 
 ---
@@ -191,6 +190,7 @@ These errors live in the SVS-11 `VaultError` enum and back the NavOracle adapter
 | 6015 | `InvalidAttestationType` | Attestation type does not match the mint-required type | Permissioned transfer with wrong attestation tier/type |
 | 6016 | `InvalidAttestationPda` | Attestation account address does not match canonical PDA derivation | Permissioned transfer with misderived attestation PDA |
 | 6017 | `InvalidAttestationConfig` | Permissioned trust anchors are missing/default | Permissioned MintConfig with unset attestation program or issuer |
+| 6018 | `SanctionsListVersionOverflow` | Sanctions list version arithmetic overflow | `update_sanctions_list` after the `u64` version counter saturates |
 
 ---
 
@@ -210,6 +210,7 @@ These errors live in the SVS-11 `VaultError` enum and back the NavOracle adapter
 | 8007 | `InvalidAttestationType` | attestation type does not match the wrapper-required type | `unwrap` with wrong attestation tier/type |
 | 8008 | `InvalidAttestationPda` | attestation account address does not match canonical PDA derivation | `unwrap` with a misderived attestation PDA |
 | 8009 | `InvalidAttestationConfig` | wrapper trust anchors are missing/default | `initialize` with unset attestation program or issuer |
+| 8010 | `LockedSupplyOverflow` | locked supply arithmetic overflow | `wrap` after `locked_supply` saturates the `u64` (cosmologically implausible) |
 
 ---
 
@@ -334,6 +335,6 @@ Error: AnchorError: Vault is paused. Error Code: VaultPaused.
 | svs-locks | 6120-6129 | Lock module errors |
 | svs-access | 6130-6139 | Access control errors |
 | svs-rewards | 6140-6149 | Rewards module errors |
-| compliance-hook | 6000-6017 | TransferHook compliance errors (Token-2022) |
+| compliance-hook | 6000-6018 | TransferHook compliance errors (Token-2022) |
 | nav-oracle | 7000-7005 | Per-pool NAV oracle errors |
-| derwa-wrapper | 8000-8009 | cPOOL ↔ dePOOL wrap errors |
+| derwa-wrapper | 8000-8010 | cPOOL ↔ dePOOL wrap errors |

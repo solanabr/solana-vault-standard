@@ -370,7 +370,32 @@ The hook's `execute` instruction (transfer-time enforcement) does not emit event
 
 ## derwa-wrapper
 
-[derwa-wrapper](derwa-wrapper.md) emits no events. Wrap and unwrap activity is observed through the standard SPL Token-2022 mint/burn and transfer log records on the cPOOL and dePOOL mints, plus the wrapper-PDA escrow ATA. The on-chain invariant `WrapperConfig.locked_supply == dePOOL.supply` can be reconstructed from those primitives without a dedicated event.
+[derwa-wrapper](derwa-wrapper.md) emits structured events on every wrap and unwrap so indexers can track wrapper activity without reconstructing it from raw token logs.
+
+| Event | Fields | Emitted By |
+|-------|--------|------------|
+| `Wrapped` | `pool`, `investor`, `amount`, `locked_supply` | `wrap` |
+| `Unwrapped` | `pool`, `investor`, `amount`, `locked_supply` | `unwrap` |
+
+```rust
+#[event]
+pub struct Wrapped {
+    pub pool: Pubkey,
+    pub investor: Pubkey,
+    pub amount: u64,
+    pub locked_supply: u64,
+}
+
+#[event]
+pub struct Unwrapped {
+    pub pool: Pubkey,
+    pub investor: Pubkey,
+    pub amount: u64,
+    pub locked_supply: u64,
+}
+```
+
+The on-chain invariant `WrapperConfig.locked_supply == dePOOL.supply` can be reconstructed from these events alongside the standard Token-2022 mint/burn log records on cPOOL and dePOOL.
 
 ---
 

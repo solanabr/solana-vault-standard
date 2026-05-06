@@ -168,7 +168,7 @@ payload offsets (data[8..] after Anchor discriminator):
 
 **Params:** `amount: u64`
 
-**Errors:** `ZeroAmount`, `InsufficientLockedSupply`, `AttestationRequired`, `MintMismatch`, `InvalidAttestationProgram`, `InvalidAttestationSubject`, `InvalidAttestationIssuer`, `InvalidAttestationType`, `InvalidAttestationPda`, `InvalidAttestationConfig`.
+**Errors:** `ZeroAmount`, `InsufficientLockedSupply`, `AttestationRequired`, `MintMismatch`, `InvalidAttestationProgram`, `InvalidAttestationSubject`, `InvalidAttestationIssuer`, `InvalidAttestationType`, `InvalidAttestationPda`, `InvalidAttestationConfig`, `LockedSupplyOverflow`.
 
 ## Errors
 
@@ -184,6 +184,7 @@ payload offsets (data[8..] after Anchor discriminator):
 | 8007 | InvalidAttestationType | attestation type does not match `WrapperConfig.required_attestation_type` |
 | 8008 | InvalidAttestationPda | attestation address does not match the canonical PDA derivation |
 | 8009 | InvalidAttestationConfig | wrapper trust anchors are unset/default |
+| 8010 | LockedSupplyOverflow | locked supply arithmetic overflow on `wrap` |
 
 ## Security
 

@@ -31,4 +31,7 @@ pub enum DeRwaError {
 
     #[msg("attestation_program / attestation_issuer must be set (non-default)")]
     InvalidAttestationConfig = 8009,
+
+    #[msg("locked supply arithmetic overflow")]
+    LockedSupplyOverflow = 8010,
 }

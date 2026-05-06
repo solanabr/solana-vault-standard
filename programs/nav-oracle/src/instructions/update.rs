@@ -52,17 +52,12 @@ pub fn handler(ctx: Context<UpdateNav>, args: UpdateArgs) -> Result<()> {
         NavOracleError::TimestampInFuture
     );
 
-    // 3. Verify SOME PRECEDING instruction in this tx is the ed25519 verify
-    //    of (publisher, message=signing_payload, signature=args.signature).
-    //    Must scan ALL instructions before this one, not just index 0.
-    //    Earlier draft used `load_instruction_at_checked(0, ...)` which assumes
-    //    Ed25519Program is the FIRST instruction. That breaks the moment the
-    //    publisher prepends a ComputeBudget instruction (priority fees / unit limits),
-    //    which is standard practice on Solana mainnet. We must tolerate any layout
-    //    where the Ed25519 verify is somewhere before this update ix.
+    // 3. Confirm a preceding ix in this tx is the Ed25519Program verify
+    //    over (publisher, signing_payload, args.signature). Scans all
+    //    instructions before this one so a ComputeBudget priority-fee ix
+    //    can sit between the verify and the update ix.
     let current_idx = load_current_index_checked(&ctx.accounts.instructions_sysvar)
-        .map_err(|_| error!(NavOracleError::InvalidSignature))?
-        as usize;
+        .map_err(|_| error!(NavOracleError::InvalidSignature))? as usize;
     require!(current_idx > 0, NavOracleError::InvalidSignature); // need at least one prior ix
 
     let mut ed25519_ix_opt = None;
@@ -152,14 +147,6 @@ pub fn handler(ctx: Context<UpdateNav>, args: UpdateArgs) -> Result<()> {
 
     Ok(())
 }
-
-// NOTE: do NOT define a loose `verify_ed25519_ix` helper here. Earlier drafts of
-// this plan included one that only checked payload length and was meant to be
-// "tightened later", which is exactly the kind of partial implementation that
-// gets shipped accidentally. The canonical helper is `verify_ed25519_ix_strict`
-// below — and the handler above already calls THAT one (not a loose variant).
-// A CI grep guard fails the build if the bare name `verify_ed25519_ix` (without
-// `_strict`) ever reappears in this directory.
 
 /// Strict verifier: confirms the ed25519_program ix at `ix_data` actually verified
 /// `expected_sig` over `expected_msg` using `expected_pubkey`. The instruction layout is
