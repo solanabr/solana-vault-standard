@@ -222,3 +222,16 @@ pub struct ComplianceOfficerUpdated {
     pub old_officer: Pubkey,
     pub new_officer: Pubkey,
 }
+
+#[event]
+pub struct SharesComplianceBootstrapped {
+    /// CreditVault PDA whose cPOOL shares mint was bootstrapped.
+    pub vault: Pubkey,
+    /// Token-2022 cPOOL shares mint (bound to compliance-hook).
+    pub shares_mint: Pubkey,
+    /// Compliance mode the cPOOL was bootstrapped under.
+    pub mode: crate::instructions::bootstrap_shares_compliance::BootstrapComplianceMode,
+    /// Attestation program ID the cPOOL's MintConfig was bound to.
+    /// `Pubkey::default()` in FreelyTransferable mode.
+    pub attestation_program: Pubkey,
+}

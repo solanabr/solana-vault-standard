@@ -233,11 +233,12 @@ pub fn handler(
         vault_signer_seeds,
     ))?;
 
-    msg!(
-        "ComplianceHook bootstrap complete | vault={} shares_mint={} mode={:?}",
-        ctx.accounts.vault.key(),
-        ctx.accounts.shares_mint.key(),
-        args.mode,
-    );
+    emit!(crate::events::SharesComplianceBootstrapped {
+        vault: ctx.accounts.vault.key(),
+        shares_mint: ctx.accounts.shares_mint.key(),
+        mode: args.mode,
+        attestation_program: args.attestation_program,
+    });
+
     Ok(())
 }
