@@ -109,15 +109,30 @@ pub fn handler(ctx: Context<InitializeWrapper>, args: InitializeWrapperArgs) -> 
     cfg.attestation_issuer = args.attestation_issuer;
     cfg.required_attestation_type = args.required_attestation_type;
 
-    msg!(
-        "WrapperConfig initialized | pool={} permissioned={} derwa={} \
-         attestation_program={} attestation_issuer={} required_type={}",
-        cfg.pool,
-        cfg.permissioned_mint,
-        cfg.derwa_mint,
-        cfg.attestation_program,
-        cfg.attestation_issuer,
-        cfg.required_attestation_type,
-    );
+    emit!(WrapperInitialized {
+        pool: cfg.pool,
+        permissioned_mint: cfg.permissioned_mint,
+        derwa_mint: cfg.derwa_mint,
+        attestation_program: cfg.attestation_program,
+        attestation_issuer: cfg.attestation_issuer,
+        required_attestation_type: cfg.required_attestation_type,
+    });
+
     Ok(())
+}
+
+#[event]
+pub struct WrapperInitialized {
+    /// CreditVault PDA this wrapper is bound to (seed of WrapperConfig).
+    pub pool: Pubkey,
+    /// Token-2022 cPOOL mint (Permissioned-mode).
+    pub permissioned_mint: Pubkey,
+    /// Token-2022 dePOOL mint (FreelyTransferable-mode).
+    pub derwa_mint: Pubkey,
+    /// Attestation program ID required for unwrap-time validation.
+    pub attestation_program: Pubkey,
+    /// Required attestation issuer for unwrap-time validation.
+    pub attestation_issuer: Pubkey,
+    /// Required attestation type discriminator (0 = generic KYC).
+    pub required_attestation_type: u8,
 }
