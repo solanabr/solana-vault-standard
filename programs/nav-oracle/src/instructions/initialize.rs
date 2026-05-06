@@ -46,11 +46,23 @@ pub fn handler(ctx: Context<InitializeNavAccount>) -> Result<()> {
     nav.loan_tape_merkle_root = [0u8; 32];
     nav.key_rotation_authority = ctx.accounts.key_rotation_authority.key();
 
-    msg!(
-        "NavAccount initialized | pool={} publisher={} rotation_auth={}",
-        nav.pool,
-        nav.publisher,
-        nav.key_rotation_authority
-    );
+    emit!(NavAccountInitialized {
+        pool: nav.pool,
+        publisher: nav.publisher,
+        key_rotation_authority: nav.key_rotation_authority,
+    });
+
     Ok(())
+}
+
+#[event]
+pub struct NavAccountInitialized {
+    /// CreditVault PDA this NavAccount is bound to (seed of the
+    /// NavAccount PDA itself).
+    pub pool: Pubkey,
+    /// Publisher pubkey authorized to sign NAV updates.
+    pub publisher: Pubkey,
+    /// Authority that can rotate the publisher (typically a
+    /// governance or multisig authority).
+    pub key_rotation_authority: Pubkey,
 }

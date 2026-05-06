@@ -26,14 +26,28 @@ pub struct RotatePublisher<'info> {
 
 pub fn handler(ctx: Context<RotatePublisher>) -> Result<()> {
     let nav = &mut ctx.accounts.nav_account;
-    let old = nav.publisher;
+    let old_publisher = nav.publisher;
     nav.publisher = ctx.accounts.new_publisher.key();
 
-    msg!(
-        "Publisher rotated | pool={} old={} new={}",
-        nav.pool,
-        old,
-        nav.publisher
-    );
+    emit!(PublisherRotated {
+        pool: nav.pool,
+        old_publisher,
+        new_publisher: nav.publisher,
+        authority: ctx.accounts.key_rotation_authority.key(),
+    });
+
     Ok(())
+}
+
+#[event]
+pub struct PublisherRotated {
+    /// CreditVault PDA this NavAccount is bound to.
+    pub pool: Pubkey,
+    /// Publisher pubkey before this rotation.
+    pub old_publisher: Pubkey,
+    /// Publisher pubkey now authorized to sign updates.
+    pub new_publisher: Pubkey,
+    /// Signer that authorized the rotation (matches
+    /// `NavAccount.key_rotation_authority`).
+    pub authority: Pubkey,
 }
