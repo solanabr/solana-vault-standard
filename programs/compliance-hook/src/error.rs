@@ -23,12 +23,9 @@ pub enum ComplianceHookError {
     #[msg("Update authority does not match SanctionsList authority")]
     UnauthorizedAuthority = 6006,
 
-    #[msg("Pool policy requires higher investor class than attestation provides")]
-    InvestorClassTooLow = 6007,
-
-    #[msg("Pool policy does not permit this jurisdiction")]
-    JurisdictionNotPermitted = 6008,
-
+    // Jurisdiction and investor-class fields are metadata-only today.
+    // Add enforcement errors here when pool-policy checks are introduced.
+    // Codes 6007 and 6008 are intentionally left unused.
     #[msg("Mint account does not deserialize as a valid Token-2022 mint")]
     InvalidMintAccount = 6009,
 
