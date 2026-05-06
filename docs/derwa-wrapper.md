@@ -186,6 +186,21 @@ payload offsets (data[8..] after Anchor discriminator):
 | 8009 | InvalidAttestationConfig | wrapper trust anchors are unset/default |
 | 8010 | LockedSupplyOverflow | locked supply arithmetic overflow on `wrap` |
 
+## Events
+
+All state-mutating instructions emit a typed Anchor event so off-chain
+indexers can react without polling account data.
+
+| Event | Emitted By | Fields |
+|-------|-----------|--------|
+| `WrapperInitialized` | `initialize` | `pool: Pubkey`, `permissioned_mint: Pubkey`, `derwa_mint: Pubkey`, `attestation_program: Pubkey`, `attestation_issuer: Pubkey`, `required_attestation_type: u8` |
+| `Wrapped` | `wrap` | `pool: Pubkey`, `investor: Pubkey`, `amount: u64`, `locked_supply_after: u64` |
+| `Unwrapped` | `unwrap` | `pool: Pubkey`, `investor: Pubkey`, `amount: u64`, `locked_supply_after: u64` |
+
+`Wrapped` / `Unwrapped` carry `locked_supply_after` so indexers can
+verify the on-chain invariant `locked_supply == dePOOL.supply` against
+their reconstructed state without an additional account fetch.
+
 ## Security
 
 - **Mint authority on dePOOL** is held by `wrapper_signer` PDA — only the wrapper program can mint or burn dePOOL.

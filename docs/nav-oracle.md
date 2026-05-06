@@ -191,6 +191,14 @@ pub struct UpdateArgs {
 
 ## Events
 
+All state-mutating instructions emit a typed Anchor event.
+
+| Event | Emitted By | Fields |
+|-------|-----------|--------|
+| `NavAccountInitialized` | `initialize` | `pool: Pubkey`, `publisher: Pubkey`, `key_rotation_authority: Pubkey` |
+| `NavUpdated` | `update` | (see struct below) |
+| `PublisherRotated` | `rotate_publisher` | `pool: Pubkey`, `old_publisher: Pubkey`, `new_publisher: Pubkey`, `authority: Pubkey` |
+
 ### NavUpdated
 
 Emitted by `update` after a successful publish.

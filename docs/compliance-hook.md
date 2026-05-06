@@ -185,11 +185,18 @@ See [ERRORS.md](ERRORS.md) for cross-program error code allocation.
 
 ## Events
 
+All state-mutating instructions emit a typed Anchor event so off-chain indexers can react without polling account data.
+
 | Event | Emitted By | Fields |
 |-------|-----------|--------|
+| `SanctionsListInitialized` | `initialize_sanctions_list` | `authority: Pubkey`, `updated_at: i64` |
 | `SanctionsListUpdated` | `update_sanctions_list` | `version: u64`, `added: Vec<Pubkey>`, `removed: Vec<Pubkey>`, `authority: Pubkey`, `updated_at: i64` |
+| `MintConfigInitialized` | `initialize_mint_config` | `mint: Pubkey`, `mode: ComplianceMode`, `attestation_program: Pubkey`, `attestation_issuer: Pubkey`, `required_attestation_type: u8` |
+| `EamlInitialized` | `initialize_extra_account_meta_list` | `mint: Pubkey`, `mode: ComplianceMode`, `extras: u8` |
+| `AccountFrozen` | `freeze_account` | `owner: Pubkey`, `authority: Pubkey` |
+| `AccountUnfrozen` | `unfreeze_account` | `owner: Pubkey`, `authority: Pubkey` |
 
-`execute` does not emit events of its own — the parent Token-2022 transfer that triggered the hook emits the standard SPL Token transfer log. `initialize_sanctions_list`, `initialize_mint_config`, and `initialize_extra_account_meta_list` log via `msg!` for runbook visibility but do not emit Anchor events.
+`execute` does not emit a hook-level event — the parent Token-2022 transfer that triggered the hook emits the standard SPL Token transfer log, and the hook's role is enforcement, not state mutation.
 
 ## Security
 

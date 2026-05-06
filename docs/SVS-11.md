@@ -408,6 +408,10 @@ This ensures pending deposit assets are not used to fund redemptions.
 | `WindowOpened` | vault | `open_investment_window` |
 | `WindowClosed` | vault | `close_investment_window` |
 | `AttesterUpdated` | vault, old/new attester, old/new attestation_program | `update_attester` |
+| `SharesComplianceBootstrapped` | vault, shares_mint, mode, attestation_program | `bootstrap_shares_compliance` |
+| `OracleSourceChanged` | vault, old_source, new_source | `set_oracle_source` |
+| `VaultConfigInitialized` | vault, vault_config | `initialize_vault_config` |
+| `ComplianceOfficerUpdated` | vault, old_officer, new_officer | `set_compliance_officer` |
 
 See [EVENTS.md](EVENTS.md) for parsing examples.
 

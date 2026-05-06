@@ -2,6 +2,12 @@
 
 This document describes all events emitted by SVS vault programs for indexers, analytics, and user interfaces.
 
+> **Per-program references**: this file documents the core vault events (SVS-1..SVS-12). Engine-program events are documented in their own program docs:
+> - [compliance-hook.md](./compliance-hook.md#events) — sanctions list, mint config, EAML, freeze/unfreeze
+> - [nav-oracle.md](./nav-oracle.md#events) — NAV account lifecycle, NAV updates, publisher rotation
+> - [derwa-wrapper.md](./derwa-wrapper.md#events) — wrapper lifecycle, wrap/unwrap
+> - [SVS-11.md](./SVS-11.md#events) — credit-vault lifecycle including `SharesComplianceBootstrapped`
+
 ---
 
 ## Core Events (All Variants)
