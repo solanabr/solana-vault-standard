@@ -56,8 +56,8 @@ import {
   createSvsAttestation,
   initEaml,
   initMintConfig,
-  resolveHookExtras,
 } from "./helpers/hook-mint";
+import { resolveHookExtras } from "../sdk/core/src";
 
 // Mock-sas program ID — matches Anchor.toml entry. Same constant used by
 // svs-11.ts; if mock-sas is redeployed, both must update.

@@ -35,7 +35,7 @@ import {
   getClaimableTokensAddress,
   getCreditFrozenAccountAddress,
 } from "../sdk/core/src/credit-vault-pda";
-import { resolveHookExtras } from "./helpers/hook-mint";
+import { resolveHookExtras } from "../sdk/core/src";
 
 const ATTESTATION_PROGRAM_ID = new PublicKey(
   "GTTMWDHTZibyEpqNRr33RnBhgms262U6qHaGrjoHqEXg",

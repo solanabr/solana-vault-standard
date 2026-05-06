@@ -23,12 +23,14 @@ import {
   ComplianceModeArg,
   createHookBoundMint,
   createSvsAttestation,
-  getAttestationPda,
-  getEamlPda,
   initEaml,
   initMintConfig,
-  resolveHookExtras,
 } from "./helpers/hook-mint";
+import {
+  getAttestationAddress,
+  getExtraAccountMetaListAddress,
+  resolveHookExtras,
+} from "../sdk/core/src";
 
 // Mock-sas program ID — matches Anchor.toml. Same constant used by
 // svs-11.ts and derwa-wrapper.spec.ts.
@@ -430,12 +432,12 @@ describe("compliance-hook: execute (Permissioned mode)", () => {
     // helper and the canonical convention (subject/issuer/type byte
     // ordering, hyphen vs underscore literals, etc.).
     expect(sourceAttestation.toBase58()).to.equal(
-      getAttestationPda(
+      getAttestationAddress(
         source.publicKey,
         attester.publicKey,
         REQUIRED_TYPE,
         ATTESTATION_PROGRAM_ID,
-      ).toBase58(),
+      )[0].toBase58(),
     );
   });
 
@@ -609,7 +611,7 @@ describe("compliance-hook: initialize_extra_account_meta_list", () => {
     const eaml = await initEaml(program, mint, mintAuthority, payer);
 
     expect(eaml.toBase58()).to.equal(
-      getEamlPda(mint, program.programId).toBase58(),
+      getExtraAccountMetaListAddress(mint, program.programId)[0].toBase58(),
     );
     const eamlAcct = await connection.getAccountInfo(eaml);
     expect(eamlAcct).to.not.equal(null);

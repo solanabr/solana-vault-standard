@@ -53,11 +53,13 @@ export * from "./modules";
 // Supporting programs (Token-2022 TransferHook, NAV oracle, deRWA wrapper)
 export * from "./compliance-hook";
 export * from "./compliance-hook-pda";
+export * from "./compliance-hook-extras";
 export * from "./nav-oracle";
 export * from "./nav-oracle-pda";
 export * from "./derwa-wrapper";
 export * from "./derwa-wrapper-pda";
 export * from "./mock-sas-pda";
+export * from "./attestation-pda";
 
 // SDK Modules (client-side, deprecated for enforcement - use on-chain modules)
 export * from "./fees";

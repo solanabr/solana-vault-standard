@@ -39,7 +39,6 @@ import {
   SystemProgram,
   Transaction,
   TransactionInstruction,
-  AccountMeta,
   sendAndConfirmTransaction,
 } from "@solana/web3.js";
 import {
@@ -50,6 +49,11 @@ import {
   getMintLen,
 } from "@solana/spl-token";
 
+import {
+  getAttestationAddress,
+  getExtraAccountMetaListAddress,
+  getMintConfigAddress,
+} from "../../sdk/core/src";
 import type { ComplianceHook } from "../../target/types/compliance_hook";
 import type { MockSas } from "../../target/types/mock_sas";
 
@@ -113,88 +117,6 @@ export async function createHookBoundMint(
 }
 
 /**
- * Build the `[b"mint_config", mint]` PDA under compliance-hook.
- */
-export function getMintConfigPda(
-  mint: PublicKey,
-  complianceHookProgramId: PublicKey,
-): PublicKey {
-  const [pda] = PublicKey.findProgramAddressSync(
-    [Buffer.from("mint_config"), mint.toBuffer()],
-    complianceHookProgramId,
-  );
-  return pda;
-}
-
-/**
- * Build the `[b"extra-account-metas", mint]` PDA — the canonical Token-2022
- * TransferHook spec literal (HYPHEN, not underscore — the Token-2022
- * runtime looks up exactly this byte string).
- */
-export function getEamlPda(
-  mint: PublicKey,
-  complianceHookProgramId: PublicKey,
-): PublicKey {
-  const [pda] = PublicKey.findProgramAddressSync(
-    [Buffer.from("extra-account-metas"), mint.toBuffer()],
-    complianceHookProgramId,
-  );
-  return pda;
-}
-
-/**
- * Build the `[b"sanctions_list"]` singleton PDA under compliance-hook.
- */
-export function getSanctionsListPda(complianceHookProgramId: PublicKey): PublicKey {
-  const [pda] = PublicKey.findProgramAddressSync(
-    [Buffer.from("sanctions_list")],
-    complianceHookProgramId,
-  );
-  return pda;
-}
-
-/**
- * Build the `[b"frozen", owner]` per-wallet freeze marker PDA under
- * compliance-hook.
- */
-export function getFrozenAccountPda(
-  owner: PublicKey,
-  complianceHookProgramId: PublicKey,
-): PublicKey {
-  const [pda] = PublicKey.findProgramAddressSync(
-    [Buffer.from("frozen"), owner.toBuffer()],
-    complianceHookProgramId,
-  );
-  return pda;
-}
-
-/**
- * Build the canonical SVS-11 attestation PDA under a given attestation
- * program. Seeds: `[b"attestation", subject, issuer, attestation_type]`.
- *
- * MUST stay in lockstep with mock-sas's `create_attestation` and the
- * EAML's cross-program PDA derivation in compliance-hook. A mismatch
- * here breaks the on-chain `check_attestation` PDA-canonical check.
- */
-export function getAttestationPda(
-  subject: PublicKey,
-  issuer: PublicKey,
-  attestationType: number,
-  attestationProgramId: PublicKey,
-): PublicKey {
-  const [pda] = PublicKey.findProgramAddressSync(
-    [
-      Buffer.from("attestation"),
-      subject.toBuffer(),
-      issuer.toBuffer(),
-      Buffer.from([attestationType]),
-    ],
-    attestationProgramId,
-  );
-  return pda;
-}
-
-/**
  * Wrap `compliance_hook.initialize_mint_config`. Pass either
  * FreelyTransferable args (no trust anchors needed; defaults are stored
  * but unused) or Permissioned args (trust anchors required, on-chain
@@ -215,7 +137,7 @@ export async function initMintConfig(
   payer: Signer,
   args: InitMintConfigArgs,
 ): Promise<PublicKey> {
-  const mintConfig = getMintConfigPda(mint, complianceHook.programId);
+  const [mintConfig] = getMintConfigAddress(mint, complianceHook.programId);
 
   await complianceHook.methods
     .initializeMintConfig({
@@ -248,8 +170,8 @@ export async function initEaml(
   mintAuthority: Signer,
   payer: Signer,
 ): Promise<PublicKey> {
-  const eaml = getEamlPda(mint, complianceHook.programId);
-  const mintConfig = getMintConfigPda(mint, complianceHook.programId);
+  const [eaml] = getExtraAccountMetaListAddress(mint, complianceHook.programId);
+  const [mintConfig] = getMintConfigAddress(mint, complianceHook.programId);
 
   await complianceHook.methods
     .initializeExtraAccountMetaList()
@@ -284,7 +206,7 @@ export async function createSvsAttestation(
   countryCode: [number, number],
   expiresAt: BN,
 ): Promise<PublicKey> {
-  const attestation = getAttestationPda(
+  const [attestation] = getAttestationAddress(
     subject,
     issuer,
     attestationType,
@@ -305,145 +227,8 @@ export async function createSvsAttestation(
   return attestation;
 }
 
-/**
- * Resolve the EAML extras for a `transfer_checked` ix on a hook-bound
- * mint, given the canonical `(source_owner, destination_owner)`. Returns
- * the `AccountMeta[]` slice callers must append via `.remainingAccounts`
- * (top-level transfers) or `.remainingAccounts(...)` on a wrapper-program
- * builder (CPI transfers).
- *
- * Layout (matches spl-token-js's `addExtraAccountMetasForExecute`):
- *
- *   1. Resolved EAML extras (4 for FreelyTransferable, 8 for Permissioned).
- *   2. Hook program account itself — Token-2022 needs this in the account
- *      list to CPI into the hook.
- *   3. EAML PDA account — Token-2022 reads this to look up the resolved
- *      extras layout (already encoded in the EAML's data).
- *
- * The EAML index map MUST stay in sync with
- * `programs/compliance-hook/src/instructions/initialize_extra_account_meta_list.rs`:
- *
- *   FreelyTransferable (4 extras): mint_config, sanctions_list,
- *   source_frozen_check, destination_frozen_check.
- *
- *   Permissioned (8 extras): the 4 above plus attestation_program (fixed
- *   pubkey from MintConfig.attestation_program), source_attestation
- *   (cross-program PDA under attestation_program), destination_attestation
- *   (same), pool_policy (fixed pubkey from MintConfig.pool_policy).
- *
- * Caller must pass the same `attestationProgram`, `attestationIssuer`,
- * and `requiredAttestationType` that were baked into MintConfig at init
- * time, otherwise the cross-program PDA derivation produces a different
- * address than what the runtime resolves and on-chain `check_attestation`
- * will read a wrong-PDA failure.
- */
-export interface ResolveHookExtrasArgs {
-  complianceHookProgramId: PublicKey;
-  mint: PublicKey;
-  sourceOwner: PublicKey;
-  destinationOwner: PublicKey;
-  permissioned: boolean;
-  /** Required when `permissioned == true`. */
-  attestationProgram?: PublicKey;
-  /** Required when `permissioned == true`. */
-  attestationIssuer?: PublicKey;
-  /** Required when `permissioned == true`. */
-  requiredAttestationType?: number;
-  /** Required when `permissioned == true`. */
-  poolPolicy?: PublicKey;
-}
-
-export function resolveHookExtras(args: ResolveHookExtrasArgs): AccountMeta[] {
-  const metas: AccountMeta[] = [
-    {
-      pubkey: getMintConfigPda(args.mint, args.complianceHookProgramId),
-      isSigner: false,
-      isWritable: false,
-    },
-    {
-      pubkey: getSanctionsListPda(args.complianceHookProgramId),
-      isSigner: false,
-      isWritable: false,
-    },
-    {
-      pubkey: getFrozenAccountPda(args.sourceOwner, args.complianceHookProgramId),
-      isSigner: false,
-      isWritable: false,
-    },
-    {
-      pubkey: getFrozenAccountPda(
-        args.destinationOwner,
-        args.complianceHookProgramId,
-      ),
-      isSigner: false,
-      isWritable: false,
-    },
-  ];
-
-  if (args.permissioned) {
-    if (
-      !args.attestationProgram ||
-      !args.attestationIssuer ||
-      args.requiredAttestationType === undefined ||
-      !args.poolPolicy
-    ) {
-      throw new Error(
-        "resolveHookExtras: permissioned mode requires attestationProgram, attestationIssuer, requiredAttestationType, poolPolicy",
-      );
-    }
-    metas.push(
-      // attestation_program — fixed pubkey baked into EAML at init time.
-      {
-        pubkey: args.attestationProgram,
-        isSigner: false,
-        isWritable: false,
-      },
-      // source_attestation — cross-program PDA under attestation_program.
-      {
-        pubkey: getAttestationPda(
-          args.sourceOwner,
-          args.attestationIssuer,
-          args.requiredAttestationType,
-          args.attestationProgram,
-        ),
-        isSigner: false,
-        isWritable: false,
-      },
-      // destination_attestation — same shape.
-      {
-        pubkey: getAttestationPda(
-          args.destinationOwner,
-          args.attestationIssuer,
-          args.requiredAttestationType,
-          args.attestationProgram,
-        ),
-        isSigner: false,
-        isWritable: false,
-      },
-      // pool_policy — fixed pubkey baked into EAML.
-      {
-        pubkey: args.poolPolicy,
-        isSigner: false,
-        isWritable: false,
-      },
-    );
-  }
-
-  // Token-2022 requires the hook program account AND the EAML PDA to be
-  // in the instruction's account list so the runtime can CPI into the
-  // hook with its declared extras. Order mirrors spl-token-js's
-  // `addExtraAccountMetasForExecute` (extras first, then hook program,
-  // then EAML PDA).
-  metas.push({
-    pubkey: args.complianceHookProgramId,
-    isSigner: false,
-    isWritable: false,
-  });
-  metas.push({
-    pubkey: getEamlPda(args.mint, args.complianceHookProgramId),
-    isSigner: false,
-    isWritable: false,
-  });
-
-  return metas;
-}
+// `resolveHookExtras` and `ResolveHookExtrasArgs` were promoted from
+// this test helper to the SDK so production callers (CLI, backend) can
+// import them without reaching into test scaffolding. Import from
+// `../../sdk/core/src` (or `@stbr/solana-vault` once consumed as a
+// package) instead.
