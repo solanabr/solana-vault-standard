@@ -251,6 +251,72 @@ initialize a NavAccount, publish the first NAV, then call
 `set_oracle_source(1)` before opening the investment window. Generic SVS-11
 deployments may remain on `oracle_source = 0`.
 
+### Design choice: bounded extensibility, not a plugin registry
+
+`oracle_source` is a `u8` with two valid values today (`0` simple,
+`1` NavOracle); values `2..=255` reject with `OracleSourceInvalid`.
+This is intentional. SVS-11 does **not** accept arbitrary oracle
+programs at deployment time. New oracle sources require an SVS-11.x
+revision (a change to the standard, code review, test coverage), not
+a configuration flag.
+
+Three reasons:
+
+1. **Pricing is a security boundary.** A misconfigured oracle program
+   can mint approval value out of thin air or block legitimate
+   redemptions. Constraining the set of programs the vault will ever
+   read from to a finite, reviewed set prevents this entire class of
+   misconfiguration.
+2. **Each oracle source has different invariants** (return shape,
+   sequence semantics, staleness rules). Adding a third source means
+   writing the consumer code that handles those invariants — work
+   that belongs in the standard, not at deploy time.
+3. **Standards integrity.** "SVS-11 compatible" must mean a fixed,
+   auditable set of pricing semantics. If any program could be the
+   oracle, the phrase would mean nothing.
+
+### Migration path (when triggered)
+
+When a third legitimate oracle adapter is needed (e.g. a launch partner
+brings a real third-oracle requirement that can't wait for a standards
+revision), the planned evolution is **registry-based semi-open**, not
+fully open:
+
+- `oracle_source: u8` becomes `oracle_adapter_id: u32` indexing into a
+  governance-gated `OracleRegistry` PDA.
+- Each registry entry holds `(program_id, interface_version, disabled)`.
+- The set is mutable via governance proposal — no protocol upgrade
+  needed to add an adapter — but every entry has been reviewed once and
+  the consumer-side interface contract enforces the shape via
+  `interface_version`.
+
+This pattern mirrors Pyth's publisher set and Wormhole's guardian set —
+flexibility without abandoning the security gate.
+
+### Triggers for revisiting
+
+Defer the migration until at least one of these is true:
+
+- Three or more legitimate oracle adapters are in flight at the same time.
+- A launch partner brings a concrete third-oracle requirement that
+  blocks integration.
+- The standards revision cadence becomes a measurable bottleneck for
+  adopters.
+
+Until then, the bounded `u8` toggle is the correct design.
+
+### Note on internal abstraction
+
+Even with bounded extensibility, the dispatch logic
+(`match vault.oracle_source { 0 => …, 1 => …, _ => err }`) is a
+candidate for refactor into a single `oracle::read(...)` function
+returning a canonical `OraclePrice` shape. This keeps `approve_deposit`
+and `approve_redeem` oracle-source-agnostic and makes the future
+registry migration a one-file change. The refactor is deliberately
+deferred — it adds no behavioral change, and the YAGNI threshold for
+internal cleanup is "we have a third adapter or a clear callsite-cost
+problem", neither of which is true today.
+
 ## KYC Attestation
 
 Every `request_deposit`, `request_redeem`, `approve_deposit`, and `approve_redeem` validates the investor's attestation account. The model is provider-agnostic — any program that writes accounts matching the spec's `Attestation` layout is supported.
