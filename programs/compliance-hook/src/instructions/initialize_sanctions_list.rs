@@ -30,9 +30,19 @@ pub fn handler(ctx: Context<InitializeSanctionsList>) -> Result<()> {
     list.updated_at = Clock::get()?.unix_timestamp;
     list.addresses = Vec::new();
 
-    msg!(
-        "SanctionsList initialized | authority={} version=0",
-        list.authority
-    );
+    emit!(SanctionsListInitialized {
+        authority: list.authority,
+        updated_at: list.updated_at,
+    });
+
     Ok(())
+}
+
+#[event]
+pub struct SanctionsListInitialized {
+    /// Authority that gates all future `update_sanctions_list` and
+    /// freeze/unfreeze calls.
+    pub authority: Pubkey,
+    /// Unix timestamp written into the list at init.
+    pub updated_at: i64,
 }

@@ -47,11 +47,18 @@ pub struct UnfreezeAccount<'info> {
 }
 
 pub fn handler(ctx: Context<UnfreezeAccount>) -> Result<()> {
-    msg!(
-        "FrozenAccount closed | owner={} authority={} rent_recipient={}",
-        ctx.accounts.owner_to_unfreeze.key(),
-        ctx.accounts.authority.key(),
-        ctx.accounts.rent_recipient.key(),
-    );
+    emit!(AccountUnfrozen {
+        owner: ctx.accounts.owner_to_unfreeze.key(),
+        authority: ctx.accounts.authority.key(),
+    });
+
     Ok(())
+}
+
+#[event]
+pub struct AccountUnfrozen {
+    /// Wallet now eligible for hook-bound transfers again.
+    pub owner: Pubkey,
+    /// Signer that authorized the unfreeze (matches `SanctionsList.authority`).
+    pub authority: Pubkey,
 }

@@ -64,10 +64,18 @@ pub struct FreezeAccount<'info> {
 pub fn handler(ctx: Context<FreezeAccount>) -> Result<()> {
     ctx.accounts.frozen_account.bump = ctx.bumps.frozen_account;
 
-    msg!(
-        "FrozenAccount created | owner={} authority={}",
-        ctx.accounts.owner_to_freeze.key(),
-        ctx.accounts.authority.key(),
-    );
+    emit!(AccountFrozen {
+        owner: ctx.accounts.owner_to_freeze.key(),
+        authority: ctx.accounts.authority.key(),
+    });
+
     Ok(())
+}
+
+#[event]
+pub struct AccountFrozen {
+    /// Wallet now blocked from any hook-bound transfer.
+    pub owner: Pubkey,
+    /// Signer that authorized the freeze (matches `SanctionsList.authority`).
+    pub authority: Pubkey,
 }

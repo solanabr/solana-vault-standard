@@ -167,15 +167,27 @@ pub fn handler(ctx: Context<InitializeMintConfig>, args: InitializeMintConfigArg
     cfg.attestation_issuer = args.attestation_issuer;
     cfg.required_attestation_type = args.required_attestation_type;
 
-    msg!(
-        "MintConfig initialized | mint={} mode={:?} pool_policy={:?} \
-         attestation_program={} attestation_issuer={} required_type={}",
-        cfg.mint,
-        cfg.mode,
-        cfg.pool_policy,
-        cfg.attestation_program,
-        cfg.attestation_issuer,
-        cfg.required_attestation_type,
-    );
+    emit!(MintConfigInitialized {
+        mint: cfg.mint,
+        mode: cfg.mode,
+        attestation_program: cfg.attestation_program,
+        attestation_issuer: cfg.attestation_issuer,
+        required_attestation_type: cfg.required_attestation_type,
+    });
+
     Ok(())
+}
+
+#[event]
+pub struct MintConfigInitialized {
+    /// The Token-2022 mint this config governs.
+    pub mint: Pubkey,
+    /// `FreelyTransferable` or `Permissioned`.
+    pub mode: crate::state::ComplianceMode,
+    /// Attestation program ID (`Pubkey::default()` in FreelyTransferable mode).
+    pub attestation_program: Pubkey,
+    /// Attestation issuer (`Pubkey::default()` in FreelyTransferable mode).
+    pub attestation_issuer: Pubkey,
+    /// Required attestation type discriminator (0 = generic KYC).
+    pub required_attestation_type: u8,
 }

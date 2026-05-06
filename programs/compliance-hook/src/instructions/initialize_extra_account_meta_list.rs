@@ -114,13 +114,24 @@ pub fn handler(ctx: Context<InitializeExtraAccountMetaList>) -> Result<()> {
     let mut data = ctx.accounts.extra_account_meta_list.try_borrow_mut_data()?;
     ExtraAccountMetaList::init::<ExecuteInstruction>(&mut data, &extra_metas)?;
 
-    msg!(
-        "ExtraAccountMetaList initialized | mint={} mode={:?} extras={}",
-        ctx.accounts.mint.key(),
+    emit!(EamlInitialized {
+        mint: ctx.accounts.mint.key(),
         mode,
-        extra_metas.len()
-    );
+        extras: extra_metas.len() as u8,
+    });
+
     Ok(())
+}
+
+#[event]
+pub struct EamlInitialized {
+    /// The Token-2022 mint whose ExtraAccountMetaList PDA is now resolvable.
+    pub mint: Pubkey,
+    /// Mode the EAML was initialized for. Determines `extras` count
+    /// (4 for FreelyTransferable, 8 for Permissioned).
+    pub mode: ComplianceMode,
+    /// Number of extras encoded in the EAML.
+    pub extras: u8,
 }
 
 /// Build the `ExtraAccountMeta` vector for a given compliance mode.
