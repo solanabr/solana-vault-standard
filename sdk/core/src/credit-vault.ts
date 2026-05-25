@@ -526,12 +526,13 @@ export class CreditVault {
       this.vault,
       investor,
     );
+    const [claimableTokens] = getClaimableTokensAddress(
+      this.program.programId,
+      this.vault,
+      investor,
+    );
     const investorSharesAccount = this.getInvestorSharesAccount(investor);
 
-    // `queued_for_settlement_at` is computed off-chain by the
-    // redemption-scheduler service. SDK callers without a scheduler can
-    // pass `0` as a sentinel; the manager will set the real settlement
-    // date on first `approveRedeem` partial fulfillment.
     const queuedAt = queuedForSettlementAt ?? new BN(0);
 
     const builder = this.program.methods
@@ -543,8 +544,11 @@ export class CreditVault {
         sharesMint: this.sharesMint,
         investorSharesAccount,
         redemptionEscrow: this.redemptionEscrow,
+        assetMint: this.assetMint,
+        claimableTokens,
         attestation,
         frozenCheck: frozenCheck ?? this.program.programId,
+        assetTokenProgram: this.assetTokenProgram,
         token2022Program: TOKEN_2022_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
         clock: SYSVAR_CLOCK_PUBKEY,
@@ -659,6 +663,11 @@ export class CreditVault {
       this.vault,
       investor,
     );
+    const [claimableTokens] = getClaimableTokensAddress(
+      this.program.programId,
+      this.vault,
+      investor,
+    );
     const investorSharesAccount = this.getInvestorSharesAccount(investor);
 
     const builder = this.program.methods
@@ -668,8 +677,11 @@ export class CreditVault {
         vault: this.vault,
         redemptionRequest,
         sharesMint: this.sharesMint,
+        assetMint: this.assetMint,
+        claimableTokens,
         investorSharesAccount,
         redemptionEscrow: this.redemptionEscrow,
+        assetTokenProgram: this.assetTokenProgram,
         token2022Program: TOKEN_2022_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
       });

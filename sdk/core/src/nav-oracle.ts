@@ -65,6 +65,12 @@ export interface InitializeNavAccountParams {
   pool: PublicKey;
   publisher: PublicKey;
   keyRotationAuthority: PublicKey;
+  /**
+   * Must equal `CreditVault.authority` of the pool (bytes 8..40 of the
+   * pool account data). Nav-oracle's `initialize` verifies the signer
+   * to gate per-pool init against squat-race attacks.
+   */
+  poolAuthority: PublicKey;
 }
 
 /**
@@ -212,6 +218,7 @@ export class NavOracle {
       .accountsPartial({
         pool: params.pool,
         navAccount,
+        poolAuthority: params.poolAuthority,
         publisher: params.publisher,
         keyRotationAuthority: params.keyRotationAuthority,
         payer,

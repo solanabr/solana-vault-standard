@@ -141,8 +141,11 @@ async function main() {
       investorSharesAccount: ctx.investorSharesAta,
       redemptionEscrow: ctx.redemptionEscrow,
       redemptionRequest: ctx.redemptionRequest,
+      assetMint: ctx.assetMint,
+      claimableTokens: ctx.claimableTokens,
       attestation: ctx.attestation,
       frozenCheck: null,
+      assetTokenProgram: TOKEN_PROGRAM_ID,
       token2022Program: TOKEN_2022_PROGRAM_ID,
       systemProgram: anchor.web3.SystemProgram.programId,
     })

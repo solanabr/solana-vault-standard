@@ -136,8 +136,11 @@ async function main() {
       investorSharesAccount: ctx.investorSharesAta,
       redemptionEscrow: ctx.redemptionEscrow,
       redemptionRequest: ctx.redemptionRequest,
+      assetMint: ctx.assetMint,
+      claimableTokens: ctx.claimableTokens,
       attestation: ctx.attestation,
       frozenCheck: null,
+      assetTokenProgram: TOKEN_PROGRAM_ID,
       token2022Program: TOKEN_2022_PROGRAM_ID,
       systemProgram: anchor.web3.SystemProgram.programId,
     })
@@ -150,9 +153,12 @@ async function main() {
       investor: ctx.investor.publicKey,
       vault: ctx.vault,
       sharesMint: ctx.sharesMint,
+      assetMint: ctx.assetMint,
+      claimableTokens: ctx.claimableTokens,
       investorSharesAccount: ctx.investorSharesAta,
       redemptionEscrow: ctx.redemptionEscrow,
       redemptionRequest: ctx.redemptionRequest,
+      assetTokenProgram: TOKEN_PROGRAM_ID,
       token2022Program: TOKEN_2022_PROGRAM_ID,
     })
     .signers([ctx.investor])

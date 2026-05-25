@@ -28,9 +28,10 @@ describe("nav-oracle: update", () => {
 
     await program.methods
       .initialize()
-      .accounts({
+      .accountsPartial({
         pool: pool.publicKey,
         navAccount: navPda,
+        poolAuthority: provider.wallet.publicKey,
         publisher: publisher.publicKey,
         keyRotationAuthority: rotationAuthority.publicKey,
         payer: provider.wallet.publicKey,

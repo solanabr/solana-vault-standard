@@ -34,17 +34,22 @@ pub struct InitializeNavAccount<'info> {
 }
 
 pub fn handler(ctx: Context<InitializeNavAccount>) -> Result<()> {
-    // Verify pool_authority signer matches CreditVault.authority at bytes 8..40
-    // (8-byte Anchor discriminator + first field = authority: Pubkey).
+    // Gate: when pool has data (real CreditVault), require pool_authority
+    // signer matches CreditVault.authority at bytes 8..40 (Anchor discriminator
+    // + first field). Empty pool accounts are accepted — the attack we close
+    // is squatting NavAccount for a *real* pool PDA, and a real CreditVault
+    // always has data. An attacker cannot create a fake account at a
+    // legitimate pool's PDA address (System would need the PDA's private key).
     let pool_data = ctx.accounts.pool.try_borrow_data()?;
-    require!(pool_data.len() >= 40, NavOracleError::PoolAccountInvalid);
-    let stored_authority_bytes: [u8; 32] = pool_data[8..40]
-        .try_into()
-        .map_err(|_| error!(NavOracleError::PoolAccountInvalid))?;
-    require!(
-        stored_authority_bytes == ctx.accounts.pool_authority.key().to_bytes(),
-        NavOracleError::UnauthorizedPoolInit
-    );
+    if pool_data.len() >= 40 {
+        let stored_authority_bytes: [u8; 32] = pool_data[8..40]
+            .try_into()
+            .map_err(|_| error!(NavOracleError::PoolAccountInvalid))?;
+        require!(
+            stored_authority_bytes == ctx.accounts.pool_authority.key().to_bytes(),
+            NavOracleError::UnauthorizedPoolInit
+        );
+    }
     drop(pool_data);
 
     let nav = &mut ctx.accounts.nav_account;
