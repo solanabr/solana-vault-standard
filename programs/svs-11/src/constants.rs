@@ -25,6 +25,13 @@ pub const ORACLE_TIMELOCK: i64 = 86400; // 24 hours
 /// time; admin can update via update_oracle_params later.
 pub const DEFAULT_MAX_NAV_STALENESS_SECS: i64 = 3_888_000;
 
+/// Maximum future horizon (5 years = 157,680,000 sec) for a
+/// manager-supplied `next_settlement_at`. Bounds operator footguns
+/// where a stuck/malformed scheduler queues redemptions to year 9999;
+/// downstream monitoring would otherwise flag them as "stuck forever"
+/// indistinguishably from a real bug.
+pub const MAX_SETTLEMENT_HORIZON_SECS: i64 = 157_680_000;
+
 /// On-chain Program ID for the nav-oracle program. Used by SVS-11 to
 /// derive + validate the NavAccount PDA in approve_deposit and
 /// approve_redeem when CreditVault.oracle_source == 1. Kept in sync

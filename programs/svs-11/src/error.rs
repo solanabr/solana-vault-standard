@@ -162,4 +162,12 @@ pub enum VaultError {
 
     #[msg("Mint account does not deserialize as a valid Token-2022 mint")]
     InvalidMintAccount,
+
+    #[msg("next_settlement_at must be in [now, now + MAX_SETTLEMENT_HORIZON_SECS]")]
+    SettlementHorizonOutOfRange,
+
+    #[msg(
+        "remaining_accounts do not match the shares mint's ExtraAccountMetaList — wrong order, missing accounts, or stale hook config"
+    )]
+    HookExtrasMismatch,
 }

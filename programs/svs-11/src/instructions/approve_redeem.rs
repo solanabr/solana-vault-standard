@@ -146,6 +146,19 @@ pub fn handler(
         VaultError::ZeroAmount
     );
 
+    // Bound the manager-supplied next_settlement_at. Without this,
+    // a stuck scheduler could queue redemptions to year 9999 and
+    // downstream monitoring would flag them indistinguishably from
+    // a real bug. Allow now..now+MAX_SETTLEMENT_HORIZON_SECS.
+    let now = ctx.accounts.clock.unix_timestamp;
+    let horizon = now
+        .checked_add(crate::constants::MAX_SETTLEMENT_HORIZON_SECS)
+        .ok_or(VaultError::MathOverflow)?;
+    require!(
+        next_settlement_at >= now && next_settlement_at <= horizon,
+        VaultError::SettlementHorizonOutOfRange
+    );
+
     // V4-P20 FIX: Reconciliation check — verify stored total_shares matches
     // shares_mint.supply. If they diverge, something has gone wrong and we
     // should not proceed with a redemption based on stale share counts.

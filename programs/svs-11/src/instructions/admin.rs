@@ -337,6 +337,18 @@ pub fn set_oracle_source_handler(ctx: Context<UpdateOracleParams>, source: u8) -
 
     let vault = &mut ctx.accounts.vault;
     let old_source = vault.oracle_source;
+
+    // Reset deviation-guard baseline when source changes. Without this,
+    // the next read post-toggle would compare against a price/sequence
+    // produced by a different oracle source (different decimals, scale,
+    // staleness semantics) and either spuriously block a legitimate
+    // fresh NAV or accept a NAV deviation that should be blocked.
+    // Admin should verify the new source's first publish manually
+    // before resuming operations after a toggle.
+    if old_source != source {
+        vault.last_seen_nav_price = 0;
+        vault.last_seen_nav_sequence = 0;
+    }
     vault.oracle_source = source;
 
     emit!(OracleSourceChanged {
