@@ -196,11 +196,11 @@ pub fn handler<'info>(ctx: Context<'_, '_, '_, 'info, Wrap<'info>>, amount: u64)
         .checked_add(amount)
         .ok_or(DeRwaError::LockedSupplyOverflow)?;
 
-    msg!(
-        "wrap | investor={} amount={} new_locked={}",
-        ctx.accounts.investor.key(),
+    emit!(crate::events::Wrapped {
+        pool: cfg.pool,
+        investor: ctx.accounts.investor.key(),
         amount,
-        cfg.locked_supply,
-    );
+        locked_supply_after: cfg.locked_supply,
+    });
     Ok(())
 }

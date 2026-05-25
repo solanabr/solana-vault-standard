@@ -109,15 +109,13 @@ pub fn handler(ctx: Context<InitializeWrapper>, args: InitializeWrapperArgs) -> 
     cfg.attestation_issuer = args.attestation_issuer;
     cfg.required_attestation_type = args.required_attestation_type;
 
-    msg!(
-        "WrapperConfig initialized | pool={} permissioned={} derwa={} \
-         attestation_program={} attestation_issuer={} required_type={}",
-        cfg.pool,
-        cfg.permissioned_mint,
-        cfg.derwa_mint,
-        cfg.attestation_program,
-        cfg.attestation_issuer,
-        cfg.required_attestation_type,
-    );
+    emit!(crate::events::WrapperInitialized {
+        pool: cfg.pool,
+        permissioned_mint: cfg.permissioned_mint,
+        derwa_mint: cfg.derwa_mint,
+        attestation_program: cfg.attestation_program,
+        attestation_issuer: cfg.attestation_issuer,
+        required_attestation_type: cfg.required_attestation_type,
+    });
     Ok(())
 }

@@ -243,12 +243,13 @@ pub fn handler<'info>(ctx: Context<'_, '_, '_, 'info, Unwrap<'info>>, amount: u6
         .checked_sub(amount)
         .ok_or(DeRwaError::LockedSupplyOverflow)?;
 
-    msg!(
-        "unwrap | investor={} amount={} new_locked={}",
-        ctx.accounts.investor.key(),
+    emit!(crate::events::Unwrapped {
+        pool: cfg.pool,
+        investor: ctx.accounts.investor.key(),
         amount,
-        cfg.locked_supply,
-    );
+        locked_supply_after: cfg.locked_supply,
+        attestation_subject: ctx.accounts.investor.key(),
+    });
     Ok(())
 }
 

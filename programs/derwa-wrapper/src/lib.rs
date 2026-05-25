@@ -1,10 +1,12 @@
 use anchor_lang::prelude::*;
 
 pub mod error;
+pub mod events;
 pub mod instructions;
 pub mod state;
 
 pub use error::*;
+pub use events::*;
 pub use instructions::*;
 pub use state::*;
 
