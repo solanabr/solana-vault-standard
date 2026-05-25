@@ -7,6 +7,108 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Audit hardening — hackathon programs PR-prep
+
+Security + quality pass against the four programs added in the
+institutional credit primitive (compliance-hook, nav-oracle,
+derwa-wrapper, SVS-11 extensions). Every fix below addresses a real
+issue surfaced by manual + agent-assisted audit; defensive / speculative
+changes were deliberately deferred.
+
+#### Real bug fixes
+
+- **compliance-hook `initialize_sanctions_list`** now requires the signer
+  be the program's upgrade authority (via `ProgramData` PDA). Closes the
+  singleton-init squat race where any payer could claim `authority` for
+  the program's lifetime.
+- **compliance-hook `initialize_mint_config`** bounds-checks
+  `mint_data.len() >= Token2022Mint::LEN` before slicing.
+- **nav-oracle `verify_self_consistency`** rejects `nav_gross == 0`
+  (`ZeroNavGross` 7008); without this, signed `(0, 0, 0, 0)` would
+  persist as valid state.
+- **nav-oracle `update`** rejects `ter_bps + loss_bps >= 10_000` with a
+  dedicated `FeesExceedGross` (7007) error; previously returned the
+  misleading `InconsistentNav`.
+- **nav-oracle `update`** adds the missing timestamp lower bound
+  (`now - 60s`) — publisher could otherwise backdate to any past value
+  and corrupt downstream staleness logic.
+- **nav-oracle `rotate_publisher`** rejects `new_publisher == Pubkey::default()`.
+- **nav-oracle `initialize`** is now gated by `pool_authority: Signer`
+  matching `CreditVault.authority` (bytes 8..40). Closes the per-pool
+  squat race.
+- **derwa-wrapper `initialize`** asserts dePOOL `mint_authority ==
+  wrapper_signer` and `supply == 0` (`InvalidDerwaMint` 8011).
+- **svs-11 `set_oracle_source`** resets `last_seen_nav_price` and
+  `last_seen_nav_sequence` on toggle. Without this, the deviation guard
+  would compare against a baseline from a different oracle source.
+- **svs-11 `approve_redeem`** bounds `next_settlement_at` to
+  `[now, now + MAX_SETTLEMENT_HORIZON_SECS]` (5 years).
+- **svs-11 request/cancel/approve redeem hook extras** errors now map
+  `add_extra_accounts_for_execute_cpi` failures to
+  `VaultError::HookExtrasMismatch` instead of opaque `ProgramError`.
+
+#### Lifecycle refactor
+
+- **svs-11 `claimable_tokens` PDA lifecycle** split out of
+  `init_if_needed` (CLAUDE.md anti-pattern): now created at
+  `request_redeem`, closed by `claim_redeem` / `cancel_redeem` /
+  `reject_redeem`. `cancel_redeem` and `reject_redeem` gain
+  `assets_claimable == 0` guard (`RequestPartiallyFulfilled`); before
+  this fix, cancel-after-partial would have panicked at runtime with an
+  insufficient-balance error.
+- **derwa-wrapper events** added: `WrapperInitialized`, `Wrapped`,
+  `Unwrapped`. Brings the program in line with the repo's emit-on-state-
+  change convention.
+
+#### Code quality
+
+- **Zero `unwrap()`** in production code across the four programs (was
+  10); replaced with typed errors (`VersionOverflow`,
+  `LockedSupplyOverflow`, `AttestationNotFound`/`AttestationRequired`).
+- **Zero `as` casts** in nav-oracle (was 6); replaced with `.into()` /
+  `try_from()`.
+- **Comment-overhead trim**: hackathon files were at 21-59% comment
+  lines (baseline svs-1/2/9: 7-14%). After trim: every file at/below
+  baseline. Removed step-narration, defensive justifications, historical
+  references, operator runbooks (all CLAUDE.md anti-patterns).
+- **Dropped fictional "backwards-compat" claims** on unreleased code
+  (attestation extension fields, `nav_oracle` slot semantics).
+
+#### Layout-stability tests
+
+- `mint_config_permissioned_layout_stable()` asserts MintConfig's Borsh
+  layout keeps `attestation_issuer` at byte offset 106 and
+  `required_attestation_type` at 138 (EAML byte readers depend on this).
+- `attestation_layout_stable_for_cross_program_readers()` asserts
+  Attestation's layout keeps subject/issuer/type/expires_at/revoked/bump
+  at the offsets compliance-hook and derwa-wrapper read.
+
+#### Doc corrections
+
+- `docs/derwa-wrapper.md`: WrapperConfig `SPACE` 113 → 178 (trust-anchor
+  fields were missing); error range 8000-8003 → 8000-8011.
+- `docs/compliance-hook.md`: `pool_policy` size annotated as `Some`-case
+  (the `None` case is 1 byte, not 33); `SPACE = 139` annotated as
+  Permissioned/`Some`; references the CI layout test.
+
+#### Breaking — SDK + tests follow-up required
+
+The lifecycle refactor changes account lists for three SVS-11
+instructions. SDK + integration-test updates required before merge:
+
+- `request_redeem` gains: `asset_mint`, `claimable_tokens`,
+  `asset_token_program` (investor pays ~165 lamports rent earlier;
+  refunded on reject/cancel).
+- `cancel_redeem` gains: `asset_mint`, `claimable_tokens`,
+  `asset_token_program`.
+- `reject_redeem` gains: `asset_mint`, `claimable_tokens`,
+  `asset_token_program`.
+- `approve_redeem` no longer requires `system_program` for `init`
+  (still in context for backwards compatibility but unused).
+
+The `nav-oracle initialize` instruction also gains a required
+`pool_authority: Signer`.
+
 ### Token-2022 TransferHook integration — end-to-end functional
 
 The compliance-hook ↔ Token-2022 TransferHook path is exercised end-to-end
