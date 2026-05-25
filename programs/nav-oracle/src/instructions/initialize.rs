@@ -1,9 +1,10 @@
+use crate::error::NavOracleError;
 use crate::state::NavAccount;
 use anchor_lang::prelude::*;
 
 #[derive(Accounts)]
 pub struct InitializeNavAccount<'info> {
-    /// CHECK: seed-only; not dereferenced.
+    /// CHECK: SVS-11 CreditVault PDA. Read in handler to verify `pool_authority`.
     pub pool: UncheckedAccount<'info>,
 
     #[account(
@@ -14,6 +15,11 @@ pub struct InitializeNavAccount<'info> {
         bump,
     )]
     pub nav_account: Account<'info, NavAccount>,
+
+    /// Must match `CreditVault.authority` (bytes 8..40 of `pool` account data).
+    /// Gates per-pool init so attackers cannot squat the NavAccount PDA for
+    /// someone else's pool.
+    pub pool_authority: Signer<'info>,
 
     /// CHECK: pubkey stored verbatim.
     pub publisher: UncheckedAccount<'info>,
@@ -28,6 +34,19 @@ pub struct InitializeNavAccount<'info> {
 }
 
 pub fn handler(ctx: Context<InitializeNavAccount>) -> Result<()> {
+    // Verify pool_authority signer matches CreditVault.authority at bytes 8..40
+    // (8-byte Anchor discriminator + first field = authority: Pubkey).
+    let pool_data = ctx.accounts.pool.try_borrow_data()?;
+    require!(pool_data.len() >= 40, NavOracleError::PoolAccountInvalid);
+    let stored_authority_bytes: [u8; 32] = pool_data[8..40]
+        .try_into()
+        .map_err(|_| error!(NavOracleError::PoolAccountInvalid))?;
+    require!(
+        stored_authority_bytes == ctx.accounts.pool_authority.key().to_bytes(),
+        NavOracleError::UnauthorizedPoolInit
+    );
+    drop(pool_data);
+
     let nav = &mut ctx.accounts.nav_account;
     nav.pool = ctx.accounts.pool.key();
     nav.nav_net = 0;

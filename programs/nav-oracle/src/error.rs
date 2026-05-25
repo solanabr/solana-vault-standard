@@ -31,4 +31,10 @@ pub enum NavOracleError {
 
     #[msg("new_publisher cannot be the default pubkey")]
     InvalidNewPublisher = 7009,
+
+    #[msg("initialize signer must be the pool's CreditVault.authority")]
+    UnauthorizedPoolInit = 7010,
+
+    #[msg("pool account data is missing or shorter than CreditVault.authority offset")]
+    PoolAccountInvalid = 7011,
 }
