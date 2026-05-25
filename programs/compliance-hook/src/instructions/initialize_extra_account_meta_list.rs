@@ -14,14 +14,15 @@ pub const EXTRA_ACCOUNT_METAS_SEED: &[u8] = b"extra-account-metas";
 /// on mode switches.
 const MAX_EXTRA_METAS: usize = 8;
 
-/// Byte size of one `ExtraAccountMeta`: 1 (discriminator) + 32 (addr_config)
-/// + 1 (is_signer PodBool) + 1 (is_writable PodBool).
-const EXTRA_ACCOUNT_META_BYTES: usize = 35;
-
-/// EAML PDA storage size = 8 (Token-2022 discriminator) + 4 (Vec length)
-/// + N × `EXTRA_ACCOUNT_META_BYTES`. CI test asserts byte-equivalence with
-/// `ExtraAccountMetaList::size_of(MAX_EXTRA_METAS)`.
-const EAML_SPACE: usize = 8 + 4 + (EXTRA_ACCOUNT_META_BYTES * MAX_EXTRA_METAS);
+/// EAML allocation. SPL's `size_of()` returns `Result<usize, ProgramError>`
+/// but cannot fail for a compile-time-const input — the unwrap is over a
+/// static invariant, not user input. Hand-rolled arithmetic isn't safe:
+/// SPL's TLV layout has version-dependent header padding that arithmetic
+/// (header_bytes + entry_count * entry_bytes) silently mis-sizes.
+fn eaml_space() -> usize {
+    #[allow(clippy::unwrap_used)]
+    ExtraAccountMetaList::size_of(MAX_EXTRA_METAS).unwrap()
+}
 
 #[derive(Accounts)]
 pub struct InitializeExtraAccountMetaList<'info> {
@@ -29,7 +30,7 @@ pub struct InitializeExtraAccountMetaList<'info> {
     #[account(
         init,
         payer = payer,
-        space = EAML_SPACE,
+        space = eaml_space(),
         seeds = [EXTRA_ACCOUNT_METAS_SEED, mint.key().as_ref()],
         bump,
     )]

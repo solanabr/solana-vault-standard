@@ -123,14 +123,19 @@ pub fn handler(
         VaultError::ZeroAmount
     );
 
+    // Sentinel 0 = "no requeue date" (full fulfillment doesn't need one;
+    // partials with 0 are valid but display as unscheduled). Any non-zero
+    // value must fall within [now, now + MAX_SETTLEMENT_HORIZON_SECS].
     let now = ctx.accounts.clock.unix_timestamp;
-    let horizon = now
-        .checked_add(crate::constants::MAX_SETTLEMENT_HORIZON_SECS)
-        .ok_or(VaultError::MathOverflow)?;
-    require!(
-        next_settlement_at >= now && next_settlement_at <= horizon,
-        VaultError::SettlementHorizonOutOfRange
-    );
+    if next_settlement_at != 0 {
+        let horizon = now
+            .checked_add(crate::constants::MAX_SETTLEMENT_HORIZON_SECS)
+            .ok_or(VaultError::MathOverflow)?;
+        require!(
+            next_settlement_at >= now && next_settlement_at <= horizon,
+            VaultError::SettlementHorizonOutOfRange
+        );
+    }
 
     // Reconciliation: refuse to redeem if vault.total_shares has drifted
     // from the on-chain supply.

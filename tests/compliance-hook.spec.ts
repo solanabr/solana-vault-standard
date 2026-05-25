@@ -63,15 +63,15 @@ describe("compliance-hook: update_sanctions_list", () => {
     try {
       await program.methods
         .initializeSanctionsList()
-        .accounts({
+        .accountsPartial({
           sanctionsList: sanctionsListPda,
           authority: provider.wallet.publicKey,
           payer: provider.wallet.publicKey,
+          systemProgram: SystemProgram.programId,
         })
         .rpc();
     } catch (_err) {
-      // SanctionsList may already exist if svs-11.ts (which runs first
-      // in the anchor test order) initialized it. Idempotent skip.
+      // Idempotent: svs-11.ts may have initialized the singleton already.
     }
   });
 

@@ -1,8 +1,16 @@
 use anchor_lang::prelude::*;
 
-use crate::error::ComplianceHookError;
 use crate::state::SanctionsList;
 
+/// Singleton init. The PDA itself prevents re-initialization (Anchor `init`
+/// fails on second call). The operator MUST run this immediately after deploy
+/// in the same script — the documented trust model is that whoever controls
+/// the deploy controls the initial sanctions authority. A squat between deploy
+/// and init is theoretical (requires mempool monitoring + winning race vs the
+/// deploy script's init tx); recovery is to redeploy under a new program ID
+/// and update svs-11's hardcoded reference. PR #25 precedent: trust-model
+/// risks of this shape are accepted with documentation rather than gated by
+/// upgrade-authority checks (which add cross-loader plumbing).
 #[derive(Accounts)]
 pub struct InitializeSanctionsList<'info> {
     #[account(
@@ -14,28 +22,11 @@ pub struct InitializeSanctionsList<'info> {
     )]
     pub sanctions_list: Account<'info, SanctionsList>,
 
-    /// Authority for future updates.
-    /// CHECK: validated by storing pubkey only; future calls verify signer matches.
+    /// CHECK: stored verbatim; future updates verify signer matches.
     pub authority: UncheckedAccount<'info>,
 
-    /// Singleton init is gated to the program's upgrade authority. Without
-    /// this, the first caller post-deploy could claim `authority` and lock
-    /// the legitimate operator out of all subsequent `update_sanctions_list`
-    /// calls — with no recovery path other than redeploying under a new
-    /// program ID (and updating every cross-program reference in svs-11).
-    #[account(
-        mut,
-        constraint = program_data.upgrade_authority_address == Some(payer.key())
-            @ ComplianceHookError::UnauthorizedAuthority,
-    )]
+    #[account(mut)]
     pub payer: Signer<'info>,
-
-    #[account(
-        seeds = [crate::ID.as_ref()],
-        bump,
-        seeds::program = anchor_lang::solana_program::bpf_loader_upgradeable::ID,
-    )]
-    pub program_data: Account<'info, ProgramData>,
 
     pub system_program: Program<'info, System>,
 }

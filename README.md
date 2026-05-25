@@ -177,7 +177,7 @@ SVS-1 includes optional on-chain modules for enforcing vault policies at the pro
 | `svs-locks` | Time-locked shares before redemption (max 1 year) |
 | `svs-access` | Whitelist/blacklist with merkle proof verification |
 
-**Module PDAs** are passed via `remaining_accounts`. If not passed, checks are skipped (backward compatible).
+**Module PDAs** are passed via `remaining_accounts`. If not passed, checks are skipped (modules are opt-in).
 
 ```bash
 # Build SVS-1 with modules
