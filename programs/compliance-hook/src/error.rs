@@ -53,6 +53,8 @@ pub enum ComplianceHookError {
     #[msg("Attestation account address does not match the canonical PDA derivation")]
     InvalidAttestationPda = 6016,
 
-    #[msg("attestation_program / attestation_issuer must be set (non-default) for Permissioned mode")]
+    #[msg(
+        "attestation_program / attestation_issuer must be set (non-default) for Permissioned mode"
+    )]
     InvalidAttestationConfig = 6017,
 }

@@ -5,9 +5,7 @@ use anchor_spl::token_2022::spl_token_2022::extension::{
     transfer_hook::TransferHook, BaseStateWithExtensions, StateWithExtensions,
 };
 use anchor_spl::token_2022::spl_token_2022::state::Mint as Token2022Mint;
-use anchor_spl::token_interface::{
-    mint_to, Mint, MintTo, TokenAccount, TokenInterface,
-};
+use anchor_spl::token_interface::{mint_to, Mint, MintTo, TokenAccount, TokenInterface};
 use spl_transfer_hook_interface::onchain::add_extra_accounts_for_execute_cpi;
 
 use crate::error::DeRwaError;
@@ -117,10 +115,7 @@ pub struct Wrap<'info> {
     pub token_program: Interface<'info, TokenInterface>,
 }
 
-pub fn handler<'info>(
-    ctx: Context<'_, '_, '_, 'info, Wrap<'info>>,
-    amount: u64,
-) -> Result<()> {
+pub fn handler<'info>(ctx: Context<'_, '_, '_, 'info, Wrap<'info>>, amount: u64) -> Result<()> {
     require!(amount > 0, DeRwaError::ZeroAmount);
 
     // 1. Transfer cPOOL from investor → wrapper PDA's ATA.

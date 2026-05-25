@@ -140,8 +140,8 @@ pub fn read_nav_oracle_price(
     let payload = &data[8..];
 
     // pool: payload[0..32]
-    let pool = Pubkey::try_from(&payload[0..32])
-        .map_err(|_| error!(VaultError::OracleAccountInvalid))?;
+    let pool =
+        Pubkey::try_from(&payload[0..32]).map_err(|_| error!(VaultError::OracleAccountInvalid))?;
     require!(&pool == expected_pool, VaultError::OraclePoolMismatch);
 
     // nav_net: payload[32..40]
@@ -178,7 +178,10 @@ pub fn read_nav_oracle_price(
     let age = now
         .checked_sub(timestamp)
         .ok_or_else(|| error!(VaultError::OracleStale))?;
-    require!(age >= 0 && age <= max_staleness_secs, VaultError::OracleStale);
+    require!(
+        age >= 0 && age <= max_staleness_secs,
+        VaultError::OracleStale
+    );
 
     // Sequence — strictly increasing.
     require!(

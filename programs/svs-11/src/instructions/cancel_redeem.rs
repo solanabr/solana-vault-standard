@@ -84,9 +84,7 @@ pub struct CancelRedeem<'info> {
     pub system_program: Program<'info, System>,
 }
 
-pub fn handler<'info>(
-    ctx: Context<'_, '_, '_, 'info, CancelRedeem<'info>>,
-) -> Result<()> {
+pub fn handler<'info>(ctx: Context<'_, '_, '_, 'info, CancelRedeem<'info>>) -> Result<()> {
     require!(!ctx.accounts.vault.paused, VaultError::VaultPaused);
     require!(
         ctx.accounts.frozen_check.data_is_empty(),

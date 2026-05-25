@@ -1,5 +1,5 @@
-use anchor_lang::prelude::*;
 use crate::state::NavAccount;
+use anchor_lang::prelude::*;
 
 #[derive(Accounts)]
 pub struct InitializeNavAccount<'info> {
@@ -48,7 +48,9 @@ pub fn handler(ctx: Context<InitializeNavAccount>) -> Result<()> {
 
     msg!(
         "NavAccount initialized | pool={} publisher={} rotation_auth={}",
-        nav.pool, nav.publisher, nav.key_rotation_authority
+        nav.pool,
+        nav.publisher,
+        nav.key_rotation_authority
     );
     Ok(())
 }

@@ -152,10 +152,7 @@ pub struct Unwrap<'info> {
     pub token_program: Interface<'info, TokenInterface>,
 }
 
-pub fn handler<'info>(
-    ctx: Context<'_, '_, '_, 'info, Unwrap<'info>>,
-    amount: u64,
-) -> Result<()> {
+pub fn handler<'info>(ctx: Context<'_, '_, '_, 'info, Unwrap<'info>>, amount: u64) -> Result<()> {
     require!(amount > 0, DeRwaError::ZeroAmount);
     require!(
         ctx.accounts.wrapper_config.locked_supply >= amount,
@@ -301,10 +298,7 @@ fn validate_investor_attestation(
     // try_into().unwrap() is sound: data.len() >= 129 guarantees 32 bytes.
     let subject_bytes: [u8; 32] = payload[0..32].try_into().unwrap();
     let subject = Pubkey::new_from_array(subject_bytes);
-    require!(
-        &subject == investor,
-        DeRwaError::InvalidAttestationSubject
-    );
+    require!(&subject == investor, DeRwaError::InvalidAttestationSubject);
 
     // (3) Issuer: payload[32..64] must match wrapper-configured issuer.
     let issuer_bytes: [u8; 32] = payload[32..64].try_into().unwrap();
@@ -348,10 +342,7 @@ fn validate_investor_attestation(
         &cfg.attestation_program,
     )
     .map_err(|_| -> Error { error!(DeRwaError::InvalidAttestationPda) })?;
-    require!(
-        att.key() == expected_pda,
-        DeRwaError::InvalidAttestationPda
-    );
+    require!(att.key() == expected_pda, DeRwaError::InvalidAttestationPda);
 
     Ok(())
 }

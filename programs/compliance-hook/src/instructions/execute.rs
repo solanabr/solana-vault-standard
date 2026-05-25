@@ -79,7 +79,6 @@ pub struct Execute<'info> {
     /// CHECK: optional `FrozenAccount` PDA for destination. Same semantics.
     /// Index 8.
     pub destination_frozen_check: UncheckedAccount<'info>,
-
     // Permissioned-mode extras are accessed via `ctx.remaining_accounts`:
     //   [0] attestation_program  — fixed pubkey (CPI index 9)
     //   [1] source_attestation   — cross-program PDA (CPI index 10)
@@ -129,7 +128,10 @@ pub fn handler(ctx: Context<Execute>) -> Result<()> {
         && ctx.accounts.source_frozen_check.data_len() > 0;
     let dst_frozen = ctx.accounts.destination_frozen_check.lamports() > 0
         && ctx.accounts.destination_frozen_check.data_len() > 0;
-    require!(!src_frozen && !dst_frozen, ComplianceHookError::AccountFrozen);
+    require!(
+        !src_frozen && !dst_frozen,
+        ComplianceHookError::AccountFrozen
+    );
 
     match ctx.accounts.mint_config.mode {
         ComplianceMode::FreelyTransferable => Ok(()),
@@ -171,12 +173,7 @@ pub fn handler(ctx: Context<Execute>) -> Result<()> {
             // manually-supplied Permissioned-mode account list cannot
             // satisfy the hook with a foreign-owner / wrong-subject /
             // wrong-issuer / wrong-type / mis-derived attestation.
-            check_attestation(
-                src_att,
-                &source_owner,
-                &ctx.accounts.mint_config,
-                "source",
-            )?;
+            check_attestation(src_att, &source_owner, &ctx.accounts.mint_config, "source")?;
             check_attestation(
                 dst_att,
                 &dest_owner,
