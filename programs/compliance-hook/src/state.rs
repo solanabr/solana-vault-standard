@@ -64,3 +64,49 @@ impl FrozenAccount {
     pub const SEED_PREFIX: &'static [u8] = b"frozen";
     pub const SPACE: usize = 8 + 1;
 }
+
+#[cfg(test)]
+mod layout_tests {
+    use super::*;
+    use anchor_lang::AnchorSerialize;
+
+    /// EAML's `Seed::AccountData` reads at offsets 106 (attestation_issuer)
+    /// and 138 (required_attestation_type) assume `MintConfig` with
+    /// `pool_policy = Some(_)` serializes to exactly 131 bytes (139 SPACE
+    /// minus the 8-byte Anchor discriminator). If Borsh ever changes how
+    /// `Option<Pubkey>::Some` encodes, or if MintConfig fields are
+    /// reordered, this test fires before the EAML reads silently break.
+    #[test]
+    fn mint_config_permissioned_layout_stable() {
+        let cfg = MintConfig {
+            mint: Pubkey::new_unique(),
+            mode: ComplianceMode::Permissioned,
+            pool_policy: Some(Pubkey::new_unique()),
+            attestation_program: Pubkey::new_unique(),
+            attestation_issuer: Pubkey::new_unique(),
+            required_attestation_type: 7,
+        };
+        let bytes = cfg.try_to_vec().expect("serialize");
+        assert_eq!(
+            bytes.len(),
+            MintConfig::SPACE - 8,
+            "MintConfig payload size drifted — EAML byte offsets (106, 138) are no longer valid"
+        );
+
+        // Verify the load-bearing offsets directly.
+        // After payload start: 32 (mint) + 1 (mode) + 1 (Some tag) + 32 (pool_policy)
+        //                    + 32 (attestation_program) = 98 → attestation_issuer at 98..130
+        // With 8-byte discriminator on disk: 8 + 98 = 106. ✓
+        let attestation_issuer_offset_in_payload = 32 + 1 + 1 + 32 + 32;
+        assert_eq!(
+            attestation_issuer_offset_in_payload, 98,
+            "EAML reads attestation_issuer at on-disk offset 106 (= 98 + 8 disc)"
+        );
+        assert_eq!(
+            &bytes[attestation_issuer_offset_in_payload..attestation_issuer_offset_in_payload + 32],
+            cfg.attestation_issuer.as_ref(),
+        );
+        // required_attestation_type at on-disk offset 138 = payload offset 130.
+        assert_eq!(bytes[130], 7);
+    }
+}

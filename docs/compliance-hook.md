@@ -76,9 +76,9 @@ Seeds: `[b"mint_config", mint]`
 | (discriminator) | — | 8 | Anchor account discriminator |
 | `mint` | `Pubkey` | 32 | The Token-2022 mint this config binds to |
 | `mode` | `ComplianceMode` | 1 | `0` = FreelyTransferable, `1` = Permissioned |
-| `pool_policy` | `Option<Pubkey>` | 1 + 32 | Pool-policy PDA (Permissioned only); 1-byte tag + 32-byte pubkey reserved fixed-size |
+| `pool_policy` | `Option<Pubkey>` | 1 + 32 (when `Some`) | Pool-policy PDA. Required `Some` in Permissioned (Borsh tag 1 + 32 bytes); rejected if `Some` in FreelyTransferable. |
 
-Total `SPACE = 139` bytes: discriminator (8), mint (32), mode (1), max-case `Option<Pubkey>` for `pool_policy` (33), attestation program (32), attestation issuer (32), and required attestation type (1). The EAML builder reads `pool_policy` from typed `MintConfig` state and stores it as a fixed-pubkey extra; it reads `attestation_issuer` at byte offset `106` and `required_attestation_type` at byte offset `138` to derive source/destination attestation PDAs.
+Total `SPACE = 139` bytes (Permissioned/`Some` case): discriminator (8) + mint (32) + mode (1) + `pool_policy` Borsh `Some` (1 + 32) + attestation_program (32) + attestation_issuer (32) + required_attestation_type (1). The EAML builder reads `attestation_issuer` at byte offset 106 and `required_attestation_type` at byte offset 138; these offsets assume the `Some` encoding. A `#[cfg(test)]` layout-stability test in `programs/compliance-hook/src/state.rs` asserts the byte positions on every CI run.
 
 ### ExtraAccountMetaList (per-mint PDA)
 

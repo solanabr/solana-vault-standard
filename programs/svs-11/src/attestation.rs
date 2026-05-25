@@ -26,7 +26,7 @@ use crate::state::CreditVault;
 ///   117..119 jurisdiction ([u8; 2])
 ///   119      investor_class (u8)
 ///   120      kyc_risk_tier (u8)
-#[derive(AnchorDeserialize)]
+#[derive(AnchorDeserialize, AnchorSerialize)]
 pub struct Attestation {
     pub subject: Pubkey,
     pub issuer: Pubkey,
@@ -52,6 +52,50 @@ pub struct Attestation {
 
 impl Attestation {
     pub const LEN: usize = 8 + 32 + 32 + 1 + 2 + 8 + 8 + 1 + 1 + 32 + 2 + 1 + 1;
+}
+
+#[cfg(test)]
+mod layout_tests {
+    use super::*;
+    use anchor_lang::AnchorSerialize;
+
+    /// Cross-program byte-offset readers in
+    /// `compliance-hook/src/instructions/execute.rs::check_attestation` AND
+    /// `derwa-wrapper/src/instructions/unwrap.rs::validate_investor_attestation`
+    /// depend on this layout. If this test fails, both readers silently
+    /// break — update them in lockstep with any layout change here.
+    #[test]
+    fn attestation_layout_stable_for_cross_program_readers() {
+        let att = Attestation {
+            subject: Pubkey::new_unique(),
+            issuer: Pubkey::new_unique(),
+            attestation_type: 7,
+            country_code: [b'B', b'R'],
+            issued_at: 1_700_000_000,
+            expires_at: 1_800_000_000,
+            revoked: false,
+            bump: 254,
+            _reserved: [0u8; 32],
+            jurisdiction: [b'B', b'R'],
+            investor_class: 2,
+            kyc_risk_tier: 1,
+        };
+        let bytes = att.try_to_vec().expect("serialize");
+        assert_eq!(
+            bytes.len(),
+            Attestation::LEN - 8,
+            "Attestation payload size drifted from LEN"
+        );
+        assert_eq!(&bytes[0..32], att.subject.as_ref());
+        assert_eq!(&bytes[32..64], att.issuer.as_ref());
+        assert_eq!(bytes[64], 7);
+        assert_eq!(
+            i64::from_le_bytes(bytes[75..83].try_into().unwrap()),
+            1_800_000_000
+        );
+        assert_eq!(bytes[83], 0);
+        assert_eq!(bytes[84], 254);
+    }
 }
 
 pub fn validate_attestation(

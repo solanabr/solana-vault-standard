@@ -53,7 +53,7 @@ The use case: an institutional investor holds cPOOL after KYC/KYB. To trade on a
 
 ### WrapperConfig (per-pool PDA)
 
-113 bytes (8 disc + 105 data).
+178 bytes (8 disc + 170 data).
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -62,6 +62,9 @@ The use case: an institutional investor holds cPOOL after KYC/KYB. To trade on a
 | derwa_mint | Pubkey | Token-2022 dePOOL mint (FreelyTransferable compliance hook) |
 | locked_supply | u64 | cPOOL currently held in wrapper escrow. Invariant: equals dePOOL.supply |
 | bump | u8 | PDA bump |
+| attestation_program | Pubkey | Owner program of acceptable attestation accounts |
+| attestation_issuer | Pubkey | Required `issuer` field on attestation payloads |
+| required_attestation_type | u8 | Required `attestation_type` byte |
 
 **Seeds:** `["wrapper_config", pool]`
 
@@ -225,7 +228,7 @@ None. The wrapper has no tunable parameters at the program level. All configurat
 programs/derwa-wrapper/src/
 ├── lib.rs                          // program entrypoint, declare_id, 3 ixs
 ├── state.rs                        // WrapperConfig
-├── error.rs                        // DeRwaError (8000-8003)
+├── error.rs                        // DeRwaError (8000-8011)
 └── instructions/
     ├── mod.rs
     ├── initialize.rs               // bind (pool, cPOOL, dePOOL) into WrapperConfig
