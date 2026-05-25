@@ -1,4 +1,5 @@
 use anchor_lang::prelude::*;
+use anchor_lang::solana_program::program_option::COption;
 use anchor_spl::token_interface::Mint;
 
 use crate::error::DeRwaError;
@@ -29,20 +30,19 @@ pub struct InitializeWrapperArgs {
 /// Bind a pool to its (cPOOL, dePOOL) mint pair + capture the per-pool
 /// trust posture for unwrap-time attestation validation.
 ///
-/// Pre-conditions (enforced by the broader system, not by this ix):
-///   1. The cPOOL mint exists with ComplianceHook in Permissioned mode,
-///      created inside `initialize_pool`.
-///   2. The dePOOL mint exists with ComplianceHook in FreelyTransferable
-///      mode, created by `scripts/create-derwa-mint.ts` with its
-///      MintConfig + ExtraAccountMetaList initialized.
-///   3. The dePOOL mint authority is the `wrapper_signer` PDA (set by
-///      the create-derwa-mint script).
+/// On-chain invariants enforced here:
+///   - `derwa_mint.mint_authority == wrapper_signer` (wrapper is sole minter)
+///   - `derwa_mint.supply == 0` (bootstraps the `locked_supply == supply`
+///     invariant that wrap/unwrap maintain)
 ///
-/// Anchor doesn't reach into the mint extensions to validate (1) and (2)
-/// here — the invariant is enforced at the binding sites. This handler
-/// records the binding so `wrap` and `unwrap` can dispatch against the
-/// correct mints AND so `unwrap` can validate the destination wallet's
-/// attestation against the configured trust anchors.
+/// Off-chain operator responsibilities (not enforced by this ix):
+///   - cPOOL has ComplianceHook in Permissioned mode (created inside
+///     `initialize_pool` in svs-11).
+///   - dePOOL has ComplianceHook in FreelyTransferable mode with
+///     MintConfig + ExtraAccountMetaList initialized (created by
+///     `scripts/create-derwa-mint.ts`). A missing or misconfigured hook
+///     fails the first `wrap` attempt rather than silently allowing
+///     non-screened transfers.
 #[derive(Accounts)]
 #[instruction(args: InitializeWrapperArgs)]
 pub struct InitializeWrapper<'info> {
@@ -72,7 +72,24 @@ pub struct InitializeWrapper<'info> {
     /// extensions (TransferHook etc.) deserialize correctly.
     pub permissioned_mint: InterfaceAccount<'info, Mint>,
 
-    /// Token-2022 dePOOL mint (FreelyTransferable hook).
+    /// Wrapper PDA — used here only to assert it is the dePOOL mint authority.
+    /// CHECK: seed-validated; we don't dereference it.
+    #[account(
+        seeds = [b"wrapper_signer", pool.key().as_ref()],
+        bump,
+    )]
+    pub wrapper_signer: UncheckedAccount<'info>,
+
+    /// Token-2022 dePOOL mint (FreelyTransferable hook). Bound to the
+    /// wrapper as sole mint authority with zero pre-existing supply — both
+    /// invariants are required for the `locked_supply == dePOOL.supply`
+    /// guarantee that wrap/unwrap maintain at runtime.
+    #[account(
+        constraint = derwa_mint.mint_authority == COption::Some(wrapper_signer.key())
+            @ DeRwaError::InvalidDerwaMint,
+        constraint = derwa_mint.supply == 0
+            @ DeRwaError::InvalidDerwaMint,
+    )]
     pub derwa_mint: InterfaceAccount<'info, Mint>,
 
     #[account(mut)]

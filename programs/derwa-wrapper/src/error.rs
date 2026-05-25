@@ -34,4 +34,7 @@ pub enum DeRwaError {
 
     #[msg("locked_supply arithmetic overflow")]
     LockedSupplyOverflow = 8010,
+
+    #[msg("dePOOL mint must have wrapper_signer as authority and supply == 0 at init")]
+    InvalidDerwaMint = 8011,
 }
