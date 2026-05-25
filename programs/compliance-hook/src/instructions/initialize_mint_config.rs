@@ -106,6 +106,10 @@ pub fn handler(ctx: Context<InitializeMintConfig>, args: InitializeMintConfigArg
     );
 
     let mint_data = ctx.accounts.mint.try_borrow_data()?;
+    require!(
+        mint_data.len() >= Token2022Mint::LEN,
+        crate::error::ComplianceHookError::InvalidMintAccount
+    );
     let mint_state = Token2022Mint::unpack(&mint_data[..Token2022Mint::LEN])
         .map_err(|_| crate::error::ComplianceHookError::InvalidMintAccount)?;
 

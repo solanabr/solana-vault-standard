@@ -1,5 +1,6 @@
 use anchor_lang::prelude::*;
 
+use crate::error::ComplianceHookError;
 use crate::state::SanctionsList;
 
 #[derive(Accounts)]
@@ -17,8 +18,24 @@ pub struct InitializeSanctionsList<'info> {
     /// CHECK: validated by storing pubkey only; future calls verify signer matches.
     pub authority: UncheckedAccount<'info>,
 
-    #[account(mut)]
+    /// Singleton init is gated to the program's upgrade authority. Without
+    /// this, the first caller post-deploy could claim `authority` and lock
+    /// the legitimate operator out of all subsequent `update_sanctions_list`
+    /// calls — with no recovery path other than redeploying under a new
+    /// program ID (and updating every cross-program reference in svs-11).
+    #[account(
+        mut,
+        constraint = program_data.upgrade_authority_address == Some(payer.key())
+            @ ComplianceHookError::UnauthorizedAuthority,
+    )]
     pub payer: Signer<'info>,
+
+    #[account(
+        seeds = [crate::ID.as_ref()],
+        bump,
+        seeds::program = anchor_lang::solana_program::bpf_loader_upgradeable::ID,
+    )]
+    pub program_data: Account<'info, ProgramData>,
 
     pub system_program: Program<'info, System>,
 }
