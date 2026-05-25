@@ -4,7 +4,7 @@ use anchor_lang::prelude::*;
 
 #[derive(Accounts)]
 pub struct RotatePublisher<'info> {
-    /// CHECK: pool seed validation.
+    /// CHECK: seed-only.
     pub pool: UncheckedAccount<'info>,
 
     #[account(
@@ -15,12 +15,9 @@ pub struct RotatePublisher<'info> {
     )]
     pub nav_account: Account<'info, NavAccount>,
 
-    /// Must sign. Production deployments typically wire this to a
-    /// governance or multisig authority that proxies via a vault
-    /// transaction.
     pub key_rotation_authority: Signer<'info>,
 
-    /// CHECK: new publisher pubkey to install.
+    /// CHECK: pubkey stored verbatim.
     pub new_publisher: UncheckedAccount<'info>,
 }
 
@@ -32,14 +29,6 @@ pub fn handler(ctx: Context<RotatePublisher>) -> Result<()> {
         NavOracleError::InvalidNewPublisher
     );
 
-    let old = nav.publisher;
     nav.publisher = new_publisher;
-
-    msg!(
-        "Publisher rotated | pool={} old={} new={}",
-        nav.pool,
-        old,
-        nav.publisher
-    );
     Ok(())
 }

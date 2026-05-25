@@ -3,9 +3,7 @@ use anchor_lang::prelude::*;
 
 #[derive(Accounts)]
 pub struct InitializeNavAccount<'info> {
-    /// CHECK: pool's CreditVault PDA — used as a seed for the NavAccount PDA.
-    /// We don't dereference it; the SVS-11 program-controlled validation lives
-    /// at SVS-11 read time.
+    /// CHECK: seed-only; not dereferenced.
     pub pool: UncheckedAccount<'info>,
 
     #[account(
@@ -17,11 +15,10 @@ pub struct InitializeNavAccount<'info> {
     )]
     pub nav_account: Account<'info, NavAccount>,
 
-    /// CHECK: publisher pubkey to be stored.
+    /// CHECK: pubkey stored verbatim.
     pub publisher: UncheckedAccount<'info>,
 
-    /// CHECK: authority that controls publisher rotations (typically a
-    /// governance or multisig authority).
+    /// CHECK: pubkey stored verbatim; gates publisher rotation.
     pub key_rotation_authority: UncheckedAccount<'info>,
 
     #[account(mut)]
@@ -46,11 +43,5 @@ pub fn handler(ctx: Context<InitializeNavAccount>) -> Result<()> {
     nav.loan_tape_merkle_root = [0u8; 32];
     nav.key_rotation_authority = ctx.accounts.key_rotation_authority.key();
 
-    msg!(
-        "NavAccount initialized | pool={} publisher={} rotation_auth={}",
-        nav.pool,
-        nav.publisher,
-        nav.key_rotation_authority
-    );
     Ok(())
 }

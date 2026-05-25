@@ -24,7 +24,7 @@ pub struct UpdateArgs {
 
 #[derive(Accounts)]
 pub struct UpdateNav<'info> {
-    /// CHECK: pool seed validation only.
+    /// CHECK: seed validation only.
     pub pool: UncheckedAccount<'info>,
 
     #[account(
@@ -42,24 +42,13 @@ pub struct UpdateNav<'info> {
 pub fn handler(ctx: Context<UpdateNav>, args: UpdateArgs) -> Result<()> {
     let nav = &mut ctx.accounts.nav_account;
 
-    // 1. Sequence must strictly increase.
     require!(args.sequence > nav.sequence, NavOracleError::StaleSequence);
-
-    // 2. Reject economically meaningless NAV (zero gross). The
-    //    self-consistency check at step 6 would pass on (0, 0, ter=0,
-    //    loss=0) and persist it as valid state.
     require!(args.nav_gross > 0, NavOracleError::ZeroNavGross);
 
-    // 3. Reject fees that meet/exceed gross (factor_bps would be <= 0).
-    //    Verify_self_consistency would also reject this with InconsistentNav,
-    //    but a dedicated error is more observable.
     let ter_u32: u32 = args.ter_bps.into();
     let loss_u32: u32 = args.loss_bps.into();
     require!(ter_u32 + loss_u32 < 10_000, NavOracleError::FeesExceedGross);
 
-    // 4. Timestamp window: now ± 60s. Upper bound prevents future-dating;
-    //    lower bound prevents backdating that would corrupt downstream
-    //    staleness logic in svs-11.
     let now = Clock::get()?.unix_timestamp;
     require!(
         args.timestamp <= now + 60,
@@ -67,18 +56,13 @@ pub fn handler(ctx: Context<UpdateNav>, args: UpdateArgs) -> Result<()> {
     );
     require!(args.timestamp >= now - 60, NavOracleError::TimestampInPast);
 
-    // 3. Verify SOME PRECEDING instruction in this tx is the ed25519 verify
-    //    of (publisher, message=signing_payload, signature=args.signature).
-    //    Must scan ALL instructions before this one, not just index 0.
-    //    Earlier draft used `load_instruction_at_checked(0, ...)` which assumes
-    //    Ed25519Program is the FIRST instruction. That breaks the moment the
-    //    publisher prepends a ComputeBudget instruction (priority fees / unit limits),
-    //    which is standard practice on Solana mainnet. We must tolerate any layout
-    //    where the Ed25519 verify is somewhere before this update ix.
+    // Scan ALL preceding ixs for an Ed25519 verify (tolerates ComputeBudget
+    // prefix, which is standard practice). Matches the FIRST one and requires
+    // it to verify our (publisher, payload, signature) exactly.
     let current_idx: usize = load_current_index_checked(&ctx.accounts.instructions_sysvar)
         .map_err(|_| error!(NavOracleError::InvalidSignature))?
         .into();
-    require!(current_idx > 0, NavOracleError::InvalidSignature); // need at least one prior ix
+    require!(current_idx > 0, NavOracleError::InvalidSignature);
 
     let mut ed25519_ix_opt = None;
     for i in 0..current_idx {
@@ -86,15 +70,12 @@ pub fn handler(ctx: Context<UpdateNav>, args: UpdateArgs) -> Result<()> {
             .map_err(|_| error!(NavOracleError::InvalidSignature))?;
         if ix.program_id == ED25519_PROGRAM_ID {
             ed25519_ix_opt = Some(ix);
-            break; // first ed25519 verify ix wins; if there are multiple, only [0] is checked
+            break;
         }
     }
     let ed25519_ix = ed25519_ix_opt.ok_or_else(|| error!(NavOracleError::InvalidSignature))?;
 
-    // 4. Reconstruct expected canonical signing payload from the supplied args
-    //    using the SAME serialization the publisher used off-chain
-    //    (NavAccount::signing_payload). The `signature` field is zeroed because
-    //    the payload is signed BEFORE the signature is produced.
+    // Canonical signing payload (signature zeroed: it's produced AFTER signing).
     let expected_payload = {
         let staged_for_payload = NavAccount {
             pool: nav.pool,
@@ -114,9 +95,6 @@ pub fn handler(ctx: Context<UpdateNav>, args: UpdateArgs) -> Result<()> {
         staged_for_payload.signing_payload()
     };
 
-    // 5. Strict ed25519 precompile check: the matched ix must verify
-    //    (publisher, signature, expected_payload) with all data inlined
-    //    (instruction_index fields == 0xFFFF) and exactly one verification.
     require!(
         verify_ed25519_ix_strict(
             &ed25519_ix.data,
@@ -127,8 +105,6 @@ pub fn handler(ctx: Context<UpdateNav>, args: UpdateArgs) -> Result<()> {
         NavOracleError::InvalidSignature
     );
 
-    // 6. Self-consistency check on the supplied fields (computed locally,
-    //    independent of what we'll persist).
     let staged = NavAccount {
         pool: nav.pool,
         nav_net: args.nav_net,
@@ -149,7 +125,6 @@ pub fn handler(ctx: Context<UpdateNav>, args: UpdateArgs) -> Result<()> {
         NavOracleError::InconsistentNav
     );
 
-    // 7. Persist (deref through Account<'_, NavAccount> into the inner struct).
     **nav = staged;
 
     emit!(NavUpdated {
@@ -168,48 +143,36 @@ pub fn handler(ctx: Context<UpdateNav>, args: UpdateArgs) -> Result<()> {
     Ok(())
 }
 
-// NOTE: do NOT define a loose `verify_ed25519_ix` helper here. Earlier drafts of
-// this plan included one that only checked payload length and was meant to be
-// "tightened later", which is exactly the kind of partial implementation that
-// gets shipped accidentally. The canonical helper is `verify_ed25519_ix_strict`
-// below — and the handler above already calls THAT one (not a loose variant).
-// A CI grep guard fails the build if the bare name `verify_ed25519_ix` (without
-// `_strict`) ever reappears in this directory.
-
-/// Strict verifier: confirms the ed25519_program ix at `ix_data` actually verified
-/// `expected_sig` over `expected_msg` using `expected_pubkey`. The instruction layout is
-/// the Solana ed25519_program standard:
-///   [count:u8][padding:u8]
-///   [signature_offset:u16][signature_instruction_index:u16]
-///   [public_key_offset:u16][public_key_instruction_index:u16]
-///   [message_data_offset:u16][message_data_size:u16][message_instruction_index:u16]
-///   [...data...]
+/// Verifies the Solana ed25519_program ix data actually verified
+/// `(expected_pubkey, expected_sig, expected_msg)`. The strict variant
+/// requires `count == 1` and all `instruction_index` fields = `0xFFFF`
+/// (data inlined, not pointing at a different instruction's data —
+/// prevents substitution attacks).
 ///
-/// We require count == 1 (exactly one verification) and all instruction_index fields == 0xFFFF
-/// (data is in this same instruction, not in another). This prevents an attacker from pointing
-/// the ed25519 verify at someone else's earlier instruction.
+/// ed25519_program ix layout:
+///   [count: u8][_pad: u8]
+///   [sig_offset: u16][sig_ix_idx: u16]
+///   [pk_offset: u16][pk_ix_idx: u16]
+///   [msg_offset: u16][msg_size: u16][msg_ix_idx: u16]
+///   [...data...]
 fn verify_ed25519_ix_strict(
     ix_data: &[u8],
     expected_pubkey: &Pubkey,
     expected_sig: &[u8; 64],
     expected_msg: &[u8],
 ) -> bool {
-    if ix_data.len() < 16 {
+    if ix_data.len() < 16 || ix_data[0] != 1 {
         return false;
     }
-    if ix_data[0] != 1 {
-        return false;
-    } // count == 1
 
-    let sig_offset = u16::from_le_bytes([ix_data[2], ix_data[3]]) as usize;
+    let sig_offset = usize::from(u16::from_le_bytes([ix_data[2], ix_data[3]]));
     let sig_ix_idx = u16::from_le_bytes([ix_data[4], ix_data[5]]);
-    let pk_offset = u16::from_le_bytes([ix_data[6], ix_data[7]]) as usize;
+    let pk_offset = usize::from(u16::from_le_bytes([ix_data[6], ix_data[7]]));
     let pk_ix_idx = u16::from_le_bytes([ix_data[8], ix_data[9]]);
-    let msg_offset = u16::from_le_bytes([ix_data[10], ix_data[11]]) as usize;
-    let msg_size = u16::from_le_bytes([ix_data[12], ix_data[13]]) as usize;
+    let msg_offset = usize::from(u16::from_le_bytes([ix_data[10], ix_data[11]]));
+    let msg_size = usize::from(u16::from_le_bytes([ix_data[12], ix_data[13]]));
     let msg_ix_idx = u16::from_le_bytes([ix_data[14], ix_data[15]]);
 
-    // 0xFFFF means "data is in this same instruction".
     if sig_ix_idx != 0xFFFF || pk_ix_idx != 0xFFFF || msg_ix_idx != 0xFFFF {
         return false;
     }

@@ -24,17 +24,6 @@ use crate::error::VaultError;
 use crate::events::RedemptionRequested;
 use crate::state::{CreditVault, RedemptionRequest, RequestStatus};
 
-/// Extract the hook program ID from a Token-2022 mint's `TransferHook`
-/// extension. Returns `None` for legacy SPL mints, mints without the
-/// extension, or mints with the extension explicitly cleared.
-///
-/// Same helper as `derwa-wrapper::wrap::read_hook_program_id` —
-/// duplicated rather than refactored into a shared module to keep the
-/// CPI extension self-contained at each call site. Mirrored here so
-/// svs-11's redemption flow extends its cPOOL `transfer_checked` ix with
-/// the hook accounts (otherwise the CPI hits "Unknown program" when the
-/// runtime tries to invoke the hook program ID found in the mint's
-/// TransferHook extension).
 fn read_hook_program_id(mint: &AccountInfo) -> Result<Option<Pubkey>> {
     if mint.owner != &spl_token_2022::ID {
         return Ok(None);
@@ -142,25 +131,11 @@ pub fn handler<'info>(
         )?;
     }
 
-    // Transfer cPOOL shares from investor → redemption_escrow.
-    //
-    // The shares mint carries the Token-2022 TransferHook extension
-    // (bound to compliance-hook in Permissioned mode by
-    // `initialize_pool`). Token-2022's `invoke_execute` requires the
-    // hook program account + EAML PDA + resolved EAML extras to be in
-    // the INNER `transfer_checked` ix's keys list — not just in the
-    // surrounding tx accounts. `anchor_spl::token_interface::transfer_checked`
-    // builds the bare ix with only canonical 4 keys, which makes the
-    // CPI fail with "Unknown program" once the cPOOL hook is active.
-    //
-    // We mirror the pattern used in `derwa-wrapper::wrap` /
-    // `derwa-wrapper::unwrap`: build the bare ix from spl-token-2022,
-    // let `add_extra_accounts_for_execute_cpi` extend BOTH the ix keys
-    // list AND the cpi_account_infos with the hook accounts (sourced
-    // from `ctx.remaining_accounts`), then `invoke_signed`. The
-    // off-chain callers pass the EAML extras for the `(source = investor,
-    // destination = redemption_escrow)` direction as `remainingAccounts`
-    // on the request_redeem ix.
+    // shares_mint TransferHook requires the EAML extras be in the inner
+    // ix's keys list, not just in the surrounding tx accounts. Build the
+    // bare spl-token-2022 ix and extend via `add_extra_accounts_for_execute_cpi`.
+    // Callers pass the EAML extras (investor → redemption_escrow direction)
+    // as `remainingAccounts`.
     let mut transfer_ix = spl_token_2022::instruction::transfer_checked(
         &spl_token_2022::ID,
         &ctx.accounts.investor_shares_account.key(),
@@ -214,14 +189,6 @@ pub fn handler<'info>(
     request.fulfilled_at = 0;
     request.bump = ctx.bumps.redemption_request;
 
-    // Pro-rata fulfillment + auto-requeue defaults.
-    // `original_shares` snapshots the initial intent and is never
-    // mutated after creation; consumers compare `original_shares` vs
-    // `fulfilled_shares_cumulative` to display per-investor settlement
-    // progress. `queued_for_settlement_at` is computed off-chain by
-    // the backend's redemption-scheduler service and passed in here.
-    // `fulfilled_shares_cumulative` starts at 0; `approve_redeem`
-    // accumulates across one or more partial-fulfillment calls.
     request.original_shares = shares;
     request.queued_for_settlement_at = queued_for_settlement_at;
     request.fulfilled_shares_cumulative = 0;

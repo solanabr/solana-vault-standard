@@ -43,22 +43,10 @@ pub struct ApproveDeposit<'info> {
     /// it is unused (the nav-oracle path uses `nav_account` instead).
     pub nav_oracle: UncheckedAccount<'info>,
 
-    /// CHECK: NavAccount PDA from the nav-oracle program. Read in the
-    /// `oracle_source == 1` branch via `read_nav_oracle_price`.
-    ///
-    /// IMPORTANT: we INTENTIONALLY OMIT the
-    /// `seeds = [NAV_ORACLE_SEED, vault.key().as_ref()]` + `bump` +
-    /// `seeds::program = NAV_ORACLE_PROGRAM_ID` constraints here.
-    /// Anchor validates seed constraints at deserialization time,
-    /// BEFORE the handler runs. With seeds enforced, the
-    /// emergency-revert path (`oracle_source == 0` + caller passes a
-    /// dummy account because they don't have a real NavAccount yet)
-    /// FAILS at pre-handler validation, defeating the
-    /// emergency-revert design. The caller must always be able to
-    /// pass *some* account in this slot, even if it's never read.
-    ///
-    /// We MANUALLY validate the PDA derivation + program ownership inside
-    /// the handler when `oracle_source == 1` (see branch below).
+    /// CHECK: Manually validated in handler when `oracle_source == 1`.
+    /// No seed constraint here — Anchor evaluates seeds pre-handler, which
+    /// would fail the emergency-revert path where the caller passes a
+    /// dummy account because they have no real NavAccount yet.
     pub nav_account: UncheckedAccount<'info>,
 
     /// CHECK: Attestation validated in handler via validate_attestation
@@ -92,22 +80,10 @@ pub fn handler(ctx: Context<ApproveDeposit>) -> Result<()> {
         &ctx.accounts.clock,
     )?;
 
-    // Read NAV via the configured oracle source. This branch is the
-    // emergency-revert safety hatch: if NavOracle has a bug post-deploy,
-    // the configured governance authority flips `oracle_source` to 0 via
-    // `set_oracle_source` and approve_* calls fall back to the legacy
-    // mock_oracle path. This is a single governance-authorized tx —
-    // minutes to recover, not days for a full SVS-11 redeploy.
-    //
-    // The `nav_account` seeds constraint is INTENTIONALLY omitted on
-    // the Accounts struct (see comment there) so the revert path
-    // doesn't fail pre-handler. We validate the PDA derivation +
-    // program ownership MANUALLY here only when `oracle_source == 1`.
+    // Oracle source dispatch. Emergency-revert toggle: governance can flip
+    // to mock if nav-oracle has a bug post-deploy.
     let oracle_read: OraclePrice = match ctx.accounts.vault.oracle_source {
         ORACLE_SOURCE_NAV_ORACLE => {
-            // Canonical NavOracle path. Validate the nav_account
-            // is the expected PDA owned by the nav-oracle program before
-            // reading any bytes.
             let credit_vault_key = ctx.accounts.vault.key();
             let (expected_nav_pda, _bump) = Pubkey::find_program_address(
                 &[NAV_ORACLE_SEED, credit_vault_key.as_ref()],
@@ -136,12 +112,6 @@ pub fn handler(ctx: Context<ApproveDeposit>) -> Result<()> {
             }
         }
         ORACLE_SOURCE_MOCK => {
-            // Mock oracle (emergency-revert path). The nav_account slot is
-            // NOT validated here — caller may pass any account.
-            msg!(
-                "WARNING: CreditVault.oracle_source=0 (mock); revert mode active. \
-                 NAV freshness from nav-oracle NOT enforced."
-            );
             let p = read_and_validate_oracle(
                 &ctx.accounts.nav_oracle.to_account_info(),
                 &ctx.accounts.vault,

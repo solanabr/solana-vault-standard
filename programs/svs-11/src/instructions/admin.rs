@@ -324,11 +324,8 @@ pub fn update_oracle_params_handler(
     Ok(())
 }
 
-/// Switch the vault's oracle read path between the simple/mock oracle path
-/// (`0`) and the optional NavOracle adapter (`1`). This is deliberately
-/// separate from oracle address changes: it does not mutate `nav_oracle` or
-/// `oracle_program`, so deployments can opt into or out of richer NAV reads
-/// without a full program upgrade.
+/// Toggle the vault's oracle read path between mock (0) and nav-oracle (1).
+/// Does NOT mutate `nav_oracle` or `oracle_program` addresses.
 pub fn set_oracle_source_handler(ctx: Context<UpdateOracleParams>, source: u8) -> Result<()> {
     require!(
         source == ORACLE_SOURCE_MOCK || source == ORACLE_SOURCE_NAV_ORACLE,
@@ -338,13 +335,8 @@ pub fn set_oracle_source_handler(ctx: Context<UpdateOracleParams>, source: u8) -
     let vault = &mut ctx.accounts.vault;
     let old_source = vault.oracle_source;
 
-    // Reset deviation-guard baseline when source changes. Without this,
-    // the next read post-toggle would compare against a price/sequence
-    // produced by a different oracle source (different decimals, scale,
-    // staleness semantics) and either spuriously block a legitimate
-    // fresh NAV or accept a NAV deviation that should be blocked.
-    // Admin should verify the new source's first publish manually
-    // before resuming operations after a toggle.
+    // Source-cross-contamination guard: the deviation baseline carries
+    // price + sequence semantics specific to one source.
     if old_source != source {
         vault.last_seen_nav_price = 0;
         vault.last_seen_nav_sequence = 0;

@@ -66,10 +66,7 @@ pub struct ApproveRedeem<'info> {
     #[account(constraint = asset_mint.key() == vault.asset_mint)]
     pub asset_mint: Box<InterfaceAccount<'info, Mint>>,
 
-    /// `init_if_needed` so partial-fulfillment retries don't fail
-    /// re-init on the second approve_redeem for the same request.
-    /// First call creates the PDA; subsequent calls top up via the
-    /// transfer_checked below. claim_redeem closes it on terminal claim.
+    /// First partial creates; subsequent partials top up; claim_redeem closes.
     #[account(
         init_if_needed,
         payer = manager,
@@ -86,21 +83,10 @@ pub struct ApproveRedeem<'info> {
     /// it is unused (the nav-oracle path uses `nav_account` instead).
     pub nav_oracle: UncheckedAccount<'info>,
 
-    /// CHECK: NavAccount PDA from the nav-oracle program. Read in the
-    /// `oracle_source == 1` branch via `read_nav_oracle_price`.
-    ///
-    /// IMPORTANT: we INTENTIONALLY OMIT the
-    /// `seeds = [NAV_ORACLE_SEED, vault.key().as_ref()]` + `bump` +
-    /// `seeds::program = NAV_ORACLE_PROGRAM_ID` constraints here.
-    /// Anchor validates seed constraints at deserialization time,
-    /// BEFORE the handler runs. With seeds enforced, the
-    /// emergency-revert path (`oracle_source == 0` + caller passes a
-    /// dummy account because they don't have a real NavAccount yet)
-    /// FAILS at pre-handler validation, defeating the entire
-    /// emergency-revert design. See approve_deposit for full rationale.
-    ///
-    /// We MANUALLY validate the PDA derivation + program ownership inside
-    /// the handler when `oracle_source == 1` (see branch below).
+    /// CHECK: Manually validated in handler when `oracle_source == 1`.
+    /// No seed constraint here — Anchor evaluates seeds pre-handler, which
+    /// would fail the emergency-revert path where the caller passes a
+    /// dummy account because they have no real NavAccount yet.
     pub nav_account: UncheckedAccount<'info>,
 
     /// CHECK: Attestation validated in handler via validate_attestation
@@ -119,9 +105,7 @@ pub struct ApproveRedeem<'info> {
     pub clock: Sysvar<'info, Clock>,
 }
 
-/// Fixed-point scale used by `batch_settlement_ratio_scaled` (1e18 = 100%).
-/// Matches the spec convention so backend can compute ratios in the same
-/// fixed-point space the on-chain handler uses for division.
+/// 1e18 = 100% (matches backend's fixed-point convention).
 const RATIO_SCALE_1E18: u128 = 1_000_000_000_000_000_000;
 
 pub fn handler(
@@ -135,19 +119,11 @@ pub fn handler(
         VaultError::AccountFrozen
     );
 
-    // Guard against malformed ratios. 0 ⇒ nothing to fulfill (caller
-    // should reject_redeem instead). > 1e18 ⇒ would over-burn the
-    // remaining shares; cap at 1e18 so a buggy backend doesn't bypass
-    // the remaining-shares math.
     require!(
         batch_settlement_ratio_scaled > 0 && batch_settlement_ratio_scaled <= RATIO_SCALE_1E18,
         VaultError::ZeroAmount
     );
 
-    // Bound the manager-supplied next_settlement_at. Without this,
-    // a stuck scheduler could queue redemptions to year 9999 and
-    // downstream monitoring would flag them indistinguishably from
-    // a real bug. Allow now..now+MAX_SETTLEMENT_HORIZON_SECS.
     let now = ctx.accounts.clock.unix_timestamp;
     let horizon = now
         .checked_add(crate::constants::MAX_SETTLEMENT_HORIZON_SECS)
@@ -157,9 +133,8 @@ pub fn handler(
         VaultError::SettlementHorizonOutOfRange
     );
 
-    // V4-P20 FIX: Reconciliation check — verify stored total_shares matches
-    // shares_mint.supply. If they diverge, something has gone wrong and we
-    // should not proceed with a redemption based on stale share counts.
+    // Reconciliation: refuse to redeem if vault.total_shares has drifted
+    // from the on-chain supply.
     require!(
         ctx.accounts.vault.total_shares == ctx.accounts.shares_mint.supply,
         VaultError::MathOverflow
@@ -172,10 +147,8 @@ pub fn handler(
         &ctx.accounts.clock,
     )?;
 
-    // Read NAV via the configured oracle source (emergency-revert
-    // toggle). See approve_deposit for the rationale on the no-seeds
-    // constraint on nav_account; manual PDA check happens in the
-    // nav-oracle branch.
+    // Read NAV via the configured oracle source. Manual PDA check in the
+    // nav-oracle branch (see nav_account doc-comment for the reason).
     let oracle_read: OraclePrice = match ctx.accounts.vault.oracle_source {
         ORACLE_SOURCE_NAV_ORACLE => {
             let credit_vault_key = ctx.accounts.vault.key();
@@ -206,10 +179,6 @@ pub fn handler(
             }
         }
         ORACLE_SOURCE_MOCK => {
-            msg!(
-                "WARNING: CreditVault.oracle_source=0 (mock); revert mode active. \
-                 NAV freshness from nav-oracle NOT enforced."
-            );
             let p = read_and_validate_oracle(
                 &ctx.accounts.nav_oracle.to_account_info(),
                 &ctx.accounts.vault,
@@ -225,11 +194,7 @@ pub fn handler(
 
     let price = oracle_read.price;
 
-    // V5-P9: Deviation check — compare oracle price against vault-derived expected price.
-    // SVS-11 (credit vault) does not use ERC-4626-style virtual shares/assets (no
-    // decimals_offset), so the simple ratio (total_assets * PRICE_SCALE / total_shares)
-    // is the correct expected price. This differs from SVS-10 which uses convert_to_assets
-    // with decimals_offset to account for virtual share inflation.
+    // Deviation: compare oracle price against vault-derived expected price.
     let vault = &ctx.accounts.vault;
     if vault.total_shares > 0 && vault.total_assets > 0 {
         let expected_price_u128 = (vault.total_assets as u128)
@@ -244,19 +209,8 @@ pub fn handler(
             .map_err(|_| VaultError::OracleDeviationExceeded)?;
     }
 
-    // Compute the pro-rata cut for THIS settlement.
-    //
-    // `remaining` = shares not yet fulfilled across prior partial settlements
-    // (or the full `shares_locked` on the first call). `fulfill` is the
-    // floor-rounded portion of `remaining` allocated to this batch. Round-
-    // down favors the vault: a residual sub-1-share dust never burns more
-    // than the ratio actually allows.
-    //
-    // CRITICAL precedence note: Rust's `as u64` binds tighter than `/`,
-    // so we MUST parenthesize the division before
-    // the cast. The form `(((remaining as u128) * ratio) / 1e18) as u64`
-    // is correct; `(remaining as u128) * ratio / 1e18 as u64` would
-    // truncate `1e18` to `u64::MAX` first and produce nonsense.
+    // Pro-rata fulfill = floor(remaining × ratio / 1e18). Floor favors vault.
+    // Parenthesize the division before the cast — `as u64` binds tighter than `/`.
     let request_snapshot = &ctx.accounts.redemption_request;
     let shares_locked = request_snapshot.shares_locked;
     let already_fulfilled = request_snapshot.fulfilled_shares_cumulative;
@@ -332,23 +286,6 @@ pub fn handler(
         ctx.accounts.asset_mint.decimals,
     )?;
 
-    // Accumulate fulfilled shares + branch on
-    // full vs partial fulfillment.
-    //
-    // Full fulfillment: cumulative reaches/exceeds shares_locked → status
-    // flips to Approved, `fulfilled_at` is stamped, request stays open
-    // until claim_redeem closes it (existing flow).
-    //
-    // Partial: cumulative < shares_locked → status stays Pending,
-    // `queued_for_settlement_at` advances to the next-batch epoch passed
-    // by the manager. The PDA stays alive so the next approve_redeem call
-    // can fulfill the remainder.
-    //
-    // `assets_claimable` ACCUMULATES across settlements (not overwritten)
-    // so claim_redeem can transfer the cumulative payout in a single ix.
-    // The on-chain ATA `claimable_tokens` already holds the cumulative
-    // balance (via the transfer_checked above on each call); the PDA
-    // field stays in sync for off-chain consumers reading the request.
     let now = ctx.accounts.clock.unix_timestamp;
     let request = &mut ctx.accounts.redemption_request;
     let new_cumulative = request
@@ -364,11 +301,7 @@ pub fn handler(
     if new_cumulative >= shares_locked {
         request.status = RequestStatus::Approved;
         request.fulfilled_at = now;
-        // queued_for_settlement_at intentionally NOT bumped on full
-        // fulfillment — the request is terminal.
     } else {
-        // Partial: stays Pending; auto-requeue to the next settlement date.
-        // (status already Pending per the Accounts constraint above.)
         request.queued_for_settlement_at = next_settlement_at;
     }
 
@@ -381,10 +314,7 @@ pub fn handler(
         .total_shares
         .checked_sub(fulfill)
         .ok_or(VaultError::MathOverflow)?;
-    // Only decrement the pending counter on FULL fulfillment — a partial
-    // settlement leaves the request in the queue, so the count of pending
-    // requests is unchanged. (cancel/reject continue to handle the
-    // mid-flight cleanup paths.)
+    // Pending counter only decrements on FULL fulfillment.
     if new_cumulative >= shares_locked {
         vault.total_pending_redeems = vault
             .total_pending_redeems
@@ -392,8 +322,6 @@ pub fn handler(
             .ok_or(VaultError::MathOverflow)?;
     }
 
-    // Persist NAV bookkeeping (mirrors approve_deposit). Sequence is only
-    // advanced for the nav-oracle path; mock returns sentinel 0.
     vault.last_seen_nav_price = price;
     if vault.oracle_source == ORACLE_SOURCE_NAV_ORACLE {
         vault.last_seen_nav_sequence = oracle_read.sequence;
