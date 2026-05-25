@@ -26,8 +26,14 @@ pub struct RotatePublisher<'info> {
 
 pub fn handler(ctx: Context<RotatePublisher>) -> Result<()> {
     let nav = &mut ctx.accounts.nav_account;
+    let new_publisher = ctx.accounts.new_publisher.key();
+    require!(
+        new_publisher != Pubkey::default(),
+        NavOracleError::InvalidNewPublisher
+    );
+
     let old = nav.publisher;
-    nav.publisher = ctx.accounts.new_publisher.key();
+    nav.publisher = new_publisher;
 
     msg!(
         "Publisher rotated | pool={} old={} new={}",

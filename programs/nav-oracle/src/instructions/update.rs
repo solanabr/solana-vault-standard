@@ -45,12 +45,27 @@ pub fn handler(ctx: Context<UpdateNav>, args: UpdateArgs) -> Result<()> {
     // 1. Sequence must strictly increase.
     require!(args.sequence > nav.sequence, NavOracleError::StaleSequence);
 
-    // 2. Timestamp not in future (allow up to 60s clock skew).
+    // 2. Reject economically meaningless NAV (zero gross). The
+    //    self-consistency check at step 6 would pass on (0, 0, ter=0,
+    //    loss=0) and persist it as valid state.
+    require!(args.nav_gross > 0, NavOracleError::ZeroNavGross);
+
+    // 3. Reject fees that meet/exceed gross (factor_bps would be <= 0).
+    //    Verify_self_consistency would also reject this with InconsistentNav,
+    //    but a dedicated error is more observable.
+    let ter_u32: u32 = args.ter_bps.into();
+    let loss_u32: u32 = args.loss_bps.into();
+    require!(ter_u32 + loss_u32 < 10_000, NavOracleError::FeesExceedGross);
+
+    // 4. Timestamp window: now ± 60s. Upper bound prevents future-dating;
+    //    lower bound prevents backdating that would corrupt downstream
+    //    staleness logic in svs-11.
     let now = Clock::get()?.unix_timestamp;
     require!(
         args.timestamp <= now + 60,
         NavOracleError::TimestampInFuture
     );
+    require!(args.timestamp >= now - 60, NavOracleError::TimestampInPast);
 
     // 3. Verify SOME PRECEDING instruction in this tx is the ed25519 verify
     //    of (publisher, message=signing_payload, signature=args.signature).
