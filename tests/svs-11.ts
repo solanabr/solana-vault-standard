@@ -1279,8 +1279,11 @@ describe("svs-11 (Credit Markets Vault)", () => {
           sharesMint,
           investorSharesAccount,
           redemptionEscrow,
+          assetMint,
+          claimableTokens,
           attestation,
           frozenCheck: null,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
           token2022Program: TOKEN_2022_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           clock: SYSVAR_CLOCK_PUBKEY,
@@ -1455,8 +1458,11 @@ describe("svs-11 (Credit Markets Vault)", () => {
           sharesMint,
           investorSharesAccount,
           redemptionEscrow,
+          assetMint,
+          claimableTokens,
           attestation,
           frozenCheck: null,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
           token2022Program: TOKEN_2022_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           clock: SYSVAR_CLOCK_PUBKEY,
@@ -1474,8 +1480,11 @@ describe("svs-11 (Credit Markets Vault)", () => {
           vault,
           redemptionRequest,
           sharesMint,
+          assetMint,
+          claimableTokens,
           investorSharesAccount,
           redemptionEscrow,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
           token2022Program: TOKEN_2022_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
         })
@@ -1952,6 +1961,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
         TOKEN_2022_PROGRAM_ID,
       );
       const zeroSharesAccount = zeroSharesAta.address;
+      const [zeroClaimable] = getClaimableTokensPDA(zeroRedeemer.publicKey);
 
       try {
         await program.methods
@@ -1963,8 +1973,11 @@ describe("svs-11 (Credit Markets Vault)", () => {
             sharesMint,
             investorSharesAccount: zeroSharesAccount,
             redemptionEscrow,
+            assetMint,
+            claimableTokens: zeroClaimable,
             attestation: zeroAttestation,
             frozenCheck: null,
+            assetTokenProgram: TOKEN_PROGRAM_ID,
             token2022Program: TOKEN_2022_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
             clock: SYSVAR_CLOCK_PUBKEY,
@@ -2437,8 +2450,11 @@ describe("svs-11 (Credit Markets Vault)", () => {
           sharesMint,
           investorSharesAccount: liqInvestorSharesAccount,
           redemptionEscrow,
+          assetMint,
+          claimableTokens: liqClaimableTokens,
           attestation: liqAttestation,
           frozenCheck: null,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
           token2022Program: TOKEN_2022_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           clock: SYSVAR_CLOCK_PUBKEY,
@@ -2752,8 +2768,11 @@ describe("svs-11 (Credit Markets Vault)", () => {
           sharesMint,
           investorSharesAccount: frozenInvestorSharesAccount,
           redemptionEscrow,
+          assetMint,
+          claimableTokens: frozenInvClaimableTokens,
           attestation: frozenInvAttestation,
           frozenCheck: null,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
           token2022Program: TOKEN_2022_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           clock: SYSVAR_CLOCK_PUBKEY,
@@ -3636,6 +3655,278 @@ describe("svs-11 (Credit Markets Vault)", () => {
       } catch (err: any) {
         expect(err.error.errorCode.code).to.equal("VaultNotPaused");
       }
+    });
+  });
+
+  describe("Pro-rata Partial Fulfillment", () => {
+    const HALF_RATIO = new BN("500000000000000000"); // 0.5e18 = 50%
+    let partialInvestor: Keypair;
+    let partialInvestorTokenAccount: PublicKey;
+    let partialInvestorSharesAccount: PublicKey;
+    let partialInvRequest: PublicKey;
+    let partialRedRequest: PublicKey;
+    let partialClaimableTokens: PublicKey;
+    let partialAttestation: PublicKey;
+    let partialDepositAmount: BN;
+
+    before(async () => {
+      partialInvestor = Keypair.generate();
+      const airdrop = await connection.requestAirdrop(
+        partialInvestor.publicKey,
+        2 * anchor.web3.LAMPORTS_PER_SOL,
+      );
+      await connection.confirmTransaction(airdrop);
+
+      [partialInvRequest] = getInvestmentRequestPDA(partialInvestor.publicKey);
+      [partialRedRequest] = getRedemptionRequestPDA(partialInvestor.publicKey);
+      [partialClaimableTokens] = getClaimableTokensPDA(
+        partialInvestor.publicKey,
+      );
+      [partialAttestation] = getAttestationPDA(
+        partialInvestor.publicKey,
+        attester.publicKey,
+      );
+
+      // Issue attestation.
+      await attestationMockProgram.methods
+        .createAttestation(attester.publicKey, 0, [66, 82], FAR_FUTURE_EXPIRY)
+        .accountsPartial({
+          authority: payer.publicKey,
+          attestation: partialAttestation,
+          subject: partialInvestor.publicKey,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
+
+      // Fund investor with USDC and create shares ATA.
+      const investorAta = await getOrCreateAssociatedTokenAccount(
+        connection,
+        payer,
+        assetMint,
+        partialInvestor.publicKey,
+      );
+      partialInvestorTokenAccount = investorAta.address;
+      partialDepositAmount = new BN(1_000_000);
+      await mintTo(
+        connection,
+        payer,
+        assetMint,
+        partialInvestorTokenAccount,
+        payer,
+        partialDepositAmount.toNumber(),
+      );
+      const sharesAta = await getOrCreateAssociatedTokenAccount(
+        connection,
+        payer,
+        sharesMint,
+        partialInvestor.publicKey,
+        false,
+        undefined,
+        undefined,
+        TOKEN_2022_PROGRAM_ID,
+      );
+      partialInvestorSharesAccount = sharesAta.address;
+
+      // Open window if closed (no-op if open).
+      try {
+        await program.methods
+          .openInvestmentWindow()
+          .accountsPartial({ manager: manager.publicKey, vault })
+          .signers([manager])
+          .rpc();
+      } catch (_) {
+        // Already open.
+      }
+
+      // Deposit → approve → claim to give investor shares.
+      await program.methods
+        .requestDeposit(partialDepositAmount)
+        .accountsPartial({
+          investor: partialInvestor.publicKey,
+          vault,
+          investmentRequest: partialInvRequest,
+          investorTokenAccount: partialInvestorTokenAccount,
+          depositVault,
+          assetMint,
+          attestation: partialAttestation,
+          frozenCheck: null,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          clock: SYSVAR_CLOCK_PUBKEY,
+        })
+        .signers([partialInvestor])
+        .rpc();
+      await program.methods
+        .approveDeposit()
+        .accountsPartial({
+          manager: manager.publicKey,
+          vault,
+          investmentRequest: partialInvRequest,
+          investor: partialInvestor.publicKey,
+          sharesMint,
+          investorSharesAccount: partialInvestorSharesAccount,
+          depositVault,
+          assetMint,
+          navOracle: mockOracleData,
+          navAccount: program.programId,
+          attestation: partialAttestation,
+          frozenCheck: null,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          clock: SYSVAR_CLOCK_PUBKEY,
+        })
+        .signers([manager])
+        .rpc();
+      await program.methods
+        .claimDeposit()
+        .accountsPartial({
+          investor: partialInvestor.publicKey,
+          vault,
+          investmentRequest: partialInvRequest,
+          sharesMint,
+          investorSharesAccount: partialInvestorSharesAccount,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+          attestation: partialAttestation,
+        })
+        .signers([partialInvestor])
+        .rpc();
+
+      // Request full redemption.
+      const shares = await getAccount(
+        connection,
+        partialInvestorSharesAccount,
+        undefined,
+        TOKEN_2022_PROGRAM_ID,
+      );
+      await program.methods
+        .requestRedeem(new BN(shares.amount.toString()), new BN(0))
+        .accountsPartial({
+          investor: partialInvestor.publicKey,
+          vault,
+          redemptionRequest: partialRedRequest,
+          sharesMint,
+          investorSharesAccount: partialInvestorSharesAccount,
+          redemptionEscrow,
+          assetMint,
+          claimableTokens: partialClaimableTokens,
+          attestation: partialAttestation,
+          frozenCheck: null,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          clock: SYSVAR_CLOCK_PUBKEY,
+        })
+        .remainingAccounts(requestRedeemHookExtras(partialInvestor.publicKey))
+        .signers([partialInvestor])
+        .rpc();
+    });
+
+    it("first half-ratio approve leaves request Pending with half fulfilled", async () => {
+      const requestBefore =
+        await program.account.redemptionRequest.fetch(partialRedRequest);
+      const totalShares = requestBefore.sharesLocked;
+
+      await program.methods
+        .approveRedeem(HALF_RATIO, new BN(0))
+        .accountsPartial({
+          manager: manager.publicKey,
+          vault,
+          redemptionRequest: partialRedRequest,
+          investor: partialInvestor.publicKey,
+          sharesMint,
+          redemptionEscrow,
+          depositVault,
+          assetMint,
+          claimableTokens: partialClaimableTokens,
+          navOracle: mockOracleData,
+          navAccount: program.programId,
+          attestation: partialAttestation,
+          frozenCheck: null,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          clock: SYSVAR_CLOCK_PUBKEY,
+        })
+        .signers([manager])
+        .rpc();
+
+      const request =
+        await program.account.redemptionRequest.fetch(partialRedRequest);
+      expect(JSON.stringify(request.status)).to.equal(
+        JSON.stringify({ pending: {} }),
+      );
+      // floor(totalShares * 0.5e18 / 1e18) = totalShares / 2
+      const expectedHalf = totalShares.div(new BN(2));
+      expect(request.fulfilledSharesCumulative.toString()).to.equal(
+        expectedHalf.toString(),
+      );
+      expect(request.assetsClaimable.toNumber()).to.be.greaterThan(0);
+    });
+
+    it("rejects cancel_redeem after partial fulfillment", async () => {
+      try {
+        await program.methods
+          .cancelRedeem()
+          .accountsPartial({
+            investor: partialInvestor.publicKey,
+            vault,
+            redemptionRequest: partialRedRequest,
+            sharesMint,
+            assetMint,
+            claimableTokens: partialClaimableTokens,
+            investorSharesAccount: partialInvestorSharesAccount,
+            redemptionEscrow,
+            assetTokenProgram: TOKEN_PROGRAM_ID,
+            token2022Program: TOKEN_2022_PROGRAM_ID,
+            systemProgram: SystemProgram.programId,
+          })
+          .remainingAccounts(cancelRedeemHookExtras(partialInvestor.publicKey))
+          .signers([partialInvestor])
+          .rpc();
+        expect.fail("should have thrown RequestPartiallyFulfilled");
+      } catch (err: any) {
+        expect(err.error.errorCode.code).to.equal("RequestPartiallyFulfilled");
+      }
+    });
+
+    it("second full-ratio approve completes the request", async () => {
+      const requestBefore =
+        await program.account.redemptionRequest.fetch(partialRedRequest);
+      const sharesLocked = requestBefore.sharesLocked;
+
+      await program.methods
+        .approveRedeem(FULL_FULFILLMENT_RATIO, new BN(0))
+        .accountsPartial({
+          manager: manager.publicKey,
+          vault,
+          redemptionRequest: partialRedRequest,
+          investor: partialInvestor.publicKey,
+          sharesMint,
+          redemptionEscrow,
+          depositVault,
+          assetMint,
+          claimableTokens: partialClaimableTokens,
+          navOracle: mockOracleData,
+          navAccount: program.programId,
+          attestation: partialAttestation,
+          frozenCheck: null,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          clock: SYSVAR_CLOCK_PUBKEY,
+        })
+        .signers([manager])
+        .rpc();
+
+      const request =
+        await program.account.redemptionRequest.fetch(partialRedRequest);
+      expect(JSON.stringify(request.status)).to.equal(
+        JSON.stringify({ approved: {} }),
+      );
+      expect(request.fulfilledSharesCumulative.toString()).to.equal(
+        sharesLocked.toString(),
+      );
     });
   });
 });
