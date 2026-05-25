@@ -1,9 +1,13 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token_2022::Token2022;
-use anchor_spl::token_interface::{transfer_checked, Mint, TokenAccount, TransferChecked};
+use anchor_spl::token_interface::{
+    close_account, transfer_checked, CloseAccount, Mint, TokenAccount, TokenInterface,
+    TransferChecked,
+};
 
 use crate::constants::{
-    REDEMPTION_ESCROW_SEED, REDEMPTION_REQUEST_SEED, SHARES_DECIMALS, VAULT_SEED,
+    CLAIMABLE_TOKENS_SEED, REDEMPTION_ESCROW_SEED, REDEMPTION_REQUEST_SEED, SHARES_DECIMALS,
+    VAULT_SEED,
 };
 use crate::error::VaultError;
 use crate::events::RedemptionRejected;
@@ -28,6 +32,7 @@ pub struct RejectRedeem<'info> {
         seeds = [REDEMPTION_REQUEST_SEED, vault.key().as_ref(), redemption_request.investor.as_ref()],
         bump = redemption_request.bump,
         constraint = redemption_request.status == RequestStatus::Pending @ VaultError::RequestNotPending,
+        constraint = redemption_request.assets_claimable == 0 @ VaultError::RequestPartiallyFulfilled,
     )]
     pub redemption_request: Box<Account<'info, RedemptionRequest>>,
 
@@ -36,6 +41,19 @@ pub struct RejectRedeem<'info> {
 
     #[account(constraint = shares_mint.key() == vault.shares_mint)]
     pub shares_mint: Box<InterfaceAccount<'info, Mint>>,
+
+    #[account(constraint = asset_mint.key() == vault.asset_mint)]
+    pub asset_mint: Box<InterfaceAccount<'info, Mint>>,
+
+    /// Empty (guarded by `assets_claimable == 0`); closed to refund rent.
+    #[account(
+        mut,
+        seeds = [CLAIMABLE_TOKENS_SEED, vault.key().as_ref(), investor.key().as_ref()],
+        bump,
+        constraint = claimable_tokens.mint == vault.asset_mint @ VaultError::InvalidMintAccount,
+        constraint = claimable_tokens.owner == vault.key() @ VaultError::Unauthorized,
+    )]
+    pub claimable_tokens: Box<InterfaceAccount<'info, TokenAccount>>,
 
     #[account(
         mut,
@@ -51,6 +69,7 @@ pub struct RejectRedeem<'info> {
     )]
     pub redemption_escrow: Box<InterfaceAccount<'info, TokenAccount>>,
 
+    pub asset_token_program: Interface<'info, TokenInterface>,
     pub token_2022_program: Program<'info, Token2022>,
     pub system_program: Program<'info, System>,
 }
@@ -92,6 +111,16 @@ pub fn handler(ctx: Context<RejectRedeem>, reason_code: u8) -> Result<()> {
         shares_to_return,
         SHARES_DECIMALS,
     )?;
+
+    close_account(CpiContext::new_with_signer(
+        ctx.accounts.asset_token_program.to_account_info(),
+        CloseAccount {
+            account: ctx.accounts.claimable_tokens.to_account_info(),
+            destination: ctx.accounts.investor.to_account_info(),
+            authority: ctx.accounts.vault.to_account_info(),
+        },
+        &[vault_seeds],
+    ))?;
 
     emit!(RedemptionRejected {
         vault: ctx.accounts.vault.key(),

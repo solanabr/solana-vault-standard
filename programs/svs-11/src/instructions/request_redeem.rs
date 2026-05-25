@@ -12,13 +12,13 @@ use anchor_spl::token_2022::spl_token_2022::extension::{
 };
 use anchor_spl::token_2022::spl_token_2022::state::Mint as Token2022Mint;
 use anchor_spl::token_2022::Token2022;
-use anchor_spl::token_interface::{Mint, TokenAccount};
+use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
 use spl_transfer_hook_interface::onchain::add_extra_accounts_for_execute_cpi;
 
 use crate::attestation::validate_attestation;
 use crate::constants::{
-    FROZEN_ACCOUNT_SEED, REDEMPTION_ESCROW_SEED, REDEMPTION_REQUEST_SEED, SHARES_DECIMALS,
-    VAULT_SEED,
+    CLAIMABLE_TOKENS_SEED, FROZEN_ACCOUNT_SEED, REDEMPTION_ESCROW_SEED, REDEMPTION_REQUEST_SEED,
+    SHARES_DECIMALS, VAULT_SEED,
 };
 use crate::error::VaultError;
 use crate::events::RedemptionRequested;
@@ -78,6 +78,23 @@ pub struct RequestRedeem<'info> {
     )]
     pub redemption_escrow: Box<InterfaceAccount<'info, TokenAccount>>,
 
+    #[account(constraint = asset_mint.key() == vault.asset_mint)]
+    pub asset_mint: Box<InterfaceAccount<'info, Mint>>,
+
+    /// Pre-allocated payout PDA for the request's lifetime. `approve_redeem`
+    /// tops it up; `claim_redeem` / `cancel_redeem` / `reject_redeem` close it.
+    /// Per-request creation removes the need for `init_if_needed` in `approve_redeem`.
+    #[account(
+        init,
+        payer = investor,
+        token::mint = asset_mint,
+        token::authority = vault,
+        token::token_program = asset_token_program,
+        seeds = [CLAIMABLE_TOKENS_SEED, vault.key().as_ref(), investor.key().as_ref()],
+        bump,
+    )]
+    pub claimable_tokens: Box<InterfaceAccount<'info, TokenAccount>>,
+
     /// CHECK: Attestation validated in handler via validate_attestation
     pub attestation: UncheckedAccount<'info>,
 
@@ -88,6 +105,7 @@ pub struct RequestRedeem<'info> {
     )]
     pub frozen_check: UncheckedAccount<'info>,
 
+    pub asset_token_program: Interface<'info, TokenInterface>,
     pub token_2022_program: Program<'info, Token2022>,
     pub system_program: Program<'info, System>,
     pub clock: Sysvar<'info, Clock>,

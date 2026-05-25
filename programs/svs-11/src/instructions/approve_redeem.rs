@@ -66,15 +66,14 @@ pub struct ApproveRedeem<'info> {
     #[account(constraint = asset_mint.key() == vault.asset_mint)]
     pub asset_mint: Box<InterfaceAccount<'info, Mint>>,
 
-    /// First partial creates; subsequent partials top up; claim_redeem closes.
+    /// Pre-created by `request_redeem`; topped up here; closed by
+    /// `claim_redeem` / `cancel_redeem` / `reject_redeem`.
     #[account(
-        init_if_needed,
-        payer = manager,
-        token::mint = asset_mint,
-        token::authority = vault,
-        token::token_program = asset_token_program,
+        mut,
         seeds = [CLAIMABLE_TOKENS_SEED, vault.key().as_ref(), investor.key().as_ref()],
         bump,
+        constraint = claimable_tokens.mint == vault.asset_mint @ VaultError::InvalidMintAccount,
+        constraint = claimable_tokens.owner == vault.key() @ VaultError::Unauthorized,
     )]
     pub claimable_tokens: Box<InterfaceAccount<'info, TokenAccount>>,
 
