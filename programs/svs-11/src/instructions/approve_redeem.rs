@@ -81,11 +81,9 @@ pub struct ApproveRedeem<'info> {
     )]
     pub claimable_tokens: Box<InterfaceAccount<'info, TokenAccount>>,
 
-    /// CHECK: Legacy mock-oracle account. Read in the `oracle_source == 0`
-    /// branch via `read_and_validate_oracle`. Field is `nav_oracle` for
-    /// backwards-compat with existing IDL clients (the underlying account
-    /// has always been the mock oracle); semantically this slot holds the
-    /// "mock_oracle_account".
+    /// CHECK: Oracle account. When `oracle_source == 0` this is the mock
+    /// oracle (read via `read_and_validate_oracle`); when `oracle_source == 1`
+    /// it is unused (the nav-oracle path uses `nav_account` instead).
     pub nav_oracle: UncheckedAccount<'info>,
 
     /// CHECK: NavAccount PDA from the nav-oracle program. Read in the

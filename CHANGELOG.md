@@ -187,7 +187,7 @@ Per-pool NAV oracle for credit-grade pricing. Off-chain publisher signs a canoni
 #### SVS-11: Attestation extensions
 - `Attestation` struct extended with `jurisdiction (u16)`, `investor_class (u8)`, `kyc_risk_tier (u8)`
 - `validate_attestation` retains existing `attestation_type` enforcement; new fields are observed-only on this PR (reserved for future enforcement gates)
-- Backward-compatible at the byte layout level: the 4 new bytes occupy reserved padding, so older attestations zero-init these fields
+- The 4 new bytes occupy what was previously reserved padding; field order is load-bearing for ComplianceHook + deRWA offset readers
 
 #### SVS-11: ComplianceHook integration on `initialize_pool`
 - Pool initialization now binds the cPOOL Token-2022 TransferHook extension to compliance-hook in the same transaction

@@ -23,9 +23,9 @@ use crate::state::CreditVault;
 ///   83       revoked (bool)
 ///   84       bump (u8)
 ///   85..117  _reserved ([u8; 32])
-///   117..119 jurisdiction ([u8; 2])  -- added with the ComplianceHook metadata extension
-///   119      investor_class (u8)     -- added with the ComplianceHook metadata extension
-///   120      kyc_risk_tier (u8)      -- added with the ComplianceHook metadata extension
+///   117..119 jurisdiction ([u8; 2])
+///   119      investor_class (u8)
+///   120      kyc_risk_tier (u8)
 #[derive(AnchorDeserialize)]
 pub struct Attestation {
     pub subject: Pubkey,
@@ -37,12 +37,11 @@ pub struct Attestation {
     pub revoked: bool,
     pub bump: u8,
     pub _reserved: [u8; 32],
-    // ↓ NEW FIELDS APPENDED — order is load-bearing for the
-    // ComplianceHook + deRWA wrapper offset readers. Default-zero values
-    // mean "no policy enforcement" (infrastructure tier / unset
-    // jurisdiction / unset risk tier), preserving backward compatibility
-    // for accounts created before this upgrade (those accounts get
-    // realloc'd in the bundled deploy).
+    // Field order is load-bearing for the ComplianceHook + deRWA wrapper
+    // offset readers (see compliance-hook/src/instructions/execute.rs::check_attestation
+    // and derwa-wrapper/src/instructions/unwrap.rs::validate_investor_attestation).
+    // Default-zero values mean "no policy enforcement": infrastructure tier,
+    // unset jurisdiction, unset risk tier.
     /// ISO 3166-1 alpha-2 jurisdiction code (e.g. b"BR", b"CH"). [0, 0] = unset.
     pub jurisdiction: [u8; 2],
     /// Investor classification: 0=infrastructure, 1=retail, 2=accredited, 3=qualified.
@@ -52,8 +51,6 @@ pub struct Attestation {
 }
 
 impl Attestation {
-    // Original layout (117 bytes): 8 disc + 32 + 32 + 1 + 2 + 8 + 8 + 1 + 1 + 32
-    // ComplianceHook metadata extension (+4 bytes): 2 jurisdiction + 1 investor_class + 1 kyc_risk_tier
     pub const LEN: usize = 8 + 32 + 32 + 1 + 2 + 8 + 8 + 1 + 1 + 32 + 2 + 1 + 1;
 }
 
