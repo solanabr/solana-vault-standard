@@ -140,6 +140,63 @@ impl CreditVault {
     pub const SEED_PREFIX: &'static [u8] = VAULT_SEED;
 }
 
+#[cfg(test)]
+mod credit_vault_layout_tests {
+    use super::*;
+    use anchor_lang::AnchorSerialize;
+
+    /// `nav-oracle::initialize` reads `CreditVault.authority` at on-disk
+    /// bytes 8..40 (= post-discriminator payload bytes 0..32) to gate
+    /// per-pool init against the squat-race attack. If this layout drifts
+    /// — e.g. someone reorders the first field of `CreditVault` — the
+    /// nav-oracle gate becomes a silent no-op (the byte slice still
+    /// parses as 32 bytes, just into the wrong field). This test guards
+    /// that invariant. Same shape as the layout test in `attestation.rs`.
+    #[test]
+    fn credit_vault_authority_offset_stable_for_nav_oracle_gate() {
+        let authority = Pubkey::new_unique();
+        let cv = CreditVault {
+            authority,
+            manager: Pubkey::new_unique(),
+            asset_mint: Pubkey::new_unique(),
+            shares_mint: Pubkey::new_unique(),
+            deposit_vault: Pubkey::new_unique(),
+            redemption_escrow: Pubkey::new_unique(),
+            nav_oracle: Pubkey::new_unique(),
+            oracle_program: Pubkey::new_unique(),
+            max_staleness: 300,
+            attester: Pubkey::new_unique(),
+            attestation_program: Pubkey::new_unique(),
+            vault_id: 1,
+            total_assets: 0,
+            total_shares: 0,
+            total_pending_deposits: 0,
+            minimum_investment: 0,
+            investment_window_open: false,
+            bump: 255,
+            redemption_escrow_bump: 254,
+            paused: false,
+            total_approved_deposits: 0,
+            max_deviation_bps: 500,
+            pending_authority: Pubkey::default(),
+            total_pending_redeems: 0,
+            required_attestation_type: 0,
+            _reserved: [0u8; 23],
+            last_seen_nav_sequence: 0,
+            last_seen_nav_price: 0,
+            max_nav_staleness_secs: 0,
+            oracle_source: 0,
+            _padding_oracle: [0u8; 7],
+        };
+        let bytes = cv.try_to_vec().expect("serialize");
+        assert_eq!(
+            &bytes[0..32],
+            authority.as_ref(),
+            "CreditVault.authority must remain at payload offset 0 (on-disk byte 8) — nav-oracle::initialize reads here"
+        );
+    }
+}
+
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq)]
 pub enum RequestStatus {
     Pending,

@@ -104,7 +104,7 @@ instructions. SDK + integration-test updates required before merge:
 - `reject_redeem` gains: `asset_mint`, `claimable_tokens`,
   `asset_token_program`.
 - `approve_redeem` no longer requires `system_program` for `init`
-  (still in context for backwards compatibility but unused).
+  (still in the IDL signature; callers may pass any system-program pubkey).
 
 The `nav-oracle initialize` instruction also gains a required
 `pool_authority: Signer`.

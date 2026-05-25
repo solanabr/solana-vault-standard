@@ -47,14 +47,18 @@ pub fn handler(ctx: Context<UpdateNav>, args: UpdateArgs) -> Result<()> {
 
     let ter_u32: u32 = args.ter_bps.into();
     let loss_u32: u32 = args.loss_bps.into();
-    require!(ter_u32 + loss_u32 < 10_000, NavOracleError::FeesExceedGross);
+    let fee_sum = ter_u32
+        .checked_add(loss_u32)
+        .ok_or(NavOracleError::FeesExceedGross)?;
+    require!(fee_sum < 10_000, NavOracleError::FeesExceedGross);
 
     let now = Clock::get()?.unix_timestamp;
-    require!(
-        args.timestamp <= now + 60,
-        NavOracleError::TimestampInFuture
-    );
-    require!(args.timestamp >= now - 60, NavOracleError::TimestampInPast);
+    let upper = now
+        .checked_add(60)
+        .ok_or(NavOracleError::TimestampInFuture)?;
+    let lower = now.checked_sub(60).ok_or(NavOracleError::TimestampInPast)?;
+    require!(args.timestamp <= upper, NavOracleError::TimestampInFuture);
+    require!(args.timestamp >= lower, NavOracleError::TimestampInPast);
 
     // Scan ALL preceding ixs for an Ed25519 verify (tolerates ComputeBudget
     // prefix, which is standard practice). Matches the FIRST one and requires

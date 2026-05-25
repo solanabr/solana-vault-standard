@@ -336,7 +336,13 @@ pub fn set_oracle_source_handler(ctx: Context<UpdateOracleParams>, source: u8) -
     let old_source = vault.oracle_source;
 
     // Source-cross-contamination guard: the deviation baseline carries
-    // price + sequence semantics specific to one source.
+    // price + sequence semantics specific to one source. Zeroing them
+    // means the next NAV read post-toggle SKIPS the deviation guard (the
+    // guard short-circuits on previous_price == 0). approve_redeem still
+    // catches gross price-vs-totals drift via the vault-derived expected-
+    // price check; approve_deposit has no such check, so admin MUST
+    // verify the new source's first publish manually before resuming
+    // deposit approvals.
     if old_source != source {
         vault.last_seen_nav_price = 0;
         vault.last_seen_nav_sequence = 0;

@@ -3890,6 +3890,32 @@ describe("svs-11 (Credit Markets Vault)", () => {
       }
     });
 
+    it("rejects reject_redeem after partial fulfillment", async () => {
+      try {
+        await program.methods
+          .rejectRedeem(0)
+          .accountsPartial({
+            manager: manager.publicKey,
+            vault,
+            redemptionRequest: partialRedRequest,
+            investor: partialInvestor.publicKey,
+            sharesMint,
+            assetMint,
+            claimableTokens: partialClaimableTokens,
+            investorSharesAccount: partialInvestorSharesAccount,
+            redemptionEscrow,
+            assetTokenProgram: TOKEN_PROGRAM_ID,
+            token2022Program: TOKEN_2022_PROGRAM_ID,
+            systemProgram: SystemProgram.programId,
+          })
+          .signers([manager])
+          .rpc();
+        expect.fail("should have thrown RequestPartiallyFulfilled");
+      } catch (err: any) {
+        expect(err.error.errorCode.code).to.equal("RequestPartiallyFulfilled");
+      }
+    });
+
     it("second full-ratio approve completes the request", async () => {
       const requestBefore =
         await program.account.redemptionRequest.fetch(partialRedRequest);
