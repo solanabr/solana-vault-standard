@@ -189,14 +189,12 @@ pub fn handler<'info>(ctx: Context<'_, '_, '_, 'info, Wrap<'info>>, amount: u64)
     );
     mint_to(cpi_ctx, amount)?;
 
-    // 3. Update locked_supply. Per spec — overflow at u64::MAX cPOOL is
-    //    practically impossible (would require ~1.8e19 token base units of
-    //    real-world credit) and the program panic is acceptable for that
-    //    theoretical edge. If product later wants a graceful error, add a
-    //    `LockedSupplyOverflow` variant to DeRwaError and switch to
-    //    `checked_add(...).ok_or(...)?`.
+    // 3. Update locked_supply.
     let cfg = &mut ctx.accounts.wrapper_config;
-    cfg.locked_supply = cfg.locked_supply.checked_add(amount).unwrap();
+    cfg.locked_supply = cfg
+        .locked_supply
+        .checked_add(amount)
+        .ok_or(DeRwaError::LockedSupplyOverflow)?;
 
     msg!(
         "wrap | investor={} amount={} new_locked={}",

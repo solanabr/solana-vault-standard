@@ -21,6 +21,16 @@ pub const EXTRA_ACCOUNT_METAS_SEED: &[u8] = b"extra-account-metas";
 /// for avoiding realloc CPIs on mode switches.
 const MAX_EXTRA_METAS: usize = 8;
 
+/// Byte size of one `ExtraAccountMeta` entry: 1 (discriminator)
+/// + 32 (addr_config) + 1 (is_signer PodBool) + 1 (is_writable PodBool).
+const EXTRA_ACCOUNT_META_BYTES: usize = 35;
+
+/// Byte size of the `ExtraAccountMetaList` PDA storage:
+/// 8 (Token-2022 account discriminator) + 4 (Vec length prefix)
+/// + N * `EXTRA_ACCOUNT_META_BYTES`. Asserted byte-for-byte against
+/// `ExtraAccountMetaList::size_of(MAX_EXTRA_METAS)` in CI tests.
+const EAML_SPACE: usize = 8 + 4 + (EXTRA_ACCOUNT_META_BYTES * MAX_EXTRA_METAS);
+
 #[derive(Accounts)]
 pub struct InitializeExtraAccountMetaList<'info> {
     /// PDA at the canonical Token-2022 seed; payer initializes.
@@ -30,7 +40,7 @@ pub struct InitializeExtraAccountMetaList<'info> {
     #[account(
         init,
         payer = payer,
-        space = ExtraAccountMetaList::size_of(MAX_EXTRA_METAS).unwrap(),
+        space = EAML_SPACE,
         seeds = [EXTRA_ACCOUNT_METAS_SEED, mint.key().as_ref()],
         bump,
     )]

@@ -86,23 +86,27 @@ impl NavAccount {
 
     /// Verify nav_net ≈ nav_gross × (1 − ter − loss) within 1bps tolerance.
     pub fn verify_self_consistency(&self) -> bool {
+        let ter_i64: i64 = self.ter_bps.into();
+        let loss_i64: i64 = self.loss_provision_bps.into();
         let factor_bps = 10_000_i64
-            .checked_sub(self.ter_bps as i64)
+            .checked_sub(ter_i64)
             .unwrap_or(0)
-            .checked_sub(self.loss_provision_bps as i64)
+            .checked_sub(loss_i64)
             .unwrap_or(0);
         if factor_bps <= 0 {
             return false;
         }
         // expected = nav_gross * factor_bps / 10000
-        let expected = (self.nav_gross as u128)
-            .checked_mul(factor_bps as u128)
+        let nav_gross_u128: u128 = self.nav_gross.into();
+        let factor_u128: u128 = u128::try_from(factor_bps).unwrap_or(0);
+        let expected = nav_gross_u128
+            .checked_mul(factor_u128)
             .unwrap_or(0)
             .checked_div(10_000)
             .unwrap_or(0);
-        let nav_net_u128 = self.nav_net as u128;
+        let nav_net_u128: u128 = self.nav_net.into();
         // Tolerance: 1 bps of nav_gross
-        let tolerance = (self.nav_gross as u128) / 10_000;
+        let tolerance = nav_gross_u128 / 10_000;
         nav_net_u128.abs_diff(expected) <= tolerance
     }
 }

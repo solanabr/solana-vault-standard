@@ -60,8 +60,9 @@ pub fn handler(ctx: Context<UpdateNav>, args: UpdateArgs) -> Result<()> {
     //    publisher prepends a ComputeBudget instruction (priority fees / unit limits),
     //    which is standard practice on Solana mainnet. We must tolerate any layout
     //    where the Ed25519 verify is somewhere before this update ix.
-    let current_idx = load_current_index_checked(&ctx.accounts.instructions_sysvar)
-        .map_err(|_| error!(NavOracleError::InvalidSignature))? as usize;
+    let current_idx: usize = load_current_index_checked(&ctx.accounts.instructions_sysvar)
+        .map_err(|_| error!(NavOracleError::InvalidSignature))?
+        .into();
     require!(current_idx > 0, NavOracleError::InvalidSignature); // need at least one prior ix
 
     let mut ed25519_ix_opt = None;

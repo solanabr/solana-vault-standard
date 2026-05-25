@@ -37,7 +37,10 @@ pub fn handler(
         }
     }
 
-    list.version = list.version.checked_add(1).unwrap();
+    list.version = list
+        .version
+        .checked_add(1)
+        .ok_or(ComplianceHookError::VersionOverflow)?;
     list.updated_at = Clock::get()?.unix_timestamp;
 
     emit!(SanctionsListUpdated {

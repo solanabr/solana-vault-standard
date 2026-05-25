@@ -57,4 +57,7 @@ pub enum ComplianceHookError {
         "attestation_program / attestation_issuer must be set (non-default) for Permissioned mode"
     )]
     InvalidAttestationConfig = 6017,
+
+    #[msg("Sanctions list version counter overflowed u64")]
+    VersionOverflow = 6018,
 }

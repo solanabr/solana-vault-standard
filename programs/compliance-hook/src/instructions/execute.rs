@@ -251,20 +251,21 @@ fn check_attestation(
     require!(data.len() >= 129, ComplianceHookError::AttestationNotFound);
 
     let payload = &data[8..];
-    // try_into().unwrap() is sound here: data.len() >= 129 means
-    // payload[i..j] is always within bounds for the offsets below.
+    let bytes_at = |range: std::ops::Range<usize>| -> Result<[u8; 32]> {
+        payload[range]
+            .try_into()
+            .map_err(|_| -> Error { error!(ComplianceHookError::AttestationNotFound) })
+    };
 
     // (3) Subject = expected ATA owner.
-    let subject_bytes: [u8; 32] = payload[0..32].try_into().unwrap();
-    let subject = Pubkey::new_from_array(subject_bytes);
+    let subject = Pubkey::new_from_array(bytes_at(0..32)?);
     require!(
         &subject == expected_subject,
         ComplianceHookError::InvalidAttestationSubject
     );
 
     // (4) Issuer = mint-configured issuer.
-    let issuer_bytes: [u8; 32] = payload[32..64].try_into().unwrap();
-    let issuer = Pubkey::new_from_array(issuer_bytes);
+    let issuer = Pubkey::new_from_array(bytes_at(32..64)?);
     require!(
         issuer == mint_config.attestation_issuer,
         ComplianceHookError::InvalidAttestationIssuer
@@ -282,7 +283,10 @@ fn check_attestation(
     require!(!revoked, ComplianceHookError::AttestationRevoked);
 
     // (7) Not expired.
-    let expires_at = i64::from_le_bytes(payload[75..83].try_into().unwrap());
+    let expires_bytes: [u8; 8] = payload[75..83]
+        .try_into()
+        .map_err(|_| -> Error { error!(ComplianceHookError::AttestationNotFound) })?;
+    let expires_at = i64::from_le_bytes(expires_bytes);
     let now = Clock::get()?.unix_timestamp;
     require!(now < expires_at, ComplianceHookError::AttestationExpired);
 

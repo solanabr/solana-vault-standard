@@ -236,11 +236,12 @@ pub fn handler<'info>(ctx: Context<'_, '_, '_, 'info, Unwrap<'info>>, amount: u6
     }
     invoke_signed(&transfer_ix, &transfer_account_infos, signer_seeds)?;
 
-    // 4. Update locked_supply. The earlier `>= amount` require! ensures this
-    //    underflow check passes; .unwrap() panicking would indicate a bug in
-    //    that earlier check, which we want to fail loud on.
+    // 4. Update locked_supply.
     let cfg = &mut ctx.accounts.wrapper_config;
-    cfg.locked_supply = cfg.locked_supply.checked_sub(amount).unwrap();
+    cfg.locked_supply = cfg
+        .locked_supply
+        .checked_sub(amount)
+        .ok_or(DeRwaError::LockedSupplyOverflow)?;
 
     msg!(
         "unwrap | investor={} amount={} new_locked={}",
@@ -293,16 +294,18 @@ fn validate_investor_attestation(
     let data = att.try_borrow_data()?;
     require!(data.len() >= 129, DeRwaError::AttestationRequired);
     let payload = &data[8..];
+    let bytes_at = |range: std::ops::Range<usize>| -> Result<[u8; 32]> {
+        payload[range]
+            .try_into()
+            .map_err(|_| -> Error { error!(DeRwaError::AttestationRequired) })
+    };
 
     // (2) Subject: payload[0..32] must match the unwrapping investor.
-    // try_into().unwrap() is sound: data.len() >= 129 guarantees 32 bytes.
-    let subject_bytes: [u8; 32] = payload[0..32].try_into().unwrap();
-    let subject = Pubkey::new_from_array(subject_bytes);
+    let subject = Pubkey::new_from_array(bytes_at(0..32)?);
     require!(&subject == investor, DeRwaError::InvalidAttestationSubject);
 
     // (3) Issuer: payload[32..64] must match wrapper-configured issuer.
-    let issuer_bytes: [u8; 32] = payload[32..64].try_into().unwrap();
-    let issuer = Pubkey::new_from_array(issuer_bytes);
+    let issuer = Pubkey::new_from_array(bytes_at(32..64)?);
     require!(
         issuer == cfg.attestation_issuer,
         DeRwaError::InvalidAttestationIssuer
@@ -320,7 +323,10 @@ fn validate_investor_attestation(
     require!(!revoked, DeRwaError::AttestationRequired);
 
     // (7) Not expired: now < payload[75..83] (i64 LE).
-    let expires_at = i64::from_le_bytes(payload[75..83].try_into().unwrap());
+    let expires_bytes: [u8; 8] = payload[75..83]
+        .try_into()
+        .map_err(|_| -> Error { error!(DeRwaError::AttestationRequired) })?;
+    let expires_at = i64::from_le_bytes(expires_bytes);
     let now = Clock::get()?.unix_timestamp;
     require!(now < expires_at, DeRwaError::AttestationRequired);
 
