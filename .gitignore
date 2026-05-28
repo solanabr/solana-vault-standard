@@ -333,3 +333,6 @@ CLAUDE.local.md
 
 # Squads Guardian vault deployment artifact (devnet-specific)
 .guardian-vaults.json
+
+# superpowers plugin specs/plans (local, not tracked)
+docs/superpowers/
