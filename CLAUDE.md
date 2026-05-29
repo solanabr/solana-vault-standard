@@ -4,7 +4,7 @@
      Language-specific rules live in .claude/rules/ — don't duplicate here.
      HTML comments are stripped before reaching Claude (zero tokens). -->
 
-Native port of ERC-4626 to Solana. 14 programs (SVS-1 through SVS-12 + mock-oracle + mock-sas) implementing tokenized vaults with shares representing proportional ownership of underlying SPL tokens.
+Native port of ERC-4626 to Solana. 17 programs (SVS-1 through SVS-12, plus compliance-hook, nav-oracle, derwa-wrapper, mock-oracle, and mock-sas) implementing tokenized vaults with shares representing proportional ownership of underlying SPL tokens.
 
 **Stack**: Anchor 0.31+, Rust 1.82+, Token-2022, TypeScript
 **AI Tooling**: [solana-claude](https://github.com/solanabr/solana-claude) for skills, rules, agents, and MCP servers

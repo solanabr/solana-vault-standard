@@ -44,25 +44,30 @@ pub struct CreditVault {
     pub shares_mint: Pubkey,            // 32 bytes
     pub deposit_vault: Pubkey,          // 32 bytes
     pub redemption_escrow: Pubkey,      // 32 bytes
-    pub nav_oracle: Pubkey,             // 32 bytes
-    pub oracle_program: Pubkey,         // 32 bytes
-    pub max_staleness: i64,             // 8 bytes
+    pub nav_oracle: Pubkey,             // 32 bytes — configured oracle account
+    pub oracle_program: Pubkey,         // 32 bytes — its owner program
+    pub max_staleness: i64,             // 8 bytes  — 60..=45d (NAV publishes monthly)
     pub attester: Pubkey,               // 32 bytes
     pub attestation_program: Pubkey,    // 32 bytes
     pub vault_id: u64,                  // 8 bytes
-    pub total_assets: u64,              // 8 bytes
-    pub total_shares: u64,              // 8 bytes
+    pub total_assets: u64,              // 8 bytes  — idle cash; AUM = total_shares * NAV
+    pub total_shares: u64,              // 8 bytes  — cached share supply
     pub total_pending_deposits: u64,    // 8 bytes
     pub minimum_investment: u64,        // 8 bytes
     pub investment_window_open: bool,   // 1 byte
-    pub decimals_offset: u8,            // 1 byte
     pub bump: u8,                       // 1 byte
     pub redemption_escrow_bump: u8,     // 1 byte
     pub paused: bool,                   // 1 byte
-    pub required_attestation_type: u8,  // 1 byte — must match attestation.attestation_type
-    pub _reserved: [u8; 63],            // 63 bytes
+    pub total_approved_deposits: u64,   // 8 bytes
+    pub pending_authority: Pubkey,      // 32 bytes — two-step authority transfer
+    pub total_pending_redeems: u64,     // 8 bytes
+    pub required_attestation_type: u8,  // 1 byte  — must match attestation.attestation_type
+    pub _reserved: [u8; 23],            // 23 bytes
+    // ---- pluggable oracle interface (D4) ----
+    pub last_seen_nav_sequence: u64,    // 8 bytes  — replay baseline (reset on oracle swap)
+    pub _padding_oracle: [u8; 24],      // 24 bytes
 }
-// Total: 345 bytes
+// Total: 484 bytes (8-byte discriminator + 476-byte payload)
 ```
 
 ```rust

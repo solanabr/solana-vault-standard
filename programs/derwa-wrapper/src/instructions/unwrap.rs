@@ -59,8 +59,9 @@ pub struct Unwrap<'info> {
 
     #[account(
         mut,
-        token::mint = permissioned_mint,
-        token::authority = wrapper_signer,
+        associated_token::mint = permissioned_mint,
+        associated_token::authority = wrapper_signer,
+        associated_token::token_program = token_program,
     )]
     pub wrapper_locked_ata: Box<InterfaceAccount<'info, TokenAccount>>,
 

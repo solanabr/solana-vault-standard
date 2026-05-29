@@ -162,7 +162,7 @@ pub fn handler<'info>(
     }
     invoke_signed(&transfer_ix, &transfer_account_infos, &[])?;
 
-    // V7-P5: total_pending_redeems tracks REQUEST COUNT (not shares). This differs from
+    // total_pending_redeems tracks REQUEST COUNT (not shares). This differs from
     // SVS-10 which tracks total locked shares. The counter is used for operational
     // monitoring only — it does NOT affect share price calculations.
     let vault = &mut ctx.accounts.vault;

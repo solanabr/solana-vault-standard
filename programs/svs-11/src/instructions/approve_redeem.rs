@@ -116,8 +116,12 @@ pub fn handler(ctx: Context<ApproveRedeem>) -> Result<()> {
         &ctx.accounts.investor.key(),
     )?;
 
-    // Reconciliation: refuse to redeem if vault.total_shares has drifted
-    // from the on-chain supply.
+    // Reconciliation: refuse to redeem if vault.total_shares has drifted from
+    // the on-chain supply. This check is one-sided by design — it lives only on
+    // the burn path (approve_redeem), which is the only place that decrements
+    // total_shares. claim_deposit (the mint path) increments total_shares
+    // atomically with its mint_to CPI and has no independent drift source, so it
+    // does not re-derive the check.
     require!(
         ctx.accounts.vault.total_shares == ctx.accounts.shares_mint.supply,
         VaultError::MathOverflow

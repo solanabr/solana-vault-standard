@@ -27,7 +27,7 @@ pub struct CreditVault {
     pub attestation_program: Pubkey,
     pub vault_id: u64,
     pub total_assets: u64,
-    /// V4-P20: Cached share count. Updated atomically with mint/burn CPIs in
+    /// Cached share count. Updated atomically with mint/burn CPIs in
     /// claim_deposit (+) and approve_redeem (-). Drives share/asset conversion
     /// and the reconciliation check in approve_redeem (which has shares_mint in
     /// its context); callers with access to shares_mint should prefer

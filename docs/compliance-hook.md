@@ -53,6 +53,11 @@ PDA Layout
   [b"attestation", owner] (svs-11)          → Attestation       (per-wallet, Permissioned)
 ```
 
+> Note: this `FrozenAccount` (compliance-hook, `[b"frozen", owner]`) is the
+> protocol-level wallet freeze and is unrelated to the `svs-access` module's
+> `FrozenAccount` — a separate per-vault account-freeze marker used by the
+> standalone SVS vaults. They share a name but are different programs and PDAs.
+
 ## Account Structures
 
 ### SanctionsList (singleton PDA)

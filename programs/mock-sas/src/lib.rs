@@ -1,3 +1,11 @@
+//! mock-sas — TEST-ONLY mock of an attestation service (SAS / Civic Pass / …).
+//!
+//! NOT FOR DEPLOYMENT. It writes attestation accounts in the canonical
+//! `svs-attestation` layout with NO issuer authentication, NO real KYC, and a
+//! permissionless `create_attestation` — purely so the integration tests can
+//! mint attestations. Production deployments bind `attestation_program` to a
+//! real attestation provider; this program must never be deployed to mainnet.
+
 use anchor_lang::prelude::*;
 
 declare_id!("GTTMWDHTZibyEpqNRr33RnBhgms262U6qHaGrjoHqEXg");
