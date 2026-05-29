@@ -1,7 +1,9 @@
 //! SVS-11 Fuzz Tests — Full-Approval Redemption Lifecycle
 //!
-//! Property-based fuzzing of the individual full-approval redemption lifecycle
-//! (the pro-rata/partial-fulfillment path was reverted — D5):
+//! Property-based check of an in-memory state MODEL of the individual
+//! full-approval redemption lifecycle (the pro-rata/partial-fulfillment path
+//! was reverted). NOTE: this is a model/spec check — it asserts the model's own
+//! invariants and does NOT invoke the on-chain program via Trident. Properties:
 //! - a request is created Pending with `assets_claimable == 0`
 //! - `approve_redeem` is atomic: it burns ALL `shares_locked` and pays out
 //!   their full asset value in one shot (no ratio, no requeue, no partials)

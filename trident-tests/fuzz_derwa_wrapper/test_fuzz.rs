@@ -1,6 +1,8 @@
 //! derwa-wrapper Fuzz Tests — 1:1 wrap/unwrap invariant
 //!
-//! Property-based fuzzing of the cPOOL ↔ dePOOL bridge invariants:
+//! Property-based check of an in-memory state MODEL of the cPOOL ↔ dePOOL
+//! bridge. NOTE: this is a model/spec check — it asserts the model's own
+//! invariants and does NOT invoke the on-chain program via Trident. Invariants:
 //! - `locked_supply == dePOOL.supply` holds across arbitrary sequences of
 //!   `wrap(n)` and `unwrap(m)`
 //! - `locked_supply == wrapper_locked_ata.amount` (no donation accounting drift)

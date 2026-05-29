@@ -33,7 +33,7 @@
  * ```
  */
 
-import { BN, Program, AnchorProvider } from "@coral-xyz/anchor";
+import { BN, Program } from "@coral-xyz/anchor";
 import {
   PublicKey,
   SystemProgram,
@@ -262,7 +262,6 @@ export class DeRwaWrapper {
     user: PublicKey,
     params: WrapParams,
   ): Promise<string> {
-    const provider = program.provider as AnchorProvider;
     const wrapperConfigPda = await this._loadConfigForUser(program, user);
     const cfg = wrapperConfigPda.state;
 
@@ -328,13 +327,7 @@ export class DeRwaWrapper {
       params.remainingAccounts?.length
         ? builder.remainingAccounts(params.remainingAccounts)
         : builder
-    )
-      .rpc()
-      .then((sig) => {
-        // Touch provider so unused-var lint doesn't fire on this branch.
-        void provider;
-        return sig;
-      });
+    ).rpc();
   }
 
   /**
