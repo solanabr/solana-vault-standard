@@ -1,10 +1,6 @@
 use anchor_lang::prelude::*;
 use anchor_lang::solana_program::program::invoke_signed;
 use anchor_spl::token_2022::spl_token_2022;
-use anchor_spl::token_2022::spl_token_2022::extension::{
-    transfer_hook::TransferHook, BaseStateWithExtensions, StateWithExtensions,
-};
-use anchor_spl::token_2022::spl_token_2022::state::Mint as Token2022Mint;
 use anchor_spl::token_2022::Token2022;
 use anchor_spl::token_interface::{
     close_account, CloseAccount, Mint, TokenAccount, TokenInterface,
@@ -12,25 +8,13 @@ use anchor_spl::token_interface::{
 use spl_transfer_hook_interface::onchain::add_extra_accounts_for_execute_cpi;
 
 use crate::constants::{
-    CLAIMABLE_TOKENS_SEED, FROZEN_ACCOUNT_SEED, REDEMPTION_ESCROW_SEED, REDEMPTION_REQUEST_SEED,
-    SHARES_DECIMALS, VAULT_SEED,
+    CLAIMABLE_TOKENS_SEED, REDEMPTION_ESCROW_SEED, REDEMPTION_REQUEST_SEED, SHARES_DECIMALS,
+    VAULT_SEED,
 };
 use crate::error::VaultError;
 use crate::events::RedemptionCancelled;
+use crate::hook_extras::read_hook_program_id;
 use crate::state::{CreditVault, RedemptionRequest, RequestStatus};
-
-fn read_hook_program_id(mint: &AccountInfo) -> Result<Option<Pubkey>> {
-    if mint.owner != &spl_token_2022::ID {
-        return Ok(None);
-    }
-    let data = mint.try_borrow_data()?;
-    let state = StateWithExtensions::<Token2022Mint>::unpack(&data)
-        .map_err(|_| error!(VaultError::InvalidMintAccount))?;
-    match state.get_extension::<TransferHook>() {
-        Ok(ext) => Ok(Option::<Pubkey>::from(ext.program_id)),
-        Err(_) => Ok(None),
-    }
-}
 
 #[derive(Accounts)]
 pub struct CancelRedeem<'info> {
@@ -51,7 +35,6 @@ pub struct CancelRedeem<'info> {
         seeds = [REDEMPTION_REQUEST_SEED, vault.key().as_ref(), investor.key().as_ref()],
         bump = redemption_request.bump,
         constraint = redemption_request.status == RequestStatus::Pending @ VaultError::RequestNotPending,
-        constraint = redemption_request.assets_claimable == 0 @ VaultError::RequestPartiallyFulfilled,
         constraint = investor.key() == redemption_request.investor,
     )]
     pub redemption_request: Box<Account<'info, RedemptionRequest>>,
@@ -62,7 +45,7 @@ pub struct CancelRedeem<'info> {
     #[account(constraint = asset_mint.key() == vault.asset_mint)]
     pub asset_mint: Box<InterfaceAccount<'info, Mint>>,
 
-    /// Empty (guarded by `assets_claimable == 0` above); closed to refund rent.
+    /// Empty for a Pending request; closed to refund rent.
     #[account(
         mut,
         seeds = [CLAIMABLE_TOKENS_SEED, vault.key().as_ref(), investor.key().as_ref()],
@@ -86,13 +69,6 @@ pub struct CancelRedeem<'info> {
     )]
     pub redemption_escrow: Box<InterfaceAccount<'info, TokenAccount>>,
 
-    /// CHECK: If data is non-empty, investor is frozen
-    #[account(
-        seeds = [FROZEN_ACCOUNT_SEED, vault.key().as_ref(), investor.key().as_ref()],
-        bump,
-    )]
-    pub frozen_check: UncheckedAccount<'info>,
-
     pub asset_token_program: Interface<'info, TokenInterface>,
     pub token_2022_program: Program<'info, Token2022>,
     pub system_program: Program<'info, System>,
@@ -100,10 +76,6 @@ pub struct CancelRedeem<'info> {
 
 pub fn handler<'info>(ctx: Context<'_, '_, '_, 'info, CancelRedeem<'info>>) -> Result<()> {
     require!(!ctx.accounts.vault.paused, VaultError::VaultPaused);
-    require!(
-        ctx.accounts.frozen_check.data_is_empty(),
-        VaultError::AccountFrozen
-    );
 
     let vault = &mut ctx.accounts.vault;
     vault.total_pending_redeems = vault
@@ -153,7 +125,10 @@ pub fn handler<'info>(ctx: Context<'_, '_, '_, 'info, CancelRedeem<'info>>) -> R
             shares_to_return,
             ctx.remaining_accounts,
         )
-        .map_err(|_| -> Error { error!(VaultError::HookExtrasMismatch) })?;
+        .map_err(|e| -> Error {
+            msg!("hook extras: {:?}", e);
+            error!(VaultError::HookExtrasMismatch)
+        })?;
     }
     invoke_signed(&transfer_ix, &transfer_account_infos, &[vault_seeds])?;
 

@@ -4,9 +4,9 @@ pub mod attestation;
 pub mod constants;
 pub mod error;
 pub mod events;
+pub mod hook_extras;
 pub mod instructions;
 pub mod math;
-pub mod oracle;
 pub mod state;
 
 use instructions::*;
@@ -79,36 +79,16 @@ pub mod svs_11 {
     }
 
     /// Request a redemption of vault shares.
-    ///
-    /// `queued_for_settlement_at` is computed off-chain by the backend
-    /// redemption-scheduler service and represents the next
-    /// settlement-date epoch this request will be eligible for.
-    /// `approve_redeem` may auto-bump this on partial fulfillment.
     pub fn request_redeem<'info>(
         ctx: Context<'_, '_, '_, 'info, RequestRedeem<'info>>,
         shares: u64,
-        queued_for_settlement_at: i64,
     ) -> Result<()> {
-        instructions::request_redeem::handler(ctx, shares, queued_for_settlement_at)
+        instructions::request_redeem::handler(ctx, shares)
     }
 
-    /// Manager approves a pending redemption request with pro-rata fulfillment.
-    ///
-    /// `batch_settlement_ratio_scaled` is a fixed-point ratio scaled to 1e18
-    /// (1e18 = 100% fulfillment). On partial fulfillment, the request stays
-    /// open and `queued_for_settlement_at` auto-bumps to `next_settlement_at`.
-    /// Pass `1_000_000_000_000_000_000` (1e18) plus any `next_settlement_at`
-    /// to preserve old "full fulfillment" semantics.
-    pub fn approve_redeem(
-        ctx: Context<ApproveRedeem>,
-        batch_settlement_ratio_scaled: u128,
-        next_settlement_at: i64,
-    ) -> Result<()> {
-        instructions::approve_redeem::handler(
-            ctx,
-            batch_settlement_ratio_scaled,
-            next_settlement_at,
-        )
+    /// Manager approves a pending redemption request, fully and atomically.
+    pub fn approve_redeem(ctx: Context<ApproveRedeem>) -> Result<()> {
+        instructions::approve_redeem::handler(ctx)
     }
 
     /// Claim approved redemption assets.
@@ -117,7 +97,10 @@ pub mod svs_11 {
     }
 
     /// Manager rejects a pending redemption request.
-    pub fn reject_redeem(ctx: Context<RejectRedeem>, reason_code: u8) -> Result<()> {
+    pub fn reject_redeem<'info>(
+        ctx: Context<'_, '_, '_, 'info, RejectRedeem<'info>>,
+        reason_code: u8,
+    ) -> Result<()> {
         instructions::reject_redeem::handler(ctx, reason_code)
     }
 
@@ -136,24 +119,6 @@ pub mod svs_11 {
     /// Manager draws down capital from the vault.
     pub fn draw_down(ctx: Context<DrawDown>, amount: u64) -> Result<()> {
         instructions::draw_down::handler(ctx, amount)
-    }
-
-    /// Freeze an investor account for compliance.
-    pub fn freeze_account(ctx: Context<FreezeAccount>) -> Result<()> {
-        instructions::compliance::freeze_handler(ctx)
-    }
-
-    /// Unfreeze a previously frozen investor account.
-    pub fn unfreeze_account(ctx: Context<UnfreezeAccount>) -> Result<()> {
-        instructions::compliance::unfreeze_handler(ctx)
-    }
-
-    /// Switch CreditVault oracle read path between the simple/mock oracle
-    /// (0, neutral upstream default) and the optional NavOracle adapter (1,
-    /// rich credit-market NAV). Authority-gated; does not mutate `nav_oracle`
-    /// or `oracle_program`.
-    pub fn set_oracle_source(ctx: Context<UpdateOracleParams>, source: u8) -> Result<()> {
-        instructions::admin::set_oracle_source_handler(ctx, source)
     }
 
     /// Pause the vault, halting approvals and capital movements.
@@ -201,38 +166,12 @@ pub mod svs_11 {
         instructions::admin::update_attester_handler(ctx, new_attester, new_attestation_program)
     }
 
-    /// Update the NAV oracle configuration.
-    /// DEPRECATED: Bypasses 24h oracle timelock. Always returns an error.
-    /// Use `request_oracle_change` + `apply_oracle_change` for oracle address changes,
-    /// and `update_oracle_params` for staleness/deviation settings.
-    #[allow(deprecated)]
-    pub fn update_oracle_config(
-        ctx: Context<UpdateOracleConfig>,
-        new_nav_oracle: Pubkey,
-        new_oracle_program: Pubkey,
-        new_max_staleness: i64,
-        new_max_deviation_bps: Option<u16>,
-    ) -> Result<()> {
-        instructions::admin::update_oracle_config_handler(
-            ctx,
-            new_nav_oracle,
-            new_oracle_program,
-            new_max_staleness,
-            new_max_deviation_bps,
-        )
-    }
-
-    /// Update oracle non-address parameters (staleness, deviation) without timelock.
+    /// Update the oracle staleness window (non-address param, no timelock).
     pub fn update_oracle_params(
         ctx: Context<UpdateOracleParams>,
         new_max_staleness: Option<i64>,
-        new_max_deviation_bps: Option<u16>,
     ) -> Result<()> {
-        instructions::admin::update_oracle_params_handler(
-            ctx,
-            new_max_staleness,
-            new_max_deviation_bps,
-        )
+        instructions::admin::update_oracle_params_handler(ctx, new_max_staleness)
     }
 
     /// Initialize the vault config PDA for oracle timelock.
@@ -240,25 +179,19 @@ pub mod svs_11 {
         instructions::admin::initialize_vault_config_handler(ctx)
     }
 
-    /// Request an oracle change (starts 24h timelock).
+    /// Request an oracle change (starts 24h timelock). Stages both the new
+    /// oracle account and its owner program; both are applied atomically.
     pub fn request_oracle_change(
         ctx: Context<RequestOracleChange>,
         new_oracle: Pubkey,
+        new_oracle_program: Pubkey,
     ) -> Result<()> {
-        instructions::admin::request_oracle_change_handler(ctx, new_oracle)
+        instructions::admin::request_oracle_change_handler(ctx, new_oracle, new_oracle_program)
     }
 
     /// Apply a pending oracle change after timelock expires.
     pub fn apply_oracle_change(ctx: Context<ApplyOracleChange>) -> Result<()> {
         instructions::admin::apply_oracle_change_handler(ctx)
-    }
-
-    /// Set or update the compliance officer for freeze/unfreeze operations.
-    pub fn set_compliance_officer(
-        ctx: Context<SetComplianceOfficer>,
-        new_officer: Pubkey,
-    ) -> Result<()> {
-        instructions::admin::set_compliance_officer_handler(ctx, new_officer)
     }
 
     // =========================================================================

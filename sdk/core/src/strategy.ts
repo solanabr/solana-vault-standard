@@ -230,9 +230,7 @@ export function calculateStrategyAllocations(
   // Validate weights are within BPS range and compute sum
   for (const weight of targetWeights.values()) {
     if (weight < 0 || weight > 10000) {
-      throw new Error(
-        `Weight ${weight} is outside valid BPS range [0, 10000]`,
-      );
+      throw new Error(`Weight ${weight} is outside valid BPS range [0, 10000]`);
     }
     totalWeight += weight;
   }
@@ -252,10 +250,14 @@ export function calculateStrategyAllocations(
     if (targetWeight === 0) continue;
 
     // Calculate target amount using BN arithmetic to avoid muln/divn truncation
-    const targetAmount = totalAssets.mul(new BN(targetWeight)).div(new BN(totalWeight));
+    const targetAmount = totalAssets
+      .mul(new BN(targetWeight))
+      .div(new BN(totalWeight));
 
     // Cap at max allocation
-    const maxAmount = totalAssets.mul(new BN(strategy.maxAllocationBps)).div(new BN(10000));
+    const maxAmount = totalAssets
+      .mul(new BN(strategy.maxAllocationBps))
+      .div(new BN(10000));
     const amount = BN.min(targetAmount, maxAmount);
 
     // Don't exceed remaining

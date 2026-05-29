@@ -283,32 +283,6 @@ pub struct RewardsClaimed {
 
 ---
 
-## SVS-11 NAV Oracle Extensions
-
-### OracleSourceChanged
-
-Emitted when the vault authority toggles which oracle the SVS-11 CreditVault reads NAV from. `oracle_source = 0` selects the simple/mock oracle (used in tests and non-credit deployments); `oracle_source = 1` selects the NavOracle adapter (used in Credit Markets deployments). Other values are reserved and rejected with `OracleSourceInvalid`.
-
-```rust
-#[event]
-pub struct OracleSourceChanged {
-    pub vault: Pubkey,      // CreditVault PDA
-    pub old_source: u8,     // Previous source (0 or 1)
-    pub new_source: u8,     // New source (0 or 1)
-}
-```
-
-**Emitted by**: `set_oracle_source`
-
-**Use cases**:
-- Audit trail for oracle policy changes
-- Index NavOracle opt-in across the pool registry
-- Surface oracle-source state in dashboards
-
-See [nav-oracle.md](nav-oracle.md) for the adapter contract and [SVS-11.md](SVS-11.md) for the consumer side.
-
----
-
 ## nav-oracle
 
 ### NavUpdated

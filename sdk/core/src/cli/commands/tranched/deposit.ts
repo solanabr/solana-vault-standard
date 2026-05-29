@@ -39,7 +39,9 @@ export function registerTranchedDepositCommand(parent: Command): void {
         const trancheIndex = parseInt(opts.tranche);
         validateAmountInput(opts.amount, "amount");
         const amount = new BN(opts.amount);
-        const minSharesOut = new BN(validateAmountInput(opts.minShares, "min-shares"));
+        const minSharesOut = new BN(
+          validateAmountInput(opts.minShares, "min-shares"),
+        );
 
         output.info(
           `Depositing ${amount.toString()} into tranche ${trancheIndex}`,

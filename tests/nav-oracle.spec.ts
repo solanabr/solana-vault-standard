@@ -16,7 +16,6 @@ describe("nav-oracle: update", () => {
   const program = anchor.workspace.NavOracle as Program<NavOracle>;
 
   const publisher = Keypair.generate();
-  const rotationAuthority = Keypair.generate(); // stand-in for the governance/multisig rotation authority
   const pool = Keypair.generate(); // stand-in for SVS-11 CreditVault PDA
   let navPda: PublicKey;
 
@@ -27,13 +26,12 @@ describe("nav-oracle: update", () => {
     );
 
     await program.methods
-      .initialize()
+      .initialize({ maxDeviationBps: 500 })
       .accountsPartial({
         pool: pool.publicKey,
         navAccount: navPda,
         poolAuthority: provider.wallet.publicKey,
         publisher: publisher.publicKey,
-        keyRotationAuthority: rotationAuthority.publicKey,
         payer: provider.wallet.publicKey,
       })
       .rpc();
@@ -285,11 +283,12 @@ describe("nav-oracle: update", () => {
     }
   });
 
-  it("rejects rotate_publisher signed by a key that is NOT the rotation authority", async () => {
-    // Security-class check: only the registered key_rotation_authority may
-    // swap the publisher. A bystander attempting rotation must fail with the
-    // unauthorized-rotation error, otherwise a compromised non-rotation key
-    // could replace the publisher.
+  it("rejects rotate_publisher against a non-SVS-11 pool account", async () => {
+    // D6: rotation authority is the pool's live CreditVault.authority, read
+    // from pool bytes 8..40. The `pool` here is a bare keypair (system-owned,
+    // empty), so it is not an SVS-11 CreditVault — rotate_publisher must fail
+    // the owner check before any authority comparison. (The positive
+    // live-authority path is covered in tests/svs-11.ts against a real vault.)
     const attacker = Keypair.generate();
     const newPublisher = Keypair.generate();
 
@@ -300,15 +299,15 @@ describe("nav-oracle: update", () => {
           pool: pool.publicKey,
           navAccount: navPda,
           newPublisher: newPublisher.publicKey,
-          keyRotationAuthority: attacker.publicKey,
+          authority: attacker.publicKey,
         } as any)
         .signers([attacker])
         .rpc();
-      expect.fail("expected UnauthorizedRotation error");
+      expect.fail("expected PoolAccountInvalid error");
     } catch (e: any) {
       const msg = (e?.logs?.join("\n") ?? "") + "\n" + (e?.message ?? "");
       expect(msg).to.match(
-        /UnauthorizedRotation|unauthorized[\s_-]*rotation|0x1b5b|7003|ConstraintHasOne|hasOne|has_one/i,
+        /PoolAccountInvalid|pool account|0x1b5c|7011|UnauthorizedRotation/i,
       );
     }
   });

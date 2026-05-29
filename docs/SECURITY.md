@@ -27,12 +27,12 @@
 ### 7. NAV Oracle Replay (nav-oracle)
 **Vector:** An attacker re-submits an old (lower-sequence) signed NAV payload to manipulate share pricing.
 
-**Mitigation:** `nav_oracle.update` requires `args.sequence > nav.sequence` (strictly increasing). SVS-11's NavOracle reader (`oracle::read_nav_oracle_price`) additionally enforces `nav.sequence > vault.last_seen_nav_sequence` so a single replay across approve_deposit/approve_redeem is rejected.
+**Mitigation:** `nav_oracle.update` requires `args.sequence > nav.sequence` (strictly increasing). SVS-11's shared oracle reader (`svs_oracle::read_oracle`) additionally enforces `header.sequence > vault.last_seen_nav_sequence` so a single replay across approve_deposit/approve_redeem is rejected.
 
 ### 8. Wrong Publisher Signature (nav-oracle)
 **Vector:** An attacker submits a NAV update signed by a key OTHER than the publisher stored on `NavAccount`.
 
-**Mitigation:** `nav_oracle.update` reconstructs the canonical 133-byte payload from `args` + on-chain `pool` + on-chain `publisher` and compares it byte-for-byte with the message inside the preceding `Ed25519Program` verify instruction. If the on-chain publisher doesn't match the signing key, payload reconstruction differs and the verify fails. Publisher rotation is gated by a separate `key_rotation_authority` (typically a multisig) so a compromised publisher cannot rotate itself.
+**Mitigation:** `nav_oracle.update` reconstructs the canonical 133-byte payload from `args` + on-chain `pool` + on-chain `publisher` and compares it byte-for-byte with the message inside the preceding `Ed25519Program` verify instruction. If the on-chain publisher doesn't match the signing key, payload reconstruction differs and the verify fails. Publisher rotation (`rotate_publisher`) is gated by the pool's live `CreditVault.authority` (typically a multisig) so a compromised publisher cannot rotate itself.
 
 ### 9. Wrong Authority on Sanctions / Mint Config (compliance-hook)
 **Vector:** A non-authority account attempts to mutate the sanctions list or mint config.
@@ -54,20 +54,15 @@
 
 **Mitigation:** `unwrap` requires a valid `Attestation` PDA for the destination wallet (subject = destination, non-revoked, non-expired) before transferring cPOOL out of escrow.
 
-### 13. Stale NAV (svs-11 + nav-oracle)
-**Vector:** A NavAccount is initialized but never updated; SVS-11 approves deposits/redemptions against an arbitrarily old NAV.
+### 13. Stale Oracle Pricing (svs-11 + pluggable oracle)
+**Vector:** The configured `oracle_account` is initialized but never updated; SVS-11 approves deposits/redemptions against an arbitrarily old price.
 
-**Mitigation:** `CreditVault.max_nav_staleness_secs` (default 45 days, configurable) gates `approve_deposit` / `approve_redeem` when `oracle_source == 1`. `now - nav.timestamp > max_nav_staleness_secs` trips `OracleStale`. Operators must monitor publisher health and rotate or pause if NAV publication stops.
+**Mitigation:** `CreditVault.max_staleness` (configurable) gates `approve_deposit` / `approve_redeem` for every oracle, regardless of implementation. The shared `svs_oracle::read_oracle` reads the canonical `SvsOraclePrice` header and trips `OracleStale` when `now - header.timestamp > max_staleness`. Operators must monitor publisher health and rotate or pause if price publication stops.
 
-### 14. Stale Mock-Oracle Pricing (svs-11, default path)
-**Vector:** Same staleness concern on the simple/mock oracle path.
+### 14. Oracle Rotation Hygiene (svs-11)
+**Vector:** A vault is repointed to a malicious or unprovisioned oracle account/program out from under in-flight requests.
 
-**Mitigation:** Existing `vault.max_staleness` field (separate from `max_nav_staleness_secs`) gates the simple oracle path. Both gates ship in this PR; deployments using `oracle_source == 0` only need the `max_staleness` gate.
-
-### 15. Source-Switch Reset Hygiene (test-only)
-**Vector:** A test that flips `oracle_source` to 1 but doesn't reset to 0 leaves later tests reading from an unprovisioned NavAccount.
-
-**Mitigation:** Test conventions require every NavOracle opt-in test to wrap its body in `try { ... } finally { setOracleSource(0) }`. Verified by the SVS-11 source-switch + opt-in tests in this PR.
+**Mitigation:** Oracle rotation is timelocked — `request_oracle_change` stages `pending_oracle` + `pending_oracle_program` (cross-checking that the staged oracle account is owned by the staged program, so a mismatched pair is rejected at stage time rather than bricking approvals after the timelock) and `apply_oracle_change` only lands the swap after the timelock elapses, rotating the oracle account and its owner program together. The staleness window updates without timelock via `update_oracle_params` (price-deviation integrity is the oracle's own concern, not a vault parameter). Each read validates `oracle_account.key() == vault.nav_oracle` and `oracle_account.owner == vault.oracle_program`.
 
 ---
 

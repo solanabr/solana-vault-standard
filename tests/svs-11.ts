@@ -33,7 +33,6 @@ import {
   getInvestmentRequestAddress,
   getRedemptionRequestAddress,
   getClaimableTokensAddress,
-  getCreditFrozenAccountAddress,
 } from "../sdk/core/src/credit-vault-pda";
 import { resolveHookExtras } from "./helpers/hook-mint";
 
@@ -47,9 +46,6 @@ const COMPLIANCE_HOOK_PROGRAM_ID = new PublicKey(
 );
 const PRICE_SCALE = new BN(1_000_000_000);
 const FAR_FUTURE_EXPIRY = new BN(4_102_444_800); // ~year 2100
-// full-fulfillment ratio (1e18). Tests reuse this
-// across all approve_redeem calls to preserve pre-Plan-C semantics.
-const FULL_FULFILLMENT_RATIO = new BN("1000000000000000000");
 
 describe("svs-11 (Credit Markets Vault)", () => {
   const provider = anchor.AnchorProvider.env();
@@ -84,7 +80,6 @@ describe("svs-11 (Credit Markets Vault)", () => {
   let investmentRequest: PublicKey;
   let redemptionRequest: PublicKey;
   let claimableTokens: PublicKey;
-  let frozenAccount: PublicKey;
   let attestation: PublicKey;
   let attester: Keypair;
   let attestationProgramId: PublicKey;
@@ -118,9 +113,6 @@ describe("svs-11 (Credit Markets Vault)", () => {
 
   const getClaimableTokensPDA = (investorKey: PublicKey): [PublicKey, number] =>
     getClaimableTokensAddress(program.programId, vault, investorKey);
-
-  const getFrozenAccountPDA = (investorKey: PublicKey): [PublicKey, number] =>
-    getCreditFrozenAccountAddress(program.programId, vault, investorKey);
 
   const getOracleDataPDA = (vaultPda: PublicKey): [PublicKey, number] => {
     return PublicKey.findProgramAddressSync(
@@ -329,7 +321,6 @@ describe("svs-11 (Credit Markets Vault)", () => {
     [investmentRequest] = getInvestmentRequestPDA(investor.publicKey);
     [redemptionRequest] = getRedemptionRequestPDA(investor.publicKey);
     [claimableTokens] = getClaimableTokensPDA(investor.publicKey);
-    [frozenAccount] = getFrozenAccountPDA(investor.publicKey);
     [attestation] = getAttestationPDA(investor.publicKey, attester.publicKey);
 
     [vaultConfig] = PublicKey.findProgramAddressSync(
@@ -450,12 +441,11 @@ describe("svs-11 (Credit Markets Vault)", () => {
         .rpc();
 
       await navOracleProgram.methods
-        .initialize()
+        .initialize({ maxDeviationBps: 500 })
         .accountsPartial({
           pool: vault,
           navAccount,
           publisher: navPublisher.publicKey,
-          keyRotationAuthority: payer.publicKey,
           payer: payer.publicKey,
         })
         .rpc();
@@ -570,7 +560,6 @@ describe("svs-11 (Credit Markets Vault)", () => {
       expect(vaultAccount.navOracle.toBase58()).to.equal(
         mockOracleData.toBase58(),
       );
-      expect(vaultAccount.oracleSource).to.equal(0);
       expect(vaultAccount.oracleProgram.toBase58()).to.equal(
         oracleProgram.programId.toBase58(),
       );
@@ -602,30 +591,6 @@ describe("svs-11 (Credit Markets Vault)", () => {
           systemProgram: SystemProgram.programId,
         })
         .rpc();
-    });
-
-    it("authority can switch oracle source between mock and nav-oracle", async () => {
-      await program.methods
-        .setOracleSource(1)
-        .accountsPartial({
-          authority: payer.publicKey,
-          vault,
-        })
-        .rpc();
-
-      let vaultAccount = await program.account.creditVault.fetch(vault);
-      expect(vaultAccount.oracleSource).to.equal(1);
-
-      await program.methods
-        .setOracleSource(0)
-        .accountsPartial({
-          authority: payer.publicKey,
-          vault,
-        })
-        .rpc();
-
-      vaultAccount = await program.account.creditVault.fetch(vault);
-      expect(vaultAccount.oracleSource).to.equal(0);
     });
   });
 
@@ -670,7 +635,6 @@ describe("svs-11 (Credit Markets Vault)", () => {
             depositVault,
             assetMint,
             attestation,
-            frozenCheck: null,
             assetTokenProgram: TOKEN_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
             clock: SYSVAR_CLOCK_PUBKEY,
@@ -710,7 +674,6 @@ describe("svs-11 (Credit Markets Vault)", () => {
           depositVault,
           assetMint,
           attestation,
-          frozenCheck: null,
           assetTokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           clock: SYSVAR_CLOCK_PUBKEY,
@@ -751,12 +714,8 @@ describe("svs-11 (Credit Markets Vault)", () => {
           vault,
           investmentRequest,
           investor: investor.publicKey,
-          navOracle: mockOracleData,
-          // nav_account slot — vault default oracle_source=0
-          // (mock) so this is unread; use program.programId as filler.
-          navAccount: program.programId,
+          oracleAccount: mockOracleData,
           attestation,
-          frozenCheck: null,
           clock: SYSVAR_CLOCK_PUBKEY,
         })
         .signers([manager])
@@ -778,220 +737,6 @@ describe("svs-11 (Credit Markets Vault)", () => {
         depositAmount.toString(),
       );
       expect(vaultAccount.totalPendingDeposits.toNumber()).to.equal(0);
-    });
-
-    it("can opt into NavOracle for credit-market NAV reads", async () => {
-      const navInvestor = Keypair.generate();
-      const navAirdrop = await connection.requestAirdrop(
-        navInvestor.publicKey,
-        5 * anchor.web3.LAMPORTS_PER_SOL,
-      );
-      await connection.confirmTransaction(navAirdrop);
-      const navInvestorTokenAccount = await getOrCreateAssociatedTokenAccount(
-        connection,
-        payer,
-        assetMint,
-        navInvestor.publicKey,
-        false,
-        undefined,
-        undefined,
-        TOKEN_PROGRAM_ID,
-      );
-      await mintTo(
-        connection,
-        payer,
-        assetMint,
-        navInvestorTokenAccount.address,
-        payer.publicKey,
-        BigInt(minimumInvestment.toString()),
-        [],
-        undefined,
-        TOKEN_PROGRAM_ID,
-      );
-
-      const [navRequest] = getInvestmentRequestPDA(navInvestor.publicKey);
-      const [navFrozen] = getFrozenAccountPDA(navInvestor.publicKey);
-      const [navAttestation] = getAttestationPDA(
-        navInvestor.publicKey,
-        attester.publicKey,
-      );
-
-      await attestationMockProgram.methods
-        .createAttestation(attester.publicKey, 0, [66, 82], FAR_FUTURE_EXPIRY)
-        .accountsPartial({
-          authority: payer.publicKey,
-          attestation: navAttestation,
-          subject: navInvestor.publicKey,
-          systemProgram: SystemProgram.programId,
-        })
-        .rpc();
-
-      await program.methods
-        .setOracleSource(1)
-        .accountsPartial({
-          authority: payer.publicKey,
-          vault,
-        })
-        .rpc();
-
-      try {
-        await publishNav();
-
-        await program.methods
-          .requestDeposit(minimumInvestment)
-          .accountsPartial({
-            investor: navInvestor.publicKey,
-            vault,
-            investmentRequest: navRequest,
-            investorTokenAccount: navInvestorTokenAccount.address,
-            depositVault,
-            assetMint,
-            attestation: navAttestation,
-            frozenCheck: navFrozen,
-            assetTokenProgram: TOKEN_PROGRAM_ID,
-            systemProgram: SystemProgram.programId,
-            clock: SYSVAR_CLOCK_PUBKEY,
-          })
-          .signers([navInvestor])
-          .rpc();
-
-        await program.methods
-          .approveDeposit()
-          .accountsPartial({
-            manager: manager.publicKey,
-            vault,
-            investmentRequest: navRequest,
-            investor: navInvestor.publicKey,
-            navOracle: mockOracleData,
-            navAccount,
-            attestation: navAttestation,
-            frozenCheck: navFrozen,
-            clock: SYSVAR_CLOCK_PUBKEY,
-          })
-          .signers([manager])
-          .rpc();
-
-        const vaultAccount = await program.account.creditVault.fetch(vault);
-        expect(vaultAccount.oracleSource).to.equal(1);
-        expect(vaultAccount.lastSeenNavSequence.toString()).to.equal(
-          navSequence.toString(),
-        );
-      } finally {
-        await program.methods
-          .setOracleSource(0)
-          .accountsPartial({
-            authority: payer.publicKey,
-            vault,
-          })
-          .rpc();
-      }
-    });
-
-    it("rejects NavOracle opt-in approval when the NavAccount PDA is missing", async () => {
-      const missingNavInvestor = Keypair.generate();
-      const missingNavAirdrop = await connection.requestAirdrop(
-        missingNavInvestor.publicKey,
-        5 * anchor.web3.LAMPORTS_PER_SOL,
-      );
-      await connection.confirmTransaction(missingNavAirdrop);
-      const missingNavInvestorTokenAccount = await getOrCreateAssociatedTokenAccount(
-        connection,
-        payer,
-        assetMint,
-        missingNavInvestor.publicKey,
-        false,
-        undefined,
-        undefined,
-        TOKEN_PROGRAM_ID,
-      );
-      await mintTo(
-        connection,
-        payer,
-        assetMint,
-        missingNavInvestorTokenAccount.address,
-        payer.publicKey,
-        BigInt(minimumInvestment.toString()),
-        [],
-        undefined,
-        TOKEN_PROGRAM_ID,
-      );
-
-      const [missingNavRequest] = getInvestmentRequestPDA(
-        missingNavInvestor.publicKey,
-      );
-      const [missingNavFrozen] = getFrozenAccountPDA(
-        missingNavInvestor.publicKey,
-      );
-      const [missingNavAttestation] = getAttestationPDA(
-        missingNavInvestor.publicKey,
-        attester.publicKey,
-      );
-
-      await attestationMockProgram.methods
-        .createAttestation(attester.publicKey, 0, [66, 82], FAR_FUTURE_EXPIRY)
-        .accountsPartial({
-          authority: payer.publicKey,
-          attestation: missingNavAttestation,
-          subject: missingNavInvestor.publicKey,
-          systemProgram: SystemProgram.programId,
-        })
-        .rpc();
-
-      await program.methods
-        .requestDeposit(minimumInvestment)
-        .accountsPartial({
-          investor: missingNavInvestor.publicKey,
-          vault,
-          investmentRequest: missingNavRequest,
-          investorTokenAccount: missingNavInvestorTokenAccount.address,
-          depositVault,
-          assetMint,
-          attestation: missingNavAttestation,
-          frozenCheck: missingNavFrozen,
-          assetTokenProgram: TOKEN_PROGRAM_ID,
-          systemProgram: SystemProgram.programId,
-          clock: SYSVAR_CLOCK_PUBKEY,
-        })
-        .signers([missingNavInvestor])
-        .rpc();
-
-      await program.methods
-        .setOracleSource(1)
-        .accountsPartial({
-          authority: payer.publicKey,
-          vault,
-        })
-        .rpc();
-
-      try {
-        await program.methods
-          .approveDeposit()
-          .accountsPartial({
-            manager: manager.publicKey,
-            vault,
-            investmentRequest: missingNavRequest,
-            investor: missingNavInvestor.publicKey,
-            navOracle: mockOracleData,
-            navAccount: program.programId,
-            attestation: missingNavAttestation,
-            frozenCheck: missingNavFrozen,
-            clock: SYSVAR_CLOCK_PUBKEY,
-          })
-          .signers([manager])
-          .rpc();
-        expect.fail("expected OracleAccountInvalid");
-      } catch (e: any) {
-        const msg = (e?.logs?.join("\n") ?? "") + "\n" + (e?.message ?? "");
-        expect(msg).to.match(/OracleAccountInvalid|oracle account invalid|0x/i);
-      } finally {
-        await program.methods
-          .setOracleSource(0)
-          .accountsPartial({
-            authority: payer.publicKey,
-            vault,
-          })
-          .rpc();
-      }
     });
 
     it("investor claims deposit", async () => {
@@ -1104,7 +849,6 @@ describe("svs-11 (Credit Markets Vault)", () => {
           depositVault,
           assetMint,
           attestation: rejectAttestation,
-          frozenCheck: null,
           assetTokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           clock: SYSVAR_CLOCK_PUBKEY,
@@ -1214,7 +958,6 @@ describe("svs-11 (Credit Markets Vault)", () => {
           depositVault,
           assetMint,
           attestation: cancelAttestation,
-          frozenCheck: null,
           assetTokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           clock: SYSVAR_CLOCK_PUBKEY,
@@ -1271,7 +1014,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
       const sharesToRedeem = new BN(sharesBefore.amount.toString());
 
       await program.methods
-        .requestRedeem(sharesToRedeem, new BN(0))
+        .requestRedeem(sharesToRedeem)
         .accountsPartial({
           investor: investor.publicKey,
           vault,
@@ -1282,7 +1025,6 @@ describe("svs-11 (Credit Markets Vault)", () => {
           assetMint,
           claimableTokens,
           attestation,
-          frozenCheck: null,
           assetTokenProgram: TOKEN_PROGRAM_ID,
           token2022Program: TOKEN_2022_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
@@ -1316,7 +1058,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
 
     it("manager approves redemption", async () => {
       await program.methods
-        .approveRedeem(FULL_FULFILLMENT_RATIO, new BN(0))
+        .approveRedeem()
         .accountsPartial({
           manager: manager.publicKey,
           vault,
@@ -1327,10 +1069,8 @@ describe("svs-11 (Credit Markets Vault)", () => {
           depositVault,
           assetMint,
           claimableTokens,
-          navOracle: mockOracleData,
-          navAccount: program.programId,
+          oracleAccount: mockOracleData,
           attestation,
-          frozenCheck: null,
           assetTokenProgram: TOKEN_PROGRAM_ID,
           token2022Program: TOKEN_2022_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
@@ -1401,7 +1141,6 @@ describe("svs-11 (Credit Markets Vault)", () => {
           depositVault,
           assetMint,
           attestation,
-          frozenCheck: null,
           assetTokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           clock: SYSVAR_CLOCK_PUBKEY,
@@ -1416,10 +1155,8 @@ describe("svs-11 (Credit Markets Vault)", () => {
           vault,
           investmentRequest,
           investor: investor.publicKey,
-          navOracle: mockOracleData,
-          navAccount: program.programId,
+          oracleAccount: mockOracleData,
           attestation,
-          frozenCheck: null,
           clock: SYSVAR_CLOCK_PUBKEY,
         })
         .signers([manager])
@@ -1450,7 +1187,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
       );
 
       await program.methods
-        .requestRedeem(new BN(shares.amount.toString()), new BN(0))
+        .requestRedeem(new BN(shares.amount.toString()))
         .accountsPartial({
           investor: investor.publicKey,
           vault,
@@ -1461,7 +1198,6 @@ describe("svs-11 (Credit Markets Vault)", () => {
           assetMint,
           claimableTokens,
           attestation,
-          frozenCheck: null,
           assetTokenProgram: TOKEN_PROGRAM_ID,
           token2022Program: TOKEN_2022_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
@@ -1573,73 +1309,6 @@ describe("svs-11 (Credit Markets Vault)", () => {
       } catch (err: any) {
         expect(err.error.errorCode.code).to.equal("InsufficientLiquidity");
       }
-    });
-  });
-
-  describe("Compliance", () => {
-    it("manager freezes account", async () => {
-      await program.methods
-        .freezeAccount()
-        .accountsPartial({
-          caller: manager.publicKey,
-          vault,
-          vaultConfig,
-          investor: investor.publicKey,
-          frozenAccount,
-          systemProgram: SystemProgram.programId,
-          clock: SYSVAR_CLOCK_PUBKEY,
-        })
-        .signers([manager])
-        .rpc();
-
-      const frozen = await program.account.frozenAccount.fetch(frozenAccount);
-      expect(frozen.investor.toBase58()).to.equal(
-        investor.publicKey.toBase58(),
-      );
-      expect(frozen.frozenBy.toBase58()).to.equal(manager.publicKey.toBase58());
-    });
-
-    it("frozen account cannot request deposit", async () => {
-      [investmentRequest] = getInvestmentRequestPDA(investor.publicKey);
-
-      try {
-        await program.methods
-          .requestDeposit(depositAmount)
-          .accountsPartial({
-            investor: investor.publicKey,
-            vault,
-            investmentRequest,
-            investorTokenAccount,
-            depositVault,
-            assetMint,
-            attestation,
-            frozenCheck: frozenAccount,
-            assetTokenProgram: TOKEN_PROGRAM_ID,
-            systemProgram: SystemProgram.programId,
-            clock: SYSVAR_CLOCK_PUBKEY,
-          })
-          .signers([investor])
-          .rpc();
-        expect.fail("should have thrown");
-      } catch (err: any) {
-        expect(err.error.errorCode.code).to.equal("AccountFrozen");
-      }
-    });
-
-    it("manager unfreezes account", async () => {
-      await program.methods
-        .unfreezeAccount()
-        .accountsPartial({
-          caller: manager.publicKey,
-          vault,
-          vaultConfig,
-          frozenAccount,
-        })
-        .signers([manager])
-        .rpc();
-
-      const info = await connection.getAccountInfo(frozenAccount);
-      expect(info).to.be.null;
     });
   });
 
@@ -1842,7 +1511,6 @@ describe("svs-11 (Credit Markets Vault)", () => {
             depositVault,
             assetMint,
             attestation: zeroAttestation,
-            frozenCheck: null,
             assetTokenProgram: TOKEN_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
             clock: SYSVAR_CLOCK_PUBKEY,
@@ -1913,7 +1581,6 @@ describe("svs-11 (Credit Markets Vault)", () => {
             depositVault,
             assetMint,
             attestation: smallAttestation,
-            frozenCheck: null,
             assetTokenProgram: TOKEN_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
             clock: SYSVAR_CLOCK_PUBKEY,
@@ -1965,7 +1632,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
 
       try {
         await program.methods
-          .requestRedeem(new BN(0), new BN(0))
+          .requestRedeem(new BN(0))
           .accountsPartial({
             investor: zeroRedeemer.publicKey,
             vault,
@@ -1976,7 +1643,6 @@ describe("svs-11 (Credit Markets Vault)", () => {
             assetMint,
             claimableTokens: zeroClaimable,
             attestation: zeroAttestation,
-            frozenCheck: null,
             assetTokenProgram: TOKEN_PROGRAM_ID,
             token2022Program: TOKEN_2022_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
@@ -2112,7 +1778,6 @@ describe("svs-11 (Credit Markets Vault)", () => {
           depositVault,
           assetMint,
           attestation: statusAttestation,
-          frozenCheck: null,
           assetTokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           clock: SYSVAR_CLOCK_PUBKEY,
@@ -2127,10 +1792,8 @@ describe("svs-11 (Credit Markets Vault)", () => {
           vault,
           investmentRequest: statusInvestmentRequest,
           investor: statusInvestor.publicKey,
-          navOracle: mockOracleData,
-          navAccount: program.programId,
+          oracleAccount: mockOracleData,
           attestation: statusAttestation,
-          frozenCheck: null,
           clock: SYSVAR_CLOCK_PUBKEY,
         })
         .signers([manager])
@@ -2144,10 +1807,8 @@ describe("svs-11 (Credit Markets Vault)", () => {
             vault,
             investmentRequest: statusInvestmentRequest,
             investor: statusInvestor.publicKey,
-            navOracle: mockOracleData,
-            navAccount: program.programId,
+            oracleAccount: mockOracleData,
             attestation: statusAttestation,
-            frozenCheck: null,
             clock: SYSVAR_CLOCK_PUBKEY,
           })
           .signers([manager])
@@ -2189,7 +1850,6 @@ describe("svs-11 (Credit Markets Vault)", () => {
           depositVault,
           assetMint,
           attestation: statusAttestation,
-          frozenCheck: null,
           assetTokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           clock: SYSVAR_CLOCK_PUBKEY,
@@ -2226,10 +1886,8 @@ describe("svs-11 (Credit Markets Vault)", () => {
           vault,
           investmentRequest: statusInvestmentRequest,
           investor: statusInvestor.publicKey,
-          navOracle: mockOracleData,
-          navAccount: program.programId,
+          oracleAccount: mockOracleData,
           attestation: statusAttestation,
-          frozenCheck: null,
           clock: SYSVAR_CLOCK_PUBKEY,
         })
         .signers([manager])
@@ -2355,7 +2013,6 @@ describe("svs-11 (Credit Markets Vault)", () => {
           depositVault,
           assetMint,
           attestation: liqAttestation,
-          frozenCheck: null,
           assetTokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           clock: SYSVAR_CLOCK_PUBKEY,
@@ -2370,10 +2027,8 @@ describe("svs-11 (Credit Markets Vault)", () => {
           vault,
           investmentRequest: liqInvestmentRequest,
           investor: liqInvestor.publicKey,
-          navOracle: mockOracleData,
-          navAccount: program.programId,
+          oracleAccount: mockOracleData,
           attestation: liqAttestation,
-          frozenCheck: null,
           clock: SYSVAR_CLOCK_PUBKEY,
         })
         .signers([manager])
@@ -2393,31 +2048,23 @@ describe("svs-11 (Credit Markets Vault)", () => {
         .signers([liqInvestor])
         .rpc();
 
-      // Increase max_deviation_bps to allow oracle price mismatch after drawdown
-      await program.methods
-        .updateOracleParams(null, 2000)
-        .accountsPartial({
-          authority: payer.publicKey,
-          vault,
-        })
-        .rpc();
-
-      // Draw down most assets. The oracle stays at PRICE_SCALE (1:1) while vault's
-      // actual price drops. With max_deviation_bps=2000, the deviation check passes
-      // as long as drawdown is < ~16.6% of total_assets. The redeem will use the
-      // oracle price (PRICE_SCALE) to calculate net_assets, which will exceed
-      // the reduced available balance → InsufficientLiquidity.
+      // Draw down most of the idle liquidity to deploy it as off-chain credit.
+      // There is NO deviation-bps workaround any more: the vault-derived
+      // books-vs-oracle deviation guard was removed (total_assets tracks idle
+      // cash, AUM = shares * oracle price), so approve-after-drawdown is no
+      // longer blocked by a false deviation trip — it now fails only on the
+      // real liquidity boundary, which is exactly what this test exercises.
       const vaultAccount = await program.account.creditVault.fetch(vault);
       const depositVaultInfo = await getAccount(connection, depositVault);
       const available =
         BigInt(depositVaultInfo.amount.toString()) -
         BigInt(vaultAccount.totalPendingDeposits.toString()) -
         BigInt(vaultAccount.totalApprovedDeposits.toString());
-      // Draw down ~15% of total_assets to stay within 2000bps deviation
-      const totalAssets = BigInt(vaultAccount.totalAssets.toString());
-      const drawAmount = (totalAssets * BigInt(15)) / BigInt(100);
+      // Deploy 90% of idle liquidity so the full-share redeem payout exceeds
+      // what remains in the vault → InsufficientLiquidity on approve_redeem.
+      const drawAmount = (available * BigInt(90)) / BigInt(100);
 
-      if (drawAmount > BigInt(0) && drawAmount < available) {
+      if (drawAmount > BigInt(0)) {
         await program.methods
           .drawDown(new BN(drawAmount.toString()))
           .accountsPartial({
@@ -2442,7 +2089,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
       );
 
       await program.methods
-        .requestRedeem(new BN(shares.amount.toString()), new BN(0))
+        .requestRedeem(new BN(shares.amount.toString()))
         .accountsPartial({
           investor: liqInvestor.publicKey,
           vault,
@@ -2453,7 +2100,6 @@ describe("svs-11 (Credit Markets Vault)", () => {
           assetMint,
           claimableTokens: liqClaimableTokens,
           attestation: liqAttestation,
-          frozenCheck: null,
           assetTokenProgram: TOKEN_PROGRAM_ID,
           token2022Program: TOKEN_2022_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
@@ -2465,7 +2111,7 @@ describe("svs-11 (Credit Markets Vault)", () => {
 
       try {
         await program.methods
-          .approveRedeem(FULL_FULFILLMENT_RATIO, new BN(0))
+          .approveRedeem()
           .accountsPartial({
             manager: manager.publicKey,
             vault,
@@ -2476,10 +2122,8 @@ describe("svs-11 (Credit Markets Vault)", () => {
             depositVault,
             assetMint,
             claimableTokens: liqClaimableTokens,
-            navOracle: mockOracleData,
-            navAccount: program.programId,
+            oracleAccount: mockOracleData,
             attestation: liqAttestation,
-            frozenCheck: null,
             assetTokenProgram: TOKEN_PROGRAM_ID,
             token2022Program: TOKEN_2022_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
@@ -2491,352 +2135,6 @@ describe("svs-11 (Credit Markets Vault)", () => {
       } catch (err: any) {
         expect(err.error.errorCode.code).to.equal("InsufficientLiquidity");
       }
-
-      // Restore max_deviation_bps to default (500)
-      await program.methods
-        .updateOracleParams(null, 500)
-        .accountsPartial({
-          authority: payer.publicKey,
-          vault,
-        })
-        .rpc();
-    });
-  });
-
-  describe("Error Cases - Frozen Account on Approve", () => {
-    let frozenInvestor: Keypair;
-    let frozenInvestorTokenAccount: PublicKey;
-    let frozenInvestorSharesAccount: PublicKey;
-    let frozenInvRequest: PublicKey;
-    let frozenRedRequest: PublicKey;
-    let frozenInvAttestation: PublicKey;
-    let frozenInvFrozenAccount: PublicKey;
-    let frozenInvClaimableTokens: PublicKey;
-
-    before(async () => {
-      frozenInvestor = Keypair.generate();
-      const airdrop = await connection.requestAirdrop(
-        frozenInvestor.publicKey,
-        5 * anchor.web3.LAMPORTS_PER_SOL,
-      );
-      await connection.confirmTransaction(airdrop);
-
-      const ata = await getOrCreateAssociatedTokenAccount(
-        connection,
-        payer,
-        assetMint,
-        frozenInvestor.publicKey,
-        false,
-        undefined,
-        undefined,
-        TOKEN_PROGRAM_ID,
-      );
-      frozenInvestorTokenAccount = ata.address;
-
-      await mintTo(
-        connection,
-        payer,
-        assetMint,
-        frozenInvestorTokenAccount,
-        payer.publicKey,
-        BigInt(depositAmount.toString()) * BigInt(2),
-        [],
-        undefined,
-        TOKEN_PROGRAM_ID,
-      );
-
-      [frozenInvRequest] = getInvestmentRequestPDA(frozenInvestor.publicKey);
-      [frozenRedRequest] = getRedemptionRequestPDA(frozenInvestor.publicKey);
-      [frozenInvAttestation] = getAttestationPDA(
-        frozenInvestor.publicKey,
-        attester.publicKey,
-      );
-      [frozenInvFrozenAccount] = getFrozenAccountPDA(frozenInvestor.publicKey);
-      [frozenInvClaimableTokens] = getClaimableTokensPDA(
-        frozenInvestor.publicKey,
-      );
-
-      await attestationMockProgram.methods
-        .createAttestation(attester.publicKey, 0, [66, 82], FAR_FUTURE_EXPIRY)
-        .accountsPartial({
-          authority: payer.publicKey,
-          attestation: frozenInvAttestation,
-          subject: frozenInvestor.publicKey,
-          systemProgram: SystemProgram.programId,
-        })
-        .rpc();
-
-      const frozenSharesAta = await getOrCreateAssociatedTokenAccount(
-        connection,
-        payer,
-        sharesMint,
-        frozenInvestor.publicKey,
-        false,
-        undefined,
-        undefined,
-        TOKEN_2022_PROGRAM_ID,
-      );
-      frozenInvestorSharesAccount = frozenSharesAta.address;
-
-      // Repay so the vault has liquidity for the redeem test
-      await program.methods
-        .repay(depositAmount)
-        .accountsPartial({
-          manager: manager.publicKey,
-          vault,
-          managerTokenAccount,
-          depositVault,
-          assetMint,
-          assetTokenProgram: TOKEN_PROGRAM_ID,
-        })
-        .signers([manager])
-        .rpc();
-
-      // Update oracle to match vault's expected price
-      const vaultAfterRepay = await program.account.creditVault.fetch(vault);
-      if (vaultAfterRepay.totalShares.toNumber() > 0) {
-        const expectedPrice = new BN(
-          (
-            (BigInt(vaultAfterRepay.totalAssets.toString()) *
-              BigInt(PRICE_SCALE.toString())) /
-            BigInt(vaultAfterRepay.totalShares.toString())
-          ).toString(),
-        );
-        await oracleProgram.methods
-          .setPrice(expectedPrice)
-          .accountsPartial({
-            authority: payer.publicKey,
-            oracleData: mockOracleData,
-            vault: vault,
-            systemProgram: SystemProgram.programId,
-          })
-          .rpc();
-      }
-    });
-
-    it("rejects approve_deposit for frozen investor", async () => {
-      // Request deposit while unfrozen
-      await program.methods
-        .requestDeposit(depositAmount)
-        .accountsPartial({
-          investor: frozenInvestor.publicKey,
-          vault,
-          investmentRequest: frozenInvRequest,
-          investorTokenAccount: frozenInvestorTokenAccount,
-          depositVault,
-          assetMint,
-          attestation: frozenInvAttestation,
-          frozenCheck: null,
-          assetTokenProgram: TOKEN_PROGRAM_ID,
-          systemProgram: SystemProgram.programId,
-          clock: SYSVAR_CLOCK_PUBKEY,
-        })
-        .signers([frozenInvestor])
-        .rpc();
-
-      // Freeze investor
-      await program.methods
-        .freezeAccount()
-        .accountsPartial({
-          caller: manager.publicKey,
-          vault,
-          vaultConfig,
-          investor: frozenInvestor.publicKey,
-          frozenAccount: frozenInvFrozenAccount,
-          systemProgram: SystemProgram.programId,
-          clock: SYSVAR_CLOCK_PUBKEY,
-        })
-        .signers([manager])
-        .rpc();
-
-      // Try approve with frozen check
-      try {
-        await program.methods
-          .approveDeposit()
-          .accountsPartial({
-            manager: manager.publicKey,
-            vault,
-            investmentRequest: frozenInvRequest,
-            investor: frozenInvestor.publicKey,
-            navOracle: mockOracleData,
-            navAccount: program.programId,
-            attestation: frozenInvAttestation,
-            frozenCheck: frozenInvFrozenAccount,
-            clock: SYSVAR_CLOCK_PUBKEY,
-          })
-          .signers([manager])
-          .rpc();
-        expect.fail("should have thrown");
-      } catch (err: any) {
-        expect(err.error.errorCode.code).to.equal("AccountFrozen");
-      }
-
-      // Clean up: unfreeze and reject deposit
-      await program.methods
-        .unfreezeAccount()
-        .accountsPartial({
-          caller: manager.publicKey,
-          vault,
-          vaultConfig,
-          frozenAccount: frozenInvFrozenAccount,
-        })
-        .signers([manager])
-        .rpc();
-
-      await program.methods
-        .rejectDeposit(0)
-        .accountsPartial({
-          manager: manager.publicKey,
-          vault,
-          investmentRequest: frozenInvRequest,
-          investor: frozenInvestor.publicKey,
-          depositVault,
-          investorTokenAccount: frozenInvestorTokenAccount,
-          assetMint,
-          assetTokenProgram: TOKEN_PROGRAM_ID,
-        })
-        .signers([manager])
-        .rpc();
-    });
-
-    it("rejects approve_redeem for frozen investor", async () => {
-      // Deposit + approve + claim first to get shares
-      [frozenInvRequest] = getInvestmentRequestPDA(frozenInvestor.publicKey);
-
-      await program.methods
-        .requestDeposit(depositAmount)
-        .accountsPartial({
-          investor: frozenInvestor.publicKey,
-          vault,
-          investmentRequest: frozenInvRequest,
-          investorTokenAccount: frozenInvestorTokenAccount,
-          depositVault,
-          assetMint,
-          attestation: frozenInvAttestation,
-          frozenCheck: null,
-          assetTokenProgram: TOKEN_PROGRAM_ID,
-          systemProgram: SystemProgram.programId,
-          clock: SYSVAR_CLOCK_PUBKEY,
-        })
-        .signers([frozenInvestor])
-        .rpc();
-
-      await program.methods
-        .approveDeposit()
-        .accountsPartial({
-          manager: manager.publicKey,
-          vault,
-          investmentRequest: frozenInvRequest,
-          investor: frozenInvestor.publicKey,
-          navOracle: mockOracleData,
-          navAccount: program.programId,
-          attestation: frozenInvAttestation,
-          frozenCheck: null,
-          clock: SYSVAR_CLOCK_PUBKEY,
-        })
-        .signers([manager])
-        .rpc();
-
-      await program.methods
-        .claimDeposit()
-        .accountsPartial({
-          investor: frozenInvestor.publicKey,
-          vault,
-          investmentRequest: frozenInvRequest,
-          sharesMint,
-          investorSharesAccount: frozenInvestorSharesAccount,
-          token2022Program: TOKEN_2022_PROGRAM_ID,
-          attestation: frozenInvAttestation,
-        })
-        .signers([frozenInvestor])
-        .rpc();
-
-      // Request redeem while unfrozen
-      const shares = await getAccount(
-        connection,
-        frozenInvestorSharesAccount,
-        undefined,
-        TOKEN_2022_PROGRAM_ID,
-      );
-
-      await program.methods
-        .requestRedeem(new BN(shares.amount.toString()), new BN(0))
-        .accountsPartial({
-          investor: frozenInvestor.publicKey,
-          vault,
-          redemptionRequest: frozenRedRequest,
-          sharesMint,
-          investorSharesAccount: frozenInvestorSharesAccount,
-          redemptionEscrow,
-          assetMint,
-          claimableTokens: frozenInvClaimableTokens,
-          attestation: frozenInvAttestation,
-          frozenCheck: null,
-          assetTokenProgram: TOKEN_PROGRAM_ID,
-          token2022Program: TOKEN_2022_PROGRAM_ID,
-          systemProgram: SystemProgram.programId,
-          clock: SYSVAR_CLOCK_PUBKEY,
-        })
-        .remainingAccounts(requestRedeemHookExtras(frozenInvestor.publicKey))
-        .signers([frozenInvestor])
-        .rpc();
-
-      // Freeze investor
-      await program.methods
-        .freezeAccount()
-        .accountsPartial({
-          caller: manager.publicKey,
-          vault,
-          vaultConfig,
-          investor: frozenInvestor.publicKey,
-          frozenAccount: frozenInvFrozenAccount,
-          systemProgram: SystemProgram.programId,
-          clock: SYSVAR_CLOCK_PUBKEY,
-        })
-        .signers([manager])
-        .rpc();
-
-      // Try approve redeem with frozen check
-      try {
-        await program.methods
-          .approveRedeem(FULL_FULFILLMENT_RATIO, new BN(0))
-          .accountsPartial({
-            manager: manager.publicKey,
-            vault,
-            redemptionRequest: frozenRedRequest,
-            investor: frozenInvestor.publicKey,
-            sharesMint,
-            redemptionEscrow,
-            depositVault,
-            assetMint,
-            claimableTokens: frozenInvClaimableTokens,
-            navOracle: mockOracleData,
-            navAccount: program.programId,
-            attestation: frozenInvAttestation,
-            frozenCheck: frozenInvFrozenAccount,
-            assetTokenProgram: TOKEN_PROGRAM_ID,
-            token2022Program: TOKEN_2022_PROGRAM_ID,
-            systemProgram: SystemProgram.programId,
-            clock: SYSVAR_CLOCK_PUBKEY,
-          })
-          .signers([manager])
-          .rpc();
-        expect.fail("should have thrown");
-      } catch (err: any) {
-        expect(err.error.errorCode.code).to.equal("AccountFrozen");
-      }
-
-      // Clean up: unfreeze
-      await program.methods
-        .unfreezeAccount()
-        .accountsPartial({
-          caller: manager.publicKey,
-          vault,
-          vaultConfig,
-          frozenAccount: frozenInvFrozenAccount,
-        })
-        .signers([manager])
-        .rpc();
     });
   });
 
@@ -2961,7 +2259,6 @@ describe("svs-11 (Credit Markets Vault)", () => {
           depositVault,
           assetMint,
           attestation: tempAttestation,
-          frozenCheck: null,
           assetTokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           clock: SYSVAR_CLOCK_PUBKEY,
@@ -2978,10 +2275,8 @@ describe("svs-11 (Credit Markets Vault)", () => {
             vault,
             investmentRequest: tempRequest,
             investor: tempInvestor.publicKey,
-            navOracle: mockOracleData,
-            navAccount: program.programId,
+            oracleAccount: mockOracleData,
             attestation: tempAttestation,
-            frozenCheck: null,
             clock: SYSVAR_CLOCK_PUBKEY,
           })
           .signers([investor])
@@ -3081,7 +2376,6 @@ describe("svs-11 (Credit Markets Vault)", () => {
           depositVault,
           assetMint,
           attestation: tempAttestation2,
-          frozenCheck: null,
           assetTokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           clock: SYSVAR_CLOCK_PUBKEY,
@@ -3143,32 +2437,6 @@ describe("svs-11 (Credit Markets Vault)", () => {
         expect.fail("should have thrown");
       } catch (err: any) {
         expect(err.error).to.exist;
-      }
-    });
-
-    it("non-manager cannot freeze account", async () => {
-      const targetInvestor = Keypair.generate();
-      const [targetFrozen] = getFrozenAccountPDA(targetInvestor.publicKey);
-
-      try {
-        await program.methods
-          .freezeAccount()
-          .accountsPartial({
-            caller: investor.publicKey,
-            vault,
-            vaultConfig,
-            investor: targetInvestor.publicKey,
-            frozenAccount: targetFrozen,
-            systemProgram: SystemProgram.programId,
-            clock: SYSVAR_CLOCK_PUBKEY,
-          })
-          .signers([investor])
-          .rpc();
-        expect.fail("should have thrown");
-      } catch (err: any) {
-        expect(err.error.errorCode.code).to.equal(
-          "UnauthorizedComplianceAction",
-        );
       }
     });
 
@@ -3308,7 +2576,6 @@ describe("svs-11 (Credit Markets Vault)", () => {
           depositVault,
           assetMint,
           attestation: staleAttestation,
-          frozenCheck: null,
           assetTokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           clock: SYSVAR_CLOCK_PUBKEY,
@@ -3338,10 +2605,8 @@ describe("svs-11 (Credit Markets Vault)", () => {
             vault,
             investmentRequest: staleInvestmentRequest,
             investor: staleInvestor.publicKey,
-            navOracle: mockOracleData,
-            navAccount: program.programId,
+            oracleAccount: mockOracleData,
             attestation: staleAttestation,
-            frozenCheck: null,
             clock: SYSVAR_CLOCK_PUBKEY,
           })
           .signers([manager])
@@ -3385,10 +2650,8 @@ describe("svs-11 (Credit Markets Vault)", () => {
           vault,
           investmentRequest: staleInvestmentRequest,
           investor: staleInvestor.publicKey,
-          navOracle: mockOracleData,
-          navAccount: program.programId,
+          oracleAccount: mockOracleData,
           attestation: staleAttestation,
-          frozenCheck: null,
           clock: SYSVAR_CLOCK_PUBKEY,
         })
         .signers([manager])
@@ -3504,7 +2767,6 @@ describe("svs-11 (Credit Markets Vault)", () => {
             depositVault,
             assetMint,
             attestation: expAttestation,
-            frozenCheck: null,
             assetTokenProgram: TOKEN_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
             clock: SYSVAR_CLOCK_PUBKEY,
@@ -3595,7 +2857,6 @@ describe("svs-11 (Credit Markets Vault)", () => {
             depositVault,
             assetMint,
             attestation: revAttestation,
-            frozenCheck: null,
             assetTokenProgram: TOKEN_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
             clock: SYSVAR_CLOCK_PUBKEY,
@@ -3658,76 +2919,70 @@ describe("svs-11 (Credit Markets Vault)", () => {
     });
   });
 
-  describe("Pro-rata Partial Fulfillment", () => {
-    const HALF_RATIO = new BN("500000000000000000"); // 0.5e18 = 50%
-    let partialInvestor: Keypair;
-    let partialInvestorTokenAccount: PublicKey;
-    let partialInvestorSharesAccount: PublicKey;
-    let partialInvRequest: PublicKey;
-    let partialRedRequest: PublicKey;
-    let partialClaimableTokens: PublicKey;
-    let partialAttestation: PublicKey;
-    let partialDepositAmount: BN;
+  describe("Redeem Rejection (hook extras)", () => {
+    let rejInvestor: Keypair;
+    let rejInvestorTokenAccount: PublicKey;
+    let rejInvestorSharesAccount: PublicKey;
+    let rejInvRequest: PublicKey;
+    let rejRedRequest: PublicKey;
+    let rejClaimableTokens: PublicKey;
+    let rejAttestation: PublicKey;
+    let rejSharesBeforeReq: bigint;
 
     before(async () => {
-      partialInvestor = Keypair.generate();
+      rejInvestor = Keypair.generate();
       const airdrop = await connection.requestAirdrop(
-        partialInvestor.publicKey,
+        rejInvestor.publicKey,
         2 * anchor.web3.LAMPORTS_PER_SOL,
       );
       await connection.confirmTransaction(airdrop);
 
-      [partialInvRequest] = getInvestmentRequestPDA(partialInvestor.publicKey);
-      [partialRedRequest] = getRedemptionRequestPDA(partialInvestor.publicKey);
-      [partialClaimableTokens] = getClaimableTokensPDA(
-        partialInvestor.publicKey,
-      );
-      [partialAttestation] = getAttestationPDA(
-        partialInvestor.publicKey,
+      [rejInvRequest] = getInvestmentRequestPDA(rejInvestor.publicKey);
+      [rejRedRequest] = getRedemptionRequestPDA(rejInvestor.publicKey);
+      [rejClaimableTokens] = getClaimableTokensPDA(rejInvestor.publicKey);
+      [rejAttestation] = getAttestationPDA(
+        rejInvestor.publicKey,
         attester.publicKey,
       );
 
-      // Issue attestation.
       await attestationMockProgram.methods
         .createAttestation(attester.publicKey, 0, [66, 82], FAR_FUTURE_EXPIRY)
         .accountsPartial({
           authority: payer.publicKey,
-          attestation: partialAttestation,
-          subject: partialInvestor.publicKey,
+          attestation: rejAttestation,
+          subject: rejInvestor.publicKey,
           systemProgram: SystemProgram.programId,
         })
         .rpc();
 
-      // Fund investor with USDC and create shares ATA.
       const investorAta = await getOrCreateAssociatedTokenAccount(
         connection,
         payer,
         assetMint,
-        partialInvestor.publicKey,
+        rejInvestor.publicKey,
       );
-      partialInvestorTokenAccount = investorAta.address;
-      partialDepositAmount = new BN(1_000_000);
+      rejInvestorTokenAccount = investorAta.address;
+      const rejDepositAmount = new BN(1_000_000);
       await mintTo(
         connection,
         payer,
         assetMint,
-        partialInvestorTokenAccount,
+        rejInvestorTokenAccount,
         payer,
-        partialDepositAmount.toNumber(),
+        rejDepositAmount.toNumber(),
       );
       const sharesAta = await getOrCreateAssociatedTokenAccount(
         connection,
         payer,
         sharesMint,
-        partialInvestor.publicKey,
+        rejInvestor.publicKey,
         false,
         undefined,
         undefined,
         TOKEN_2022_PROGRAM_ID,
       );
-      partialInvestorSharesAccount = sharesAta.address;
+      rejInvestorSharesAccount = sharesAta.address;
 
-      // Open window if closed (no-op if open).
       try {
         await program.methods
           .openInvestmentWindow()
@@ -3738,39 +2993,35 @@ describe("svs-11 (Credit Markets Vault)", () => {
         // Already open.
       }
 
-      // Deposit → approve → claim to give investor shares.
       await program.methods
-        .requestDeposit(partialDepositAmount)
+        .requestDeposit(rejDepositAmount)
         .accountsPartial({
-          investor: partialInvestor.publicKey,
+          investor: rejInvestor.publicKey,
           vault,
-          investmentRequest: partialInvRequest,
-          investorTokenAccount: partialInvestorTokenAccount,
+          investmentRequest: rejInvRequest,
+          investorTokenAccount: rejInvestorTokenAccount,
           depositVault,
           assetMint,
-          attestation: partialAttestation,
-          frozenCheck: null,
+          attestation: rejAttestation,
           assetTokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           clock: SYSVAR_CLOCK_PUBKEY,
         })
-        .signers([partialInvestor])
+        .signers([rejInvestor])
         .rpc();
       await program.methods
         .approveDeposit()
         .accountsPartial({
           manager: manager.publicKey,
           vault,
-          investmentRequest: partialInvRequest,
-          investor: partialInvestor.publicKey,
+          investmentRequest: rejInvRequest,
+          investor: rejInvestor.publicKey,
           sharesMint,
-          investorSharesAccount: partialInvestorSharesAccount,
+          investorSharesAccount: rejInvestorSharesAccount,
           depositVault,
           assetMint,
-          navOracle: mockOracleData,
-          navAccount: program.programId,
-          attestation: partialAttestation,
-          frozenCheck: null,
+          oracleAccount: mockOracleData,
+          attestation: rejAttestation,
           assetTokenProgram: TOKEN_PROGRAM_ID,
           token2022Program: TOKEN_2022_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
@@ -3781,177 +3032,460 @@ describe("svs-11 (Credit Markets Vault)", () => {
       await program.methods
         .claimDeposit()
         .accountsPartial({
-          investor: partialInvestor.publicKey,
+          investor: rejInvestor.publicKey,
           vault,
-          investmentRequest: partialInvRequest,
+          investmentRequest: rejInvRequest,
           sharesMint,
-          investorSharesAccount: partialInvestorSharesAccount,
+          investorSharesAccount: rejInvestorSharesAccount,
           token2022Program: TOKEN_2022_PROGRAM_ID,
-          attestation: partialAttestation,
+          attestation: rejAttestation,
         })
-        .signers([partialInvestor])
+        .signers([rejInvestor])
         .rpc();
 
-      // Request full redemption.
-      const shares = await getAccount(
+      const claimed = await getAccount(
         connection,
-        partialInvestorSharesAccount,
+        rejInvestorSharesAccount,
+        undefined,
+        TOKEN_2022_PROGRAM_ID,
+      );
+      rejSharesBeforeReq = claimed.amount;
+
+      await program.methods
+        .requestRedeem(new BN(rejSharesBeforeReq.toString()))
+        .accountsPartial({
+          investor: rejInvestor.publicKey,
+          vault,
+          redemptionRequest: rejRedRequest,
+          sharesMint,
+          investorSharesAccount: rejInvestorSharesAccount,
+          redemptionEscrow,
+          assetMint,
+          claimableTokens: rejClaimableTokens,
+          attestation: rejAttestation,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          clock: SYSVAR_CLOCK_PUBKEY,
+        })
+        .remainingAccounts(requestRedeemHookExtras(rejInvestor.publicKey))
+        .signers([rejInvestor])
+        .rpc();
+    });
+
+    it("reject_redeem returns escrowed shares through the transfer hook", async () => {
+      await program.methods
+        .rejectRedeem(0)
+        .accountsPartial({
+          manager: manager.publicKey,
+          vault,
+          redemptionRequest: rejRedRequest,
+          investor: rejInvestor.publicKey,
+          sharesMint,
+          assetMint,
+          claimableTokens: rejClaimableTokens,
+          investorSharesAccount: rejInvestorSharesAccount,
+          redemptionEscrow,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .remainingAccounts(cancelRedeemHookExtras(rejInvestor.publicKey))
+        .signers([manager])
+        .rpc();
+
+      const sharesAfter = await getAccount(
+        connection,
+        rejInvestorSharesAccount,
+        undefined,
+        TOKEN_2022_PROGRAM_ID,
+      );
+      expect(sharesAfter.amount.toString()).to.equal(
+        rejSharesBeforeReq.toString(),
+      );
+
+      const info = await connection.getAccountInfo(rejRedRequest);
+      expect(info).to.be.null;
+    });
+  });
+
+  describe("Protocol-level compliance", () => {
+    // Single source of truth: freeze + sanctions live in compliance-hook.
+    // mint_to (claim_deposit) and burn (approve_redeem) bypass the
+    // Token-2022 TransferHook, so SVS-11 asserts compliance directly.
+    let complianceHook: anchor.Program;
+    let sanctionsListPda: PublicKey;
+
+    const frozenPda = (wallet: PublicKey): PublicKey =>
+      PublicKey.findProgramAddressSync(
+        [Buffer.from("frozen"), wallet.toBuffer()],
+        COMPLIANCE_HOOK_PROGRAM_ID,
+      )[0];
+
+    before(async () => {
+      const complianceHookIdl = require("../target/idl/compliance_hook.json");
+      complianceHook = new anchor.Program(complianceHookIdl, provider);
+      [sanctionsListPda] = PublicKey.findProgramAddressSync(
+        [Buffer.from("sanctions_list")],
+        COMPLIANCE_HOOK_PROGRAM_ID,
+      );
+    });
+
+    async function provisionApprovedDeposit(
+      inv: Keypair,
+    ): Promise<{ invRequest: PublicKey; sharesAccount: PublicKey; att: PublicKey }> {
+      const airdrop = await connection.requestAirdrop(
+        inv.publicKey,
+        2 * anchor.web3.LAMPORTS_PER_SOL,
+      );
+      await connection.confirmTransaction(airdrop);
+
+      const [invRequest] = getInvestmentRequestPDA(inv.publicKey);
+      const [att] = getAttestationPDA(inv.publicKey, attester.publicKey);
+
+      await attestationMockProgram.methods
+        .createAttestation(attester.publicKey, 0, [66, 82], FAR_FUTURE_EXPIRY)
+        .accountsPartial({
+          authority: payer.publicKey,
+          attestation: att,
+          subject: inv.publicKey,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
+
+      const investorAta = await getOrCreateAssociatedTokenAccount(
+        connection,
+        payer,
+        assetMint,
+        inv.publicKey,
+      );
+      const amount = new BN(1_000_000);
+      await mintTo(
+        connection,
+        payer,
+        assetMint,
+        investorAta.address,
+        payer,
+        amount.toNumber(),
+      );
+      const sharesAta = await getOrCreateAssociatedTokenAccount(
+        connection,
+        payer,
+        sharesMint,
+        inv.publicKey,
+        false,
+        undefined,
+        undefined,
+        TOKEN_2022_PROGRAM_ID,
+      );
+
+      try {
+        await program.methods
+          .openInvestmentWindow()
+          .accountsPartial({ manager: manager.publicKey, vault })
+          .signers([manager])
+          .rpc();
+      } catch (_) {
+        // Already open.
+      }
+
+      await program.methods
+        .requestDeposit(amount)
+        .accountsPartial({
+          investor: inv.publicKey,
+          vault,
+          investmentRequest: invRequest,
+          investorTokenAccount: investorAta.address,
+          depositVault,
+          assetMint,
+          attestation: att,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          clock: SYSVAR_CLOCK_PUBKEY,
+        })
+        .signers([inv])
+        .rpc();
+      await program.methods
+        .approveDeposit()
+        .accountsPartial({
+          manager: manager.publicKey,
+          vault,
+          investmentRequest: invRequest,
+          investor: inv.publicKey,
+          sharesMint,
+          investorSharesAccount: sharesAta.address,
+          depositVault,
+          assetMint,
+          oracleAccount: mockOracleData,
+          attestation: att,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          clock: SYSVAR_CLOCK_PUBKEY,
+        })
+        .signers([manager])
+        .rpc();
+
+      return { invRequest, sharesAccount: sharesAta.address, att };
+    }
+
+    it("claim_deposit fails when the investor wallet is frozen at the protocol level", async () => {
+      const inv = Keypair.generate();
+      const { invRequest, sharesAccount, att } =
+        await provisionApprovedDeposit(inv);
+
+      const frozenAccount = frozenPda(inv.publicKey);
+      await complianceHook.methods
+        .freezeAccount()
+        .accounts({
+          sanctionsList: sanctionsListPda,
+          authority: payer.publicKey,
+          ownerToFreeze: inv.publicKey,
+          frozenAccount,
+          payer: payer.publicKey,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([payer])
+        .rpc();
+
+      try {
+        await program.methods
+          .claimDeposit()
+          .accountsPartial({
+            investor: inv.publicKey,
+            vault,
+            investmentRequest: invRequest,
+            sharesMint,
+            investorSharesAccount: sharesAccount,
+            token2022Program: TOKEN_2022_PROGRAM_ID,
+            attestation: att,
+          })
+          .signers([inv])
+          .rpc();
+        expect.fail("should have thrown");
+      } catch (err: any) {
+        expect(err.error.errorCode.code).to.equal("AccountFrozen");
+      }
+
+      await complianceHook.methods
+        .unfreezeAccount()
+        .accounts({
+          sanctionsList: sanctionsListPda,
+          authority: payer.publicKey,
+          ownerToUnfreeze: inv.publicKey,
+          frozenAccount,
+          rentRecipient: payer.publicKey,
+        })
+        .signers([payer])
+        .rpc();
+    });
+
+    it("approve_redeem fails when the investor wallet is sanctioned", async () => {
+      const inv = Keypair.generate();
+      const { invRequest, sharesAccount, att } =
+        await provisionApprovedDeposit(inv);
+
+      await program.methods
+        .claimDeposit()
+        .accountsPartial({
+          investor: inv.publicKey,
+          vault,
+          investmentRequest: invRequest,
+          sharesMint,
+          investorSharesAccount: sharesAccount,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+          attestation: att,
+        })
+        .signers([inv])
+        .rpc();
+
+      const [redRequest] = getRedemptionRequestPDA(inv.publicKey);
+      const [claimable] = getClaimableTokensPDA(inv.publicKey);
+      const sharesHeld = await getAccount(
+        connection,
+        sharesAccount,
         undefined,
         TOKEN_2022_PROGRAM_ID,
       );
       await program.methods
-        .requestRedeem(new BN(shares.amount.toString()), new BN(0))
+        .requestRedeem(new BN(sharesHeld.amount.toString()))
         .accountsPartial({
-          investor: partialInvestor.publicKey,
+          investor: inv.publicKey,
           vault,
-          redemptionRequest: partialRedRequest,
+          redemptionRequest: redRequest,
           sharesMint,
-          investorSharesAccount: partialInvestorSharesAccount,
+          investorSharesAccount: sharesAccount,
           redemptionEscrow,
           assetMint,
-          claimableTokens: partialClaimableTokens,
-          attestation: partialAttestation,
-          frozenCheck: null,
+          claimableTokens: claimable,
+          attestation: att,
           assetTokenProgram: TOKEN_PROGRAM_ID,
           token2022Program: TOKEN_2022_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
           clock: SYSVAR_CLOCK_PUBKEY,
         })
-        .remainingAccounts(requestRedeemHookExtras(partialInvestor.publicKey))
-        .signers([partialInvestor])
+        .remainingAccounts(requestRedeemHookExtras(inv.publicKey))
+        .signers([inv])
         .rpc();
-    });
 
-    it("first half-ratio approve leaves request Pending with half fulfilled", async () => {
-      const requestBefore =
-        await program.account.redemptionRequest.fetch(partialRedRequest);
-      const totalShares = requestBefore.sharesLocked;
-
-      await program.methods
-        .approveRedeem(HALF_RATIO, new BN(0))
-        .accountsPartial({
-          manager: manager.publicKey,
-          vault,
-          redemptionRequest: partialRedRequest,
-          investor: partialInvestor.publicKey,
-          sharesMint,
-          redemptionEscrow,
-          depositVault,
-          assetMint,
-          claimableTokens: partialClaimableTokens,
-          navOracle: mockOracleData,
-          navAccount: program.programId,
-          attestation: partialAttestation,
-          frozenCheck: null,
-          assetTokenProgram: TOKEN_PROGRAM_ID,
-          token2022Program: TOKEN_2022_PROGRAM_ID,
-          systemProgram: SystemProgram.programId,
-          clock: SYSVAR_CLOCK_PUBKEY,
+      await complianceHook.methods
+        .updateSanctionsList([inv.publicKey], [])
+        .accounts({
+          sanctionsList: sanctionsListPda,
+          authority: payer.publicKey,
         })
-        .signers([manager])
+        .signers([payer])
         .rpc();
 
-      const request =
-        await program.account.redemptionRequest.fetch(partialRedRequest);
-      expect(JSON.stringify(request.status)).to.equal(
-        JSON.stringify({ pending: {} }),
-      );
-      // floor(totalShares * 0.5e18 / 1e18) = totalShares / 2
-      const expectedHalf = totalShares.div(new BN(2));
-      expect(request.fulfilledSharesCumulative.toString()).to.equal(
-        expectedHalf.toString(),
-      );
-      expect(request.assetsClaimable.toNumber()).to.be.greaterThan(0);
-    });
-
-    it("rejects cancel_redeem after partial fulfillment", async () => {
       try {
         await program.methods
-          .cancelRedeem()
-          .accountsPartial({
-            investor: partialInvestor.publicKey,
-            vault,
-            redemptionRequest: partialRedRequest,
-            sharesMint,
-            assetMint,
-            claimableTokens: partialClaimableTokens,
-            investorSharesAccount: partialInvestorSharesAccount,
-            redemptionEscrow,
-            assetTokenProgram: TOKEN_PROGRAM_ID,
-            token2022Program: TOKEN_2022_PROGRAM_ID,
-            systemProgram: SystemProgram.programId,
-          })
-          .remainingAccounts(cancelRedeemHookExtras(partialInvestor.publicKey))
-          .signers([partialInvestor])
-          .rpc();
-        expect.fail("should have thrown RequestPartiallyFulfilled");
-      } catch (err: any) {
-        expect(err.error.errorCode.code).to.equal("RequestPartiallyFulfilled");
-      }
-    });
-
-    it("rejects reject_redeem after partial fulfillment", async () => {
-      try {
-        await program.methods
-          .rejectRedeem(0)
+          .approveRedeem()
           .accountsPartial({
             manager: manager.publicKey,
             vault,
-            redemptionRequest: partialRedRequest,
-            investor: partialInvestor.publicKey,
+            redemptionRequest: redRequest,
+            investor: inv.publicKey,
             sharesMint,
-            assetMint,
-            claimableTokens: partialClaimableTokens,
-            investorSharesAccount: partialInvestorSharesAccount,
             redemptionEscrow,
+            depositVault,
+            assetMint,
+            claimableTokens: claimable,
+            oracleAccount: mockOracleData,
+            attestation: att,
             assetTokenProgram: TOKEN_PROGRAM_ID,
             token2022Program: TOKEN_2022_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
+            clock: SYSVAR_CLOCK_PUBKEY,
           })
           .signers([manager])
           .rpc();
-        expect.fail("should have thrown RequestPartiallyFulfilled");
+        expect.fail("should have thrown");
       } catch (err: any) {
-        expect(err.error.errorCode.code).to.equal("RequestPartiallyFulfilled");
+        expect(err.error.errorCode.code).to.equal("SanctionedAddress");
+      }
+
+      await complianceHook.methods
+        .updateSanctionsList([], [inv.publicKey])
+        .accounts({
+          sanctionsList: sanctionsListPda,
+          authority: payer.publicKey,
+        })
+        .signers([payer])
+        .rpc();
+    });
+  });
+
+  describe("NavOracle publisher rotation (D6: unified authority)", () => {
+    // rotate_publisher reads the pool's live CreditVault.authority (payer)
+    // from pool bytes 8..40; key_rotation_authority is gone. The NavAccount
+    // here was initialized in setup against this real vault.
+    it("rejects rotation by a non-authority signer", async () => {
+      const newPublisher = Keypair.generate();
+      try {
+        await navOracleProgram.methods
+          .rotatePublisher()
+          .accountsPartial({
+            pool: vault,
+            navAccount,
+            authority: manager.publicKey,
+            newPublisher: newPublisher.publicKey,
+          })
+          .signers([manager])
+          .rpc();
+        expect.fail("should have thrown");
+      } catch (err: any) {
+        const msg =
+          (err?.logs?.join("\n") ?? "") + "\n" + (err?.message ?? "");
+        expect(msg).to.match(/UnauthorizedRotation|7003/i);
       }
     });
 
-    it("second full-ratio approve completes the request", async () => {
-      const requestBefore =
-        await program.account.redemptionRequest.fetch(partialRedRequest);
-      const sharesLocked = requestBefore.sharesLocked;
-
-      await program.methods
-        .approveRedeem(FULL_FULFILLMENT_RATIO, new BN(0))
+    it("rotates the publisher when signed by the live CreditVault.authority", async () => {
+      const newPublisher = Keypair.generate();
+      await navOracleProgram.methods
+        .rotatePublisher()
         .accountsPartial({
-          manager: manager.publicKey,
-          vault,
-          redemptionRequest: partialRedRequest,
-          investor: partialInvestor.publicKey,
-          sharesMint,
-          redemptionEscrow,
-          depositVault,
-          assetMint,
-          claimableTokens: partialClaimableTokens,
-          navOracle: mockOracleData,
-          navAccount: program.programId,
-          attestation: partialAttestation,
-          frozenCheck: null,
-          assetTokenProgram: TOKEN_PROGRAM_ID,
-          token2022Program: TOKEN_2022_PROGRAM_ID,
-          systemProgram: SystemProgram.programId,
-          clock: SYSVAR_CLOCK_PUBKEY,
+          pool: vault,
+          navAccount,
+          authority: payer.publicKey,
+          newPublisher: newPublisher.publicKey,
         })
-        .signers([manager])
+        .signers([payer])
         .rpc();
 
-      const request =
-        await program.account.redemptionRequest.fetch(partialRedRequest);
-      expect(JSON.stringify(request.status)).to.equal(
-        JSON.stringify({ approved: {} }),
+      const nav = await navOracleProgram.account.navAccount.fetch(navAccount);
+      expect(nav.publisher.toBase58()).to.equal(
+        newPublisher.publicKey.toBase58(),
       );
-      expect(request.fulfilledSharesCumulative.toString()).to.equal(
-        sharesLocked.toString(),
+    });
+  });
+
+  describe("Oracle change timelock (stage-time pair check)", () => {
+    // request_oracle_change cross-checks the staged (oracle account, program)
+    // pair so a mismatch fails at stage time rather than bricking approvals
+    // after the timelock. Negative cases must NOT mutate the pending_* state.
+    it("rejects a staged oracle account not owned by the staged program", async () => {
+      try {
+        await program.methods
+          // mockOracleData is owned by mock-oracle, not nav-oracle.
+          .requestOracleChange(mockOracleData, navOracleProgram.programId)
+          .accountsPartial({
+            authority: payer.publicKey,
+            vault,
+            vaultConfig,
+            newOracleProgramAccount: navOracleProgram.programId,
+            newOracleAccount: mockOracleData,
+            clock: SYSVAR_CLOCK_PUBKEY,
+          })
+          .rpc();
+        expect.fail("should have thrown");
+      } catch (err: any) {
+        expect(err.error.errorCode.code).to.equal("OracleInvalidProgram");
+      }
+
+      const cfg = await program.account.vaultConfig.fetch(vaultConfig);
+      expect(cfg.pendingOracle.toBase58()).to.equal(
+        PublicKey.default.toBase58(),
+      );
+    });
+
+    it("rejects when the staged oracle account key != new_oracle arg", async () => {
+      const stray = Keypair.generate().publicKey;
+      try {
+        await program.methods
+          .requestOracleChange(stray, navOracleProgram.programId)
+          .accountsPartial({
+            authority: payer.publicKey,
+            vault,
+            vaultConfig,
+            newOracleProgramAccount: navOracleProgram.programId,
+            newOracleAccount: mockOracleData, // key != `stray`
+            clock: SYSVAR_CLOCK_PUBKEY,
+          })
+          .rpc();
+        expect.fail("should have thrown");
+      } catch (err: any) {
+        expect(err.error.errorCode.code).to.equal("InvalidAddress");
+      }
+    });
+
+    it("stages a valid (account, program) pair", async () => {
+      await program.methods
+        .requestOracleChange(mockOracleData, oracleProgram.programId)
+        .accountsPartial({
+          authority: payer.publicKey,
+          vault,
+          vaultConfig,
+          newOracleProgramAccount: oracleProgram.programId,
+          newOracleAccount: mockOracleData,
+          clock: SYSVAR_CLOCK_PUBKEY,
+        })
+        .rpc();
+
+      const cfg = await program.account.vaultConfig.fetch(vaultConfig);
+      expect(cfg.pendingOracle.toBase58()).to.equal(mockOracleData.toBase58());
+      expect(cfg.pendingOracleProgram.toBase58()).to.equal(
+        oracleProgram.programId.toBase58(),
       );
     });
   });

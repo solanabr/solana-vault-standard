@@ -8,7 +8,9 @@ import { registerUnwrapCommand } from "./unwrap";
 export function registerDerwaCommands(program: Command): void {
   const derwa = program
     .command("derwa")
-    .description("Manage derwa-wrapper program: cPOOL ↔ dePOOL wrap and unwrap");
+    .description(
+      "Manage derwa-wrapper program: cPOOL ↔ dePOOL wrap and unwrap",
+    );
   registerInitDerwaCommand(derwa);
   registerWrapCommand(derwa);
   registerUnwrapCommand(derwa);

@@ -139,16 +139,16 @@ When modules are enabled, additional error codes are used.
 
 ## SVS-11 NAV Oracle Errors
 
-These errors live in the SVS-11 `VaultError` enum and back the NavOracle adapter path (`oracle_source = 1`) plus the `set_oracle_source` toggle. Code numbers are Anchor-assigned in declaration order. See [nav-oracle.md](nav-oracle.md) for the adapter contract.
+These errors live in the SVS-11 `VaultError` enum and back the pluggable oracle interface read path. Code numbers are Anchor-assigned in declaration order. See [nav-oracle.md](nav-oracle.md) for the adapter contract.
 
 | Name | Message | When Thrown |
 |------|---------|-------------|
-| `OracleAccountMissing` | NAV oracle account is missing or empty | `approve_deposit` / `approve_redeem` with `oracle_source = 1` and no `NavAccount` supplied |
-| `OracleAccountInvalid` | NAV oracle account data layout, owner, or PDA derivation invalid | NavAccount fails layout, owner, or seed validation |
-| `OraclePoolMismatch` | NAV oracle pool field does not match this vault | NavAccount.pool != CreditVault PDA |
-| `OraclePublisherMismatch` | NAV oracle publisher does not match expected publisher | NavAccount.publisher != configured publisher |
-| `OracleSequenceStale` | NAV oracle sequence has not advanced (replay) | NavAccount.sequence not strictly greater than last seen |
-| `OracleSourceInvalid` | CreditVault.oracle_source must be 0 (mock) or 1 (nav_oracle); other values reserved | `set_oracle_source` with value > 1, or read with reserved value |
+| `OracleStale` | Oracle price data is stale | Oracle timestamp older than `max_staleness` |
+| `OracleInvalidPrice` | Oracle price is invalid | Oracle reports a zero or otherwise invalid price |
+| `OracleInvalidProgram` | Oracle account owner does not match vault.oracle_program | Oracle account not owned by the configured oracle program |
+| `OracleSequenceStale` | Oracle sequence has not advanced (replay) | Oracle header sequence not strictly greater than last seen |
+| `InvalidMintAccount` | Mint account does not deserialize as a valid Token-2022 mint | Shares mint fails Token-2022 deserialization |
+| `HookExtrasMismatch` | remaining_accounts do not match the shares mint's ExtraAccountMetaList | Hook extras wrong order, missing accounts, or stale hook config |
 
 ---
 
@@ -161,9 +161,11 @@ These errors live in the SVS-11 `VaultError` enum and back the NavOracle adapter
 | 7000 | `StaleSequence` | Sequence must increment monotonically | `update` with sequence ≤ stored sequence |
 | 7001 | `InvalidSignature` | Signature does not match publisher key over canonical payload | Ed25519 precompile scan fails to find a matching `(pubkey, msg, sig)` triple |
 | 7002 | `InconsistentNav` | Self-consistency check failed: nav_net != nav_gross × (1 − ter − loss) | `update` payload fails self-consistency |
-| 7003 | `UnauthorizedRotation` | Publisher rotation requires the configured key_rotation_authority signer | `rotate_publisher` without the rotation authority signer |
+| 7003 | `UnauthorizedRotation` | Publisher rotation requires the pool's live CreditVault.authority as signer | `rotate_publisher` without the pool's current CreditVault.authority as signer |
 | 7004 | `UnauthorizedPublisher` | Caller is not the registered publisher for this NavAccount | Update signed by a key other than `NavAccount.publisher` |
 | 7005 | `TimestampInFuture` | Timestamp must not be in the future | `update` payload timestamp > on-chain clock |
+| 7012 | `DeviationExceeded` | New NAV deviates more than max_deviation_bps from the previously published NAV | `update` where the new NAV moves beyond `max_deviation_bps` vs the prior published NAV |
+| 7013 | `InvalidDeviationConfig` | max_deviation_bps must be > 0 (a zero ceiling rejects every consecutive publish) | `initialize` with `max_deviation_bps = 0` |
 
 ---
 
@@ -335,5 +337,5 @@ Error: AnchorError: Vault is paused. Error Code: VaultPaused.
 | svs-access | 6130-6139 | Access control errors |
 | svs-rewards | 6140-6149 | Rewards module errors |
 | compliance-hook | 6000-6017 | TransferHook compliance errors (Token-2022) |
-| nav-oracle | 7000-7005 | Per-pool NAV oracle errors |
+| nav-oracle | 7000-7013 | Per-pool NAV oracle errors |
 | derwa-wrapper | 8000-8009 | cPOOL ↔ dePOOL wrap errors |

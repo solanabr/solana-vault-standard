@@ -101,9 +101,9 @@ Located in `tests/`:
 | `create-derwa-mint-script.spec.ts` | dePOOL mint creation script (MintConfig + EAML wiring) | 1 |
 | **Total** | (active) | **420** |
 
-**SVS-11 NAV oracle additions:** 3 new test cases were added in this PR to cover the oracle-source toggle and the NavOracle adapter path — `authority can switch oracle source between mock and nav-oracle`, `can opt into NavOracle for credit-market NAV reads`, and `rejects NavOracle opt-in approval when the NavAccount PDA is missing`.
+**SVS-11 pluggable-oracle coverage:** the vault reads any compliant oracle through a single `oracle_account` via the generic `SvsOraclePrice` header, so the oracle path is exercised by staleness cases — `rejects approve_deposit when oracle is stale` and `approve_deposit succeeds after oracle timestamp restored`.
 
-**nav-oracle reviewer-class additions:** 2 additional security-class edge cases were added — `rejects update signed by a key that is NOT the registered publisher` and `rejects rotate_publisher signed by a key that is NOT the rotation authority`.
+**nav-oracle reviewer-class additions:** 2 additional security-class edge cases were added — `rejects update signed by a key that is NOT the registered publisher` and `rejects rotate_publisher against a non-SVS-11 pool account` (rotation authority is the pool's live `CreditVault.authority`).
 
 **derwa-wrapper subject-binding coverage:** 1 new security test covers
 `rejects unwrap when attestation belongs to a DIFFERENT subject (8005)`.

@@ -36,8 +36,14 @@ export function registerPublishNavCommand(parent: Command): void {
     .requiredOption("--nav-gross <u64>", "Gross NAV (raw u64)")
     .requiredOption("--ter-bps <u16>", "Total expense ratio (basis points)")
     .requiredOption("--loss-bps <u16>", "Loss provision (basis points)")
-    .requiredOption("--nav-type <u8>", "NAV type discriminator (e.g. 0 = monthly close)")
-    .requiredOption("--timestamp <i64>", "Unix-timestamp seconds when NAV was computed")
+    .requiredOption(
+      "--nav-type <u8>",
+      "NAV type discriminator (e.g. 0 = monthly close)",
+    )
+    .requiredOption(
+      "--timestamp <i64>",
+      "Unix-timestamp seconds when NAV was computed",
+    )
     .requiredOption("--sequence <u64>", "Strictly-increasing sequence number")
     .requiredOption(
       "--merkle-root <hex64>",

@@ -146,8 +146,8 @@ describe("SDK DeRwaWrapper Module", () => {
         investorDerwaAta,
       };
 
-      expect(params.investorPermissionedAta?.equals(investorPermissionedAta))
-        .to.be.true;
+      expect(params.investorPermissionedAta?.equals(investorPermissionedAta)).to
+        .be.true;
       expect(params.wrapperLockedAta?.equals(wrapperLockedAta)).to.be.true;
       expect(params.investorDerwaAta?.equals(investorDerwaAta)).to.be.true;
     });
@@ -207,8 +207,8 @@ describe("SDK DeRwaWrapper Module", () => {
       };
 
       expect(params.wrapperLockedAta?.equals(wrapperLockedAta)).to.be.true;
-      expect(params.investorPermissionedAta?.equals(investorPermissionedAta))
-        .to.be.true;
+      expect(params.investorPermissionedAta?.equals(investorPermissionedAta)).to
+        .be.true;
       expect(params.investorDerwaAta?.equals(investorDerwaAta)).to.be.true;
     });
 

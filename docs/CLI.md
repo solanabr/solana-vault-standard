@@ -1134,7 +1134,7 @@ solana-vault compliance init-eaml <mint>
 # Create the per-pool NavAccount PDA
 solana-vault nav init <pool> \
   --publisher <pubkey> \
-  --rotation-authority <pubkey>
+  [--max-deviation-bps <number>]   # default 500
 
 # Publish a signed NAV update (requires publisher Keypair file)
 solana-vault nav publish <pool> \
@@ -1144,7 +1144,7 @@ solana-vault nav publish <pool> \
   --merkle-root <hex64> \
   --publisher-secret <path>
 
-# Rotate the publisher pubkey (caller must be key_rotation_authority)
+# Rotate the publisher pubkey (caller must be the pool's CreditVault.authority)
 solana-vault nav rotate-publisher <pool> --new-publisher <pubkey>
 ```
 
@@ -1166,13 +1166,6 @@ solana-vault derwa wrap --amount <u64> \
 solana-vault derwa unwrap --amount <u64> \
   --attestation <pubkey> \
   --remaining-accounts <comma-separated-pubkeys>
-```
-
-### `set-oracle-source` (SVS-11)
-
-```bash
-# Switch the vault between simple oracle (0) and NavOracle adapter (1)
-solana-vault set-oracle-source <vault> --source <0|1>
 ```
 
 ### `bootstrap-shares-compliance` (SVS-11)

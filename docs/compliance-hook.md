@@ -6,6 +6,8 @@
 
 The hook implements a per-mint mode dispatch — `FreelyTransferable` (sanctions + frozen-account check only, used for dePOOL-style open mints) versus `Permissioned` (sanctions + frozen-account check + valid SVS-11 attestation on both wallets, used for cPOOL-style closed institutional shares). A global `SanctionsList` PDA is shared across every mint that uses the hook; per-mint state lives in `MintConfig` and `ExtraAccountMetaList` PDAs.
 
+`compliance-hook` is the **single source of truth for compliance** across the protocol. The Token-2022 transfer hook only fires on `transfer` / `transfer_checked` — it does NOT fire on `mint_to` or `burn`. To cover those hook-blind paths, the program exports a shared CPI helper, `assert_wallet_compliant`, that other programs call directly (see [Shared Compliance Helper](#shared-compliance-helper)). SVS-11's old per-vault freeze was removed; compliance-hook is now the only freeze authority.
+
 ## Architecture
 
 ```
@@ -103,6 +105,30 @@ Behavior: same sanctions + frozen-account checks as `FreelyTransferable`, plus a
 EAML extras: 8 entries (the 4 `FreelyTransferable` extras plus attestation-program, source-attestation, destination-attestation, pool-policy). Source/destination attestations are resolved as cross-program PDAs under the configured attestation program.
 
 `pool_policy` is wired through the EAML for forward compatibility: the current `execute` handler does not enforce jurisdiction / investor-class / KYC-tier thresholds against it. The slot is reserved for an optional policy-enforcement layer, and surfacing it in the EAML now means that layer can be enabled without re-initializing EAML accounts.
+
+## Shared Compliance Helper
+
+`assert_wallet_compliant` is a public function (in `programs/compliance-hook/src/compliance.rs`, re-exported via `lib.rs`, gated behind the `cpi` feature) that other programs link against to enforce compliance on the mint/burn paths the Token-2022 transfer hook never sees.
+
+```rust
+pub fn assert_wallet_compliant(
+    sanctions_list: &SanctionsList,
+    frozen_pda: &AccountInfo,
+    wallet: &Pubkey,
+) -> Result<()>
+```
+
+It asserts `wallet` is neither sanctioned (`SanctionedAddress`, 6000) nor frozen (`AccountFrozen`, 6001). The caller surfaces the singleton `SanctionsList` (`[b"sanctions_list"]`) and the wallet-global `FrozenAccount` (`[b"frozen", wallet]`) PDA — typically via `seeds::program = COMPLIANCE_HOOK_PROGRAM_ID` — and passes them in.
+
+**Freeze semantic (matches `execute`):** a wallet is frozen iff its `[b"frozen", wallet]` PDA is `owner == compliance-hook program && lamports() > 0 && !data_is_empty()`. An absent PDA (system-owned, zero data) counts as **not frozen**, so the caller can always pass the derived address without an existence pre-check. Requiring program ownership prevents a forged empty-owner account from masquerading as either state.
+
+**Consumers** (the three hook-blind paths):
+
+| Program | Instruction | Token op |
+|---------|-------------|----------|
+| svs-11 | `claim_deposit` | `mint_to` |
+| svs-11 | `approve_redeem` | `burn` |
+| derwa-wrapper | `unwrap` | `burn` |
 
 ## Instructions
 
@@ -238,6 +264,8 @@ SVS-11's `initialize_pool` creates the cPOOL shares mint with the `TransferHook`
 
 For cPOOL mints, the runbook calls `initialize_mint_config` with `mode = Permissioned` and `pool_policy = Some(<policy_pda>)`. For deRWA mints (the open-transfer wrapper), `mode = FreelyTransferable` and `pool_policy = None`.
 
+Beyond the transfer-hook path, SVS-11 calls `assert_wallet_compliant` directly on its mint/burn instructions — `claim_deposit` (`mint_to`) and `approve_redeem` (`burn`) — and derwa-wrapper calls it on `unwrap` (`burn`). These are the operations the Token-2022 hook does not cover, so the helper makes compliance-hook the single freeze/sanctions authority for the whole protocol; SVS-11 no longer carries its own per-vault freeze flag.
+
 The redemption escrow account that SVS-11 creates is sized for the `TransferHookAccount` extension because its mint (cPOOL) carries `TransferHook` — Token-2022 requires every account holding tokens of a TransferHook-bearing mint to be sized for the companion account-level extension. See [SVS-11.md](SVS-11.md) for the full pool init sequence.
 
 ## Constants
@@ -256,7 +284,8 @@ The program declares `declare_id!("6JKauKWVJqs9duaCqXCMS6UN9KvqHxMjLS5KwJxGqH5P"
 
 ## Implementation Files
 
-- `programs/compliance-hook/src/lib.rs` — `#[program]` entry points
+- `programs/compliance-hook/src/lib.rs` — `#[program]` entry points; re-exports `assert_wallet_compliant`
+- `programs/compliance-hook/src/compliance.rs` — `assert_wallet_compliant` shared CPI helper (mint/burn paths)
 - `programs/compliance-hook/src/state.rs` — `SanctionsList`, `ComplianceMode`, `MintConfig`
 - `programs/compliance-hook/src/error.rs` — `ComplianceHookError` (codes 6000–6017)
 - `programs/compliance-hook/src/instructions/initialize_sanctions_list.rs`

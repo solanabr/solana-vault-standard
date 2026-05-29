@@ -68,7 +68,10 @@ describe("SDK ComplianceHook PDA Module", () => {
 
     it("different programIds produce different frozen account addresses", () => {
       const [defaultPda] = getComplianceFrozenAccountAddress(MINT_A);
-      const [altPda] = getComplianceFrozenAccountAddress(MINT_A, ALT_PROGRAM_ID);
+      const [altPda] = getComplianceFrozenAccountAddress(
+        MINT_A,
+        ALT_PROGRAM_ID,
+      );
       expect(defaultPda.equals(altPda)).to.be.false;
     });
   });

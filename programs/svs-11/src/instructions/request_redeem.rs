@@ -7,35 +7,19 @@
 use anchor_lang::prelude::*;
 use anchor_lang::solana_program::program::invoke_signed;
 use anchor_spl::token_2022::spl_token_2022;
-use anchor_spl::token_2022::spl_token_2022::extension::{
-    transfer_hook::TransferHook, BaseStateWithExtensions, StateWithExtensions,
-};
-use anchor_spl::token_2022::spl_token_2022::state::Mint as Token2022Mint;
 use anchor_spl::token_2022::Token2022;
 use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
 use spl_transfer_hook_interface::onchain::add_extra_accounts_for_execute_cpi;
 
 use crate::attestation::validate_attestation;
 use crate::constants::{
-    CLAIMABLE_TOKENS_SEED, FROZEN_ACCOUNT_SEED, REDEMPTION_ESCROW_SEED, REDEMPTION_REQUEST_SEED,
-    SHARES_DECIMALS, VAULT_SEED,
+    CLAIMABLE_TOKENS_SEED, REDEMPTION_ESCROW_SEED, REDEMPTION_REQUEST_SEED, SHARES_DECIMALS,
+    VAULT_SEED,
 };
 use crate::error::VaultError;
 use crate::events::RedemptionRequested;
+use crate::hook_extras::read_hook_program_id;
 use crate::state::{CreditVault, RedemptionRequest, RequestStatus};
-
-fn read_hook_program_id(mint: &AccountInfo) -> Result<Option<Pubkey>> {
-    if mint.owner != &spl_token_2022::ID {
-        return Ok(None);
-    }
-    let data = mint.try_borrow_data()?;
-    let state = StateWithExtensions::<Token2022Mint>::unpack(&data)
-        .map_err(|_| error!(VaultError::InvalidMintAccount))?;
-    match state.get_extension::<TransferHook>() {
-        Ok(ext) => Ok(Option::<Pubkey>::from(ext.program_id)),
-        Err(_) => Ok(None),
-    }
-}
 
 #[cfg(feature = "modules")]
 use svs_module_hooks as module_hooks;
@@ -98,13 +82,6 @@ pub struct RequestRedeem<'info> {
     /// CHECK: Attestation validated in handler via validate_attestation
     pub attestation: UncheckedAccount<'info>,
 
-    /// CHECK: If data is non-empty, investor is frozen
-    #[account(
-        seeds = [FROZEN_ACCOUNT_SEED, vault.key().as_ref(), investor.key().as_ref()],
-        bump,
-    )]
-    pub frozen_check: UncheckedAccount<'info>,
-
     pub asset_token_program: Interface<'info, TokenInterface>,
     pub token_2022_program: Program<'info, Token2022>,
     pub system_program: Program<'info, System>,
@@ -114,7 +91,6 @@ pub struct RequestRedeem<'info> {
 pub fn handler<'info>(
     ctx: Context<'_, '_, '_, 'info, RequestRedeem<'info>>,
     shares: u64,
-    queued_for_settlement_at: i64,
 ) -> Result<()> {
     require!(shares > 0, VaultError::ZeroAmount);
     require!(!ctx.accounts.vault.paused, VaultError::VaultPaused);
@@ -125,11 +101,6 @@ pub fn handler<'info>(
         &ctx.accounts.investor.key(),
         &ctx.accounts.clock,
     )?;
-
-    require!(
-        ctx.accounts.frozen_check.data_is_empty(),
-        VaultError::AccountFrozen
-    );
 
     #[cfg(feature = "modules")]
     {
@@ -184,7 +155,10 @@ pub fn handler<'info>(
             shares,
             ctx.remaining_accounts,
         )
-        .map_err(|_| -> Error { error!(VaultError::HookExtrasMismatch) })?;
+        .map_err(|e| -> Error {
+            msg!("hook extras: {:?}", e);
+            error!(VaultError::HookExtrasMismatch)
+        })?;
     }
     invoke_signed(&transfer_ix, &transfer_account_infos, &[])?;
 
@@ -206,10 +180,6 @@ pub fn handler<'info>(
     request.requested_at = ctx.accounts.clock.unix_timestamp;
     request.fulfilled_at = 0;
     request.bump = ctx.bumps.redemption_request;
-
-    request.original_shares = shares;
-    request.queued_for_settlement_at = queued_for_settlement_at;
-    request.fulfilled_shares_cumulative = 0;
 
     emit!(RedemptionRequested {
         vault: ctx.accounts.vault.key(),

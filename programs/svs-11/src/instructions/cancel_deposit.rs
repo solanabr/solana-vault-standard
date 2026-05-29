@@ -3,7 +3,7 @@ use anchor_spl::token_interface::{
     transfer_checked, Mint, TokenAccount, TokenInterface, TransferChecked,
 };
 
-use crate::constants::{FROZEN_ACCOUNT_SEED, INVESTMENT_REQUEST_SEED, VAULT_SEED};
+use crate::constants::{INVESTMENT_REQUEST_SEED, VAULT_SEED};
 use crate::error::VaultError;
 use crate::events::InvestmentCancelled;
 use crate::state::{CreditVault, InvestmentRequest, RequestStatus};
@@ -47,22 +47,11 @@ pub struct CancelDeposit<'info> {
     #[account(constraint = asset_mint.key() == vault.asset_mint)]
     pub asset_mint: Box<InterfaceAccount<'info, Mint>>,
 
-    /// CHECK: If data is non-empty, investor is frozen
-    #[account(
-        seeds = [FROZEN_ACCOUNT_SEED, vault.key().as_ref(), investor.key().as_ref()],
-        bump,
-    )]
-    pub frozen_check: UncheckedAccount<'info>,
-
     pub asset_token_program: Interface<'info, TokenInterface>,
 }
 
 pub fn handler(ctx: Context<CancelDeposit>) -> Result<()> {
     require!(!ctx.accounts.vault.paused, VaultError::VaultPaused);
-    require!(
-        ctx.accounts.frozen_check.data_is_empty(),
-        VaultError::AccountFrozen
-    );
 
     // V5-P23 FIX: Enforce minimum lock period before allowing cancellation,
     // matching SVS-10's cancel_deposit pattern. Without this, investors could

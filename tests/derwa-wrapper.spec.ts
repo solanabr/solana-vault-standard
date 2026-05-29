@@ -383,6 +383,72 @@ describe("derwa-wrapper: wrap + unwrap roundtrip", () => {
     expect(cfg.lockedSupply.eq(WRAP_AMOUNT)).to.be.true;
   });
 
+  it("unwrap fails when the investor wallet is frozen at the protocol level", async () => {
+    [attestationPda] = PublicKey.findProgramAddressSync(
+      [
+        Buffer.from("attestation"),
+        investor.publicKey.toBuffer(),
+        attester.publicKey.toBuffer(),
+        Buffer.from([REQUIRED_TYPE]),
+      ],
+      ATTESTATION_PROGRAM_ID,
+    );
+    const [sanctionsListPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("sanctions_list")],
+      complianceHook.programId,
+    );
+    const [frozenAccount] = PublicKey.findProgramAddressSync(
+      [Buffer.from("frozen"), investor.publicKey.toBuffer()],
+      complianceHook.programId,
+    );
+
+    await complianceHook.methods
+      .freezeAccount()
+      .accounts({
+        sanctionsList: sanctionsListPda,
+        authority: provider.wallet.publicKey,
+        ownerToFreeze: investor.publicKey,
+        frozenAccount,
+        payer: provider.wallet.publicKey,
+        systemProgram: SystemProgram.programId,
+      })
+      .rpc();
+
+    try {
+      await program.methods
+        .unwrap(WRAP_AMOUNT)
+        .accountsPartial({
+          wrapperConfig: wrapperConfigPda,
+          wrapperSigner: wrapperSignerPda,
+          permissionedMint,
+          derwaMint,
+          wrapperLockedAta,
+          investorPermissionedAta: investorPermAta,
+          investorDerwaAta,
+          investorAttestation: attestationPda,
+          investor: investor.publicKey,
+          tokenProgram: TOKEN_2022_PROGRAM_ID,
+        })
+        .remainingAccounts(unwrapHookExtras())
+        .signers([investor])
+        .rpc();
+      expect.fail("should have thrown AccountFrozen");
+    } catch (err: any) {
+      expect(err.error.errorCode.code).to.equal("AccountFrozen");
+    }
+
+    await complianceHook.methods
+      .unfreezeAccount()
+      .accounts({
+        sanctionsList: sanctionsListPda,
+        authority: provider.wallet.publicKey,
+        ownerToUnfreeze: investor.publicKey,
+        frozenAccount,
+        rentRecipient: provider.wallet.publicKey,
+      })
+      .rpc();
+  });
+
   it("unwrap with valid attestation burns dePOOL + releases cPOOL", async () => {
     // Resolve the investor's attestation PDA — already created during
     // `before()` setup, so we just compute its address here for the

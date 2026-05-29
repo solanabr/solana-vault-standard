@@ -6,7 +6,6 @@ pub mod cancel_deposit;
 pub mod cancel_redeem;
 pub mod claim_deposit;
 pub mod claim_redeem;
-pub mod compliance;
 pub mod draw_down;
 pub mod initialize_pool;
 pub mod investment_window;
@@ -35,8 +34,6 @@ pub use cancel_redeem::*;
 pub use claim_deposit::*;
 #[allow(ambiguous_glob_reexports)]
 pub use claim_redeem::*;
-#[allow(ambiguous_glob_reexports)]
-pub use compliance::*;
 #[allow(ambiguous_glob_reexports)]
 pub use draw_down::*;
 #[allow(ambiguous_glob_reexports)]

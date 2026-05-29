@@ -1,10 +1,12 @@
 use anchor_lang::prelude::*;
 use spl_transfer_hook_interface::instruction::TransferHookInstruction;
 
+pub mod compliance;
 pub mod error;
 pub mod instructions;
 pub mod state;
 
+pub use compliance::*;
 pub use error::*;
 pub use instructions::*;
 pub use state::*;

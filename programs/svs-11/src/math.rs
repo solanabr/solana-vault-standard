@@ -13,6 +13,8 @@ pub fn assets_to_shares(assets: u64, price_per_share: u64) -> Result<u64> {
             VaultError::InvalidStalenessConfig.into()
         }
         svs_oracle::OracleError::FutureTimestamp => VaultError::OracleStale.into(),
+        svs_oracle::OracleError::AccountTooSmall => VaultError::OracleInvalidPrice.into(),
+        svs_oracle::OracleError::SequenceStale => VaultError::OracleSequenceStale.into(),
     })
 }
 
@@ -27,6 +29,8 @@ pub fn shares_to_assets(shares: u64, price_per_share: u64) -> Result<u64> {
             VaultError::InvalidStalenessConfig.into()
         }
         svs_oracle::OracleError::FutureTimestamp => VaultError::OracleStale.into(),
+        svs_oracle::OracleError::AccountTooSmall => VaultError::OracleInvalidPrice.into(),
+        svs_oracle::OracleError::SequenceStale => VaultError::OracleSequenceStale.into(),
     })
 }
 

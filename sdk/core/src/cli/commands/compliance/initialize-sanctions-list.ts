@@ -77,7 +77,9 @@ export function registerInitSanctionsListCommand(parent: Command): void {
         const hook = await ComplianceHook.create(prog, { authority });
 
         spinner.succeed("Sanctions list initialized!");
-        output.success(`SanctionsList PDA: ${hook.sanctionsListPda.toBase58()}`);
+        output.success(
+          `SanctionsList PDA: ${hook.sanctionsListPda.toBase58()}`,
+        );
 
         if (globalOpts.output === "json") {
           output.json({

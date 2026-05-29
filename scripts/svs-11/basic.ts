@@ -65,7 +65,6 @@ async function main() {
       depositVault: ctx.depositVault,
       investmentRequest: ctx.investmentRequest,
       attestation: ctx.attestation,
-      frozenCheck: null,
       assetTokenProgram: TOKEN_PROGRAM_ID,
       systemProgram: anchor.web3.SystemProgram.programId,
     })
@@ -81,9 +80,8 @@ async function main() {
       vault: ctx.vault,
       investmentRequest: ctx.investmentRequest,
       investor: ctx.investor.publicKey,
-      navOracle: ctx.navOracle,
+      oracleAccount: ctx.navOracle,
       attestation: ctx.attestation,
-      frozenCheck: null,
       clock: anchor.web3.SYSVAR_CLOCK_PUBKEY,
     })
     .rpc();
@@ -133,7 +131,7 @@ async function main() {
   const redeemShares = new BN(sharesAccount.amount.toString()).div(new BN(2));
 
   const reqRedSig = await program.methods
-    .requestRedeem(redeemShares, new BN(0))
+    .requestRedeem(redeemShares)
     .accountsPartial({
       investor: ctx.investor.publicKey,
       vault: ctx.vault,
@@ -144,7 +142,6 @@ async function main() {
       assetMint: ctx.assetMint,
       claimableTokens: ctx.claimableTokens,
       attestation: ctx.attestation,
-      frozenCheck: null,
       assetTokenProgram: TOKEN_PROGRAM_ID,
       token2022Program: TOKEN_2022_PROGRAM_ID,
       systemProgram: anchor.web3.SystemProgram.programId,
@@ -157,7 +154,7 @@ async function main() {
   // Pass 1e18 ratio + 0 next-settlement to preserve full-fulfillment
   // semantics in this smoke-test script.
   const appRedSig = await program.methods
-    .approveRedeem(new BN("1000000000000000000"), new BN(0))
+    .approveRedeem()
     .accountsPartial({
       manager: payer.publicKey,
       vault: ctx.vault,
@@ -168,9 +165,8 @@ async function main() {
       sharesMint: ctx.sharesMint,
       redemptionEscrow: ctx.redemptionEscrow,
       claimableTokens: ctx.claimableTokens,
-      navOracle: ctx.navOracle,
+      oracleAccount: ctx.navOracle,
       attestation: ctx.attestation,
-      frozenCheck: null,
       assetTokenProgram: TOKEN_PROGRAM_ID,
       token2022Program: TOKEN_2022_PROGRAM_ID,
       systemProgram: anchor.web3.SystemProgram.programId,

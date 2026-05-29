@@ -52,10 +52,7 @@ export function getMintConfigAddress(
 export function getSanctionsListAddress(
   programId: PublicKey = COMPLIANCE_HOOK_PROGRAM_ID,
 ): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [SANCTIONS_LIST_SEED],
-    programId,
-  );
+  return PublicKey.findProgramAddressSync([SANCTIONS_LIST_SEED], programId);
 }
 
 /**
@@ -108,8 +105,7 @@ export function deriveComplianceHookAddresses(
   const [mintConfig, mintConfigBump] = getMintConfigAddress(mint, programId);
   const [extraAccountMetaList, extraAccountMetaListBump] =
     getExtraAccountMetaListAddress(mint, programId);
-  const [sanctionsList, sanctionsListBump] =
-    getSanctionsListAddress(programId);
+  const [sanctionsList, sanctionsListBump] = getSanctionsListAddress(programId);
 
   return {
     mintConfig,

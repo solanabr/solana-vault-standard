@@ -79,13 +79,13 @@ impl FuzzTest {
         assert!(amount > 0, "wrap(0) accepted");
 
         // Move cPOOL.
-        self.state.investor_cpool = self.state.investor_cpool.saturating_sub(amount);
+        self.state.investor_cpool = self.state.investor_cpool.checked_sub(amount).expect("fuzz model overflow: sub");
         self.state.wrapper_locked_ata_amount =
-            self.state.wrapper_locked_ata_amount.saturating_add(amount);
+            self.state.wrapper_locked_ata_amount.checked_add(amount).expect("fuzz model overflow: add");
 
         // Mint dePOOL.
-        self.state.investor_depool = self.state.investor_depool.saturating_add(amount);
-        self.state.derwa_supply = self.state.derwa_supply.saturating_add(amount);
+        self.state.investor_depool = self.state.investor_depool.checked_add(amount).expect("fuzz model overflow: add");
+        self.state.derwa_supply = self.state.derwa_supply.checked_add(amount).expect("fuzz model overflow: add");
 
         // Update locked_supply.
         let new_locked = match self.state.locked_supply.checked_add(amount) {
@@ -93,15 +93,15 @@ impl FuzzTest {
             None => {
                 // Overflow path mirrors on-chain `LockedSupplyOverflow` — reject.
                 // Roll back.
-                self.state.investor_cpool = self.state.investor_cpool.saturating_add(amount);
+                self.state.investor_cpool = self.state.investor_cpool.checked_add(amount).expect("fuzz model overflow: add");
                 self.state.wrapper_locked_ata_amount = prev_ata;
-                self.state.investor_depool = self.state.investor_depool.saturating_sub(amount);
+                self.state.investor_depool = self.state.investor_depool.checked_sub(amount).expect("fuzz model overflow: sub");
                 self.state.derwa_supply = prev_derwa;
                 return;
             }
         };
         self.state.locked_supply = new_locked;
-        self.state.total_wrapped = self.state.total_wrapped.saturating_add(amount as u128);
+        self.state.total_wrapped = self.state.total_wrapped.checked_add(amount as u128).expect("fuzz model overflow: add");
         self.state.wrap_count += 1;
 
         // INVARIANT: locked_supply == dePOOL.supply (the core 1:1 invariant).
@@ -150,17 +150,17 @@ impl FuzzTest {
         let prev_ata = self.state.wrapper_locked_ata_amount;
 
         // Burn dePOOL.
-        self.state.investor_depool = self.state.investor_depool.saturating_sub(amount);
-        self.state.derwa_supply = self.state.derwa_supply.saturating_sub(amount);
+        self.state.investor_depool = self.state.investor_depool.checked_sub(amount).expect("fuzz model overflow: sub");
+        self.state.derwa_supply = self.state.derwa_supply.checked_sub(amount).expect("fuzz model overflow: sub");
 
         // Release cPOOL.
         self.state.wrapper_locked_ata_amount =
-            self.state.wrapper_locked_ata_amount.saturating_sub(amount);
-        self.state.investor_cpool = self.state.investor_cpool.saturating_add(amount);
+            self.state.wrapper_locked_ata_amount.checked_sub(amount).expect("fuzz model overflow: sub");
+        self.state.investor_cpool = self.state.investor_cpool.checked_add(amount).expect("fuzz model overflow: add");
 
         // Update locked_supply.
-        self.state.locked_supply = self.state.locked_supply.saturating_sub(amount);
-        self.state.total_unwrapped = self.state.total_unwrapped.saturating_add(amount as u128);
+        self.state.locked_supply = self.state.locked_supply.checked_sub(amount).expect("fuzz model overflow: sub");
+        self.state.total_unwrapped = self.state.total_unwrapped.checked_add(amount as u128).expect("fuzz model overflow: add");
         self.state.unwrap_count += 1;
 
         // INVARIANT: core 1:1 invariant maintained after unwrap.
@@ -215,7 +215,7 @@ impl FuzzTest {
         let net = self
             .state
             .total_wrapped
-            .saturating_sub(self.state.total_unwrapped);
+            .checked_sub(self.state.total_unwrapped).expect("fuzz model overflow: sub");
         assert_eq!(
             net as u64, self.state.locked_supply,
             "Final: wraps − unwraps {} != locked_supply {}",

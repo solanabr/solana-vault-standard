@@ -20,11 +20,8 @@ modules = ["svs-module-hooks", "svs-fees", "svs-caps", "svs-locks", "svs-access"
 
 [dependencies]
 # `init-if-needed` is required for the `claimable_tokens` ATA in
-# approve_redeem. Pro-rata fulfillment may invoke approve_redeem
-# multiple times for the same redemption_request; the first call
-# initializes the claimable PDA, subsequent calls top it up via
-# transfer_checked. Without this feature the second partial settlement
-# would fail re-init.
+# approve_redeem (initializes the claimable PDA before the payout
+# transfer_checked).
 anchor-lang = { version = "0.31.1", features = ["init-if-needed"] }
 anchor-spl = { version = "0.31.1", features = ["token", "associated_token", "metadata"] }
 spl-token-2022 = "6.0.0"

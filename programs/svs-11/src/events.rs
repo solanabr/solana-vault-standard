@@ -59,23 +59,13 @@ pub struct RedemptionRequested {
 pub struct RedemptionApproved {
     pub vault: Pubkey,
     pub investor: Pubkey,
-    /// Shares burned in THIS settlement (the pro-rata cut). For full
-    /// fulfillment this equals the original `shares_locked`; for partial,
-    /// it is the rounded-down `remaining * ratio / 1e18`.
+    /// Shares burned (== the request's `shares_locked` — full approval).
     pub shares: u64,
-    /// USDC paid out for this settlement.
+    /// Assets paid out (net of exit fee).
     pub assets: u64,
-    /// NAV used for this settlement.
+    /// NAV used for the settlement.
     pub nav: u64,
-    /// Fixed-point batch settlement ratio scaled to 1e18.
-    pub ratio_scaled: u128,
-    /// Cumulative shares fulfilled across all settlements for this request.
-    pub cumulative_fulfilled: u64,
-    /// Settlement-date epoch the request is now queued for. Equals
-    /// `next_settlement_at` arg on partial; `redemption_request.queued_for_settlement_at`
-    /// (unchanged) on full fulfillment.
-    pub next_settlement_at: i64,
-    /// Manager pubkey that approved this settlement.
+    /// Manager pubkey that approved the redemption.
     pub manager: Pubkey,
 }
 
@@ -112,19 +102,6 @@ pub struct DrawDown {
     pub vault: Pubkey,
     pub amount: u64,
     pub destination: Pubkey,
-}
-
-#[event]
-pub struct AccountFrozen {
-    pub vault: Pubkey,
-    pub investor: Pubkey,
-    pub frozen_by: Pubkey,
-}
-
-#[event]
-pub struct AccountUnfrozen {
-    pub vault: Pubkey,
-    pub investor: Pubkey,
 }
 
 #[event]
@@ -204,21 +181,7 @@ pub struct OracleChangeApplied {
 }
 
 #[event]
-pub struct OracleSourceChanged {
-    pub vault: Pubkey,
-    pub old_source: u8,
-    pub new_source: u8,
-}
-
-#[event]
 pub struct VaultConfigInitialized {
     pub vault: Pubkey,
     pub vault_config: Pubkey,
-}
-
-#[event]
-pub struct ComplianceOfficerUpdated {
-    pub vault: Pubkey,
-    pub old_officer: Pubkey,
-    pub new_officer: Pubkey,
 }

@@ -1,24 +1,23 @@
-//! SVS-11 Fuzz Tests — Pro-rata Redemption Lifecycle
+//! SVS-11 Fuzz Tests — Full-Approval Redemption Lifecycle
 //!
-//! Property-based fuzzing of the pro-rata partial-fulfillment redemption
-//! lifecycle added in the credit-markets feature:
-//! - `fulfilled_shares_cumulative` never exceeds `shares_locked`
-//! - `assets_claimable` monotonically non-decreasing within a request lifetime
-//! - status flips Pending → Approved iff `fulfilled_cumulative >= shares_locked`
-//! - cancel/reject are blocked once `assets_claimable > 0` (RequestPartiallyFulfilled)
+//! Property-based fuzzing of the individual full-approval redemption lifecycle
+//! (the pro-rata/partial-fulfillment path was reverted — D5):
+//! - a request is created Pending with `assets_claimable == 0`
+//! - `approve_redeem` is atomic: it burns ALL `shares_locked` and pays out
+//!   their full asset value in one shot (no ratio, no requeue, no partials)
+//! - status flips Pending → Approved exactly once, on approve
 //! - `total_pending_redeems` decrements exactly once per terminal transition
-//! - `vault.total_shares` decremented by exactly `fulfill` per approve
-//! - pro-rata math `(remaining * ratio) / 1e18` never extracts more than `remaining`
+//! - `vault.total_shares` is decremented by exactly `shares_locked` per approve
+//! - cancel/reject return the escrowed shares and close the (Pending) request
+//! - `approve_redeem` reverts (no state change) when idle liquidity < payout
 
 mod fuzz_accounts;
 use fuzz_accounts::*;
 
 use trident_fuzz::fuzzing::*;
 
-const RATIO_SCALE_1E18: u128 = 1_000_000_000_000_000_000;
 const PRICE_SCALE: u64 = 1_000_000_000;
 const SHARES_DECIMALS_POW: u128 = 1_000_000_000; // 10^9
-const MAX_SETTLEMENT_HORIZON_SECS: i64 = 157_680_000;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum RequestStatus {
@@ -36,10 +35,7 @@ impl Default for RequestStatus {
 #[derive(Clone, Copy, Default, Debug)]
 struct RedemptionRequest {
     shares_locked: u64,
-    original_shares: u64,
-    fulfilled_shares_cumulative: u64,
     assets_claimable: u64,
-    queued_for_settlement_at: i64,
     status: RequestStatus,
 }
 
@@ -65,13 +61,16 @@ struct VaultState {
 impl VaultState {
     fn available_liquidity(&self) -> u64 {
         self.deposit_vault_amount
-            .saturating_sub(self.total_pending_deposits)
-            .saturating_sub(self.total_approved_deposits)
+            .checked_sub(self.total_pending_deposits)
+            .expect("fuzz model overflow: sub")
+            .checked_sub(self.total_approved_deposits)
+            .expect("fuzz model overflow: sub")
     }
 
     fn shares_to_assets(&self, shares: u64) -> u64 {
         ((shares as u128)
-            .saturating_mul(self.nav_price as u128)
+            .checked_mul(self.nav_price as u128)
+            .expect("fuzz model overflow: mul")
             .checked_div(SHARES_DECIMALS_POW)
             .unwrap_or(0)) as u64
     }
@@ -114,8 +113,8 @@ impl FuzzTest {
         self.current_time = 1_000_000;
     }
 
-    /// Mirror of request_redeem: investor locks shares into escrow + creates
-    /// a fresh RedemptionRequest. Only one outstanding request per investor.
+    /// Mirror of request_redeem: investor locks shares into escrow + creates a
+    /// fresh Pending RedemptionRequest. Only one outstanding request modeled.
     #[flow]
     fn flow_request_redeem(&mut self) {
         if self.state.paused {
@@ -133,30 +132,29 @@ impl FuzzTest {
 
         self.state.request = RedemptionRequest {
             shares_locked: shares,
-            original_shares: shares,
-            fulfilled_shares_cumulative: 0,
             assets_claimable: 0,
-            queued_for_settlement_at: 0,
             status: RequestStatus::Pending,
         };
-        self.state.redemption_escrow_amount =
-            self.state.redemption_escrow_amount.saturating_add(shares);
-        self.state.total_pending_redeems = self.state.total_pending_redeems.saturating_add(1);
+        self.state.redemption_escrow_amount = self
+            .state
+            .redemption_escrow_amount
+            .checked_add(shares)
+            .expect("fuzz model overflow: add");
+        self.state.total_pending_redeems = self
+            .state
+            .total_pending_redeems
+            .checked_add(1)
+            .expect("fuzz model overflow: add");
 
-        // INVARIANT: original_shares is the immutable snapshot.
+        // INVARIANT: a fresh request is Pending with nothing claimable yet.
         assert_eq!(
-            self.state.request.original_shares, self.state.request.shares_locked,
-            "original_shares != shares_locked at creation"
-        );
-        // INVARIANT: cumulative starts at 0.
-        assert_eq!(
-            self.state.request.fulfilled_shares_cumulative, 0,
-            "fresh request has non-zero cumulative"
+            self.state.request.assets_claimable, 0,
+            "fresh request has non-zero assets_claimable"
         );
     }
 
-    /// Mirror of approve_redeem with a random fixed-point ratio in (0, 1e18].
-    /// Models the partial-fulfillment + auto-requeue + final-flip semantics.
+    /// Mirror of approve_redeem: atomic FULL approval. Burns all `shares_locked`
+    /// and pays out their full asset value; no ratio / partial / requeue.
     #[flow]
     fn flow_approve_redeem(&mut self) {
         if self.state.paused {
@@ -166,139 +164,95 @@ impl FuzzTest {
             return;
         }
 
-        // Random ratio in (0, 1e18]
-        let ratio_u128: u128 = (rand::random::<u128>() % RATIO_SCALE_1E18) + 1;
-        // next_settlement_at: 0 sentinel or within horizon
-        let next_settlement_at: i64 = if rand::random::<bool>() {
-            0
-        } else {
-            self.current_time + (rand::random::<i64>() % MAX_SETTLEMENT_HORIZON_SECS).abs()
-        };
-
-        let req = &self.state.request;
-        let shares_locked = req.shares_locked;
-        let already = req.fulfilled_shares_cumulative;
-        let remaining = match shares_locked.checked_sub(already) {
-            Some(v) if v > 0 => v,
-            _ => return, // nothing to settle
-        };
-
-        let fulfill: u64 = ((remaining as u128 * ratio_u128) / RATIO_SCALE_1E18) as u64;
-        if fulfill == 0 {
-            // Mirrors on-chain ZeroAmount reject — ratio too small for residual.
-            // INVARIANT: this is the dust-orphan path. Cumulative MUST be unchanged.
-            assert_eq!(
-                self.state.request.fulfilled_shares_cumulative, already,
-                "dust-orphan path mutated cumulative"
-            );
-            return;
+        let shares_locked = self.state.request.shares_locked;
+        if shares_locked == 0 {
+            return; // mirrors ZeroAmount
         }
-        // INVARIANT: floor-rounded fulfill never exceeds remaining.
-        assert!(
-            fulfill <= remaining,
-            "pro-rata fulfill {} > remaining {}",
-            fulfill,
-            remaining
-        );
 
-        let gross_assets = self.state.shares_to_assets(fulfill);
+        let gross_assets = self.state.shares_to_assets(shares_locked);
         let net_assets = gross_assets; // no exit fee in model
         if net_assets == 0 {
             return;
         }
         if self.state.available_liquidity() < net_assets {
-            return; // mirrors InsufficientLiquidity
+            return; // mirrors InsufficientLiquidity (no state change)
         }
 
-        // Apply effects.
-        let prev_cumulative = self.state.request.fulfilled_shares_cumulative;
-        let prev_claimable = self.state.request.assets_claimable;
         let prev_total_shares = self.state.total_shares;
         let prev_pending = self.state.total_pending_redeems;
+        let prev_escrow = self.state.redemption_escrow_amount;
 
-        // Burn shares from escrow.
-        self.state.redemption_escrow_amount =
-            self.state.redemption_escrow_amount.saturating_sub(fulfill);
-        // Transfer assets deposit_vault → claimable_tokens.
-        self.state.deposit_vault_amount =
-            self.state.deposit_vault_amount.saturating_sub(net_assets);
+        // Burn ALL locked shares from escrow.
+        self.state.redemption_escrow_amount = self
+            .state
+            .redemption_escrow_amount
+            .checked_sub(shares_locked)
+            .expect("fuzz model overflow: sub");
+        // Transfer payout deposit_vault → claimable_tokens.
+        self.state.deposit_vault_amount = self
+            .state
+            .deposit_vault_amount
+            .checked_sub(net_assets)
+            .expect("fuzz model overflow: sub");
         self.state.claimable_tokens_amount = self
             .state
             .claimable_tokens_amount
-            .saturating_add(net_assets);
+            .checked_add(net_assets)
+            .expect("fuzz model overflow: add");
 
-        let new_cumulative = self
+        self.state.request.assets_claimable = net_assets;
+        self.state.request.status = RequestStatus::Approved;
+
+        self.state.total_assets = self
             .state
-            .request
-            .fulfilled_shares_cumulative
-            .saturating_add(fulfill);
-        self.state.request.fulfilled_shares_cumulative = new_cumulative;
-        self.state.request.assets_claimable = self
+            .total_assets
+            .checked_sub(net_assets)
+            .expect("fuzz model overflow: sub");
+        self.state.total_shares = self
             .state
-            .request
-            .assets_claimable
-            .saturating_add(net_assets);
-
-        if new_cumulative >= shares_locked {
-            self.state.request.status = RequestStatus::Approved;
-        } else {
-            self.state.request.queued_for_settlement_at = next_settlement_at;
-        }
-
-        self.state.total_assets = self.state.total_assets.saturating_sub(net_assets);
-        self.state.total_shares = self.state.total_shares.saturating_sub(fulfill);
-        if new_cumulative >= shares_locked {
-            self.state.total_pending_redeems =
-                self.state.total_pending_redeems.saturating_sub(1);
-        }
+            .total_shares
+            .checked_sub(shares_locked)
+            .expect("fuzz model overflow: sub");
+        self.state.total_pending_redeems = self
+            .state
+            .total_pending_redeems
+            .checked_sub(1)
+            .expect("fuzz model overflow: sub");
         self.state.approve_count += 1;
 
-        // INVARIANT: cumulative monotonically increases.
-        assert!(
-            self.state.request.fulfilled_shares_cumulative > prev_cumulative,
-            "cumulative did not increase on approve"
+        // INVARIANT: status flips to Approved exactly on approve.
+        assert_eq!(
+            self.state.request.status,
+            RequestStatus::Approved,
+            "approve did not flip status to Approved"
         );
-        // INVARIANT: cumulative never exceeds shares_locked.
-        assert!(
-            self.state.request.fulfilled_shares_cumulative <= shares_locked,
-            "cumulative {} > shares_locked {}",
-            self.state.request.fulfilled_shares_cumulative,
-            shares_locked
-        );
-        // INVARIANT: assets_claimable monotonically increases.
-        assert!(
-            self.state.request.assets_claimable > prev_claimable,
-            "assets_claimable did not increase on approve"
-        );
-        // INVARIANT: total_shares decremented by exactly `fulfill`.
+        // INVARIANT: total_shares decremented by exactly `shares_locked`.
         assert_eq!(
             self.state.total_shares,
-            prev_total_shares.saturating_sub(fulfill),
-            "total_shares delta != fulfill"
+            prev_total_shares
+                .checked_sub(shares_locked)
+                .expect("fuzz model overflow: sub"),
+            "total_shares delta != shares_locked"
         );
-        // INVARIANT: status flip iff cumulative reached shares_locked.
-        if self.state.request.fulfilled_shares_cumulative >= shares_locked {
-            assert_eq!(
-                self.state.request.status,
-                RequestStatus::Approved,
-                "full fulfillment did not flip status"
-            );
-            assert_eq!(
-                self.state.total_pending_redeems,
-                prev_pending - 1,
-                "pending counter not decremented on full"
-            );
-        } else {
-            assert_eq!(
-                self.state.request.status,
-                RequestStatus::Pending,
-                "partial fulfillment flipped status prematurely"
-            );
-            assert_eq!(
-                self.state.total_pending_redeems, prev_pending,
-                "pending counter changed on partial"
-            );
-        }
+        // INVARIANT: escrow decremented by exactly `shares_locked`.
+        assert_eq!(
+            self.state.redemption_escrow_amount,
+            prev_escrow
+                .checked_sub(shares_locked)
+                .expect("fuzz model overflow: sub"),
+            "escrow delta != shares_locked"
+        );
+        // INVARIANT: pending counter decremented exactly once.
+        assert_eq!(
+            self.state.total_pending_redeems,
+            prev_pending - 1,
+            "pending counter delta != 1 on approve"
+        );
+        // INVARIANT: claimable equals the single full payout.
+        assert_eq!(
+            self.state.request.assets_claimable, net_assets,
+            "assets_claimable != net payout on full approval"
+        );
     }
 
     /// Mirror of claim_redeem: only when status == Approved. Drains
@@ -311,7 +265,7 @@ impl FuzzTest {
 
         let claimable = self.state.request.assets_claimable;
         // INVARIANT: claimable matches the on-chain claimable_tokens balance
-        //            up to the per-request portion (only one request modeled here).
+        //            (only one request modeled here).
         assert_eq!(
             self.state.claimable_tokens_amount, claimable,
             "claimable_tokens drift from request.assets_claimable"
@@ -322,18 +276,14 @@ impl FuzzTest {
         self.state.claim_count += 1;
     }
 
-    /// Mirror of cancel_redeem: only when status == Pending AND
-    /// assets_claimable == 0 (`RequestPartiallyFulfilled` guard).
+    /// Mirror of cancel_redeem: only when status == Pending. Returns the
+    /// escrowed shares to the investor and closes the request.
     #[flow]
     fn flow_cancel_redeem(&mut self) {
         if self.state.paused {
             return;
         }
         if self.state.request.status != RequestStatus::Pending {
-            return;
-        }
-        // The audit-hardening RequestPartiallyFulfilled guard.
-        if self.state.request.assets_claimable != 0 {
             return;
         }
 
@@ -343,8 +293,13 @@ impl FuzzTest {
         self.state.redemption_escrow_amount = self
             .state
             .redemption_escrow_amount
-            .saturating_sub(returned_shares);
-        self.state.total_pending_redeems = self.state.total_pending_redeems.saturating_sub(1);
+            .checked_sub(returned_shares)
+            .expect("fuzz model overflow: sub");
+        self.state.total_pending_redeems = self
+            .state
+            .total_pending_redeems
+            .checked_sub(1)
+            .expect("fuzz model overflow: sub");
         self.state.request = RedemptionRequest::default();
         self.state.cancel_count += 1;
 
@@ -354,20 +309,18 @@ impl FuzzTest {
             prev_pending - 1,
             "pending counter delta != 1 on cancel"
         );
-        // INVARIANT: claimable_tokens unchanged on cancel (was 0 by guard, stays 0).
+        // INVARIANT: claimable_tokens unchanged on cancel (a Pending request
+        // has nothing claimable).
         assert_eq!(
             self.state.claimable_tokens_amount, 0,
             "claimable_tokens non-zero on cancel"
         );
     }
 
-    /// Mirror of reject_redeem: manager-initiated cancel. Same partial guard.
+    /// Mirror of reject_redeem: manager-initiated cancel of a Pending request.
     #[flow]
     fn flow_reject_redeem(&mut self) {
         if self.state.request.status != RequestStatus::Pending {
-            return;
-        }
-        if self.state.request.assets_claimable != 0 {
             return;
         }
 
@@ -377,8 +330,13 @@ impl FuzzTest {
         self.state.redemption_escrow_amount = self
             .state
             .redemption_escrow_amount
-            .saturating_sub(returned_shares);
-        self.state.total_pending_redeems = self.state.total_pending_redeems.saturating_sub(1);
+            .checked_sub(returned_shares)
+            .expect("fuzz model overflow: sub");
+        self.state.total_pending_redeems = self
+            .state
+            .total_pending_redeems
+            .checked_sub(1)
+            .expect("fuzz model overflow: sub");
         self.state.request = RedemptionRequest::default();
         self.state.reject_count += 1;
 
@@ -389,7 +347,8 @@ impl FuzzTest {
         );
     }
 
-    /// Random NAV moves within the deviation guard's tolerance.
+    /// Random NAV moves. The vault no longer runs a books-vs-oracle deviation
+    /// guard, so any positive price is valid; this just varies the payout.
     #[flow]
     fn flow_update_nav(&mut self) {
         let cur = self.state.nav_price;
@@ -409,28 +368,21 @@ impl FuzzTest {
 
     #[end]
     fn end(&mut self) {
-        // INVARIANT: cumulative never exceeds locked at end-of-run.
-        assert!(
-            self.state.request.fulfilled_shares_cumulative <= self.state.request.shares_locked,
-            "Final: cumulative {} > shares_locked {}",
-            self.state.request.fulfilled_shares_cumulative,
-            self.state.request.shares_locked
-        );
-
         // INVARIANT: status consistency at end-of-run.
         match self.state.request.status {
             RequestStatus::Approved => {
-                assert!(
-                    self.state.request.fulfilled_shares_cumulative
-                        >= self.state.request.shares_locked,
-                    "Approved but cumulative < shares_locked"
+                // Approved means the full payout is staged and claimable.
+                assert_eq!(
+                    self.state.claimable_tokens_amount,
+                    self.state.request.assets_claimable,
+                    "Approved but claimable_tokens != assets_claimable"
                 );
             }
             RequestStatus::Pending => {
-                assert!(
-                    self.state.request.fulfilled_shares_cumulative
-                        < self.state.request.shares_locked,
-                    "Pending but cumulative >= shares_locked"
+                // Pending means nothing has been paid out yet.
+                assert_eq!(
+                    self.state.request.assets_claimable, 0,
+                    "Pending but assets_claimable != 0"
                 );
             }
             RequestStatus::None => {
@@ -441,19 +393,6 @@ impl FuzzTest {
                 );
             }
         }
-
-        // INVARIANT: total_shares + redemption_escrow_amount conservation.
-        // (Shares burned through claims came from escrow; partial-fulfill burns
-        // come from escrow; cancel/reject returns escrow to investor.)
-        // Note: this is a weak invariant in a single-request model — the
-        // multi-request property would need a richer accounts model.
-
-        // INVARIANT: claimable_tokens never exceeds total cumulative net_assets transferred.
-        assert!(
-            self.state.claimable_tokens_amount <= self.state.request.assets_claimable
-                || self.state.request.status == RequestStatus::None,
-            "claimable_tokens > assets_claimable mid-lifecycle"
-        );
     }
 }
 

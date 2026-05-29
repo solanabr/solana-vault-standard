@@ -7,10 +7,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { createContext } from "../../middleware";
 import { getGlobalOptions } from "../../index";
-import {
-  ComplianceHook,
-  ComplianceMode,
-} from "../../../compliance-hook";
+import { ComplianceHook, ComplianceMode } from "../../../compliance-hook";
 import { getMintConfigAddress } from "../../../compliance-hook-pda";
 import { loadIdl } from "../../utils";
 
@@ -48,7 +45,10 @@ export function registerInitMintConfigCommand(parent: Command): void {
       const modeStr = String(opts.mode).toLowerCase();
       let mode: ComplianceMode;
       let isPermissioned: boolean;
-      if (modeStr === "freely-transferable" || modeStr === "freely_transferable") {
+      if (
+        modeStr === "freely-transferable" ||
+        modeStr === "freely_transferable"
+      ) {
         mode = ComplianceMode.freelyTransferable();
         isPermissioned = false;
       } else if (modeStr === "permissioned") {
@@ -121,11 +121,15 @@ export function registerInitMintConfigCommand(parent: Command): void {
         output.info(`  Mint:                ${mint.toBase58()}`);
         output.info(`  MintConfig:          ${mintConfig.toBase58()}`);
         output.info(`  Mode:                ${modeStr}`);
-        output.info(`  Pool policy:         ${poolPolicy ? poolPolicy.toBase58() : "(none)"}`);
+        output.info(
+          `  Pool policy:         ${poolPolicy ? poolPolicy.toBase58() : "(none)"}`,
+        );
         output.info(`  Attestation program: ${attestationProgram.toBase58()}`);
         output.info(`  Attestation issuer:  ${attestationIssuer.toBase58()}`);
         output.info(`  Required type:       ${requiredAttestationType}`);
-        output.info(`  MintAuthority:       ${wallet.publicKey.toBase58()} (signer)`);
+        output.info(
+          `  MintAuthority:       ${wallet.publicKey.toBase58()} (signer)`,
+        );
 
         if (globalOpts.dryRun) {
           output.success("Dry run complete. No transaction sent.");

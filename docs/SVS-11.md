@@ -2,7 +2,7 @@
 
 ## Overview
 
-SVS-11 is a manager-approved tokenized vault for credit markets and illiquid assets. Unlike SVS-1 through SVS-4 which use permissionless deposit/withdraw, SVS-11 implements a request-approval-claim flow where every deposit and redemption requires manager approval with oracle-based NAV pricing. Mandatory KYC attestation and compliance features (account freezing, investment windows) make it suitable for regulated credit products, private debt, and institutional fund structures. The attestation model is provider-agnostic — compatible with SAS, Civic Pass, or any program that writes accounts in the spec's `Attestation` format.
+SVS-11 is a manager-approved tokenized vault for credit markets and illiquid assets. Unlike SVS-1 through SVS-4 which use permissionless deposit/withdraw, SVS-11 implements a request-approval-claim flow where every deposit and redemption requires manager approval with oracle-based NAV pricing. Mandatory KYC attestation plus protocol-level compliance (sanctions + freeze enforced by the separate `compliance-hook` program) and investment windows make it suitable for regulated credit products, private debt, and institutional fund structures. The attestation model is provider-agnostic — compatible with SAS, Civic Pass, or any program that writes accounts in the spec's `Attestation` format.
 
 ## Balance Model
 
@@ -26,7 +26,6 @@ SVS-11 is a manager-approved tokenized vault for credit markets and illiquid ass
 | **InvestmentRequest** | `["investment_request", vault, investor]` | Vault PDA |
 | **RedemptionRequest** | `["redemption_request", vault, investor]` | Vault PDA |
 | **ClaimableTokens** | `["claimable_tokens", vault, investor]` | Vault PDA |
-| **FrozenAccount** | `["frozen_account", vault, investor]` | Vault PDA |
 | **VaultConfig** | `["vault_config", vault]` | Authority |
 | **Attestation** | `["attestation", subject, issuer, attestation_type]` | Attestation program |
 | **FeeConfig** | `["svs_fee_config", vault]` | Vault authority |
@@ -69,16 +68,16 @@ pub struct CreditVault {
 ```rust
 #[account]
 pub struct VaultConfig {
-    pub vault: Pubkey,              // 32 bytes
-    pub pending_oracle: Pubkey,     // 32 bytes — proposed new oracle (timelock)
-    pub oracle_change_at: i64,      // 8 bytes  — when the change can be applied
-    pub compliance_officer: Pubkey, // 32 bytes — separate compliance officer for freeze/unfreeze
-    pub bump: u8,                   // 1 byte
-    pub _reserved: [u8; 31],        // 31 bytes
+    pub vault: Pubkey,                  // 32 bytes
+    pub pending_oracle: Pubkey,         // 32 bytes — proposed new oracle account (timelock)
+    pub pending_oracle_program: Pubkey, // 32 bytes — proposed new oracle owner program (timelock)
+    pub oracle_change_at: i64,          // 8 bytes  — when the change can be applied
+    pub bump: u8,                       // 1 byte
+    pub _reserved: [u8; 31],            // 31 bytes
 }
 // Total: 136 bytes
 // Seeds: ["vault_config", vault]
-// Required for compliance operations (freeze/unfreeze) and oracle timelock changes.
+// Required for oracle timelock changes (rotates both the oracle account and its owner program atomically).
 // Must be initialized via `initialize_vault_config` after vault creation.
 ```
 
@@ -110,18 +109,6 @@ pub struct RedemptionRequest {
     pub bump: u8,                       // 1 byte
 }
 // Total: 98 bytes
-```
-
-```rust
-#[account]
-pub struct FrozenAccount {
-    pub investor: Pubkey,               // 32 bytes
-    pub vault: Pubkey,                  // 32 bytes
-    pub frozen_by: Pubkey,              // 32 bytes
-    pub frozen_at: i64,                 // 8 bytes
-    pub bump: u8,                       // 1 byte
-}
-// Total: 105 bytes
 ```
 
 ```rust
@@ -161,7 +148,7 @@ pub enum AccessMode {
 | Instruction | Signer | Description |
 |-------------|--------|-------------|
 | `request_redeem` | `investor` | Lock shares in redemption escrow (requires KYC attestation; intentionally does not require an open investment window) |
-| `approve_redeem` | `manager` | Burn shares, transfer assets to claimable account via oracle price |
+| `approve_redeem` | `manager` | Atomic full approval — burn ALL `shares_locked` and transfer their full asset value (via oracle price) to the claimable account in one shot |
 | `claim_redeem` | `investor` | Withdraw claimable assets to own token account |
 | `cancel_redeem` | `investor` | Cancel own pending request, reclaim locked shares |
 
@@ -181,10 +168,7 @@ pub enum AccessMode {
 
 ### Compliance
 
-| Instruction | Signer | Description |
-|-------------|--------|-------------|
-| `freeze_account` | `manager` | Create `FrozenAccount` PDA, blocking investor from deposits and redemptions |
-| `unfreeze_account` | `manager` | Close `FrozenAccount` PDA |
+SVS-11 has no per-vault freeze instructions. Compliance (sanctions + freeze) is enforced at the protocol level by the separate `compliance-hook` program (see the Compliance section below). Every Token-2022 cPOOL transfer routes through the hook; the three hook-blind paths (`claim_deposit`, `approve_redeem`, `unwrap`) additionally call the hook's shared `assert_wallet_compliant` helper.
 
 ### Admin
 
@@ -203,7 +187,7 @@ pub fn initialize_pool(
     ctx: Context<InitializePool>,
     vault_id: u64,
     minimum_investment: u64,  // minimum deposit amount (in asset decimals)
-    max_staleness: i64,       // max oracle age in seconds (60..=86400)
+    max_staleness: i64,       // max oracle age in seconds (60..=DEFAULT_MAX_NAV_STALENESS_SECS = 45 days)
 ) -> Result<()>
 ```
 
@@ -213,43 +197,61 @@ pub fn initialize_pool(
 
 ## Oracle Integration
 
-NAV pricing uses an external oracle account. The vault reads price data directly from the oracle's account data (no CPI). The shape below describes the simple/mock oracle path (`oracle_source = 0`), which is the neutral upstream default. Deployments that need richer NAV semantics opt into the NavOracle adapter (`oracle_source = 1`) — see "Oracle Extensibility And Credit Markets NavOracle Policy" below.
+NAV pricing uses a pluggable external oracle account. SVS-11 has no hardcoded
+mock/nav selector — the vault reads ANY compliant oracle through a generic
+24-byte `SvsOraclePrice` header via the shared `read_oracle` reader in
+`modules/svs-oracle` (no CPI; price data is read directly from account data).
+Any program can plug in its own oracle as long as it writes this header; oracle
+integrity stays the responsibility of each oracle program. The Credit Markets
+`nav-oracle` is the reference implementation, `mock-oracle` is an example.
 
 ```rust
-pub struct NavOracleData {
-    pub price_per_share: u64,   // price in PRICE_SCALE (1e9)
-    pub updated_at: i64,        // unix timestamp
+// SvsOraclePrice header — 24 bytes of payload (after the 8-byte Anchor discriminator)
+pub struct SvsOraclePrice {
+    pub price: u64,       // payload 0..8   (on-disk bytes 8..16)  — price in PRICE_SCALE (1e9)
+    pub timestamp: i64,   // payload 8..16  (on-disk bytes 16..24) — unix timestamp
+    pub sequence: u64,    // payload 16..24 (on-disk bytes 24..32) — monotonic replay guard
 }
 ```
 
 **Validation**:
 1. `oracle_account.key == vault.nav_oracle`
 2. `oracle_account.owner == vault.oracle_program`
-3. `price_per_share > 0`
-4. `clock.unix_timestamp - updated_at <= vault.max_staleness`
+3. `price > 0`
+4. `clock.unix_timestamp - timestamp <= vault.max_staleness`
+5. Sequence monotonicity vs `vault.last_seen_nav_sequence` (a `sequence == 0` value is the "unused" sentinel that skips the monotonicity check)
+
+`approve_deposit` and `approve_redeem` each take a SINGLE `oracle_account`
+(replacing the old `nav_oracle` + `nav_account` pair).
 
 **Conversion** (via `svs_oracle` crate):
 ```rust
-shares = assets * PRICE_SCALE / price_per_share
-assets = shares * price_per_share / PRICE_SCALE
+shares = assets * PRICE_SCALE / price
+assets = shares * price / PRICE_SCALE
 ```
 
 Where `PRICE_SCALE = 1_000_000_000` (1e9).
 
-## Oracle Extensibility And Credit Markets NavOracle Policy
+## Oracle Timelock And Rotation
 
-SVS-11 keeps the simple oracle path as the neutral upstream default.
-Fresh `CreditVault` accounts include oracle-source bookkeeping fields so
-deployments can opt into richer oracle adapters without changing the core
+Oracle changes go through a timelock (`request_oracle_change` /
+`apply_oracle_change`) recorded in `VaultConfig`. A rotation swaps BOTH the
+oracle account AND its owner program atomically: `request_oracle_change` takes a
+`new_oracle` account and a `new_oracle_program` arg, staging them into
+`pending_oracle` / `pending_oracle_program`; `apply_oracle_change` commits both
+to `vault.nav_oracle` / `vault.oracle_program` once the timelock elapses.
+`request_oracle_change` cross-checks the pair at stage time (the new oracle
+account must be owned by the new program), so a mismatched pair fails fast
+instead of bricking approvals after the timelock. This
+lets a deployment migrate from one oracle implementation (e.g. `mock-oracle`) to
+another (e.g. the Credit Markets `nav-oracle`) without changing the core
 deposit/redeem state machine.
 
-Credit Markets deployments use the richer NavOracle adapter as deployment
-policy because private-credit NAV needs signed publisher payloads, gross/net
-NAV, TER, loss-provision basis points, sequence monotonicity, stale-NAV
-checks, and loan-tape Merkle commitments. Credit Markets pools should
-initialize a NavAccount, publish the first NAV, then call
-`set_oracle_source(1)` before opening the investment window. Generic SVS-11
-deployments may remain on `oracle_source = 0`.
+Credit Markets deployments use the `nav-oracle` reference implementation because
+private-credit NAV needs signed publisher payloads, gross/net NAV, TER,
+loss-provision basis points, sequence monotonicity, stale-NAV checks, and
+loan-tape Merkle commitments — all of which the oracle program enforces behind
+the generic `SvsOraclePrice` header.
 
 ## KYC Attestation
 
@@ -286,12 +288,12 @@ pub struct Attestation {
 | Role | Permissions |
 |------|-------------|
 | **Authority** | pause, unpause, transfer_authority, set_manager, update_attester, module admin |
-| **Manager** | approve/reject deposits, approve redemptions, draw_down, repay, freeze/unfreeze, open/close window |
+| **Manager** | approve/reject deposits, approve redemptions, draw_down, repay, open/close window |
 | **Investor** | request/cancel deposits, request/cancel redemptions, claim |
 
 ### Compliance Features
 
-- **Account Freezing**: Manager creates `FrozenAccount` PDA to block an investor. Checked via `Option<Account<'info, FrozenAccount>>` -- if the account exists, the investor is frozen. Frozen accounts can still claim already-approved deposits and redemptions — freezing only blocks new requests and approvals.
+- **Protocol-Level Compliance (sanctions + freeze)**: Enforced by the separate `compliance-hook` program, not per-vault. The hook owns a singleton SanctionsList PDA `["sanctions_list"]` and a per-wallet FrozenAccount PDA `["frozen", wallet]`, and exposes `freeze_account` / `unfreeze_account`. Every Token-2022 cPOOL transfer routes through the hook automatically. The three hook-blind paths — `claim_deposit` (mint_to), `approve_redeem` (burn), and the derwa-wrapper `unwrap` — additionally call the hook's shared `assert_wallet_compliant` helper, which rejects sanctioned or frozen wallets. The other six core instructions (`request_deposit`, `cancel_deposit`, `approve_deposit`, `request_redeem`, `cancel_redeem`, `claim_redeem`) take no compliance-check account.
 - **Investment Windows**: Deposits and redemptions only accepted when `investment_window_open == true`.
 - **Pause**: Halts approve_deposit, approve_redeem, draw_down, repay. Requests and claims still work.
 
@@ -329,13 +331,11 @@ This ensures pending deposit assets are not used to fund redemptions.
 | `InvestmentRejected` | vault, investor, amount, reason_code | `reject_deposit` |
 | `InvestmentCancelled` | vault, investor, amount | `cancel_deposit` |
 | `RedemptionRequested` | vault, investor, shares | `request_redeem` |
-| `RedemptionApproved` | vault, investor, shares, assets, nav | `approve_redeem` |
+| `RedemptionApproved` | vault, investor, shares, assets, nav, manager | `approve_redeem` |
 | `RedemptionClaimed` | vault, investor, assets | `claim_redeem` |
 | `RedemptionCancelled` | vault, investor, shares | `cancel_redeem` |
 | `Repayment` | vault, amount, new_total_assets | `repay` |
 | `DrawDown` | vault, amount, destination | `draw_down` |
-| `AccountFrozen` | vault, investor, frozen_by | `freeze_account` |
-| `AccountUnfrozen` | vault, investor | `unfreeze_account` |
 | `VaultStatusChanged` | vault, paused | `pause` / `unpause` |
 | `AuthorityTransferred` | vault, old_authority, new_authority | `transfer_authority` |
 | `ManagerChanged` | vault, old_manager, new_manager | `set_manager` |
@@ -362,7 +362,6 @@ See [EVENTS.md](EVENTS.md) for parsing examples.
 | 6010 | `InsufficientLiquidity` | Insufficient liquidity in vault |
 | 6011 | `InvestmentWindowClosed` | Investment window is closed |
 | 6012 | `InvalidAddress` | Invalid address: cannot be the zero address |
-| 6013 | `AccountFrozen` | Account is frozen |
 | 6014 | `InvalidAttestationProgram` | Attestation account not owned by attestation program |
 | 6015 | `InvalidAttestation` | Invalid attestation account |
 | 6016 | `InvalidAttester` | Attestation issuer does not match vault attester |
@@ -386,11 +385,11 @@ pub const REDEMPTION_ESCROW_SEED: &[u8] = b"redemption_escrow";
 pub const INVESTMENT_REQUEST_SEED: &[u8] = b"investment_request";
 pub const REDEMPTION_REQUEST_SEED: &[u8] = b"redemption_request";
 pub const CLAIMABLE_TOKENS_SEED: &[u8] = b"claimable_tokens";
-pub const FROZEN_ACCOUNT_SEED: &[u8] = b"frozen_account";
 
 pub const MAX_DECIMALS: u8 = 9;
 pub const SHARES_DECIMALS: u8 = 9;
-pub const DEFAULT_MAX_STALENESS: i64 = 3600;  // 1 hour
+pub const DEFAULT_MAX_STALENESS: i64 = 3600;                       // 1 hour
+pub const DEFAULT_MAX_NAV_STALENESS_SECS: i64 = 45 * 24 * 60 * 60; // 45 days (max_staleness ceiling)
 
 // No hardcoded attestation program ID — configured per-vault via `attester` and `attestation_program`
 ```
@@ -465,7 +464,7 @@ const repayTx = await vault.repay(500_000_000);
 | **Pricing** | On-chain math | On-chain math | On-chain math | Oracle NAV |
 | **KYC** | None | None | None | Generic Attestation |
 | **Manager Role** | None | None | Operator (delegated) | Manager (fixed) |
-| **Account Freezing** | No | No | No | Yes |
+| **Account Freezing** | No | No | No | Protocol-level (compliance-hook) |
 | **Investment Windows** | Always open | Always open | Always open | Manager-controlled |
 | **Credit Ops** | N/A | N/A | N/A | draw_down / repay |
 
@@ -474,13 +473,14 @@ const repayTx = await vault.repay(500_000_000);
 | File | Purpose |
 |------|---------|
 | `programs/svs-11/src/lib.rs` | Program entry point, instruction dispatch |
-| `programs/svs-11/src/state.rs` | Account structs (CreditVault, requests, frozen) |
+| `programs/svs-11/src/state.rs` | Account structs (CreditVault, requests) |
 | `programs/svs-11/src/constants.rs` | PDA seeds, limits |
 | `programs/svs-11/src/error.rs` | Error codes |
 | `programs/svs-11/src/events.rs` | Event definitions |
 | `programs/svs-11/src/math.rs` | Share/asset conversion via oracle |
-| `programs/svs-11/src/oracle.rs` | Oracle reading and validation |
+| `programs/svs-11/src/hook_extras.rs` | Shared Token-2022 TransferHook helper (`read_hook_program_id`) |
 | `programs/svs-11/src/attestation.rs` | Generic KYC attestation validation |
+| `modules/svs-oracle/src/price.rs` | Generic `SvsOraclePrice` header + `read_oracle` (oracle reading/validation) |
 | `programs/svs-11/src/instructions/` | Instruction handlers |
 | `programs/svs-11/src/instructions/module_admin.rs` | Module admin (with `modules` feature) |
 | `sdk/core/src/credit-vault.ts` | TypeScript SDK |

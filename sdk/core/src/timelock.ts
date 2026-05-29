@@ -153,7 +153,11 @@ export async function generateProposalId(
   params: unknown,
   salt: Uint8Array,
 ): Promise<string> {
-  const text = JSON.stringify({ action, params }) + Array.from(salt).map((b) => b.toString(16).padStart(2, "0")).join("");
+  const text =
+    JSON.stringify({ action, params }) +
+    Array.from(salt)
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
   const data = new TextEncoder().encode(text);
   const hex = await sha256Hex(data);
   return hex.slice(0, 16);

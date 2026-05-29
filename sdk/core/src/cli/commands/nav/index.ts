@@ -8,7 +8,9 @@ import { registerRotatePublisherCommand } from "./rotate-publisher";
 export function registerNavCommands(program: Command): void {
   const nav = program
     .command("nav")
-    .description("Manage nav-oracle program: NavAccount, NAV publishing, publisher rotation");
+    .description(
+      "Manage nav-oracle program: NavAccount, NAV publishing, publisher rotation",
+    );
   registerInitNavAccountCommand(nav);
   registerPublishNavCommand(nav);
   registerRotatePublisherCommand(nav);

@@ -35,7 +35,6 @@ import {
   getInvestmentRequestAddress,
   getRedemptionRequestAddress,
   getClaimableTokensAddress,
-  getCreditFrozenAccountAddress,
 } from "../../sdk/core/src/credit-vault-pda";
 import * as fs from "fs";
 import * as path from "path";
@@ -51,7 +50,6 @@ export {
   getInvestmentRequestAddress,
   getRedemptionRequestAddress,
   getClaimableTokensAddress,
-  getCreditFrozenAccountAddress,
 };
 
 export const PRICE_SCALE = new BN(1_000_000_000);

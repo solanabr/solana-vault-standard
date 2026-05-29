@@ -98,7 +98,6 @@ async function main() {
         depositVault: ctx.depositVault,
         investmentRequest: expInvReq,
         attestation: expiredAttestation,
-        frozenCheck: null,
         assetTokenProgram: TOKEN_PROGRAM_ID,
         systemProgram: anchor.web3.SystemProgram.programId,
       })
@@ -143,7 +142,6 @@ async function main() {
           depositVault: ctx.depositVault,
           investmentRequest: ctx.investmentRequest,
           attestation: ctx.attestation,
-          frozenCheck: null,
           assetTokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: anchor.web3.SystemProgram.programId,
         })

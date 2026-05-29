@@ -7,7 +7,6 @@ export const REDEMPTION_ESCROW_SEED = Buffer.from("redemption_escrow");
 export const INVESTMENT_REQUEST_SEED = Buffer.from("investment_request");
 export const REDEMPTION_REQUEST_SEED = Buffer.from("redemption_request");
 export const CLAIMABLE_TOKENS_SEED = Buffer.from("claimable_tokens");
-export const CREDIT_FROZEN_ACCOUNT_SEED = Buffer.from("frozen_account");
 
 // Cross-program PDA helpers for compliance-hook and mock-sas live in their
 // dedicated PDA modules: `./compliance-hook-pda` and `./mock-sas-pda`.
@@ -73,17 +72,6 @@ export function getClaimableTokensAddress(
 ): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
     [CLAIMABLE_TOKENS_SEED, vault.toBuffer(), investor.toBuffer()],
-    programId,
-  );
-}
-
-export function getCreditFrozenAccountAddress(
-  programId: PublicKey,
-  vault: PublicKey,
-  investor: PublicKey,
-): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [CREDIT_FROZEN_ACCOUNT_SEED, vault.toBuffer(), investor.toBuffer()],
     programId,
   );
 }

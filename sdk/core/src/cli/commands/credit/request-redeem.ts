@@ -90,8 +90,6 @@ export function registerRequestRedeemCommand(program: Command): void {
           wallet.publicKey,
           shares,
           attestation,
-          undefined,
-          undefined,
           remainingAccounts,
         );
 

@@ -99,10 +99,11 @@ impl FuzzTest {
         let nav_gross: u64 = rand::random::<u64>() % 100_000_000_000_000;
         let ter_bps: u16 = rand::random::<u16>() % 6_000;
         let loss_provision_bps: u16 = rand::random::<u16>() % 6_000;
-        let new_sequence: u64 = self
-            .state
-            .sequence
-            .saturating_add((rand::random::<u64>() % 5).saturating_add(1));
+        let new_sequence: u64 = self.state.sequence.checked_add(
+            (rand::random::<u64>() % 5)
+                .checked_add(1)
+                .expect("fuzz model overflow: add"),
+        ).expect("fuzz model overflow: add");
         // Sometimes intentionally pick a stale sequence to exercise the reject branch.
         let sequence = if rand::random::<u8>() % 8 == 0 {
             self.state.sequence
@@ -126,7 +127,7 @@ impl FuzzTest {
         } else {
             // Slightly off — outside the 1-bps tolerance.
             let base = ((nav_gross as u128 * factor_bps as u128) / 10_000) as u64;
-            base.saturating_add(nav_gross / 5_000) // 2 bps off
+            base.checked_add(nav_gross / 5_000).expect("fuzz model overflow: add") // 2 bps off
         };
 
         // --- Mirror the on-chain validation chain. ---
@@ -217,7 +218,7 @@ impl FuzzTest {
         let prev_nav_net = self.state.nav_net;
         let prev_nav_gross = self.state.nav_gross;
 
-        self.state.publisher_version = self.state.publisher_version.saturating_add(1);
+        self.state.publisher_version = self.state.publisher_version.checked_add(1).expect("fuzz model overflow: add");
         self.state.publisher_rotation_count += 1;
 
         // INVARIANT: rotation does not touch NAV state.

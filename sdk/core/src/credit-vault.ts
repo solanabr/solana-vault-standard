@@ -17,7 +17,6 @@ import {
   getInvestmentRequestAddress,
   getRedemptionRequestAddress,
   getClaimableTokensAddress,
-  getCreditFrozenAccountAddress,
 } from "./credit-vault-pda";
 import {
   COMPLIANCE_HOOK_PROGRAM_ID,
@@ -48,13 +47,10 @@ export interface CreditVaultState {
   bump: number;
   redemptionEscrowBump: number;
   paused: boolean;
-  // Oracle extensibility fields. `oracleSource` selects the read path:
-  //   0 = simple/mock oracle (neutral upstream default)
-  //   1 = NavOracle adapter (rich credit-grade NAV)
-  oracleSource: number;
+  // Pluggable oracle: `navOracle` is the configured oracle account and
+  // `oracleProgram` its owner program; the vault reads the generic
+  // SvsOraclePrice header. `lastSeenNavSequence` is the consumed sequence.
   lastSeenNavSequence: BN;
-  lastSeenNavPrice: BN;
-  maxNavStalenessSecs: BN;
 }
 
 export interface CreateCreditVaultParams {
@@ -128,14 +124,6 @@ export interface RedemptionRequestState {
   status: { pending: {} } | { approved: {} };
   requestedAt: BN;
   fulfilledAt: BN;
-  bump: number;
-}
-
-export interface CreditFrozenAccountState {
-  investor: PublicKey;
-  vault: PublicKey;
-  frozenBy: PublicKey;
-  frozenAt: BN;
   bump: number;
 }
 
@@ -313,10 +301,8 @@ export class CreditVault {
       .bootstrapSharesCompliance({
         mode: params.mode,
         poolPolicy: params.poolPolicy ?? null,
-        attestationProgram:
-          params.attestationProgram ?? PublicKey.default,
-        attestationIssuer:
-          params.attestationIssuer ?? PublicKey.default,
+        attestationProgram: params.attestationProgram ?? PublicKey.default,
+        attestationIssuer: params.attestationIssuer ?? PublicKey.default,
         requiredAttestationType: params.requiredAttestationType ?? 0,
       })
       .accountsPartial({
@@ -376,7 +362,6 @@ export class CreditVault {
     investor: PublicKey,
     amount: BN,
     attestation: PublicKey,
-    frozenCheck?: PublicKey,
   ): Promise<string> {
     const [investmentRequest] = getInvestmentRequestAddress(
       this.program.programId,
@@ -395,7 +380,6 @@ export class CreditVault {
         depositVault: this.depositVault,
         assetMint: this.assetMint,
         attestation,
-        frozenCheck: frozenCheck ?? this.program.programId,
         assetTokenProgram: this.assetTokenProgram,
         systemProgram: SystemProgram.programId,
         clock: SYSVAR_CLOCK_PUBKEY,
@@ -406,10 +390,8 @@ export class CreditVault {
   async approveDeposit(
     manager: PublicKey,
     investor: PublicKey,
-    navOracle: PublicKey,
+    oracleAccount: PublicKey,
     attestation: PublicKey,
-    frozenCheck?: PublicKey,
-    navAccount?: PublicKey,
   ): Promise<string> {
     const [investmentRequest] = getInvestmentRequestAddress(
       this.program.programId,
@@ -424,14 +406,10 @@ export class CreditVault {
         vault: this.vault,
         investmentRequest,
         investor,
-        navOracle,
-        // nav_account is the NavAccount PDA from the nav-oracle program.
-        // Read only when CreditVault.oracle_source == 1. For
-        // oracle_source == 0 (mock-oracle revert mode) any account works
-        // — we default to the program ID as a non-readable filler.
-        navAccount: navAccount ?? this.program.programId,
+        // The configured oracle account (vault.nav_oracle), read through the
+        // generic SvsOraclePrice header.
+        oracleAccount,
         attestation,
-        frozenCheck: frozenCheck ?? this.program.programId,
         clock: SYSVAR_CLOCK_PUBKEY,
       })
       .rpc();
@@ -517,8 +495,6 @@ export class CreditVault {
     investor: PublicKey,
     shares: BN,
     attestation: PublicKey,
-    frozenCheck?: PublicKey,
-    queuedForSettlementAt?: BN,
     remainingAccounts?: AccountMeta[],
   ): Promise<string> {
     const [redemptionRequest] = getRedemptionRequestAddress(
@@ -533,10 +509,8 @@ export class CreditVault {
     );
     const investorSharesAccount = this.getInvestorSharesAccount(investor);
 
-    const queuedAt = queuedForSettlementAt ?? new BN(0);
-
     const builder = this.program.methods
-      .requestRedeem(shares, queuedAt)
+      .requestRedeem(shares)
       .accountsPartial({
         investor,
         vault: this.vault,
@@ -547,33 +521,24 @@ export class CreditVault {
         assetMint: this.assetMint,
         claimableTokens,
         attestation,
-        frozenCheck: frozenCheck ?? this.program.programId,
         assetTokenProgram: this.assetTokenProgram,
         token2022Program: TOKEN_2022_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
         clock: SYSVAR_CLOCK_PUBKEY,
       });
 
-    return (remainingAccounts?.length
-      ? builder.remainingAccounts(remainingAccounts)
-      : builder
+    return (
+      remainingAccounts?.length
+        ? builder.remainingAccounts(remainingAccounts)
+        : builder
     ).rpc();
   }
 
   async approveRedeem(
     manager: PublicKey,
     investor: PublicKey,
-    navOracle: PublicKey,
+    oracleAccount: PublicKey,
     attestation: PublicKey,
-    frozenCheck?: PublicKey,
-    navAccount?: PublicKey,
-    /// Fixed-point ratio (1e18 = 100%). Default preserves the original
-    /// "full fulfillment" semantics so existing SDK callers continue to
-    /// work.
-    batchSettlementRatioScaled?: BN,
-    /// Settlement epoch the request auto-requeues to on partial
-    /// fulfillment. Ignored on full fulfillment.
-    nextSettlementAt?: BN,
   ): Promise<string> {
     const [redemptionRequest] = getRedemptionRequestAddress(
       this.program.programId,
@@ -586,12 +551,8 @@ export class CreditVault {
       investor,
     );
 
-    const ratio =
-      batchSettlementRatioScaled ?? new BN("1000000000000000000"); // 1e18 default
-    const nextSettlement = nextSettlementAt ?? new BN(0);
-
     return this.program.methods
-      .approveRedeem(ratio, nextSettlement)
+      .approveRedeem()
       .accountsPartial({
         manager,
         vault: this.vault,
@@ -602,11 +563,9 @@ export class CreditVault {
         depositVault: this.depositVault,
         assetMint: this.assetMint,
         claimableTokens,
-        navOracle,
-        // nav_account — see approveDeposit for full context.
-        navAccount: navAccount ?? this.program.programId,
+        // The configured oracle account (vault.nav_oracle).
+        oracleAccount,
         attestation,
-        frozenCheck: frozenCheck ?? this.program.programId,
         assetTokenProgram: this.assetTokenProgram,
         token2022Program: TOKEN_2022_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
@@ -670,25 +629,24 @@ export class CreditVault {
     );
     const investorSharesAccount = this.getInvestorSharesAccount(investor);
 
-    const builder = this.program.methods
-      .cancelRedeem()
-      .accountsPartial({
-        investor,
-        vault: this.vault,
-        redemptionRequest,
-        sharesMint: this.sharesMint,
-        assetMint: this.assetMint,
-        claimableTokens,
-        investorSharesAccount,
-        redemptionEscrow: this.redemptionEscrow,
-        assetTokenProgram: this.assetTokenProgram,
-        token2022Program: TOKEN_2022_PROGRAM_ID,
-        systemProgram: SystemProgram.programId,
-      });
+    const builder = this.program.methods.cancelRedeem().accountsPartial({
+      investor,
+      vault: this.vault,
+      redemptionRequest,
+      sharesMint: this.sharesMint,
+      assetMint: this.assetMint,
+      claimableTokens,
+      investorSharesAccount,
+      redemptionEscrow: this.redemptionEscrow,
+      assetTokenProgram: this.assetTokenProgram,
+      token2022Program: TOKEN_2022_PROGRAM_ID,
+      systemProgram: SystemProgram.programId,
+    });
 
-    return (remainingAccounts?.length
-      ? builder.remainingAccounts(remainingAccounts)
-      : builder
+    return (
+      remainingAccounts?.length
+        ? builder.remainingAccounts(remainingAccounts)
+        : builder
     ).rpc();
   }
 
@@ -750,51 +708,6 @@ export class CreditVault {
       .rpc();
   }
 
-  // ============ Compliance ============
-
-  async freezeAccount(
-    manager: PublicKey,
-    investor: PublicKey,
-  ): Promise<string> {
-    const [frozenAccount] = getCreditFrozenAccountAddress(
-      this.program.programId,
-      this.vault,
-      investor,
-    );
-
-    return this.program.methods
-      .freezeAccount()
-      .accountsPartial({
-        manager,
-        vault: this.vault,
-        investor,
-        frozenAccount,
-        systemProgram: SystemProgram.programId,
-        clock: SYSVAR_CLOCK_PUBKEY,
-      })
-      .rpc();
-  }
-
-  async unfreezeAccount(
-    manager: PublicKey,
-    investor: PublicKey,
-  ): Promise<string> {
-    const [frozenAccount] = getCreditFrozenAccountAddress(
-      this.program.programId,
-      this.vault,
-      investor,
-    );
-
-    return this.program.methods
-      .unfreezeAccount()
-      .accountsPartial({
-        manager,
-        vault: this.vault,
-        frozenAccount,
-      })
-      .rpc();
-  }
-
   // ============ Admin Functions ============
 
   async pause(authority: PublicKey): Promise<string> {
@@ -810,31 +723,6 @@ export class CreditVault {
   async unpause(authority: PublicKey): Promise<string> {
     return this.program.methods
       .unpause()
-      .accountsPartial({
-        authority,
-        vault: this.vault,
-      })
-      .rpc();
-  }
-
-  /**
-   * Switch the vault's oracle read path between the simple/mock oracle
-   * (`source = 0`, neutral upstream default) and the optional NavOracle
-   * adapter (`source = 1`, rich credit-grade NAV).
-   *
-   * Authority-gated. Does NOT mutate `nav_oracle` or `oracle_program` —
-   * deployments can opt into or out of richer NAV reads without a full
-   * program upgrade. Emits an `OracleSourceChanged` event.
-   *
-   * @param authority - Vault authority (signer)
-   * @param source - 0 (simple/mock) or 1 (NavOracle adapter)
-   */
-  async setOracleSource(
-    authority: PublicKey,
-    source: 0 | 1,
-  ): Promise<string> {
-    return this.program.methods
-      .setOracleSource(source)
       .accountsPartial({
         authority,
         vault: this.vault,
@@ -966,20 +854,5 @@ export class CreditVault {
       { fetch: (addr: PublicKey) => Promise<RedemptionRequestState> }
     >;
     return accountNs["redemptionRequest"].fetch(redemptionRequest);
-  }
-
-  async fetchFrozenAccount(
-    investor: PublicKey,
-  ): Promise<CreditFrozenAccountState> {
-    const [frozenAccount] = getCreditFrozenAccountAddress(
-      this.program.programId,
-      this.vault,
-      investor,
-    );
-    const accountNs = this.program.account as Record<
-      string,
-      { fetch: (addr: PublicKey) => Promise<CreditFrozenAccountState> }
-    >;
-    return accountNs["frozenAccount"].fetch(frozenAccount);
   }
 }

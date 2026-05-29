@@ -20,9 +20,10 @@ export function registerInitNavAccountCommand(parent: Command): void {
       "--publisher <pubkey>",
       "Publisher key authorized to sign NAV updates",
     )
-    .requiredOption(
-      "--rotation-authority <pubkey>",
-      "Authority allowed to rotate the publisher",
+    .option(
+      "--max-deviation-bps <number>",
+      "Max consecutive-publish NAV deviation in bps (> 0)",
+      "500",
     )
     .action(async (poolArg, opts) => {
       const globalOpts = getGlobalOptions(parent.parent!);
@@ -52,14 +53,13 @@ export function registerInitNavAccountCommand(parent: Command): void {
         const programId = new PublicKey((idl as any).address);
         const pool = new PublicKey(poolArg);
         const publisher = new PublicKey(opts.publisher);
-        const keyRotationAuthority = new PublicKey(opts.rotationAuthority);
         const [navAccount] = getNavAccountAddress(pool, programId);
 
         output.info("═══ NavOracle: Initialize NavAccount ═══");
         output.info(`  Pool:               ${pool.toBase58()}`);
         output.info(`  NavAccount:         ${navAccount.toBase58()}`);
         output.info(`  Publisher:          ${publisher.toBase58()}`);
-        output.info(`  Rotation authority: ${keyRotationAuthority.toBase58()}`);
+        output.info(`  Pool authority:     ${wallet.publicKey.toBase58()}`);
         output.info(`  Payer:              ${wallet.publicKey.toBase58()}`);
 
         if (globalOpts.dryRun) {
@@ -81,7 +81,8 @@ export function registerInitNavAccountCommand(parent: Command): void {
         const result = await NavOracle.initialize(prog, wallet.publicKey, {
           pool,
           publisher,
-          keyRotationAuthority,
+          poolAuthority: wallet.publicKey,
+          maxDeviationBps: Number(opts.maxDeviationBps),
         });
 
         spinner.succeed("NavAccount created");

@@ -20,11 +20,7 @@
  * the Token-2022 TransferHook runtime during transfers, not by user code.
  */
 import { BN, Program, AnchorProvider } from "@coral-xyz/anchor";
-import {
-  PublicKey,
-  SystemProgram,
-  Keypair,
-} from "@solana/web3.js";
+import { PublicKey, SystemProgram, Keypair } from "@solana/web3.js";
 
 import {
   COMPLIANCE_HOOK_PROGRAM_ID,

@@ -10,18 +10,14 @@ import {
 
 describe("SDK Nav Oracle PDA Module", () => {
   const POOL_A = new PublicKey("So11111111111111111111111111111111111111112");
-  const POOL_B = new PublicKey(
-    "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
-  );
-  const POOL_C = new PublicKey(
-    "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL",
-  );
+  const POOL_B = new PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
+  const POOL_C = new PublicKey("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
   const ALT_PROGRAM_ID = new PublicKey(
     "SVS1111111111111111111111111111111111111111",
   );
 
   describe("Constants", () => {
-    it("NAV_ACCOUNT_SEED matches Rust SEED_PREFIX (b\"nav_oracle\")", () => {
+    it('NAV_ACCOUNT_SEED matches Rust SEED_PREFIX (b"nav_oracle")', () => {
       expect(NAV_ACCOUNT_SEED.toString()).to.equal("nav_oracle");
     });
 

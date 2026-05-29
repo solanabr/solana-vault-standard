@@ -44,7 +44,9 @@ describe("SDK ComplianceHook Class", () => {
     it("freelyTransferable() returns the camelCase variant tag", () => {
       const v = ComplianceMode.freelyTransferable();
       expect(v).to.have.property("freelyTransferable");
-      expect((v as { freelyTransferable: unknown }).freelyTransferable).to.deep.equal({});
+      expect(
+        (v as { freelyTransferable: unknown }).freelyTransferable,
+      ).to.deep.equal({});
     });
 
     it("permissioned() returns the camelCase variant tag", () => {
@@ -174,7 +176,8 @@ describe("SDK ComplianceHook Class", () => {
     it("InitializeMintConfigParams: poolPolicy may be omitted, null, or set", () => {
       // Omitted (FreelyTransferable case)
       const stub = { publicKey: AUTHORITY } as { publicKey: PublicKey };
-      const fakeKp = stub as unknown as InitializeMintConfigParams["mintAuthority"];
+      const fakeKp =
+        stub as unknown as InitializeMintConfigParams["mintAuthority"];
       const a: InitializeMintConfigParams = {
         mint: MINT_A,
         mode: ComplianceMode.freelyTransferable(),
@@ -214,8 +217,7 @@ describe("SDK ComplianceHook Class", () => {
 
     it("UpdateSanctionsListParams: additions/removals default to empty", () => {
       const stub = { publicKey: AUTHORITY } as { publicKey: PublicKey };
-      const fakeKp =
-        stub as unknown as UpdateSanctionsListParams["authority"];
+      const fakeKp = stub as unknown as UpdateSanctionsListParams["authority"];
       const params: UpdateSanctionsListParams = { authority: fakeKp };
       expect(params.additions).to.equal(undefined);
       expect(params.removals).to.equal(undefined);

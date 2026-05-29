@@ -13,7 +13,9 @@ import { loadIdl } from "../../utils";
 export function registerInitDerwaCommand(parent: Command): void {
   parent
     .command("init")
-    .description("Bind pool ↔ permissioned (cPOOL) ↔ open (dePOOL) into a WrapperConfig")
+    .description(
+      "Bind pool ↔ permissioned (cPOOL) ↔ open (dePOOL) into a WrapperConfig",
+    )
     .argument("<pool>", "Pool PDA (CreditVault address)")
     .requiredOption(
       "--permissioned-mint <pubkey>",
@@ -73,7 +75,9 @@ export function registerInitDerwaCommand(parent: Command): void {
 
         output.info("═══ deRWA Wrapper: Initialize ═══");
         output.info(`  Pool:                 ${pool.toBase58()}`);
-        output.info(`  Permissioned mint:    ${permissionedMint.toBase58()} (cPOOL)`);
+        output.info(
+          `  Permissioned mint:    ${permissionedMint.toBase58()} (cPOOL)`,
+        );
         output.info(`  deRWA mint:           ${derwaMint.toBase58()} (dePOOL)`);
         output.info(`  Attestation program:  ${attestationProgram.toBase58()}`);
         output.info(`  Attestation issuer:   ${attestationIssuer.toBase58()}`);
@@ -96,18 +100,14 @@ export function registerInitDerwaCommand(parent: Command): void {
         const spinner = output.spinner("Creating WrapperConfig PDA...");
         spinner.start();
 
-        const result = await DeRwaWrapper.initialize(
-          prog,
-          wallet.publicKey,
-          {
-            pool,
-            permissionedMint,
-            derwaMint,
-            attestationProgram,
-            attestationIssuer,
-            requiredAttestationType,
-          },
-        );
+        const result = await DeRwaWrapper.initialize(prog, wallet.publicKey, {
+          pool,
+          permissionedMint,
+          derwaMint,
+          attestationProgram,
+          attestationIssuer,
+          requiredAttestationType,
+        });
 
         spinner.succeed("WrapperConfig created");
         output.success(`Tx: ${result.signature}`);

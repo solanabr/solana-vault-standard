@@ -39,7 +39,9 @@ export function registerTranchedRedeemCommand(parent: Command): void {
         const trancheIndex = parseInt(opts.tranche);
         validateAmountInput(opts.shares, "shares");
         const shares = new BN(opts.shares);
-        const minAssetsOut = new BN(validateAmountInput(opts.minAssets, "min-assets"));
+        const minAssetsOut = new BN(
+          validateAmountInput(opts.minAssets, "min-assets"),
+        );
 
         output.info(
           `Redeeming ${shares.toString()} shares from tranche ${trancheIndex}`,

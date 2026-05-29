@@ -11,6 +11,11 @@ use spl_transfer_hook_interface::onchain::add_extra_accounts_for_execute_cpi;
 use crate::error::DeRwaError;
 use crate::state::WrapperConfig;
 
+/// ComplianceHook program ID. Mirrors `svs-11/src/constants.rs` and
+/// `compliance-hook/src/lib.rs::declare_id!`.
+pub const COMPLIANCE_HOOK_PROGRAM_ID: Pubkey =
+    anchor_lang::solana_program::pubkey!("6JKauKWVJqs9duaCqXCMS6UN9KvqHxMjLS5KwJxGqH5P");
+
 fn read_hook_program_id(mint: &AccountInfo) -> Result<Option<Pubkey>> {
     if mint.owner != &spl_token_2022::ID {
         return Ok(None);
@@ -75,6 +80,23 @@ pub struct Unwrap<'info> {
     /// CHECK: validated in handler against wrapper trust anchors + canonical PDA.
     pub investor_attestation: UncheckedAccount<'info>,
 
+    /// Protocol-level singleton sanctions list (owned by compliance-hook).
+    #[account(
+        seeds = [compliance_hook::state::SanctionsList::SEED_PREFIX],
+        bump,
+        seeds::program = COMPLIANCE_HOOK_PROGRAM_ID,
+    )]
+    pub sanctions_list: Box<Account<'info, compliance_hook::state::SanctionsList>>,
+
+    /// CHECK: [b"frozen", investor] in compliance-hook. Existence (program-owned,
+    /// non-empty) = frozen. Validated by assert_wallet_compliant.
+    #[account(
+        seeds = [compliance_hook::state::FrozenAccount::SEED_PREFIX, investor.key().as_ref()],
+        bump,
+        seeds::program = COMPLIANCE_HOOK_PROGRAM_ID,
+    )]
+    pub frozen_check: UncheckedAccount<'info>,
+
     pub investor: Signer<'info>,
 
     pub token_program: Interface<'info, TokenInterface>,
@@ -86,6 +108,12 @@ pub fn handler<'info>(ctx: Context<'_, '_, '_, 'info, Unwrap<'info>>, amount: u6
         ctx.accounts.wrapper_config.locked_supply >= amount,
         DeRwaError::InsufficientLockedSupply
     );
+
+    compliance_hook::assert_wallet_compliant(
+        &ctx.accounts.sanctions_list,
+        &ctx.accounts.frozen_check.to_account_info(),
+        &ctx.accounts.investor.key(),
+    )?;
 
     validate_investor_attestation(
         &ctx.accounts.investor_attestation,

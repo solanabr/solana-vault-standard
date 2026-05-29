@@ -148,7 +148,7 @@ impl FuzzTest {
         if self.state.sanctioned.len() != prev_count
             || self.state.sanctioned.is_empty() != (prev_count == 0)
         {
-            self.state.sanctions_version = self.state.sanctions_version.saturating_add(1);
+            self.state.sanctions_version = self.state.sanctions_version.checked_add(1).expect("fuzz model overflow: add");
         }
         // INVARIANT: capacity bound.
         assert!(

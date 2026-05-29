@@ -363,21 +363,21 @@ Beyond the SVS-1..SVS-12 vault variants, the workspace ships supporting programs
 
 | Program | Purpose | Primary Consumer |
 |---------|---------|------------------|
-| [compliance-hook](compliance-hook.md) | Token-2022 `TransferHook` backend (sanctions list + per-mint policy) | SVS-11 (cPOOL/dePOOL) |
-| [nav-oracle](nav-oracle.md) | Per-pool NAV oracle with signed publisher payloads | SVS-11 (`oracle_source = 1`) |
+| [compliance-hook](compliance-hook.md) | Protocol-level compliance: singleton sanctions list + per-wallet freeze + Token-2022 `TransferHook` backend | SVS-11 (cPOOL/dePOOL) |
+| [nav-oracle](nav-oracle.md) | Per-pool NAV oracle with signed publisher payloads, writing the canonical `SvsOraclePrice` header | SVS-11 (pluggable oracle) |
 | [derwa-wrapper](derwa-wrapper.md) | 1:1 wrap between a closed permissioned mint and an open Token-2022 mint | SVS-11 (cPOOL → dePOOL bridge) |
 | `mock-oracle` | Test oracle implementing the `svs-oracle` account layout | SVS-10/11 tests |
 | `mock-sas` | Test attestation service mock | SVS-11/derwa-wrapper tests |
 
 ### compliance-hook
 
-Token-2022 `TransferHook` extension backend. Per-mint configuration (`FreelyTransferable` | `Permissioned`) drives transfer-time policy: sanctions-list gating in both modes, plus attestation gating in `Permissioned` mode. SVS-11 binds compliance-hook to its share mint via the cPOOL/dePOOL pattern.
+Protocol-level compliance, the single source of truth for sanctions and per-wallet freeze. It owns a singleton `SanctionsList` (`[b"sanctions_list"]`) and a per-wallet freeze marker (`[b"frozen", wallet]`). The Token-2022 `TransferHook` extension backend enforces compliance on transfers; per-mint configuration (`FreelyTransferable` | `Permissioned`) drives transfer-time policy: sanctions/freeze gating in both modes, plus attestation gating in `Permissioned` mode. The three hook-blind SVS-11 paths — `claim_deposit` (mint), `approve_redeem` (burn), and derwa unwrap (burn) — call the shared `assert_wallet_compliant` helper directly, since the transfer hook never fires on mint/burn. SVS-11 no longer freezes accounts at the vault level.
 
-See [compliance-hook.md](compliance-hook.md) for the per-mint config layout, transfer-hook entrypoint, and attestation-check flow.
+See [compliance-hook.md](compliance-hook.md) for the sanctions-list / freeze PDA layout, transfer-hook entrypoint, and attestation-check flow.
 
 ### nav-oracle
 
-Per-pool NAV oracle for credit-grade pricing. An off-chain publisher signs a canonical 133-byte payload (gross/net NAV, TER, loss provision, sequence, timestamp, loan-tape Merkle root); the on-chain program verifies the signature via an `Ed25519Program` instruction scan and stores the latest NAV in a `NavAccount` PDA. Sequence numbers are strictly monotonic to prevent replay. SVS-11's `oracle_source = 1` mode reads the `NavAccount` in `approve_deposit` / `approve_redeem` to convert assets ↔ shares.
+Per-pool NAV oracle for credit-grade pricing, the reference implementation of the pluggable SVS oracle interface. An off-chain publisher signs a canonical 133-byte payload (gross/net NAV, TER, loss provision, sequence, timestamp, loan-tape Merkle root); the on-chain program verifies the signature via an `Ed25519Program` instruction scan, enforces a consecutive-price deviation guard, and writes the latest reading — fronted by the canonical 24-byte `SvsOraclePrice` header (price, timestamp, sequence) — into a `NavAccount` PDA. Sequence numbers are strictly monotonic to prevent replay. SVS-11 reads any compliant oracle through a single `oracle_account` via the shared `read_oracle` in `modules/svs-oracle`; the vault enforces only generic invariants (positive price, staleness, monotonic sequence) in `approve_deposit` / `approve_redeem` to convert assets ↔ shares. Publisher rotation reads the pool's live `CreditVault.authority`.
 
 See [nav-oracle.md](nav-oracle.md) for the payload schema, signature-verification pattern, and `NavAccount` layout.
 
@@ -397,8 +397,8 @@ See [derwa-wrapper.md](derwa-wrapper.md) for the wrap/unwrap flow and attestatio
                                   │ ed25519 sig
                                   ▼
    ┌───────────────┐      ┌──────────────────┐
-   │  SVS-11 Vault │◄─────┤   nav-oracle     │  (oracle_source = 1)
-   │  (async pool) │      │   NavAccount PDA │
+   │  SVS-11 Vault │◄─────┤   nav-oracle     │  (pluggable oracle:
+   │  (async pool) │      │  SvsOraclePrice  │   single oracle_account)
    └───────┬───────┘      └──────────────────┘
            │
            │ mints / burns
@@ -418,9 +418,9 @@ See [derwa-wrapper.md](derwa-wrapper.md) for the wrap/unwrap flow and attestatio
 ```
 
 Cross-program calls in the SVS-11 deposit/redeem path:
-1. `approve_deposit` reads `NavAccount` from nav-oracle (no CPI; account read).
-2. `mint_to(cpool_mint, ...)` triggers compliance-hook's `TransferHook` automatically (Token-2022 invokes the hook).
-3. Wrap to dePOOL is an explicit CPI to `derwa-wrapper::wrap`; unwrap calls `derwa-wrapper::unwrap` which itself reads an attestation account checked against compliance-hook policy.
+1. `approve_deposit` reads the configured `oracle_account` via the generic `SvsOraclePrice` header (no CPI; account read).
+2. `claim_deposit` (mint) calls compliance-hook's `assert_wallet_compliant` directly — the `TransferHook` does not fire on mint/burn.
+3. Wrap to dePOOL is an explicit CPI to `derwa-wrapper::wrap`; unwrap (burn) calls `derwa-wrapper::unwrap` which itself reads an attestation account checked against compliance-hook policy and asserts wallet compliance.
 
 ---
 

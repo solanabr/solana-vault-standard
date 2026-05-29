@@ -404,13 +404,13 @@ These are full on-chain programs (not Rust modules). They live alongside SVS-1..
 
 ### compliance-hook
 
-Token-2022 `TransferHook` extension backend. Holds a per-mint config (`FreelyTransferable` | `Permissioned`) and a sanctions list; Token-2022 invokes the hook on every transfer of a hook-bound mint. SVS-11 uses it to gate cPOOL/dePOOL transfers.
+Protocol-level compliance: single source of truth for sanctions and per-wallet freeze. Holds a singleton `SanctionsList` (`[b"sanctions_list"]`), per-wallet freeze markers (`[b"frozen", wallet]`), and a per-mint config (`FreelyTransferable` | `Permissioned`). Token-2022 invokes its `TransferHook` on every transfer of a hook-bound mint. The three hook-blind SVS-11 paths (`claim_deposit` mint, `approve_redeem` burn, derwa unwrap burn) call the shared `assert_wallet_compliant` helper directly. SVS-11 uses it to gate cPOOL/dePOOL flows; it does not freeze accounts at the vault level.
 
 See [compliance-hook.md](compliance-hook.md).
 
 ### nav-oracle
 
-Per-pool NAV oracle. Off-chain publisher signs a canonical NAV payload (gross/net NAV, TER, loss provision, sequence, timestamp, loan-tape root); the program verifies via `Ed25519Program` instruction scan and stores the latest reading in a `NavAccount` PDA with strictly monotonic sequence. Used by SVS-11 with `oracle_source = 1`.
+Per-pool NAV oracle, the reference implementation of the pluggable SVS oracle interface. Off-chain publisher signs a canonical NAV payload (gross/net NAV, TER, loss provision, sequence, timestamp, loan-tape root); the program verifies via `Ed25519Program` instruction scan, enforces a consecutive-price deviation guard, and writes the latest reading — fronted by the canonical 24-byte `SvsOraclePrice` header — into a `NavAccount` PDA with strictly monotonic sequence. SVS-11 reads it (or any compliant oracle) through a single `oracle_account` via the shared `read_oracle` in `modules/svs-oracle`.
 
 See [nav-oracle.md](nav-oracle.md).
 
@@ -426,7 +426,7 @@ See [derwa-wrapper.md](derwa-wrapper.md).
 |------------|-----------------|------------|---------------|
 | SVS-1..4 | optional (bind to shares mint) | n/a | n/a |
 | SVS-10 | optional | optional | n/a |
-| SVS-11 | required (cPOOL/dePOOL gating) | required when `oracle_source = 1` | required for dePOOL bridging |
+| SVS-11 | required (cPOOL/dePOOL gating) | required (pluggable oracle) | required for dePOOL bridging |
 | SVS-12 | optional per tranche | optional | n/a |
 
 Modules in the table above (svs-fees, svs-caps, etc.) compose freely with all three supporting programs — they operate at different layers (modules act inside the vault binary; supporting programs are reached externally).

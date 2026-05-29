@@ -312,23 +312,23 @@ export class DeRwaWrapper {
       };
     };
 
-    const builder = methodsNs
-      .wrap(params.amount)
-      .accountsPartial({
-        wrapperConfig: wrapperConfigPda.pda,
-        wrapperSigner,
-        permissionedMint: cfg.permissionedMint,
-        derwaMint: cfg.derwaMint,
-        investorPermissionedAta,
-        wrapperLockedAta,
-        investorDerwaAta,
-        investor: params.user,
-        tokenProgram: TOKEN_2022_PROGRAM_ID,
-      });
+    const builder = methodsNs.wrap(params.amount).accountsPartial({
+      wrapperConfig: wrapperConfigPda.pda,
+      wrapperSigner,
+      permissionedMint: cfg.permissionedMint,
+      derwaMint: cfg.derwaMint,
+      investorPermissionedAta,
+      wrapperLockedAta,
+      investorDerwaAta,
+      investor: params.user,
+      tokenProgram: TOKEN_2022_PROGRAM_ID,
+    });
 
-    return (params.remainingAccounts?.length
-      ? builder.remainingAccounts(params.remainingAccounts)
-      : builder)
+    return (
+      params.remainingAccounts?.length
+        ? builder.remainingAccounts(params.remainingAccounts)
+        : builder
+    )
       .rpc()
       .then((sig) => {
         // Touch provider so unused-var lint doesn't fire on this branch.
@@ -398,24 +398,23 @@ export class DeRwaWrapper {
       };
     };
 
-    const builder = methodsNs
-      .unwrap(params.amount)
-      .accountsPartial({
-        wrapperConfig: wrapperConfigPda.pda,
-        wrapperSigner,
-        permissionedMint: cfg.permissionedMint,
-        derwaMint: cfg.derwaMint,
-        wrapperLockedAta,
-        investorPermissionedAta,
-        investorDerwaAta,
-        investorAttestation: params.attestation,
-        investor: params.user,
-        tokenProgram: TOKEN_2022_PROGRAM_ID,
-      });
+    const builder = methodsNs.unwrap(params.amount).accountsPartial({
+      wrapperConfig: wrapperConfigPda.pda,
+      wrapperSigner,
+      permissionedMint: cfg.permissionedMint,
+      derwaMint: cfg.derwaMint,
+      wrapperLockedAta,
+      investorPermissionedAta,
+      investorDerwaAta,
+      investorAttestation: params.attestation,
+      investor: params.user,
+      tokenProgram: TOKEN_2022_PROGRAM_ID,
+    });
 
-    return (params.remainingAccounts?.length
-      ? builder.remainingAccounts(params.remainingAccounts)
-      : builder
+    return (
+      params.remainingAccounts?.length
+        ? builder.remainingAccounts(params.remainingAccounts)
+        : builder
     ).rpc();
   }
 

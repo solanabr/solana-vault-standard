@@ -6,7 +6,7 @@ use anchor_spl::{
 
 use crate::attestation::validate_attestation;
 use crate::constants::{
-    FROZEN_ACCOUNT_SEED, INVESTMENT_REQUEST_SEED, SHARES_MINT_SEED, VAULT_SEED,
+    COMPLIANCE_HOOK_PROGRAM_ID, INVESTMENT_REQUEST_SEED, SHARES_MINT_SEED, VAULT_SEED,
 };
 use crate::error::VaultError;
 use crate::events::InvestmentClaimed;
@@ -57,10 +57,20 @@ pub struct ClaimDeposit<'info> {
     /// CHECK: Validated in handler via validate_attestation
     pub attestation: UncheckedAccount<'info>,
 
-    /// CHECK: If data is non-empty, investor is frozen
+    /// Protocol-level singleton sanctions list (owned by compliance-hook).
     #[account(
-        seeds = [FROZEN_ACCOUNT_SEED, vault.key().as_ref(), investor.key().as_ref()],
+        seeds = [compliance_hook::state::SanctionsList::SEED_PREFIX],
         bump,
+        seeds::program = COMPLIANCE_HOOK_PROGRAM_ID,
+    )]
+    pub sanctions_list: Box<Account<'info, compliance_hook::state::SanctionsList>>,
+
+    /// CHECK: [b"frozen", investor] in compliance-hook. Existence (program-owned,
+    /// non-empty) = frozen. Validated by assert_wallet_compliant.
+    #[account(
+        seeds = [compliance_hook::state::FrozenAccount::SEED_PREFIX, investor.key().as_ref()],
+        bump,
+        seeds::program = COMPLIANCE_HOOK_PROGRAM_ID,
     )]
     pub frozen_check: UncheckedAccount<'info>,
 
@@ -80,10 +90,12 @@ pub fn handler(ctx: Context<ClaimDeposit>) -> Result<()> {
         &ctx.accounts.investor.key(),
         &ctx.accounts.clock,
     )?;
-    require!(
-        ctx.accounts.frozen_check.data_is_empty(),
-        VaultError::AccountFrozen
-    );
+
+    compliance_hook::assert_wallet_compliant(
+        &ctx.accounts.sanctions_list,
+        &ctx.accounts.frozen_check.to_account_info(),
+        &ctx.accounts.investor.key(),
+    )?;
 
     let shares = ctx.accounts.investment_request.shares_claimable;
     let amount_locked = ctx.accounts.investment_request.amount_locked;

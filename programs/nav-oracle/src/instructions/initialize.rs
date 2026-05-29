@@ -2,6 +2,13 @@ use crate::error::NavOracleError;
 use crate::state::NavAccount;
 use anchor_lang::prelude::*;
 
+#[derive(AnchorSerialize, AnchorDeserialize)]
+pub struct InitializeNavArgs {
+    /// Max allowed consecutive-publish deviation, in bps. MUST be > 0 (a zero
+    /// ceiling would reject every consecutive publish).
+    pub max_deviation_bps: u16,
+}
+
 #[derive(Accounts)]
 pub struct InitializeNavAccount<'info> {
     /// CHECK: SVS-11 CreditVault PDA. Read in handler to verify `pool_authority`.
@@ -24,16 +31,18 @@ pub struct InitializeNavAccount<'info> {
     /// CHECK: pubkey stored verbatim.
     pub publisher: UncheckedAccount<'info>,
 
-    /// CHECK: pubkey stored verbatim; gates publisher rotation.
-    pub key_rotation_authority: UncheckedAccount<'info>,
-
     #[account(mut)]
     pub payer: Signer<'info>,
 
     pub system_program: Program<'info, System>,
 }
 
-pub fn handler(ctx: Context<InitializeNavAccount>) -> Result<()> {
+pub fn handler(ctx: Context<InitializeNavAccount>, args: InitializeNavArgs) -> Result<()> {
+    require!(
+        args.max_deviation_bps > 0,
+        NavOracleError::InvalidDeviationConfig
+    );
+
     // Gate: when pool has data (real CreditVault), require pool_authority
     // signer matches CreditVault.authority at bytes 8..40 (Anchor discriminator
     // + first field). Empty pool accounts are accepted — the attack we close
@@ -53,19 +62,20 @@ pub fn handler(ctx: Context<InitializeNavAccount>) -> Result<()> {
     drop(pool_data);
 
     let nav = &mut ctx.accounts.nav_account;
-    nav.pool = ctx.accounts.pool.key();
     nav.nav_net = 0;
+    nav.timestamp = 0;
+    nav.sequence = 0;
+    nav.pool = ctx.accounts.pool.key();
     nav.nav_gross = 0;
     nav.ter_bps = 0;
     nav.loss_provision_bps = 0;
     nav.nav_type = 0;
     nav._padding = [0u8; 7];
-    nav.timestamp = 0;
-    nav.sequence = 0;
     nav.publisher = ctx.accounts.publisher.key();
     nav.signature = [0u8; 64];
     nav.loan_tape_merkle_root = [0u8; 32];
-    nav.key_rotation_authority = ctx.accounts.key_rotation_authority.key();
+    nav.last_published_nav = 0;
+    nav.max_deviation_bps = args.max_deviation_bps;
 
     Ok(())
 }

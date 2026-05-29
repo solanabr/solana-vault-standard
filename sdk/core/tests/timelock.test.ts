@@ -536,7 +536,11 @@ describe("SDK Timelock Module", () => {
       const now = 1000000;
 
       const p1 = await manager.propose(TimelockAction.Pause, {}, now);
-      const p2 = await manager.propose(TimelockAction.UpdateFees, { fee: 100 }, now);
+      const p2 = await manager.propose(
+        TimelockAction.UpdateFees,
+        { fee: 100 },
+        now,
+      );
       const p3 = await manager.propose(
         TimelockAction.TransferAuthority,
         { newAuthority: NEW_AUTHORITY.toBase58() },
@@ -573,7 +577,11 @@ describe("SDK Timelock Module", () => {
 
       const ids = new Set<string>();
       for (let i = 0; i < 100; i++) {
-        const p = await manager.propose(TimelockAction.Pause, { index: i }, now);
+        const p = await manager.propose(
+          TimelockAction.Pause,
+          { index: i },
+          now,
+        );
         ids.add(p.id);
       }
 

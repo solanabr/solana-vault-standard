@@ -29,7 +29,9 @@
 mod constants;
 mod error;
 mod functions;
+mod price;
 
 pub use constants::*;
 pub use error::OracleError;
 pub use functions::*;
+pub use price::*;

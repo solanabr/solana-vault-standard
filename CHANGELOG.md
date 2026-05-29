@@ -7,6 +7,94 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Architectural refactor — audit-driven (D1–D6)
+
+A consolidation pass over the four hackathon programs, landed as five
+commit-aligned changes. Supersedes some entries in the earlier "Audit
+hardening" pass below (noted inline where reversed).
+
+#### Compliance: single source of truth (D1/D2/D3)
+
+- **SVS-11 per-vault freeze removed entirely.** Deleted the
+  `freeze_account` / `unfreeze_account` instructions, the `FrozenAccount`
+  account, `VaultConfig.compliance_officer` + `set_compliance_officer`,
+  the `FROZEN_ACCOUNT_SEED` constant, the `AccountFrozen` /
+  `UnauthorizedComplianceAction` errors, and the `AccountFrozen` /
+  `AccountUnfrozen` / `ComplianceOfficerUpdated` events. Vault managers no
+  longer hold freeze power.
+- **compliance-hook is now the only compliance authority.** Added a shared
+  `assert_wallet_compliant(sanctions_list, frozen_pda, wallet)` helper
+  (behind the `cpi` feature). The Token-2022 transfer hook covers
+  transfers; the three hook-blind paths — `claim_deposit` (mint_to),
+  `approve_redeem` (burn), and derwa-wrapper `unwrap` (burn) — call the
+  helper directly. The other six SVS-11 paths no longer take a
+  `frozen_check` account.
+- Extracted the duplicated `read_hook_program_id` into a shared
+  `svs-11/src/hook_extras.rs` (3 sites).
+
+#### Pluggable oracle interface (D4)
+
+- **Replaced the hardcoded mock/nav `oracle_source` binary with a
+  pluggable interface.** New 24-byte `SvsOraclePrice` header
+  (`price`/`timestamp`/`sequence`) written at account bytes 8..32 by any
+  compliant oracle, plus one generic `read_oracle` reader in
+  `modules/svs-oracle`. Deleted `oracle_source`, `set_oracle_source`,
+  `OracleSourceInvalid`, `OracleSourceChanged`, and the
+  `NAV_ORACLE_SEED` / `NAV_ORACLE_PROGRAM_ID` / `ORACLE_SOURCE_*`
+  constants. `approve_deposit` / `approve_redeem` take a single
+  `oracle_account` (validated `key == vault.nav_oracle`,
+  `owner == vault.oracle_program`).
+- Collapsed the two staleness fields into one `max_staleness` (ceiling
+  raised from 24h to 45 days); deleted `max_nav_staleness_secs` and the
+  now-dead `last_seen_nav_price`.
+- The oracle timelock now rotates the oracle account **and** its owner
+  program atomically (`request_oracle_change` gains a `new_oracle_program`
+  arg; `VaultConfig` gains `pending_oracle_program`). `request_oracle_change`
+  also cross-checks the (account, program) pair at stage time — the staged
+  oracle account must be owned by the staged program — so a mismatched pair
+  is rejected immediately instead of bricking approvals after the timelock.
+- **Removed the vault-derived (books-vs-oracle) deviation guard.** SVS-11 no
+  longer re-derives a price from `total_assets / total_shares` to bound the
+  oracle: `total_assets` tracks idle cash (draw_down deploys capital
+  off-chain), so it is not the NAV, and AUM is `total_shares * oracle price`.
+  The old guard would have falsely tripped `OracleDeviationExceeded` on any
+  vault that had deployed capital, blocking all deposits/redemptions. Deleted
+  `CreditVault.max_deviation_bps`, its `update_oracle_params` parameter, the
+  `OracleDeviationExceeded` / `MaxDeviationTooHigh` errors, and the
+  `DEFAULT_MAX_DEVIATION_BPS` / `MAX_DEVIATION_BPS_CAP` constants. Price
+  integrity is now wholly the oracle's responsibility.
+- **Consecutive-price deviation guard moved into nav-oracle** (each oracle
+  self-validates integrity). `nav-oracle::initialize` now takes
+  `InitializeNavArgs { max_deviation_bps }` (must be > 0); new errors
+  `DeviationExceeded` (7012) and `InvalidDeviationConfig` (7013).
+  `NavAccount` reordered to lead with the canonical header and gained
+  `last_published_nav` + `max_deviation_bps`. mock-oracle now writes the
+  header too.
+
+#### NAV publisher-rotation authority unified (D6)
+
+- Deleted `NavAccount.key_rotation_authority`. `rotate_publisher` now
+  reads the pool's live `CreditVault.authority` (pool bytes 8..40) with
+  three checks (pool owned by SVS-11, data length, signer match), so
+  rotation is governed by the same authority that controls the vault.
+  `initialize` no longer takes a `key_rotation_authority` account.
+
+#### Redemption reverted to atomic full approval (D5)
+
+- **Removed the on-chain "pro-rata" machinery** — it was manager-driven
+  with zero enforced cross-request fairness. `approve_redeem` is now
+  atomic full-or-nothing: it takes no `batch_settlement_ratio_scaled` /
+  `next_settlement_at` params and burns all `shares_locked` in one shot.
+  Deleted RedemptionRequest fields `original_shares` /
+  `queued_for_settlement_at` / `fulfilled_shares_cumulative`,
+  `request_redeem`'s `queued_for_settlement_at` param, the
+  `SettlementHorizonOutOfRange` / `RequestPartiallyFulfilled` errors, the
+  `MAX_SETTLEMENT_HORIZON_SECS` constant, and the cancel/reject dust-trap
+  constraints. `RedemptionApproved` simplified to
+  `{ vault, investor, shares, assets, nav, manager }`.
+- Replaced `saturating_*` with `checked_*` across the four Trident fuzz
+  harnesses so model overflow surfaces as divergence (T1-2).
+
 ### Audit hardening — hackathon programs PR-prep
 
 Security + quality pass against the four programs added in the
@@ -35,14 +123,11 @@ changes were deliberately deferred.
 - **nav-oracle `rotate_publisher`** rejects `new_publisher == Pubkey::default()`.
 - **nav-oracle `initialize`** is now gated by `pool_authority: Signer`
   matching `CreditVault.authority` (bytes 8..40). Closes the per-pool
-  squat race.
+  squat race. (The architectural refactor above further changed
+  `initialize` to take `InitializeNavArgs { max_deviation_bps }` and drop
+  the `key_rotation_authority` account.)
 - **derwa-wrapper `initialize`** asserts dePOOL `mint_authority ==
   wrapper_signer` and `supply == 0` (`InvalidDerwaMint` 8011).
-- **svs-11 `set_oracle_source`** resets `last_seen_nav_price` and
-  `last_seen_nav_sequence` on toggle. Without this, the deviation guard
-  would compare against a baseline from a different oracle source.
-- **svs-11 `approve_redeem`** bounds `next_settlement_at` to
-  `[now, now + MAX_SETTLEMENT_HORIZON_SECS]` (5 years).
 - **svs-11 request/cancel/approve redeem hook extras** errors now map
   `add_extra_accounts_for_execute_cpi` failures to
   `VaultError::HookExtrasMismatch` instead of opaque `ProgramError`.
@@ -52,10 +137,10 @@ changes were deliberately deferred.
 - **svs-11 `claimable_tokens` PDA lifecycle** split out of
   `init_if_needed` (CLAUDE.md anti-pattern): now created at
   `request_redeem`, closed by `claim_redeem` / `cancel_redeem` /
-  `reject_redeem`. `cancel_redeem` and `reject_redeem` gain
-  `assets_claimable == 0` guard (`RequestPartiallyFulfilled`); before
-  this fix, cancel-after-partial would have panicked at runtime with an
-  insufficient-balance error.
+  `reject_redeem`. (The earlier `assets_claimable == 0` /
+  `RequestPartiallyFulfilled` cancel/reject guard was removed by the
+  full-approval revert above — a Pending request always has
+  `assets_claimable == 0`, so the guard is moot.)
 - **derwa-wrapper events** added: `WrapperInitialized`, `Wrapped`,
   `Unwrapped`. Brings the program in line with the repo's emit-on-state-
   change convention.
