@@ -3491,4 +3491,54 @@ describe("svs-11 (Credit Markets Vault)", () => {
       );
     });
   });
+
+  describe("Oracle staleness window at init (monthly-NAV regression)", () => {
+    // Regression: initialize_pool validated max_staleness via
+    // svs_oracle::validate_staleness_config (24h cap), so a credit pool with a
+    // monthly NAV window (<=45d) could not be created at all. It now uses the
+    // same 60..=DEFAULT_MAX_NAV_STALENESS_SECS bound as update_oracle_params.
+    const THIRTY_DAYS = new BN(2_592_000); // > 24h cap, < 45d ceiling
+    const vaultId2 = new BN(777);
+    let vault2: PublicKey;
+    let sharesMint2: PublicKey;
+    let redemptionEscrow2: PublicKey;
+    let depositVault2: PublicKey;
+
+    before(() => {
+      [vault2] = getCreditVaultAddress(program.programId, assetMint, vaultId2);
+      [sharesMint2] = getCreditSharesMintAddress(program.programId, vault2);
+      [redemptionEscrow2] = getRedemptionEscrowAddress(
+        program.programId,
+        vault2,
+      );
+      depositVault2 = getAssociatedTokenAddressSync(assetMint, vault2, true);
+    });
+
+    it("accepts a 30-day staleness window (was rejected by the 24h cap)", async () => {
+      await program.methods
+        .initializePool(vaultId2, minimumInvestment, THIRTY_DAYS)
+        .accountsPartial({
+          authority: payer.publicKey,
+          manager: manager.publicKey,
+          vault: vault2,
+          assetMint,
+          sharesMint: sharesMint2,
+          depositVault: depositVault2,
+          redemptionEscrow: redemptionEscrow2,
+          navOracle: mockOracleData,
+          oracleProgram: oracleProgram.programId,
+          attester: attester.publicKey,
+          attestationProgram: attestationProgramId,
+          assetTokenProgram: TOKEN_PROGRAM_ID,
+          token2022Program: TOKEN_2022_PROGRAM_ID,
+          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+          rent: SYSVAR_RENT_PUBKEY,
+        })
+        .rpc();
+
+      const v = await program.account.creditVault.fetch(vault2);
+      expect(v.maxStaleness.toNumber()).to.equal(THIRTY_DAYS.toNumber());
+    });
+  });
 });

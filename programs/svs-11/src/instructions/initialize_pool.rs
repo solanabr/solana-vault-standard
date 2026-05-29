@@ -15,8 +15,8 @@ use anchor_spl::{
 };
 
 use crate::constants::{
-    COMPLIANCE_HOOK_PROGRAM_ID, MAX_DECIMALS, REDEMPTION_ESCROW_SEED, SHARES_DECIMALS,
-    SHARES_MINT_SEED, VAULT_SEED,
+    COMPLIANCE_HOOK_PROGRAM_ID, DEFAULT_MAX_NAV_STALENESS_SECS, MAX_DECIMALS,
+    REDEMPTION_ESCROW_SEED, SHARES_DECIMALS, SHARES_MINT_SEED, VAULT_SEED,
 };
 use crate::error::VaultError;
 use crate::events::VaultInitialized;
@@ -291,8 +291,13 @@ pub fn handler(
     vault.redemption_escrow = ctx.accounts.redemption_escrow.key();
     vault.nav_oracle = ctx.accounts.nav_oracle.key();
     vault.oracle_program = ctx.accounts.oracle_program.key();
-    svs_oracle::validate_staleness_config(max_staleness)
-        .map_err(|_| VaultError::InvalidStalenessConfig)?;
+    // Ceiling is the NAV staleness window (45 days), not svs_oracle's generic
+    // 24h cap — NAV publishes monthly, so a 24h limit would make a credit pool
+    // un-initializable. Mirrors update_oracle_params (admin.rs).
+    require!(
+        (60..=DEFAULT_MAX_NAV_STALENESS_SECS).contains(&max_staleness),
+        VaultError::InvalidStalenessConfig
+    );
     vault.max_staleness = max_staleness;
     vault.attester = ctx.accounts.attester.key();
     vault.attestation_program = ctx.accounts.attestation_program.key();

@@ -63,7 +63,7 @@ pub fn request_transfer_authority_handler(
 
     let vault = &mut ctx.accounts.vault;
 
-    // V9-P8: Prevent silently overwriting a pending transfer
+    // Prevent silently overwriting a pending transfer
     require!(
         vault.pending_authority == Pubkey::default(),
         VaultError::PendingTransferExists
@@ -118,7 +118,7 @@ pub struct AcceptAuthority<'info> {
 }
 
 /// Transfer vault authority (deprecated -- prefer two-step transfer).
-/// V7-P1: Guard against completing single-step transfer while a two-step transfer is pending.
+/// Guard against completing single-step transfer while a two-step transfer is pending.
 #[allow(deprecated)]
 #[deprecated(note = "Use request_transfer_authority + accept_authority two-step pattern")]
 pub fn transfer_authority_handler(ctx: Context<Admin>, new_authority: Pubkey) -> Result<()> {
@@ -126,7 +126,7 @@ pub fn transfer_authority_handler(ctx: Context<Admin>, new_authority: Pubkey) ->
         new_authority != Pubkey::default(),
         VaultError::InvalidAddress
     );
-    // V7-P1: Prevent bypassing pending two-step transfer via deprecated single-step path
+    // Prevent bypassing pending two-step transfer via deprecated single-step path
     require!(
         ctx.accounts.vault.pending_authority == Pubkey::default(),
         VaultError::PendingTransferExists
@@ -146,7 +146,7 @@ pub fn transfer_authority_handler(ctx: Context<Admin>, new_authority: Pubkey) ->
 }
 
 /// Cancel a pending two-step authority transfer.
-/// V7-P4: Dedicated cancel instruction (cleaner than overwriting with a new request).
+/// Dedicated cancel instruction (cleaner than overwriting with a new request).
 pub fn cancel_transfer_authority_handler(ctx: Context<Admin>) -> Result<()> {
     let vault = &mut ctx.accounts.vault;
     require!(
@@ -464,6 +464,10 @@ pub fn apply_oracle_change_handler(ctx: Context<ApplyOracleChange>) -> Result<()
 
     ctx.accounts.vault.nav_oracle = new_oracle;
     ctx.accounts.vault.oracle_program = new_oracle_program;
+    // Reset the replay baseline: a fresh oracle starts its sequence at 1, which
+    // would otherwise be rejected as SequenceStale against the old oracle's
+    // last-seen value, bricking every approval until it climbs past it.
+    ctx.accounts.vault.last_seen_nav_sequence = 0;
 
     let vault_config = &mut ctx.accounts.vault_config;
     vault_config.pending_oracle = Pubkey::default();
