@@ -160,13 +160,7 @@ anchor verify <PROGRAM_ID> --provider.cluster mainnet
 
 ---
 
-## Multisig Setup (Example: Squads v4)
-
-The SVS standard does not prescribe a specific multisig program; any
-governance / multisig that exposes a controllable signer PDA works
-(Squads v4, Realms, or a custom governance program). The example below
-uses Squads v4 because it has the broadest tooling support on Solana,
-but the only contract is "the upgrade authority is a multisig vault PDA."
+## Multisig Setup (Squads v4)
 
 ### Creating a Squad for Program Authority
 
@@ -191,13 +185,12 @@ async function createProgramSquad() {
 }
 ```
 
-### Transferring Upgrade Authority to the Multisig Vault
+### Transferring Upgrade Authority to Multisig
 
 ```bash
-# Transfer program upgrade authority to the multisig vault PDA.
-# Substitute whichever multisig program you use; only the vault PDA matters.
+# Transfer program upgrade authority to multisig
 solana program set-upgrade-authority <PROGRAM_ID> \
-    --new-upgrade-authority <MULTISIG_VAULT_PDA> \
+    --new-upgrade-authority <MULTISIG_PDA> \
     --url mainnet
 ```
 
@@ -339,7 +332,7 @@ jobs:
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `🚀 Buffer written to mainnet: \`${{ steps.buffer.outputs.address }}\`\n\nApprove upgrade via the configured multisig (e.g. Squads).`
+              body: `🚀 Buffer written to mainnet: \`${{ steps.buffer.outputs.address }}\`\n\nApprove upgrade via Squads multisig.`
             })
 ```
 
