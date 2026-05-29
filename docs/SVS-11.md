@@ -255,9 +255,9 @@ the generic `SvsOraclePrice` header.
 
 ## KYC Attestation
 
-Every `request_deposit`, `request_redeem`, `approve_deposit`, and `approve_redeem` validates the investor's attestation account. The model is provider-agnostic — any program that writes accounts matching the spec's `Attestation` layout is supported.
+Every `request_deposit`, `request_redeem`, `approve_deposit`, and `approve_redeem` validates the investor's attestation account. The model is provider-agnostic — any program that writes accounts matching the canonical `Attestation` layout is supported. The layout and verification live in the shared `svs_attestation` crate (`modules/svs-attestation`, the attestation analogue of `svs-oracle`); `attestation.rs::validate_attestation` calls `svs_attestation::verify_attestation` and maps the result onto `VaultError`. `compliance-hook` and `derwa-wrapper` consume the same module.
 
-**Attestation Account Layout** (125 bytes):
+**Attestation Account Layout** (129 bytes on-disk: 8-byte discriminator + 121-byte payload):
 ```rust
 pub struct Attestation {
     pub subject: Pubkey,          // 32 — investor being attested
@@ -265,19 +265,25 @@ pub struct Attestation {
     pub attestation_type: u8,     //  1 — KYC(0), Accredited(1), etc.
     pub country_code: [u8; 2],    //  2 — ISO 3166-1 alpha-2
     pub issued_at: i64,           //  8 — unix timestamp
-    pub expires_at: i64,          //  8 — 0 = no expiry
+    pub expires_at: i64,          //  8 — must be strictly in the future
     pub revoked: bool,            //  1
     pub bump: u8,                 //  1
     pub _reserved: [u8; 32],      // 32
+    // additive-only metadata (default-zero = no policy enforcement):
+    pub jurisdiction: [u8; 2],    //  2 — ISO 3166-1 alpha-2, [0,0] = unset
+    pub investor_class: u8,       //  1 — 0=infra, 1=retail, 2=accredited, 3=qualified
+    pub kyc_risk_tier: u8,        //  1 — 0=unset, 1=low, 2=medium, 3=high
 }
 ```
 
-**Validation**:
-1. `attestation.owner == vault.attestation_program`
-2. `attestation.subject == investor`
-3. `attestation.issuer == vault.attester`
-4. `attestation.revoked == false`
-5. `attestation.expires_at == 0` (no expiry) OR `attestation.expires_at > clock.unix_timestamp`
+**Validation** (`svs_attestation::verify_attestation`):
+1. `att.owner == vault.attestation_program`
+2. `att.subject == investor`
+3. `att.issuer == vault.attester`
+4. `att.attestation_type == vault.required_attestation_type`
+5. `att.revoked == false`
+6. `att.expires_at > clock.unix_timestamp` (a non-positive expiry is treated as expired)
+7. Canonical PDA: `att.key() == [b"attestation", subject, issuer, &[type], &[bump]]` under `vault.attestation_program` — atomically binds steps 2–4 to the physical account.
 
 **Configuration**: The vault stores `attester` (issuer pubkey) and `attestation_program` (program that owns attestation accounts). These can be updated via `update_attester`.
 

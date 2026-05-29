@@ -27,6 +27,7 @@ anchor-spl = { version = "0.31.1", features = ["token", "associated_token", "met
 spl-token-2022 = "6.0.0"
 spl-transfer-hook-interface = "0.9"
 svs-oracle = { path = "../../modules/svs-oracle" }
+svs-attestation = { path = "../../modules/svs-attestation" }
 svs-fees = { path = "../../modules/svs-fees", optional = true }
 svs-caps = { path = "../../modules/svs-caps", optional = true }
 svs-locks = { path = "../../modules/svs-locks", optional = true }

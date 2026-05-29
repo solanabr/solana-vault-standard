@@ -7,6 +7,7 @@ use anchor_spl::token_2022::spl_token_2022::extension::{
 use anchor_spl::token_2022::spl_token_2022::state::Mint as Token2022Mint;
 use anchor_spl::token_interface::{burn, Burn, Mint, TokenAccount, TokenInterface};
 use spl_transfer_hook_interface::onchain::add_extra_accounts_for_execute_cpi;
+use svs_attestation::{verify_attestation, AttestationError};
 
 use crate::error::DeRwaError;
 use crate::state::WrapperConfig;
@@ -187,76 +188,37 @@ pub fn handler<'info>(ctx: Context<'_, '_, '_, 'info, Unwrap<'info>>, amount: u6
     Ok(())
 }
 
-/// Validate an SVS-11 Attestation against wrapper trust anchors + the
-/// unwrapping investor. Canonical-PDA derivation atomically binds the
-/// owner/subject/issuer/type checks to the same physical account.
-///
-/// Field offsets MUST stay in sync with `svs-11/src/attestation.rs` AND
-/// `compliance-hook/src/instructions/execute.rs::check_attestation`.
-/// Offsets after the 8-byte discriminator:
-///   0..32  subject  | 32..64  issuer  | 64  type  | 65..67  country
-///   67..75  issued_at  | 75..83  expires_at  | 83  revoked  | 84  bump
+/// Map the shared module's granular error onto deRWA error codes.
+fn map_attestation_err(e: AttestationError) -> DeRwaError {
+    match e {
+        AttestationError::WrongOwner => DeRwaError::InvalidAttestationProgram,
+        AttestationError::SubjectMismatch => DeRwaError::InvalidAttestationSubject,
+        AttestationError::IssuerMismatch => DeRwaError::InvalidAttestationIssuer,
+        AttestationError::WrongType => DeRwaError::InvalidAttestationType,
+        AttestationError::InvalidPda => DeRwaError::InvalidAttestationPda,
+        AttestationError::Malformed | AttestationError::Revoked | AttestationError::Expired => {
+            DeRwaError::AttestationRequired
+        }
+    }
+}
+
+/// Validate an SVS attestation against wrapper trust anchors + the unwrapping
+/// investor. The canonical layout + checks live in the shared `svs-attestation`
+/// module; this maps the result onto deRWA error codes.
 fn validate_investor_attestation(
     att: &AccountInfo,
     investor: &Pubkey,
     cfg: &WrapperConfig,
 ) -> Result<()> {
-    require!(
-        att.owner == &cfg.attestation_program,
-        DeRwaError::InvalidAttestationProgram
-    );
-    require!(
-        att.lamports() > 0 && att.data_len() > 0,
-        DeRwaError::AttestationRequired
-    );
-
-    let data = att.try_borrow_data()?;
-    require!(data.len() >= 129, DeRwaError::AttestationRequired);
-    let payload = &data[8..];
-    let bytes_at = |range: std::ops::Range<usize>| -> Result<[u8; 32]> {
-        payload[range]
-            .try_into()
-            .map_err(|_| -> Error { error!(DeRwaError::AttestationRequired) })
-    };
-
-    let subject = Pubkey::new_from_array(bytes_at(0..32)?);
-    require!(&subject == investor, DeRwaError::InvalidAttestationSubject);
-
-    let issuer = Pubkey::new_from_array(bytes_at(32..64)?);
-    require!(
-        issuer == cfg.attestation_issuer,
-        DeRwaError::InvalidAttestationIssuer
-    );
-
-    let attestation_type = payload[64];
-    require!(
-        attestation_type == cfg.required_attestation_type,
-        DeRwaError::InvalidAttestationType
-    );
-
-    let revoked = payload[83] != 0;
-    require!(!revoked, DeRwaError::AttestationRequired);
-
-    let expires_bytes: [u8; 8] = payload[75..83]
-        .try_into()
-        .map_err(|_| -> Error { error!(DeRwaError::AttestationRequired) })?;
-    let expires_at = i64::from_le_bytes(expires_bytes);
     let now = Clock::get()?.unix_timestamp;
-    require!(now < expires_at, DeRwaError::AttestationRequired);
-
-    let bump = payload[84];
-    let expected_pda = Pubkey::create_program_address(
-        &[
-            b"attestation",
-            subject.as_ref(),
-            issuer.as_ref(),
-            &[attestation_type],
-            &[bump],
-        ],
+    verify_attestation(
+        att,
         &cfg.attestation_program,
+        investor,
+        &cfg.attestation_issuer,
+        cfg.required_attestation_type,
+        now,
     )
-    .map_err(|_| -> Error { error!(DeRwaError::InvalidAttestationPda) })?;
-    require!(att.key() == expected_pda, DeRwaError::InvalidAttestationPda);
-
+    .map_err(|e| error!(map_attestation_err(e)))?;
     Ok(())
 }

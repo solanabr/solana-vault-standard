@@ -540,6 +540,7 @@ dependencies = [
  "anchor-spl",
  "spl-tlv-account-resolution",
  "spl-transfer-hook-interface",
+ "svs-attestation",
 ]
 
 [[package]]
@@ -646,6 +647,7 @@ dependencies = [
  "anchor-spl",
  "compliance-hook",
  "spl-transfer-hook-interface",
+ "svs-attestation",
 ]
 
 [[package]]
@@ -2944,6 +2946,7 @@ dependencies = [
  "spl-token-2022",
  "spl-transfer-hook-interface",
  "svs-access",
+ "svs-attestation",
  "svs-caps",
  "svs-fees",
  "svs-locks",
@@ -3125,6 +3128,14 @@ name = "svs-access"
 version = "2.0.0"
 dependencies = [
  "blake3",
+ "proptest",
+]
+
+[[package]]
+name = "svs-attestation"
+version = "2.0.0"
+dependencies = [
+ "anchor-lang",
  "proptest",
 ]
 

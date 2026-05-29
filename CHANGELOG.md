@@ -95,6 +95,25 @@ hardening" pass below (noted inline where reversed).
 - Replaced `saturating_*` with `checked_*` across the four Trident fuzz
   harnesses so model overflow surfaces as divergence (T1-2).
 
+#### Attestation interface extracted to a shared module
+
+- **New `modules/svs-attestation` crate** — the attestation analogue of
+  `svs-oracle`. The canonical 129-byte layout, the offset parser
+  (`Attestation::from_account_data`), the pure invariant check
+  (`check_invariants`), and the full account-level verifier
+  (`verify_attestation`, which adds owner + canonical-PDA binding) now
+  live in one place instead of being re-implemented by byte offset in
+  three programs.
+- **Repointed all three consumers** at the shared verifier: SVS-11
+  `attestation.rs::validate_attestation`, `compliance-hook`
+  `execute.rs::check_attestation`, and `derwa-wrapper`
+  `unwrap.rs::validate_investor_attestation`. Each maps the granular
+  `AttestationError` onto its own program error codes (e.g. svs-11's
+  `InvalidAttester` and compliance-hook's `InvalidAttestationIssuer` both
+  derive from `IssuerMismatch`), so on-chain error codes are unchanged.
+  Deleted the duplicated `Attestation` struct + layout-stability test
+  from `svs-11/src/attestation.rs` and the two hand-rolled offset readers.
+
 ### Audit hardening — hackathon programs PR-prep
 
 Security + quality pass against the four programs added in the

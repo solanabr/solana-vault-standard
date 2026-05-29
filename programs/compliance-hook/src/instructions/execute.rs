@@ -1,5 +1,6 @@
 use anchor_lang::prelude::*;
 use spl_transfer_hook_interface::error::TransferHookError;
+use svs_attestation::{verify_attestation, AttestationError};
 
 use crate::error::ComplianceHookError;
 use crate::state::{ComplianceMode, MintConfig, SanctionsList};
@@ -117,84 +118,38 @@ pub fn handler(ctx: Context<Execute>) -> Result<()> {
     }
 }
 
-/// Validates an SVS-11 Attestation account against `mint_config`'s trust
-/// anchors. The canonical-PDA check (step 8) atomically binds steps 3-5:
-/// any subject/issuer/type mismatch would produce a different PDA, so a
-/// forged payload satisfying 3-5 individually still fails 8.
-///
-/// Field offsets MUST stay in sync with `svs-11/src/attestation.rs` AND
-/// `derwa-wrapper/src/instructions/unwrap.rs` (parallel reader). Offsets
-/// after the 8-byte discriminator:
-///   0..32  subject  | 32..64  issuer  | 64  type  | 65..67  country
-///   67..75  issued_at  | 75..83  expires_at  | 83  revoked  | 84  bump
+/// Map the shared module's granular error onto compliance-hook error codes.
+fn map_attestation_err(e: AttestationError) -> ComplianceHookError {
+    match e {
+        AttestationError::WrongOwner => ComplianceHookError::InvalidAttestationProgram,
+        AttestationError::Malformed => ComplianceHookError::AttestationNotFound,
+        AttestationError::SubjectMismatch => ComplianceHookError::InvalidAttestationSubject,
+        AttestationError::IssuerMismatch => ComplianceHookError::InvalidAttestationIssuer,
+        AttestationError::WrongType => ComplianceHookError::InvalidAttestationType,
+        AttestationError::Revoked => ComplianceHookError::AttestationRevoked,
+        AttestationError::Expired => ComplianceHookError::AttestationExpired,
+        AttestationError::InvalidPda => ComplianceHookError::InvalidAttestationPda,
+    }
+}
+
+/// Validates an SVS attestation account against `mint_config`'s trust anchors.
+/// The canonical layout + checks (owner, subject/issuer/type, revoked, expiry,
+/// canonical PDA) live in the shared `svs-attestation` module; this maps the
+/// result onto compliance-hook error codes.
 fn check_attestation(
     att: &AccountInfo,
     expected_subject: &Pubkey,
     mint_config: &MintConfig,
 ) -> Result<()> {
-    require!(
-        att.owner == &mint_config.attestation_program,
-        ComplianceHookError::InvalidAttestationProgram
-    );
-    require!(
-        att.lamports() > 0 && att.data_len() > 0,
-        ComplianceHookError::AttestationNotFound
-    );
-
-    let data = att.try_borrow_data()?;
-    require!(data.len() >= 129, ComplianceHookError::AttestationNotFound);
-
-    let payload = &data[8..];
-    let bytes_at = |range: std::ops::Range<usize>| -> Result<[u8; 32]> {
-        payload[range]
-            .try_into()
-            .map_err(|_| -> Error { error!(ComplianceHookError::AttestationNotFound) })
-    };
-
-    let subject = Pubkey::new_from_array(bytes_at(0..32)?);
-    require!(
-        &subject == expected_subject,
-        ComplianceHookError::InvalidAttestationSubject
-    );
-
-    let issuer = Pubkey::new_from_array(bytes_at(32..64)?);
-    require!(
-        issuer == mint_config.attestation_issuer,
-        ComplianceHookError::InvalidAttestationIssuer
-    );
-
-    let attestation_type = payload[64];
-    require!(
-        attestation_type == mint_config.required_attestation_type,
-        ComplianceHookError::InvalidAttestationType
-    );
-
-    let revoked = payload[83] != 0;
-    require!(!revoked, ComplianceHookError::AttestationRevoked);
-
-    let expires_bytes: [u8; 8] = payload[75..83]
-        .try_into()
-        .map_err(|_| -> Error { error!(ComplianceHookError::AttestationNotFound) })?;
-    let expires_at = i64::from_le_bytes(expires_bytes);
     let now = Clock::get()?.unix_timestamp;
-    require!(now < expires_at, ComplianceHookError::AttestationExpired);
-
-    let bump = payload[84];
-    let expected_pda = Pubkey::create_program_address(
-        &[
-            b"attestation",
-            subject.as_ref(),
-            issuer.as_ref(),
-            &[attestation_type],
-            &[bump],
-        ],
+    verify_attestation(
+        att,
         &mint_config.attestation_program,
+        expected_subject,
+        &mint_config.attestation_issuer,
+        mint_config.required_attestation_type,
+        now,
     )
-    .map_err(|_| -> Error { error!(ComplianceHookError::InvalidAttestationPda) })?;
-    require!(
-        att.key() == expected_pda,
-        ComplianceHookError::InvalidAttestationPda
-    );
-
+    .map_err(|e| error!(map_attestation_err(e)))?;
     Ok(())
 }

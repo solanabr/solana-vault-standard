@@ -2732,17 +2732,19 @@ describe("svs-11 (Credit Markets Vault)", () => {
 
       [expInvestmentRequest] = getInvestmentRequestPDA(expInvestor.publicKey);
 
-      // Create attestation with type=1 so PDA is unique, and expires_at in the past
+      // Valid required type (0) with expires_at in the past, so expiry is the
+      // ONLY failing dimension. The PDA is already unique via expInvestor's
+      // subject — no need to vary the type.
       [expAttestation] = getAttestationPDA(
         expInvestor.publicKey,
         attester.publicKey,
-        1,
+        0,
       );
 
       await attestationMockProgram.methods
         .createAttestation(
           attester.publicKey,
-          1,
+          0,
           [66, 82],
           new BN(1_000_000), // far in the past
         )
