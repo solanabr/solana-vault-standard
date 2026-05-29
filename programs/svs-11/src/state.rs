@@ -55,7 +55,7 @@ pub struct CreditVault {
     pub _reserved: [u8; 23],
 
     // =========================================================================
-    // Pluggable oracle interface (D4)
+    // Pluggable oracle interface
     // =========================================================================
     //
     // SVS-11 reads any SVS-compliant oracle through the generic 24-byte

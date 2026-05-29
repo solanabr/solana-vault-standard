@@ -106,7 +106,6 @@ pub struct ApproveRedeem<'info> {
     pub clock: Sysvar<'info, Clock>,
 }
 
-/// 1e18 = 100% (matches backend's fixed-point convention).
 pub fn handler(ctx: Context<ApproveRedeem>) -> Result<()> {
     require!(!ctx.accounts.vault.paused, VaultError::VaultPaused);
 

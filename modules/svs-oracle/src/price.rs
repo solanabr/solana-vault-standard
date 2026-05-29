@@ -58,12 +58,19 @@ impl SvsOraclePrice {
 }
 
 /// Generic SVS oracle read: parse the header and enforce the universal
-/// invariants (positive price, staleness, sequence monotonicity). Owner/
+/// invariants (positive price, staleness, sequence replay floor). Owner/
 /// address binding is the caller's responsibility (it knows the configured
 /// program + account). Returns the validated header.
 ///
-/// `sequence == 0` is the "sequencing unused" sentinel: the monotonicity
-/// check is skipped and the caller must NOT advance its last-seen counter.
+/// The sequence is a replay FLOOR, not a per-read nonce: a publication is
+/// rejected only when its sequence is STRICTLY older than the last seen
+/// (`sequence < last_seen`). The *current* publication (`sequence == last_seen`)
+/// is accepted on every read, so a vault can settle a whole queue of requests
+/// against a single published NAV; only a strictly-older signed payload is a
+/// replay and rejected.
+///
+/// `sequence == 0` is the "sequencing unused" sentinel: the floor check is
+/// skipped and the caller must NOT advance its last-seen counter.
 pub fn read_oracle(
     data: &[u8],
     now: i64,
@@ -83,7 +90,7 @@ pub fn read_oracle(
         return Err(OracleError::StalePrice);
     }
 
-    if header.sequence != 0 && header.sequence <= last_seen_sequence {
+    if header.sequence != 0 && header.sequence < last_seen_sequence {
         return Err(OracleError::SequenceStale);
     }
 
@@ -162,8 +169,17 @@ mod tests {
     }
 
     #[test]
-    fn rejects_replayed_sequence() {
+    fn accepts_equal_sequence_for_batch_settlement() {
+        // The current publication (sequence == last_seen) is reusable, so a
+        // vault can settle many queued requests against one published NAV.
         let acct = account_with(1_000_000_000, 1700, 5);
+        assert!(read_oracle(&acct, 1700, 3600, 5).is_ok());
+    }
+
+    #[test]
+    fn rejects_strictly_older_sequence() {
+        // A strictly-older signed payload is a replay.
+        let acct = account_with(1_000_000_000, 1700, 4);
         assert_eq!(
             read_oracle(&acct, 1700, 3600, 5),
             Err(OracleError::SequenceStale)

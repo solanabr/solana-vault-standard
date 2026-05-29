@@ -81,9 +81,13 @@ pub fn handler(ctx: Context<Execute>) -> Result<()> {
         ComplianceHookError::SanctionedAddress
     );
 
-    let src_frozen = ctx.accounts.source_frozen_check.lamports() > 0
+    // Frozen iff the PDA exists AND is owned by this program — same definition
+    // as assert_wallet_compliant (compliance.rs), kept in parity here.
+    let src_frozen = ctx.accounts.source_frozen_check.owner == &crate::ID
+        && ctx.accounts.source_frozen_check.lamports() > 0
         && ctx.accounts.source_frozen_check.data_len() > 0;
-    let dst_frozen = ctx.accounts.destination_frozen_check.lamports() > 0
+    let dst_frozen = ctx.accounts.destination_frozen_check.owner == &crate::ID
+        && ctx.accounts.destination_frozen_check.lamports() > 0
         && ctx.accounts.destination_frozen_check.data_len() > 0;
     require!(
         !src_frozen && !dst_frozen,

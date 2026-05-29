@@ -61,21 +61,27 @@ impl NavAccount {
     pub fn verify_self_consistency(&self) -> bool {
         let ter_i64: i64 = self.ter_bps.into();
         let loss_i64: i64 = self.loss_provision_bps.into();
-        let factor_bps = 10_000_i64
+        // Fail closed: any arithmetic failure rejects the payload rather than
+        // coercing to 0 (which could let a fabricated NAV satisfy the check).
+        let factor_bps = match 10_000_i64
             .checked_sub(ter_i64)
-            .unwrap_or(0)
-            .checked_sub(loss_i64)
-            .unwrap_or(0);
+            .and_then(|v| v.checked_sub(loss_i64))
+        {
+            Some(v) => v,
+            None => return false,
+        };
         if factor_bps <= 0 {
             return false;
         }
         let nav_gross_u128: u128 = self.nav_gross.into();
-        let factor_u128: u128 = u128::try_from(factor_bps).unwrap_or(0);
-        let expected = nav_gross_u128
-            .checked_mul(factor_u128)
-            .unwrap_or(0)
-            .checked_div(10_000)
-            .unwrap_or(0);
+        let factor_u128: u128 = match u128::try_from(factor_bps) {
+            Ok(v) => v,
+            Err(_) => return false,
+        };
+        let expected = match nav_gross_u128.checked_mul(factor_u128).map(|v| v / 10_000) {
+            Some(v) => v,
+            None => return false,
+        };
         let nav_net_u128: u128 = self.nav_net.into();
         let tolerance = nav_gross_u128 / 10_000;
         nav_net_u128.abs_diff(expected) <= tolerance

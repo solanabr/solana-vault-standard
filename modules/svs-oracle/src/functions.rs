@@ -28,7 +28,7 @@ pub fn validate_freshness(
     current_timestamp: i64,
     max_staleness: i64,
 ) -> Result<(), OracleError> {
-    // V4-M6: Reject future timestamps with a distinct error — a future timestamp
+    // Reject future timestamps with a distinct error — a future timestamp
     // is a different failure mode than stale data
     if updated_at > current_timestamp {
         return Err(OracleError::FutureTimestamp);
@@ -243,7 +243,7 @@ mod tests {
 
     #[test]
     fn test_validate_freshness_future_timestamp() {
-        // V4-M6: updated_at in the future returns FutureTimestamp, not StalePrice
+        // updated_at in the future returns FutureTimestamp, not StalePrice
         assert_eq!(
             validate_freshness(2000, 1000, 3600),
             Err(OracleError::FutureTimestamp)
