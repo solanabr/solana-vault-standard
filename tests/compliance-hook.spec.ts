@@ -293,20 +293,108 @@ describe("compliance-hook: execute (FreelyTransferable mode)", () => {
     expect(destAcct.amount).to.equal(1_000_000n);
   });
 
-  // Frozen / sanctioned negative paths are kept as visible skipped coverage —
-  // the active happy-path test above proves the EAML resolution works
-  // end-to-end; the negative cases land alongside a more comprehensive
-  // hook-policy fuzz harness.
-  it.skip("transfer where destination owner is sanctioned fails", async () => {
-    // Setup: add destination's wallet to sanctions list, then call execute.
-    // Expected: SanctionedAddress (6000) error.
+  const [sanctionsListPda] = PublicKey.findProgramAddressSync(
+    [Buffer.from("sanctions_list")],
+    program.programId,
+  );
+
+  // Decorate the inner transfer_checked with the hook's EAML extras and run it,
+  // expecting a SanctionedAddress (6000) rejection from the hook CPI.
+  const expectSanctionedTransfer = async (
+    fromAta: PublicKey,
+    toAta: PublicKey,
+    toOwner: PublicKey,
+  ): Promise<void> => {
+    const ix = createTransferCheckedInstruction(
+      fromAta,
+      mint,
+      toAta,
+      source.publicKey,
+      100_000,
+      6,
+      [],
+      TOKEN_2022_PROGRAM_ID,
+    );
+    await addExtraAccountMetasForExecute(
+      connection,
+      ix,
+      program.programId,
+      fromAta,
+      mint,
+      toAta,
+      source.publicKey,
+      BigInt(100_000),
+    );
+    void toOwner;
+
+    let errored = false;
+    try {
+      await provider.sendAndConfirm(new Transaction().add(ix), [source]);
+    } catch (e: unknown) {
+      errored = true;
+      const errStr = String(e);
+      expect(
+        errStr.includes("SanctionedAddress") ||
+          errStr.includes("0x1770") || // hex(6000)
+          errStr.includes("6000"),
+        `Expected SanctionedAddress rejection, got: ${errStr}`,
+      ).to.equal(true);
+    }
+    expect(errored).to.equal(true, "sanctioned transfer should reject");
+  };
+
+  it("transfer where destination owner is sanctioned fails", async () => {
+    await program.methods
+      .updateSanctionsList([destination.publicKey], [])
+      .accounts({ sanctionsList: sanctionsListPda, authority: payer.publicKey })
+      .signers([payer])
+      .rpc();
+    try {
+      await expectSanctionedTransfer(
+        sourceAta,
+        destinationAta,
+        destination.publicKey,
+      );
+    } finally {
+      // Clean the singleton list so later tests see an unsanctioned destination.
+      await program.methods
+        .updateSanctionsList([], [destination.publicKey])
+        .accounts({
+          sanctionsList: sanctionsListPda,
+          authority: payer.publicKey,
+        })
+        .signers([payer])
+        .rpc();
+    }
   });
 
-  it.skip("transfer where source owner is sanctioned fails", async () => {
-    // Mirror of the above for source owner.
-    // Expected: SanctionedAddress (6000) error.
+  it("transfer where source owner is sanctioned fails", async () => {
+    await program.methods
+      .updateSanctionsList([source.publicKey], [])
+      .accounts({ sanctionsList: sanctionsListPda, authority: payer.publicKey })
+      .signers([payer])
+      .rpc();
+    try {
+      await expectSanctionedTransfer(
+        sourceAta,
+        destinationAta,
+        destination.publicKey,
+      );
+    } finally {
+      await program.methods
+        .updateSanctionsList([], [source.publicKey])
+        .accounts({
+          sanctionsList: sanctionsListPda,
+          authority: payer.publicKey,
+        })
+        .signers([payer])
+        .rpc();
+    }
   });
 
+  // Frozen negative paths remain visible skipped coverage — the two active
+  // sanctioned-transfer tests above prove the hook's gate fires through the
+  // EAML-resolved sanctions_list during a real transfer_checked CPI.
   it.skip("transfer where source owner has FrozenAccount PDA fails", async () => {
     // Setup: create a FrozenAccount PDA at [b"frozen", source_owner].
     // Expected: AccountFrozen (6001) error.

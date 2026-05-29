@@ -1,0 +1,12 @@
+[package]
+name = "svs-attestation"
+version = "2.0.0"
+edition = "2021"
+description = "Attestation account interface module for SVS vault programs - KYC/KYB attestation parsing and verification"
+license = "Apache-2.0"
+
+[dependencies]
+anchor-lang = "0.31.1"
+
+[dev-dependencies]
+proptest = "1.4"

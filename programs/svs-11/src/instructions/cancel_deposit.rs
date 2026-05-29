@@ -53,7 +53,7 @@ pub struct CancelDeposit<'info> {
 pub fn handler(ctx: Context<CancelDeposit>) -> Result<()> {
     require!(!ctx.accounts.vault.paused, VaultError::VaultPaused);
 
-    // V5-P23 FIX: Enforce minimum lock period before allowing cancellation,
+    // Enforce minimum lock period before allowing cancellation,
     // matching SVS-10's cancel_deposit pattern. Without this, investors could
     // request + immediately cancel deposits in the same slot, enabling griefing
     // (inflating total_pending_deposits transiently).

@@ -7,13 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Architectural refactor — audit-driven (D1–D6)
+### Architectural refactor — audit-driven
 
-A consolidation pass over the four hackathon programs, landed as five
-commit-aligned changes. Supersedes some entries in the earlier "Audit
+A consolidation pass over the four institutional-credit programs, landed as
+five commit-aligned changes. Supersedes some entries in the earlier "Audit
 hardening" pass below (noted inline where reversed).
 
-#### Compliance: single source of truth (D1/D2/D3)
+#### Compliance: single source of truth
 
 - **SVS-11 per-vault freeze removed entirely.** Deleted the
   `freeze_account` / `unfreeze_account` instructions, the `FrozenAccount`
@@ -32,7 +32,7 @@ hardening" pass below (noted inline where reversed).
 - Extracted the duplicated `read_hook_program_id` into a shared
   `svs-11/src/hook_extras.rs` (3 sites).
 
-#### Pluggable oracle interface (D4)
+#### Pluggable oracle interface
 
 - **Replaced the hardcoded mock/nav `oracle_source` binary with a
   pluggable interface.** New 24-byte `SvsOraclePrice` header
@@ -71,7 +71,7 @@ hardening" pass below (noted inline where reversed).
   `last_published_nav` + `max_deviation_bps`. mock-oracle now writes the
   header too.
 
-#### NAV publisher-rotation authority unified (D6)
+#### NAV publisher-rotation authority unified
 
 - Deleted `NavAccount.key_rotation_authority`. `rotate_publisher` now
   reads the pool's live `CreditVault.authority` (pool bytes 8..40) with
@@ -79,7 +79,7 @@ hardening" pass below (noted inline where reversed).
   rotation is governed by the same authority that controls the vault.
   `initialize` no longer takes a `key_rotation_authority` account.
 
-#### Redemption reverted to atomic full approval (D5)
+#### Redemption reverted to atomic full approval
 
 - **Removed the on-chain "pro-rata" machinery** — it was manager-driven
   with zero enforced cross-request fairness. `approve_redeem` is now
@@ -93,9 +93,28 @@ hardening" pass below (noted inline where reversed).
   constraints. `RedemptionApproved` simplified to
   `{ vault, investor, shares, assets, nav, manager }`.
 - Replaced `saturating_*` with `checked_*` across the four Trident fuzz
-  harnesses so model overflow surfaces as divergence (T1-2).
+  harnesses so model overflow surfaces as divergence.
 
-### Audit hardening — hackathon programs PR-prep
+#### Attestation interface extracted to a shared module
+
+- **New `modules/svs-attestation` crate** — the attestation analogue of
+  `svs-oracle`. The canonical 129-byte layout, the offset parser
+  (`Attestation::from_account_data`), the pure invariant check
+  (`check_invariants`), and the full account-level verifier
+  (`verify_attestation`, which adds owner + canonical-PDA binding) now
+  live in one place instead of being re-implemented by byte offset in
+  three programs.
+- **Repointed all three consumers** at the shared verifier: SVS-11
+  `attestation.rs::validate_attestation`, `compliance-hook`
+  `execute.rs::check_attestation`, and `derwa-wrapper`
+  `unwrap.rs::validate_investor_attestation`. Each maps the granular
+  `AttestationError` onto its own program error codes (e.g. svs-11's
+  `InvalidAttester` and compliance-hook's `InvalidAttestationIssuer` both
+  derive from `IssuerMismatch`), so on-chain error codes are unchanged.
+  Deleted the duplicated `Attestation` struct + layout-stability test
+  from `svs-11/src/attestation.rs` and the two hand-rolled offset readers.
+
+### Audit hardening — institutional-credit programs
 
 Security + quality pass against the four programs added in the
 institutional credit primitive (compliance-hook, nav-oracle,
@@ -152,7 +171,7 @@ changes were deliberately deferred.
   `LockedSupplyOverflow`, `AttestationNotFound`/`AttestationRequired`).
 - **Zero `as` casts** in nav-oracle (was 6); replaced with `.into()` /
   `try_from()`.
-- **Comment-overhead trim**: hackathon files were at 21-59% comment
+- **Comment-overhead trim**: the institutional-credit program files were at 21-59% comment
   lines (baseline svs-1/2/9: 7-14%). After trim: every file at/below
   baseline. Removed step-narration, defensive justifications, historical
   references, operator runbooks (all CLAUDE.md anti-patterns).

@@ -1,6 +1,9 @@
 //! compliance-hook Fuzz Tests — sanctions, freeze, and attestation gate
 //!
-//! Property-based fuzzing of the on-chain `execute` gate composition:
+//! Property-based check of an in-memory state MODEL replicating the `execute`
+//! gate's documented logic. NOTE: this is a model/spec check — it asserts the
+//! model's own invariants and does NOT invoke the on-chain program via Trident.
+//! Properties:
 //! - Sanctions list contains/doesn't-contain check is order-independent
 //! - Frozen marker existence ↔ blocked state across freeze/unfreeze cycles
 //! - FreelyTransferable mode allows all transfers between non-sanctioned + non-frozen wallets

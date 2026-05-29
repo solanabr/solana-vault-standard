@@ -1,6 +1,9 @@
 //! nav-oracle Fuzz Tests — signed NAV publisher invariants
 //!
-//! Property-based fuzzing of the on-chain `update` handler validation chain:
+//! Property-based check of an in-memory state MODEL replicating the `update`
+//! handler's validation chain. NOTE: this is a model/spec check — it asserts the
+//! model's own invariants and does NOT invoke the on-chain program via Trident.
+//! Properties:
 //! - `verify_self_consistency` accepts iff `nav_net ≈ nav_gross × (1 − ter − loss)` within 1 bps
 //! - `verify_self_consistency` rejects nav_gross == 0 (ZeroNavGross is upstream guard)
 //! - `ter_bps + loss_bps >= 10_000` rejected (FeesExceedGross)
@@ -8,8 +11,9 @@
 //! - sequence is strictly monotonic (StaleSequence rejects ≤)
 //! - publisher rotation only flips publisher; sequence + payload state untouched
 //!
-//! Mirrors the on-chain `NavAccount::verify_self_consistency` and
-//! `update::handler` validation chain byte-for-byte.
+//! The model replicates the documented logic of
+//! `NavAccount::verify_self_consistency` and `update::handler`; keep it in sync
+//! by hand when those handlers change (it is not derived from them).
 
 mod fuzz_accounts;
 use fuzz_accounts::*;

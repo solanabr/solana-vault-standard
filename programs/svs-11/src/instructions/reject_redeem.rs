@@ -76,7 +76,7 @@ pub struct RejectRedeem<'info> {
     pub system_program: Program<'info, System>,
 }
 
-/// V5-P20: This handler intentionally does NOT check vault.paused. During a pause,
+/// This handler intentionally does NOT check vault.paused. During a pause,
 /// the manager must still be able to reject pending redemption requests to clear the
 /// queue and return escrowed shares to investors. Blocking rejections during pause
 /// would trap investor shares in the escrow indefinitely.

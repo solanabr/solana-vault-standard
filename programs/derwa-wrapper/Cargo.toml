@@ -17,7 +17,8 @@ default = []
 idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
 
 [dependencies]
-anchor-lang = { version = "0.31.1", features = ["init-if-needed"] }
+anchor-lang = { version = "0.31.1" }
 anchor-spl = { version = "0.31.1", features = ["token", "associated_token"] }
 spl-transfer-hook-interface = "0.9"
+svs-attestation = { path = "../../modules/svs-attestation" }
 compliance-hook = { path = "../compliance-hook", features = ["cpi"] }

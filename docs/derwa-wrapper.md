@@ -114,7 +114,8 @@ Binds a pool to its `(cPOOL, dePOOL)` mint pair by creating the per-pool `Wrappe
 
 **Steps:**
 1. Validate `investor_attestation` PDA via the FIVE-step trust-anchor check
-   (`unwrap.rs::validate_investor_attestation`):
+   (`unwrap.rs::validate_investor_attestation`, which delegates to
+   `svs_attestation::verify_attestation` and maps the result onto deRWA error codes):
    - **Owner**: `att.owner == wrapper_config.attestation_program`.
    - **Subject**: `payload[0..32] == investor.key()` — atomically binds
      the attestation to THIS investor.
@@ -151,7 +152,7 @@ these if the explicit check is somehow bypassed (today: not possible
 because the explicit check is on the same program), tomorrow: yes once
 the hook is fully wired.
 
-**Attestation layout** (must stay in sync with `compliance-hook::execute::check_attestation` and SVS-11's `Attestation` struct):
+**Attestation layout** (defined canonically in the shared `svs_attestation` crate, `modules/svs-attestation`; SVS-11 and `compliance-hook` read the same module, so the layout lives in exactly one place):
 
 ```
 payload offsets (data[8..] after Anchor discriminator):

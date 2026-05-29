@@ -20,6 +20,7 @@ modules/
 ├── svs-locks/          # Time-locked shares
 ├── svs-access/         # Whitelist/blacklist with merkle proofs + account freeze
 ├── svs-oracle/         # Oracle price validation (staleness, deviation)
+├── svs-attestation/    # KYC/KYB attestation interface (layout, parse, verify)
 ├── svs-rewards/        # Secondary reward token distribution (MasterChef-style)
 └── svs-module-hooks/   # Shared integration hooks, seed constants, and error types
 ```
@@ -31,6 +32,7 @@ Dependencies:
 - `svs-access` — depends on `blake3` (merkle hashing)
 - `svs-locks` — no external deps
 - `svs-oracle` — no external deps
+- `svs-attestation` — depends on `anchor-lang` (needs `Pubkey` / `AccountInfo` / canonical-PDA derivation)
 - `svs-rewards` — no external deps
 - `svs-module-hooks` — depends on `anchor-lang`, `svs-fees`, `svs-caps`, `svs-locks`, `svs-access`
 
@@ -328,6 +330,37 @@ Fails if `|oracle - expected| * 10000 / expected > max_deviation_bps`.
 ### Integration
 
 SVS-10 (async) and SVS-11 (credit) import this crate and constrain oracle accounts to match the expected layout. External oracle programs write accounts conforming to the interface.
+
+---
+
+## svs-attestation
+
+Shared KYC/KYB attestation interface — the attestation analogue of `svs-oracle`. Attestation accounts are owned by a third-party attestation program (SAS, Civic Pass, the bundled `mock-sas`, …), never by the consuming vault, so a typed Anchor `Account<T>` is impossible: consumers read the canonical layout by byte offset. Centralizing the layout + checks here means every SVS consumer enforces the same interface instead of re-deriving offsets independently.
+
+### Constants
+
+| Name | Value | Description |
+|------|-------|-------------|
+| `ATTESTATION_ACCOUNT_LEN` | `129` | Full on-disk length (8-byte discriminator + 121-byte payload) |
+| `ATTESTATION_PAYLOAD_LEN` | `121` | Payload length after the discriminator |
+| `ATTESTATION_SEED_PREFIX` | `b"attestation"` | Canonical PDA seed prefix |
+
+Payload byte offsets (after the 8-byte discriminator) are exported individually (`SUBJECT_OFFSET`, `ISSUER_OFFSET`, `ATTESTATION_TYPE_OFFSET`, `EXPIRES_AT_OFFSET`, `REVOKED_OFFSET`, `BUMP_OFFSET`, `JURISDICTION_OFFSET`, …). The layout is additive-only: new metadata fields append at the end; existing offsets never shift.
+
+### Functions
+
+**`Attestation::from_account_data(data) -> Result<Attestation, AttestationError>`**
+Offset parser; skips the discriminator, rejects buffers shorter than `ATTESTATION_ACCOUNT_LEN`.
+
+**`check_invariants(att, subject, expected_issuer, expected_type, now) -> Result<(), AttestationError>`**
+Pure invariant check (subject/issuer/type match, not revoked, strictly-future expiry). No account access — independently unit-/property-testable.
+
+**`verify_attestation(att_info, attestation_program, subject, expected_issuer, expected_type, now) -> Result<Attestation, AttestationError>`**
+Full account-level verification: owner binding + parse + `check_invariants` + canonical-PDA binding (`[b"attestation", subject, issuer, &[type], &[bump]]`). Returns the parsed attestation so callers may read `jurisdiction` / `investor_class` / `kyc_risk_tier`.
+
+### Integration
+
+SVS-11 (`validate_attestation`), `compliance-hook` (`check_attestation` in the Token-2022 hook), and `derwa-wrapper` (`validate_investor_attestation` on unwrap) all call `verify_attestation` and map the granular `AttestationError` onto their own program error codes (e.g. svs-11's `InvalidAttester` vs compliance-hook's `InvalidAttestationIssuer` both originate from `IssuerMismatch`). `mock-sas` is the reference writer; third-party attestation programs write accounts conforming to the same layout.
 
 ---
 
