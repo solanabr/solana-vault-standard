@@ -215,7 +215,7 @@ integrity stays the responsibility of each oracle program. The Credit Markets
 pub struct SvsOraclePrice {
     pub price: u64,       // payload 0..8   (on-disk bytes 8..16)  — price in PRICE_SCALE (1e9)
     pub timestamp: i64,   // payload 8..16  (on-disk bytes 16..24) — unix timestamp
-    pub sequence: u64,    // payload 16..24 (on-disk bytes 24..32) — monotonic replay guard
+    pub sequence: u64,    // payload 16..24 (on-disk bytes 24..32) — replay floor (see validation #5)
 }
 ```
 
@@ -224,7 +224,7 @@ pub struct SvsOraclePrice {
 2. `oracle_account.owner == vault.oracle_program`
 3. `price > 0`
 4. `clock.unix_timestamp - timestamp <= vault.max_staleness`
-5. Sequence monotonicity vs `vault.last_seen_nav_sequence` (a `sequence == 0` value is the "unused" sentinel that skips the monotonicity check)
+5. Sequence replay floor vs `vault.last_seen_nav_sequence`: a publication is rejected only when STRICTLY older (`sequence < last_seen`); the *current* publication (`sequence == last_seen`) stays valid, so a whole queue of requests can settle against one published NAV. (A `sequence == 0` value is the "unused" sentinel that skips the check.) Note the writer side differs: `nav-oracle::update` requires the publisher to STRICTLY advance (`> nav.sequence`).
 
 `approve_deposit` and `approve_redeem` each take a SINGLE `oracle_account`
 (replacing the old `nav_oracle` + `nav_account` pair).
@@ -399,7 +399,6 @@ pub const CLAIMABLE_TOKENS_SEED: &[u8] = b"claimable_tokens";
 
 pub const MAX_DECIMALS: u8 = 9;
 pub const SHARES_DECIMALS: u8 = 9;
-pub const DEFAULT_MAX_STALENESS: i64 = 3600;                       // 1 hour
 pub const DEFAULT_MAX_NAV_STALENESS_SECS: i64 = 45 * 24 * 60 * 60; // 45 days (max_staleness ceiling)
 
 // No hardcoded attestation program ID — configured per-vault via `attester` and `attestation_program`

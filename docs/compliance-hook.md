@@ -211,6 +211,7 @@ Removals apply first, then additions (already-present entries are skipped). The 
 | 6015 | `InvalidAttestationType` | Attestation type does not match the configured required type |
 | 6016 | `InvalidAttestationPda` | Attestation address does not match canonical PDA derivation |
 | 6017 | `InvalidAttestationConfig` | Permissioned trust anchors are missing/default |
+| 6018 | `VersionOverflow` | Sanctions-list version counter would overflow `u64` |
 
 See [ERRORS.md](ERRORS.md) for cross-program error code allocation.
 
@@ -292,7 +293,7 @@ The program declares `declare_id!("6JKauKWVJqs9duaCqXCMS6UN9KvqHxMjLS5KwJxGqH5P"
 - `programs/compliance-hook/src/lib.rs` — `#[program]` entry points; re-exports `assert_wallet_compliant`
 - `programs/compliance-hook/src/compliance.rs` — `assert_wallet_compliant` shared CPI helper (mint/burn paths)
 - `programs/compliance-hook/src/state.rs` — `SanctionsList`, `ComplianceMode`, `MintConfig`
-- `programs/compliance-hook/src/error.rs` — `ComplianceHookError` (codes 6000–6017)
+- `programs/compliance-hook/src/error.rs` — `ComplianceHookError` (codes 6000–6018)
 - `programs/compliance-hook/src/instructions/initialize_sanctions_list.rs`
 - `programs/compliance-hook/src/instructions/initialize_mint_config.rs`
 - `programs/compliance-hook/src/instructions/initialize_extra_account_meta_list.rs`

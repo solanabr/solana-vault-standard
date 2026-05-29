@@ -66,6 +66,19 @@ Optional on-chain modules for additional functionality:
 | svs-rewards | Secondary reward token distribution | [MODULES.md](MODULES.md#svs-rewards) |
 | svs-access | Whitelist/blacklist/freeze | [MODULES.md](MODULES.md#svs-access) |
 | svs-oracle | Shared oracle price interface | [MODULES.md](MODULES.md#svs-oracle) |
+| svs-attestation | Shared KYC/KYB attestation interface | [MODULES.md](MODULES.md#svs-attestation) |
+
+---
+
+## Credit Markets Programs
+
+Supporting programs for the SVS-11 institutional-credit primitive:
+
+| Program | Purpose | Doc |
+|---------|---------|-----|
+| compliance-hook | Token-2022 `TransferHook` backend (FreelyTransferable/Permissioned) + sanctions & freeze | [compliance-hook.md](compliance-hook.md) |
+| nav-oracle | Per-pool signed NAV oracle (reference `svs-oracle` implementation) | [nav-oracle.md](nav-oracle.md) |
+| derwa-wrapper | 1:1 permissioned-cPOOL ↔ tradeable-dePOOL bridge, attestation-gated unwrap | [derwa-wrapper.md](derwa-wrapper.md) |
 
 ---
 

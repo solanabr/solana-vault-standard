@@ -336,6 +336,6 @@ Error: AnchorError: Vault is paused. Error Code: VaultPaused.
 | svs-locks | 6120-6129 | Lock module errors |
 | svs-access | 6130-6139 | Access control errors |
 | svs-rewards | 6140-6149 | Rewards module errors |
-| compliance-hook | 6000-6017 | TransferHook compliance errors (Token-2022) |
+| compliance-hook | 6000-6018 | TransferHook compliance errors (Token-2022) |
 | nav-oracle | 7000-7013 | Per-pool NAV oracle errors |
-| derwa-wrapper | 8000-8009 | cPOOL ↔ dePOOL wrap errors |
+| derwa-wrapper | 8000-8011 | cPOOL ↔ dePOOL wrap errors |

@@ -188,6 +188,8 @@ payload offsets (data[8..] after Anchor discriminator):
 | 8007 | InvalidAttestationType | attestation type does not match `WrapperConfig.required_attestation_type` |
 | 8008 | InvalidAttestationPda | attestation address does not match the canonical PDA derivation |
 | 8009 | InvalidAttestationConfig | wrapper trust anchors are unset/default |
+| 8010 | LockedSupplyOverflow | locked-supply counter under/overflowed |
+| 8011 | InvalidDerwaMint | dePOOL mint does not match `WrapperConfig.derwa_mint` |
 
 ## Security
 
