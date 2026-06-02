@@ -3670,6 +3670,34 @@ describe("svs-11 (Credit Markets Vault)", () => {
       expect(v.navOracle.toBase58()).to.equal(mockOracleData.toBase58());
       expect(v.lastSeenNavSequence.toNumber()).to.equal(0);
     });
+
+    it("rejects an account that is not a readable SVS oracle (fail-fast at swap)", async () => {
+      // A System-owned account passes the executable/owner/key checks but has
+      // no parseable SvsOraclePrice header → rejected at swap (no mutation).
+      const notAnOracle = Keypair.generate();
+      const air = await connection.requestAirdrop(
+        notAnOracle.publicKey,
+        anchor.web3.LAMPORTS_PER_SOL,
+      );
+      await connection.confirmTransaction(air);
+      const before = (await program.account.creditVault.fetch(vault)).navOracle;
+      try {
+        await program.methods
+          .setOracle(notAnOracle.publicKey, SystemProgram.programId)
+          .accountsPartial({
+            authority: payer.publicKey,
+            vault,
+            newOracleProgramAccount: SystemProgram.programId,
+            newOracleAccount: notAnOracle.publicKey,
+          })
+          .rpc();
+        expect.fail("should have thrown");
+      } catch (err: any) {
+        expect(err.error.errorCode.code).to.equal("OracleInvalidProgram");
+      }
+      const after = (await program.account.creditVault.fetch(vault)).navOracle;
+      expect(after.toBase58()).to.equal(before.toBase58());
+    });
   });
 
   describe("Oracle staleness window at init (monthly-NAV regression)", () => {

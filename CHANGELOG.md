@@ -87,8 +87,11 @@ hardening" pass below (noted inline where reversed).
 - `set_oracle` (authority-gated) rotates the oracle account **and** its owner
   program atomically, cross-checking the (account, program) pair — the oracle
   account must be owned by the named program — so a mismatched pair is rejected
-  immediately instead of bricking approvals. On rotation it seeds the replay
-  floor from the incoming oracle's current sequence.
+  immediately instead of bricking approvals. It also rejects an account that is
+  not a readable, version-compatible `SvsOraclePrice` header (fail-fast at swap,
+  without enforcing freshness — a valid oracle may be stale/unpublished at the
+  instant of rotation). On rotation it seeds the replay floor from the incoming
+  oracle's current sequence.
 - **Removed the vault-derived (books-vs-oracle) deviation guard.** SVS-11 no
   longer re-derives a price from `total_assets / total_shares` to bound the
   oracle: `total_assets` tracks idle cash (draw_down deploys capital

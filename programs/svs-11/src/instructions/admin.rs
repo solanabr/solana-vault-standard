@@ -329,14 +329,19 @@ pub fn set_oracle_handler(
     let old_oracle = ctx.accounts.vault.nav_oracle;
     let old_program = ctx.accounts.vault.oracle_program;
 
-    // Seed the replay floor from the incoming oracle's current sequence (0 if it
-    // has never published): a fresh oracle isn't bricked, and a swap-back can't
-    // replay a NAV older than where that oracle already is.
+    // Fail-fast: require a readable, version-compatible header (NOT freshness —
+    // a valid oracle may be stale/unpublished at rotation). Seed the replay
+    // floor from the incoming sequence (0 if unpublished) so a fresh oracle
+    // isn't bricked and a swap-back can't replay an older NAV.
     let incoming_sequence = {
         let data = ctx.accounts.new_oracle_account.try_borrow_data()?;
-        svs_oracle::SvsOraclePrice::from_account_data(&data)
-            .map(|h| h.sequence)
-            .unwrap_or(0)
+        let header = svs_oracle::SvsOraclePrice::from_account_data(&data)
+            .map_err(|_| error!(VaultError::OracleInvalidProgram))?;
+        require!(
+            header.version == svs_oracle::SVS_ORACLE_VERSION,
+            VaultError::OracleInvalidProgram
+        );
+        header.sequence
     };
 
     let vault = &mut ctx.accounts.vault;
