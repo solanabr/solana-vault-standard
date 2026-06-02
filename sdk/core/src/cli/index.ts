@@ -66,7 +66,6 @@ import { registerFeesCommands } from "./commands/fees";
 import { registerCapsCommands } from "./commands/caps";
 import { registerAccessCommands } from "./commands/access";
 import { registerEmergencyCommands } from "./commands/emergency";
-import { registerTimelockCommands } from "./commands/timelock";
 import { registerStrategyCommands } from "./commands/strategy";
 import { registerPortfolioCommands } from "./commands/portfolio";
 import { registerAsyncCommands } from "./commands/async";
@@ -116,7 +115,6 @@ export function createCli(): Command {
   registerCapsCommands(program);
   registerAccessCommands(program);
   registerEmergencyCommands(program);
-  registerTimelockCommands(program);
   registerStrategyCommands(program);
   registerPortfolioCommands(program);
 

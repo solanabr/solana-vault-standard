@@ -22,10 +22,10 @@
  * });
  *
  * // cPOOL -> dePOOL
- * await DeRwaWrapper.wrap(program, investor, { user: investor, amount: new BN(1_000_000) });
+ * await DeRwaWrapper.wrap(program, { user: investor, amount: new BN(1_000_000) });
  *
  * // dePOOL -> cPOOL (requires valid attestation on the destination wallet)
- * await DeRwaWrapper.unwrap(program, investor, {
+ * await DeRwaWrapper.unwrap(program, {
  *   user: investor,
  *   amount: new BN(1_000_000),
  *   attestation,
@@ -152,6 +152,13 @@ export interface WrapParams {
   /** Optional override for the investor's dePOOL ATA. Defaults to the canonical ATA. */
   investorDerwaAta?: PublicKey;
   /**
+   * The `wrapper_config` PDA for the target pool. Required on multi-pool
+   * deployments; when omitted the SDK discovers it on-chain and errors if more
+   * than one config exists. Derive via `getWrapperConfigAddress(pool, derwaMint,
+   * programId)` or read it from `DeRwaWrapper.initialize`.
+   */
+  wrapperConfig?: PublicKey;
+  /**
    * Token-2022 TransferHook extra accounts resolved from the cPOOL mint's EAML.
    * Required when the permissioned cPOOL mint has an active hook and this
    * instruction is invoked via CPI.
@@ -179,6 +186,13 @@ export interface UnwrapParams {
   investorPermissionedAta?: PublicKey;
   /** Optional override for the investor's dePOOL ATA. */
   investorDerwaAta?: PublicKey;
+  /**
+   * The `wrapper_config` PDA for the target pool. Required on multi-pool
+   * deployments; when omitted the SDK discovers it on-chain and errors if more
+   * than one config exists. Derive via `getWrapperConfigAddress(pool, derwaMint,
+   * programId)` or read it from `DeRwaWrapper.initialize`.
+   */
+  wrapperConfig?: PublicKey;
   /**
    * Token-2022 TransferHook extra accounts resolved from the cPOOL mint's EAML.
    * Required when the permissioned cPOOL mint has an active hook and this
@@ -257,12 +271,11 @@ export class DeRwaWrapper {
    * `user` is the investor pubkey — exposed as a parameter for clarity even though
    * it must equal `provider.wallet.publicKey` for the tx to land.
    */
-  static async wrap(
-    program: Program,
-    user: PublicKey,
-    params: WrapParams,
-  ): Promise<string> {
-    const wrapperConfigPda = await this._loadConfigForUser(program, user);
+  static async wrap(program: Program, params: WrapParams): Promise<string> {
+    const wrapperConfigPda = await this._resolveConfig(
+      program,
+      params.wrapperConfig,
+    );
     const cfg = wrapperConfigPda.state;
 
     const [wrapperSigner] = getWrapperSignerAddress(
@@ -337,12 +350,11 @@ export class DeRwaWrapper {
    * issued by the SAS program. On-chain enforcement is in `unwrap.rs` via
    * explicit offset reads — see `DeRwaError::AttestationRequired`.
    */
-  static async unwrap(
-    program: Program,
-    user: PublicKey,
-    params: UnwrapParams,
-  ): Promise<string> {
-    const wrapperConfigPda = await this._loadConfigForUser(program, user);
+  static async unwrap(program: Program, params: UnwrapParams): Promise<string> {
+    const wrapperConfigPda = await this._resolveConfig(
+      program,
+      params.wrapperConfig,
+    );
     const cfg = wrapperConfigPda.state;
 
     const [wrapperSigner] = getWrapperSignerAddress(
@@ -431,17 +443,24 @@ export class DeRwaWrapper {
   }
 
   /**
-   * Internal: derive a user's relevant WrapperConfig and fetch its state. The
-   * `user` arg is currently unused because the SDK supports a single config
-   * per pool; preserved as a parameter for forward-compatibility once we add a
-   * pool-discovery helper. Callers who already know the config can call
-   * `fetchWrapperConfig` directly.
+   * Internal: resolve the WrapperConfig to act against and fetch its state.
+   *
+   * Prefers a caller-supplied `wrapperConfig` PDA (the multi-pool path). When
+   * omitted, falls back to on-chain discovery: exactly one config → use it;
+   * none → tell the caller to initialize; more than one → tell the caller to
+   * pass `wrapperConfig` in the wrap/unwrap params.
    */
-  private static async _loadConfigForUser(
+  private static async _resolveConfig(
     program: Program,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    _user: PublicKey,
+    wrapperConfig?: PublicKey,
   ): Promise<{ pda: PublicKey; state: WrapperConfigState }> {
+    if (wrapperConfig) {
+      return {
+        pda: wrapperConfig,
+        state: await this.fetchWrapperConfig(program, wrapperConfig),
+      };
+    }
+
     const accountNs = program.account as Record<
       string,
       { all: () => Promise<{ publicKey: PublicKey; account: unknown }[]> }
@@ -454,7 +473,7 @@ export class DeRwaWrapper {
     }
     if (all.length > 1) {
       throw new Error(
-        `Multiple (${all.length}) WrapperConfig accounts found; pass an explicit wrapperConfig PDA via the per-instruction params instead.`,
+        `Multiple (${all.length}) WrapperConfig accounts found; pass the target pool's config via the \`wrapperConfig\` field of WrapParams/UnwrapParams.`,
       );
     }
     return {

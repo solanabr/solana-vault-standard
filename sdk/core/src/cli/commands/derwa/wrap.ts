@@ -81,7 +81,7 @@ export function registerWrapCommand(parent: Command): void {
         const spinner = output.spinner("Wrapping cPOOL → dePOOL...");
         spinner.start();
 
-        const sig = await DeRwaWrapper.wrap(prog, wallet.publicKey, {
+        const sig = await DeRwaWrapper.wrap(prog, {
           user: wallet.publicKey,
           amount,
           remainingAccounts,

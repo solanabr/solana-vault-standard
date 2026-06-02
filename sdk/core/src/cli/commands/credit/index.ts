@@ -12,6 +12,10 @@ import { registerCancelRedeemCommand } from "./cancel-redeem";
 import { registerRepayCommand } from "./repay";
 import { registerDrawDownCommand } from "./draw-down";
 import { registerInvestmentWindowCommand } from "./investment-window";
+import { registerRejectRedeemCommand } from "./reject-redeem";
+import { registerSetOracleCommand } from "./set-oracle";
+import { registerUpdateOracleParamsCommand } from "./update-oracle-params";
+import { registerAuthorityCommands } from "./authority";
 
 export function registerCreditCommands(program: Command): void {
   // Pool setup (operator runbook). bootstrap-shares-compliance runs
@@ -29,7 +33,13 @@ export function registerCreditCommands(program: Command): void {
   registerApproveRedeemCommand(program);
   registerClaimRedeemCommand(program);
   registerCancelRedeemCommand(program);
+  registerRejectRedeemCommand(program);
   registerRepayCommand(program);
   registerDrawDownCommand(program);
   registerInvestmentWindowCommand(program);
+
+  // Admin: pluggable-oracle repoint + staleness window + two-step authority rotation.
+  registerSetOracleCommand(program);
+  registerUpdateOracleParamsCommand(program);
+  registerAuthorityCommands(program);
 }

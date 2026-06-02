@@ -1,4 +1,4 @@
-/** Tests for Extended CLI Commands: fees, caps, access, emergency, timelock, strategy, portfolio, ct */
+/** Tests for Extended CLI Commands: fees, caps, access, emergency, strategy, portfolio, ct */
 
 import { expect } from "chai";
 import { BN } from "@coral-xyz/anchor";
@@ -38,16 +38,6 @@ import {
   createEmergencyConfig,
   validateEmergencyConfig,
 } from "../src/emergency";
-import {
-  TimelockConfig,
-  TimelockAction,
-  ProposalStatus,
-  createTimelockConfig,
-  validateTimelockConfig,
-  createProposal,
-  getProposalStatus,
-  canExecute,
-} from "../src/timelock";
 import {
   StrategyType,
   StrategyStatus,
@@ -281,69 +271,6 @@ describe("Extended CLI Commands", () => {
     });
   });
 
-  describe("Timelock Module", () => {
-    it("creates timelock config", () => {
-      const admin = PublicKey.unique();
-      const config = createTimelockConfig(admin, {
-        minDelay: 86400, // 1 day
-        maxDelay: 604800, // 1 week
-      });
-
-      expect(config.admin.equals(admin)).to.be.true;
-      expect(config.minDelay).to.equal(86400);
-      expect(config.maxDelay).to.equal(604800);
-    });
-
-    it("validates timelock config", () => {
-      const admin = PublicKey.unique();
-      const config = createTimelockConfig(admin, { minDelay: 3600 });
-
-      expect(validateTimelockConfig(config)).to.be.true;
-    });
-
-    it("creates and checks proposal status", async () => {
-      const admin = PublicKey.unique();
-      const config = createTimelockConfig(admin, { minDelay: 3600 });
-      const now = Math.floor(Date.now() / 1000);
-
-      const proposal = await createProposal(
-        TimelockAction.TransferAuthority,
-        { newAuthority: PublicKey.unique().toBase58() },
-        config,
-        now,
-        3600,
-      );
-
-      expect(proposal.status).to.equal(ProposalStatus.Pending);
-      expect(proposal.executeAfter).to.equal(now + 3600);
-
-      // Check status before ETA
-      const statusBefore = getProposalStatus(proposal, now + 1000);
-      expect(statusBefore).to.equal(ProposalStatus.Pending);
-
-      // Check status after ETA
-      const statusAfter = getProposalStatus(proposal, now + 4000);
-      expect(statusAfter).to.equal(ProposalStatus.Ready);
-    });
-
-    it("canExecute returns false before ETA", async () => {
-      const admin = PublicKey.unique();
-      const config = createTimelockConfig(admin, { minDelay: 3600 });
-      const now = Math.floor(Date.now() / 1000);
-
-      const proposal = await createProposal(
-        TimelockAction.Pause,
-        {},
-        config,
-        now,
-        3600,
-      );
-
-      const result = canExecute(proposal, now + 1800); // 30 min in
-      expect(result.executable).to.be.false;
-    });
-  });
-
   describe("Strategy Module", () => {
     it("creates lending strategy", () => {
       const strategy = createLendingStrategy(
@@ -438,7 +365,6 @@ describe("Extended CLI Commands", () => {
         "cap",
         "access",
         "emergency",
-        "timelock",
         "strategy",
         "portfolio",
       ];
@@ -482,18 +408,6 @@ describe("Extended CLI Commands", () => {
       expect(setModeCmd).to.exist;
       const optionFlags = setModeCmd!.options.map((o) => o.long);
       expect(optionFlags).to.include("--mode");
-    });
-
-    it("timelock propose command has action option", () => {
-      const program = createCli();
-      const timelockCmd = program.commands.find((c) => c.name() === "timelock");
-      const proposeCmd = timelockCmd!.commands.find(
-        (c) => c.name() === "propose",
-      );
-
-      expect(proposeCmd).to.exist;
-      const optionFlags = proposeCmd!.options.map((o) => o.long);
-      expect(optionFlags).to.include("--action");
     });
 
     it("strategy add command has type option", () => {

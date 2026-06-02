@@ -509,23 +509,21 @@ export class CreditVault {
     );
     const investorSharesAccount = this.getInvestorSharesAccount(investor);
 
-    const builder = this.program.methods
-      .requestRedeem(shares)
-      .accountsPartial({
-        investor,
-        vault: this.vault,
-        redemptionRequest,
-        sharesMint: this.sharesMint,
-        investorSharesAccount,
-        redemptionEscrow: this.redemptionEscrow,
-        assetMint: this.assetMint,
-        claimableTokens,
-        attestation,
-        assetTokenProgram: this.assetTokenProgram,
-        token2022Program: TOKEN_2022_PROGRAM_ID,
-        systemProgram: SystemProgram.programId,
-        clock: SYSVAR_CLOCK_PUBKEY,
-      });
+    const builder = this.program.methods.requestRedeem(shares).accountsPartial({
+      investor,
+      vault: this.vault,
+      redemptionRequest,
+      sharesMint: this.sharesMint,
+      investorSharesAccount,
+      redemptionEscrow: this.redemptionEscrow,
+      assetMint: this.assetMint,
+      claimableTokens,
+      attestation,
+      assetTokenProgram: this.assetTokenProgram,
+      token2022Program: TOKEN_2022_PROGRAM_ID,
+      systemProgram: SystemProgram.programId,
+      clock: SYSVAR_CLOCK_PUBKEY,
+    });
 
     return (
       remainingAccounts?.length
@@ -650,6 +648,58 @@ export class CreditVault {
     ).rpc();
   }
 
+  /**
+   * Manager rejects a pending redemption request, returning the escrowed
+   * cPOOL shares to the investor and closing the request + claimable PDAs.
+   *
+   * Like {@link cancelRedeem}, the share transfer flows escrow → investor, so
+   * production callers on a hook-bound cPOOL mint must pass the resolved
+   * cancel-direction TransferHook extras (source = vault, destination =
+   * investor) via `remainingAccounts`. The optional shape supports unit tests
+   * against hookless mints.
+   */
+  async rejectRedeem(
+    manager: PublicKey,
+    investor: PublicKey,
+    reasonCode: number = 0,
+    remainingAccounts?: AccountMeta[],
+  ): Promise<string> {
+    const [redemptionRequest] = getRedemptionRequestAddress(
+      this.program.programId,
+      this.vault,
+      investor,
+    );
+    const [claimableTokens] = getClaimableTokensAddress(
+      this.program.programId,
+      this.vault,
+      investor,
+    );
+    const investorSharesAccount = this.getInvestorSharesAccount(investor);
+
+    const builder = this.program.methods
+      .rejectRedeem(reasonCode)
+      .accountsPartial({
+        manager,
+        vault: this.vault,
+        redemptionRequest,
+        investor,
+        sharesMint: this.sharesMint,
+        assetMint: this.assetMint,
+        claimableTokens,
+        investorSharesAccount,
+        redemptionEscrow: this.redemptionEscrow,
+        assetTokenProgram: this.assetTokenProgram,
+        token2022Program: TOKEN_2022_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+      });
+
+    return (
+      remainingAccounts?.length
+        ? builder.remainingAccounts(remainingAccounts)
+        : builder
+    ).rpc();
+  }
+
   // ============ Manager Operations ============
 
   async repay(
@@ -730,12 +780,105 @@ export class CreditVault {
       .rpc();
   }
 
+  /**
+   * @deprecated Single-step transfer hands the root of trust to `newAuthority`
+   * in one transaction with no acceptance step. Prefer the two-step
+   * {@link requestTransferAuthority} + {@link acceptAuthority} pattern, which
+   * proves the incoming key controls its signer before the swap. The on-chain
+   * single-step path also refuses to run while a two-step transfer is pending.
+   */
   async transferAuthority(
     authority: PublicKey,
     newAuthority: PublicKey,
   ): Promise<string> {
     return this.program.methods
       .transferAuthority(newAuthority)
+      .accountsPartial({
+        authority,
+        vault: this.vault,
+      })
+      .rpc();
+  }
+
+  /**
+   * Step 1 of the safe authority rotation: the current `authority` nominates
+   * `newAuthority` as pending. The swap only completes when `newAuthority`
+   * calls {@link acceptAuthority}; until then {@link cancelTransferAuthority}
+   * clears it.
+   */
+  async requestTransferAuthority(
+    authority: PublicKey,
+    newAuthority: PublicKey,
+  ): Promise<string> {
+    return this.program.methods
+      .requestTransferAuthority(newAuthority)
+      .accountsPartial({
+        authority,
+        vault: this.vault,
+      })
+      .rpc();
+  }
+
+  /**
+   * Step 2 of the safe authority rotation: the pending `newAuthority` signs to
+   * accept, proving it controls the key before the root of trust moves.
+   */
+  async acceptAuthority(newAuthority: PublicKey): Promise<string> {
+    return this.program.methods
+      .acceptAuthority()
+      .accountsPartial({
+        newAuthority,
+        vault: this.vault,
+      })
+      .rpc();
+  }
+
+  /** Clears a pending two-step authority transfer (current authority only). */
+  async cancelTransferAuthority(authority: PublicKey): Promise<string> {
+    return this.program.methods
+      .cancelTransferAuthority()
+      .accountsPartial({
+        authority,
+        vault: this.vault,
+      })
+      .rpc();
+  }
+
+  /**
+   * Repoint the vault's NAV oracle (authority-gated, immediate). `newOracle`
+   * is the oracle account and `newOracleProgram` its owner program; the
+   * handler validates each account key against its arg, that the program is
+   * executable, and that the oracle is owned by the program, then seeds the
+   * replay floor from the incoming oracle's sequence.
+   */
+  async setOracle(
+    authority: PublicKey,
+    newOracle: PublicKey,
+    newOracleProgram: PublicKey,
+  ): Promise<string> {
+    return this.program.methods
+      .setOracle(newOracle, newOracleProgram)
+      .accountsPartial({
+        authority,
+        vault: this.vault,
+        newOracleProgramAccount: newOracleProgram,
+        newOracleAccount: newOracle,
+      })
+      .rpc();
+  }
+
+  /**
+   * Update the oracle staleness window (authority-gated). Oracle address +
+   * program changes go through {@link setOracle}; this only adjusts the
+   * non-address parameter. Pass a `BN` to set `max_staleness`, or `null` to
+   * leave it unchanged (the on-chain arg is `Option<i64>`).
+   */
+  async updateOracleParams(
+    authority: PublicKey,
+    newMaxStaleness: BN | null,
+  ): Promise<string> {
+    return this.program.methods
+      .updateOracleParams(newMaxStaleness)
       .accountsPartial({
         authority,
         vault: this.vault,

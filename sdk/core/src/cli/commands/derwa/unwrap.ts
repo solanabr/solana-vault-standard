@@ -89,7 +89,7 @@ export function registerUnwrapCommand(parent: Command): void {
         const spinner = output.spinner("Unwrapping dePOOL → cPOOL...");
         spinner.start();
 
-        const sig = await DeRwaWrapper.unwrap(prog, wallet.publicKey, {
+        const sig = await DeRwaWrapper.unwrap(prog, {
           user: wallet.publicKey,
           amount,
           attestation,
