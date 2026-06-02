@@ -18,28 +18,32 @@ import { registerUpdateOracleParamsCommand } from "./update-oracle-params";
 import { registerAuthorityCommands } from "./authority";
 
 export function registerCreditCommands(program: Command): void {
+  const credit = program
+    .command("credit")
+    .description("SVS-11 Credit Vault commands");
+
   // Pool setup (operator runbook). bootstrap-shares-compliance runs
   // ONCE per pool, after `credit init` (initialize_pool), to wire up
   // the cPOOL hook PDAs. Listed first to mirror the operator workflow
   // order in `docs/SVS-11.md::Pool Setup`.
-  registerBootstrapSharesComplianceCommand(program);
+  registerBootstrapSharesComplianceCommand(credit);
 
-  registerRequestDepositCommand(program);
-  registerApproveDepositCommand(program);
-  registerClaimDepositCommand(program);
-  registerRejectDepositCommand(program);
-  registerCancelDepositCommand(program);
-  registerRequestRedeemCommand(program);
-  registerApproveRedeemCommand(program);
-  registerClaimRedeemCommand(program);
-  registerCancelRedeemCommand(program);
-  registerRejectRedeemCommand(program);
-  registerRepayCommand(program);
-  registerDrawDownCommand(program);
-  registerInvestmentWindowCommand(program);
+  registerRequestDepositCommand(credit);
+  registerApproveDepositCommand(credit);
+  registerClaimDepositCommand(credit);
+  registerRejectDepositCommand(credit);
+  registerCancelDepositCommand(credit);
+  registerRequestRedeemCommand(credit);
+  registerApproveRedeemCommand(credit);
+  registerClaimRedeemCommand(credit);
+  registerCancelRedeemCommand(credit);
+  registerRejectRedeemCommand(credit);
+  registerRepayCommand(credit);
+  registerDrawDownCommand(credit);
+  registerInvestmentWindowCommand(credit);
 
   // Admin: pluggable-oracle repoint + staleness window + two-step authority rotation.
-  registerSetOracleCommand(program);
-  registerUpdateOracleParamsCommand(program);
-  registerAuthorityCommands(program);
+  registerSetOracleCommand(credit);
+  registerUpdateOracleParamsCommand(credit);
+  registerAuthorityCommands(credit);
 }

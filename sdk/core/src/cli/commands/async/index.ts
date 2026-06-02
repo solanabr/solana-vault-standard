@@ -10,13 +10,17 @@ import { registerClaimRedeemCommand } from "./claim-redeem";
 import { registerSetOperatorCommand } from "./set-operator";
 
 export function registerAsyncCommands(program: Command): void {
-  registerRequestDepositCommand(program);
-  registerCancelDepositCommand(program);
-  registerFulfillDepositCommand(program);
-  registerClaimDepositCommand(program);
-  registerRequestRedeemCommand(program);
-  registerCancelRedeemCommand(program);
-  registerFulfillRedeemCommand(program);
-  registerClaimRedeemCommand(program);
-  registerSetOperatorCommand(program);
+  const async = program
+    .command("async")
+    .description("SVS-10 Async Vault commands");
+
+  registerRequestDepositCommand(async);
+  registerCancelDepositCommand(async);
+  registerFulfillDepositCommand(async);
+  registerClaimDepositCommand(async);
+  registerRequestRedeemCommand(async);
+  registerCancelRedeemCommand(async);
+  registerFulfillRedeemCommand(async);
+  registerClaimRedeemCommand(async);
+  registerSetOperatorCommand(async);
 }
