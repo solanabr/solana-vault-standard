@@ -65,8 +65,9 @@ pub mod mock_sas {
     pub fn revoke_attestation(ctx: Context<RevokeAttestation>) -> Result<()> {
         let account_info = ctx.accounts.attestation.to_account_info();
         let mut data = account_info.try_borrow_mut_data()?;
-        // revoked field is at offset: 8 (disc) + 32 (subject) + 32 (issuer) + 1 (type) + 2 (country) + 8 (issued_at) + 8 (expires_at) = 91
-        data[91] = 1; // true
+        // revoked on-disk offset: 8 (disc) + 1 (version) + 32 (subject) + 32 (issuer)
+        // + 1 (type) + 2 (country) + 8 (issued_at) + 8 (expires_at) = 92
+        data[92] = 1; // true
         Ok(())
     }
 }
@@ -90,6 +91,10 @@ fn create_attestation_inner(
     // 8-byte Anchor discriminator (zeroed for mock)
     data[offset..offset + 8].copy_from_slice(&[0u8; 8]);
     offset += 8;
+
+    // version (1) — canonical attestation layout version (ATTESTATION_VERSION)
+    data[offset] = 1;
+    offset += 1;
 
     // subject (32)
     data[offset..offset + 32].copy_from_slice(&ctx.accounts.subject.key().to_bytes());
@@ -144,10 +149,10 @@ fn create_attestation_inner(
     Ok(())
 }
 
-// Account size: 8 (disc) + 32 + 32 + 1 + 2 + 8 + 8 + 1 + 1 + 32 + 2 + 1 + 1 = 129
-// Layout includes the metadata extension (jurisdiction, investor_class,
-// kyc_risk_tier) appended after _reserved.
-const ATTESTATION_ACCOUNT_SIZE: usize = 129;
+// Account size: 8 (disc) + 1 (version) + 32 + 32 + 1 + 2 + 8 + 8 + 1 + 1 + 32 + 2 + 1 + 1 = 130
+// Layout: a 1-byte version tag at payload offset 0, then the canonical fields,
+// then the metadata extension (jurisdiction, investor_class, kyc_risk_tier).
+const ATTESTATION_ACCOUNT_SIZE: usize = 130;
 
 #[derive(Accounts)]
 #[instruction(issuer: Pubkey, attestation_type: u8)]

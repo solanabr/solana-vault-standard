@@ -82,6 +82,7 @@ pub fn handler(ctx: Context<UpdateNav>, args: UpdateArgs) -> Result<()> {
     // Canonical signing payload (signature zeroed: it's produced AFTER signing).
     let expected_payload = {
         let staged_for_payload = NavAccount {
+            version: NavAccount::HEADER_VERSION,
             nav_net: args.nav_net,
             timestamp: args.timestamp,
             sequence: args.sequence,
@@ -115,6 +116,7 @@ pub fn handler(ctx: Context<UpdateNav>, args: UpdateArgs) -> Result<()> {
     check_deviation(nav.last_published_nav, args.nav_net, nav.max_deviation_bps)?;
 
     let staged = NavAccount {
+        version: NavAccount::HEADER_VERSION,
         nav_net: args.nav_net,
         timestamp: args.timestamp,
         sequence: args.sequence,

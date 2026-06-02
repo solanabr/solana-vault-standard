@@ -126,7 +126,9 @@ pub fn handler(ctx: Context<Execute>) -> Result<()> {
 fn map_attestation_err(e: AttestationError) -> ComplianceHookError {
     match e {
         AttestationError::WrongOwner => ComplianceHookError::InvalidAttestationProgram,
-        AttestationError::Malformed => ComplianceHookError::AttestationNotFound,
+        AttestationError::Malformed | AttestationError::WrongVersion => {
+            ComplianceHookError::AttestationNotFound
+        }
         AttestationError::SubjectMismatch => ComplianceHookError::InvalidAttestationSubject,
         AttestationError::IssuerMismatch => ComplianceHookError::InvalidAttestationIssuer,
         AttestationError::WrongType => ComplianceHookError::InvalidAttestationType,

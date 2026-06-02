@@ -1,15 +1,12 @@
 use anchor_lang::prelude::*;
 
-use crate::constants::{
-    DEFAULT_MAX_NAV_STALENESS_SECS, ORACLE_TIMELOCK, VAULT_CONFIG_SEED, VAULT_SEED,
-};
+use crate::constants::{DEFAULT_MAX_NAV_STALENESS_SECS, VAULT_SEED};
 use crate::error::VaultError;
 use crate::events::{
     AttesterUpdated, AuthorityTransferRequested, AuthorityTransferred, ManagerChanged,
-    OracleChangeApplied, OracleChangeRequested, OracleConfigUpdated, VaultConfigInitialized,
-    VaultStatusChanged,
+    OracleChanged, OracleConfigUpdated, VaultStatusChanged,
 };
-use crate::state::{CreditVault, VaultConfig};
+use crate::state::CreditVault;
 
 #[derive(Accounts)]
 pub struct Admin<'info> {
@@ -231,7 +228,7 @@ pub fn update_attester_handler(
 }
 
 // =============================================================================
-// Oracle non-address parameter updates (no timelock required)
+// Oracle non-address parameter updates
 // =============================================================================
 
 #[derive(Accounts)]
@@ -250,8 +247,8 @@ pub struct UpdateOracleParams<'info> {
 }
 
 /// Update the non-address oracle staleness window. Oracle address and program
-/// changes must use the timelock flow; per-oracle integrity (e.g. price
-/// deviation) lives in the oracle program, not the vault.
+/// changes use `set_oracle`; per-oracle integrity (e.g. price deviation) lives
+/// in the oracle program, not the vault.
 pub fn update_oracle_params_handler(
     ctx: Context<UpdateOracleParams>,
     new_max_staleness: Option<i64>,
@@ -281,112 +278,45 @@ pub fn update_oracle_params_handler(
 }
 
 // =============================================================================
-// VaultConfig initialization
+// Oracle rotation: authority-gated, atomic (oracle account + owner program)
 // =============================================================================
 
 #[derive(Accounts)]
-pub struct InitializeVaultConfig<'info> {
+pub struct SetOracle<'info> {
     #[account(
         constraint = authority.key() == vault.authority @ VaultError::Unauthorized,
     )]
     pub authority: Signer<'info>,
-
-    #[account(
-        seeds = [VAULT_SEED, vault.asset_mint.as_ref(), &vault.vault_id.to_le_bytes()],
-        bump = vault.bump,
-    )]
-    pub vault: Box<Account<'info, CreditVault>>,
-
-    #[account(
-        init,
-        payer = payer,
-        space = VaultConfig::LEN,
-        seeds = [VAULT_CONFIG_SEED, vault.key().as_ref()],
-        bump,
-    )]
-    pub vault_config: Box<Account<'info, VaultConfig>>,
-
-    #[account(mut)]
-    pub payer: Signer<'info>,
-
-    pub system_program: Program<'info, System>,
-}
-
-pub fn initialize_vault_config_handler(ctx: Context<InitializeVaultConfig>) -> Result<()> {
-    let vault_config = &mut ctx.accounts.vault_config;
-    vault_config.vault = ctx.accounts.vault.key();
-    vault_config.pending_oracle = Pubkey::default();
-    vault_config.pending_oracle_program = Pubkey::default();
-    vault_config.oracle_change_at = 0;
-    vault_config.bump = ctx.bumps.vault_config;
-    vault_config._reserved = [0u8; 31];
-
-    emit!(VaultConfigInitialized {
-        vault: ctx.accounts.vault.key(),
-        vault_config: vault_config.key(),
-    });
-
-    Ok(())
-}
-
-// =============================================================================
-// Oracle change timelock: request
-// =============================================================================
-
-#[derive(Accounts)]
-pub struct RequestOracleChange<'info> {
-    #[account(
-        constraint = authority.key() == vault.authority @ VaultError::Unauthorized,
-    )]
-    pub authority: Signer<'info>,
-
-    #[account(
-        seeds = [VAULT_SEED, vault.asset_mint.as_ref(), &vault.vault_id.to_le_bytes()],
-        bump = vault.bump,
-    )]
-    pub vault: Box<Account<'info, CreditVault>>,
 
     #[account(
         mut,
-        has_one = vault,
-        seeds = [VAULT_CONFIG_SEED, vault.key().as_ref()],
-        bump = vault_config.bump,
+        seeds = [VAULT_SEED, vault.asset_mint.as_ref(), &vault.vault_id.to_le_bytes()],
+        bump = vault.bump,
     )]
-    pub vault_config: Box<Account<'info, VaultConfig>>,
+    pub vault: Box<Account<'info, CreditVault>>,
 
-    /// CHECK: Validated as executable below
+    /// CHECK: validated against the `new_oracle_program` arg + executable below.
     pub new_oracle_program_account: UncheckedAccount<'info>,
 
-    /// CHECK: the staged oracle account; key + owner cross-checked below.
+    /// CHECK: validated against the `new_oracle` arg + owner == program below.
     pub new_oracle_account: UncheckedAccount<'info>,
-
-    pub clock: Sysvar<'info, Clock>,
 }
 
-pub fn request_oracle_change_handler(
-    ctx: Context<RequestOracleChange>,
+/// Repoint the vault's NAV oracle (authority-gated). Atomically swaps the oracle
+/// account and its owner program. Fail-fast, fail-closed.
+pub fn set_oracle_handler(
+    ctx: Context<SetOracle>,
     new_oracle: Pubkey,
     new_oracle_program: Pubkey,
 ) -> Result<()> {
-    require!(new_oracle != Pubkey::default(), VaultError::InvalidAddress);
-    require!(
-        new_oracle_program != Pubkey::default(),
-        VaultError::InvalidAddress
-    );
-
-    // The supplied program account must be the named program and executable.
     require!(
         ctx.accounts.new_oracle_program_account.key() == new_oracle_program,
-        VaultError::InvalidOracleProgram
+        VaultError::InvalidAddress
     );
     require!(
         ctx.accounts.new_oracle_program_account.executable,
-        VaultError::InvalidOracleProgram
+        VaultError::OracleInvalidProgram
     );
-
-    // Stage-time pair check: the new oracle account must be the named one and
-    // owned by the new program, else the pair would brick approvals (which
-    // re-check owner == oracle_program) only after the timelock elapses.
     require!(
         ctx.accounts.new_oracle_account.key() == new_oracle,
         VaultError::InvalidAddress
@@ -396,88 +326,32 @@ pub fn request_oracle_change_handler(
         VaultError::OracleInvalidProgram
     );
 
-    let vault_config = &mut ctx.accounts.vault_config;
-    let change_at = ctx
-        .accounts
-        .clock
-        .unix_timestamp
-        .checked_add(ORACLE_TIMELOCK)
-        .ok_or(VaultError::MathOverflow)?;
-
-    vault_config.pending_oracle = new_oracle;
-    vault_config.pending_oracle_program = new_oracle_program;
-    vault_config.oracle_change_at = change_at;
-
-    emit!(OracleChangeRequested {
-        vault: ctx.accounts.vault.key(),
-        pending_oracle: new_oracle,
-        oracle_change_at: change_at,
-    });
-
-    Ok(())
-}
-
-// =============================================================================
-// Oracle change timelock: apply
-// =============================================================================
-
-#[derive(Accounts)]
-pub struct ApplyOracleChange<'info> {
-    #[account(
-        constraint = authority.key() == vault.authority @ VaultError::Unauthorized,
-    )]
-    pub authority: Signer<'info>,
-
-    #[account(
-        mut,
-        seeds = [VAULT_SEED, vault.asset_mint.as_ref(), &vault.vault_id.to_le_bytes()],
-        bump = vault.bump,
-    )]
-    pub vault: Box<Account<'info, CreditVault>>,
-
-    #[account(
-        mut,
-        has_one = vault,
-        seeds = [VAULT_CONFIG_SEED, vault.key().as_ref()],
-        bump = vault_config.bump,
-    )]
-    pub vault_config: Box<Account<'info, VaultConfig>>,
-
-    pub clock: Sysvar<'info, Clock>,
-}
-
-pub fn apply_oracle_change_handler(ctx: Context<ApplyOracleChange>) -> Result<()> {
-    let vault_config = &ctx.accounts.vault_config;
-
-    require!(
-        vault_config.pending_oracle != Pubkey::default(),
-        VaultError::OracleChangeNotRequested
-    );
-    require!(
-        ctx.accounts.clock.unix_timestamp >= vault_config.oracle_change_at,
-        VaultError::OracleChangeTooEarly
-    );
-
     let old_oracle = ctx.accounts.vault.nav_oracle;
-    let new_oracle = vault_config.pending_oracle;
-    let new_oracle_program = vault_config.pending_oracle_program;
+    let old_program = ctx.accounts.vault.oracle_program;
 
-    ctx.accounts.vault.nav_oracle = new_oracle;
-    ctx.accounts.vault.oracle_program = new_oracle_program;
-    // Reset the replay baseline: a fresh oracle starts its sequence at 1, which
-    // would otherwise be rejected as SequenceStale against the old oracle's
-    // last-seen value, bricking every approval until it climbs past it.
-    ctx.accounts.vault.last_seen_nav_sequence = 0;
+    // Seed the replay floor from the incoming oracle's current sequence (0 if it
+    // has never published): a fresh oracle isn't bricked, and a swap-back can't
+    // replay a NAV older than where that oracle already is.
+    let incoming_sequence = {
+        let data = ctx.accounts.new_oracle_account.try_borrow_data()?;
+        svs_oracle::SvsOraclePrice::from_account_data(&data)
+            .map(|h| h.sequence)
+            .unwrap_or(0)
+    };
 
-    let vault_config = &mut ctx.accounts.vault_config;
-    vault_config.pending_oracle = Pubkey::default();
-    vault_config.pending_oracle_program = Pubkey::default();
-    vault_config.oracle_change_at = 0;
+    let vault = &mut ctx.accounts.vault;
+    vault.nav_oracle = new_oracle;
+    vault.oracle_program = new_oracle_program;
+    vault.last_seen_nav_sequence = incoming_sequence;
 
-    emit!(OracleChangeApplied {
-        vault: ctx.accounts.vault.key(),
+    emit!(OracleChanged {
+        vault: vault.key(),
         old_oracle,
         new_oracle,
+        old_program,
+        new_program: new_oracle_program,
+        authority: ctx.accounts.authority.key(),
+        timestamp: Clock::get()?.unix_timestamp,
     });
 
     Ok(())

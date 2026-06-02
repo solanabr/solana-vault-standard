@@ -6,11 +6,9 @@ pub const REDEMPTION_ESCROW_SEED: &[u8] = b"redemption_escrow";
 pub const INVESTMENT_REQUEST_SEED: &[u8] = b"investment_request";
 pub const REDEMPTION_REQUEST_SEED: &[u8] = b"redemption_request";
 pub const CLAIMABLE_TOKENS_SEED: &[u8] = b"claimable_tokens";
-pub const VAULT_CONFIG_SEED: &[u8] = b"vault_config";
 
 pub const MAX_DECIMALS: u8 = 9;
 pub const SHARES_DECIMALS: u8 = 9;
-pub const ORACLE_TIMELOCK: i64 = 86400; // 24 hours
 
 /// Default per-pool maximum oracle staleness (45 days = 3,888,000 sec) and
 /// the ceiling enforced by `update_oracle_params`. Callers pass the desired

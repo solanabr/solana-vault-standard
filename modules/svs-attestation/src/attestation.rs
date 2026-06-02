@@ -11,6 +11,7 @@ use crate::error::AttestationError;
 /// means "no policy enforcement").
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Attestation {
+    pub version: u8,
     pub subject: Pubkey,
     pub issuer: Pubkey,
     pub attestation_type: u8,
@@ -51,6 +52,7 @@ impl Attestation {
         };
 
         Ok(Self {
+            version: p[VERSION_OFFSET],
             subject: Pubkey::new_from_array(arr32(SUBJECT_OFFSET)?),
             issuer: Pubkey::new_from_array(arr32(ISSUER_OFFSET)?),
             attestation_type: p[ATTESTATION_TYPE_OFFSET],
@@ -130,6 +132,11 @@ pub fn verify_attestation(
         .map_err(|_| AttestationError::Malformed)?;
     let att = Attestation::from_account_data(&data)?;
 
+    // Layout version gate: reject before trusting any offset-read field.
+    if att.version != ATTESTATION_VERSION {
+        return Err(AttestationError::WrongVersion);
+    }
+
     check_invariants(&att, subject, expected_issuer, expected_type, now)?;
 
     let expected_pda = Pubkey::create_program_address(
@@ -154,7 +161,7 @@ pub fn verify_attestation(
 mod tests {
     use super::*;
 
-    /// Build a canonical 129-byte attestation account buffer.
+    /// Build a canonical attestation account buffer.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn account_bytes(
         subject: Pubkey,
@@ -166,6 +173,7 @@ mod tests {
     ) -> Vec<u8> {
         let mut v = vec![0u8; ATTESTATION_ACCOUNT_LEN];
         let p = &mut v[DISCRIMINATOR_LEN..];
+        p[VERSION_OFFSET] = ATTESTATION_VERSION;
         p[SUBJECT_OFFSET..SUBJECT_OFFSET + 32].copy_from_slice(subject.as_ref());
         p[ISSUER_OFFSET..ISSUER_OFFSET + 32].copy_from_slice(issuer.as_ref());
         p[ATTESTATION_TYPE_OFFSET] = attestation_type;
@@ -186,6 +194,7 @@ mod tests {
         let issuer = Pubkey::new_unique();
         let data = account_bytes(subject, issuer, 7, 1_800_000_000, false, 254);
         let att = Attestation::from_account_data(&data).unwrap();
+        assert_eq!(att.version, ATTESTATION_VERSION);
         assert_eq!(att.subject, subject);
         assert_eq!(att.issuer, issuer);
         assert_eq!(att.attestation_type, 7);
@@ -212,13 +221,14 @@ mod tests {
     /// (here or in `mock-sas`'s writer) is caught.
     #[test]
     fn layout_offsets_stable() {
-        assert_eq!(SUBJECT_OFFSET, 0);
-        assert_eq!(ISSUER_OFFSET, 32);
-        assert_eq!(ATTESTATION_TYPE_OFFSET, 64);
-        assert_eq!(EXPIRES_AT_OFFSET, 75);
-        assert_eq!(REVOKED_OFFSET, 83);
-        assert_eq!(BUMP_OFFSET, 84);
-        assert_eq!(ATTESTATION_ACCOUNT_LEN, 129);
+        assert_eq!(VERSION_OFFSET, 0);
+        assert_eq!(SUBJECT_OFFSET, 1);
+        assert_eq!(ISSUER_OFFSET, 33);
+        assert_eq!(ATTESTATION_TYPE_OFFSET, 65);
+        assert_eq!(EXPIRES_AT_OFFSET, 76);
+        assert_eq!(REVOKED_OFFSET, 84);
+        assert_eq!(BUMP_OFFSET, 85);
+        assert_eq!(ATTESTATION_ACCOUNT_LEN, 130);
     }
 
     #[test]

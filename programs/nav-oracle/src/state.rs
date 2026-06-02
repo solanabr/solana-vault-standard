@@ -6,13 +6,16 @@ use anchor_lang::prelude::*;
 /// − loss_provision_bps/10000)` within 1 bps tolerance.
 #[account]
 pub struct NavAccount {
-    // ---- canonical SvsOraclePrice header (payload bytes 0..24) ----
-    /// Net NAV == SvsOraclePrice.price (payload 0..8). Decimals match SVS-11
+    // ---- canonical SvsOraclePrice header (payload bytes 0..25) ----
+    /// Canonical header version == SvsOraclePrice.version (payload 0..1).
+    /// Held at `HEADER_VERSION`; the vault's `read_oracle` rejects a mismatch.
+    pub version: u8,
+    /// Net NAV == SvsOraclePrice.price (payload 1..9). Decimals match SVS-11
     /// `oracle_price_decimals`, default 9.
     pub nav_net: u64,
-    /// == SvsOraclePrice.timestamp (payload 8..16).
+    /// == SvsOraclePrice.timestamp (payload 9..17).
     pub timestamp: i64,
-    /// == SvsOraclePrice.sequence (payload 16..24). Strictly monotonic per pool.
+    /// == SvsOraclePrice.sequence (payload 17..25). Strictly monotonic per pool.
     pub sequence: u64,
     // ---- implementation-specific (vault never reads) ----
     pub pool: Pubkey,
@@ -38,7 +41,15 @@ pub struct NavAccount {
 
 impl NavAccount {
     pub const SEED_PREFIX: &'static [u8] = b"nav_oracle";
-    pub const SPACE: usize = 8 + 8 + 8 + 8 + 32 + 8 + 2 + 2 + 1 + 7 + 32 + 64 + 32 + 8 + 2;
+    /// Canonical `SvsOraclePrice` header version this oracle writes. Matches
+    /// `svs_oracle::SVS_ORACLE_VERSION` (kept in sync by convention — nav-oracle
+    /// replicates the header layout without depending on the crate).
+    pub const HEADER_VERSION: u8 = 1;
+    // discriminator(8) + version(1) + nav_net(8) + timestamp(8) + sequence(8)
+    // + pool(32) + nav_gross(8) + ter(2) + loss(2) + nav_type(1) + padding(7)
+    // + publisher(32) + signature(64) + merkle_root(32) + last_published(8)
+    // + max_deviation(2)
+    pub const SPACE: usize = 8 + 1 + 8 + 8 + 8 + 32 + 8 + 2 + 2 + 1 + 7 + 32 + 64 + 32 + 8 + 2;
 
     /// Canonical 133-byte signing payload. Matches the TypeScript
     /// `buildSigningPayload` (sdk/core/src/nav-oracle.ts) byte-for-byte.
@@ -95,15 +106,17 @@ mod layout_tests {
 
     /// NavAccount leads with the canonical `SvsOraclePrice` header so the
     /// generic `svs_oracle::read_oracle` parses it at one fixed window. In
-    /// payload space (try_to_vec excludes the 8-byte discriminator): nav_net
-    /// (price) 0..8, timestamp 8..16, sequence 16..24. On disk that is bytes
-    /// 8..16 / 16..24 / 24..32 — matching `svs_oracle::PRICE_PAYLOAD_OFFSET`
-    /// (8) + the 24-byte header. If this drifts, the vault reads garbage.
+    /// payload space (try_to_vec excludes the 8-byte discriminator): version
+    /// 0..1, nav_net (price) 1..9, timestamp 9..17, sequence 17..25. On disk
+    /// that is bytes 8..9 / 9..17 / 17..25 / 25..33 — matching
+    /// `svs_oracle::PRICE_PAYLOAD_OFFSET` (8) + the 25-byte header. If this
+    /// drifts, the vault reads garbage (or, on a version bump, fails closed).
     #[test]
     fn nav_account_header_layout_stable_for_generic_reader() {
         let pool = Pubkey::new_unique();
         let publisher = Pubkey::new_unique();
         let nav = NavAccount {
+            version: NavAccount::HEADER_VERSION,
             nav_net: 1_000_000_000,
             timestamp: 1_700_000_000,
             sequence: 42,
@@ -126,19 +139,24 @@ mod layout_tests {
             "NavAccount payload drifted from SPACE"
         );
         assert_eq!(
-            u64::from_le_bytes(bytes[0..8].try_into().unwrap()),
+            bytes[0],
+            NavAccount::HEADER_VERSION,
+            "version byte must lead the header at payload offset 0"
+        );
+        assert_eq!(
+            u64::from_le_bytes(bytes[1..9].try_into().unwrap()),
             1_000_000_000,
-            "nav_net (price) must lead the header at payload offset 0"
+            "nav_net (price) must be at payload offset 1"
         );
         assert_eq!(
-            i64::from_le_bytes(bytes[8..16].try_into().unwrap()),
+            i64::from_le_bytes(bytes[9..17].try_into().unwrap()),
             1_700_000_000,
-            "timestamp must be at payload offset 8"
+            "timestamp must be at payload offset 9"
         );
         assert_eq!(
-            u64::from_le_bytes(bytes[16..24].try_into().unwrap()),
+            u64::from_le_bytes(bytes[17..25].try_into().unwrap()),
             42,
-            "sequence must be at payload offset 16"
+            "sequence must be at payload offset 17"
         );
     }
 }

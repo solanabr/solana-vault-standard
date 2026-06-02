@@ -197,9 +197,10 @@ fn map_attestation_err(e: AttestationError) -> DeRwaError {
         AttestationError::IssuerMismatch => DeRwaError::InvalidAttestationIssuer,
         AttestationError::WrongType => DeRwaError::InvalidAttestationType,
         AttestationError::InvalidPda => DeRwaError::InvalidAttestationPda,
-        AttestationError::Malformed | AttestationError::Revoked | AttestationError::Expired => {
-            DeRwaError::AttestationRequired
-        }
+        AttestationError::Malformed
+        | AttestationError::WrongVersion
+        | AttestationError::Revoked
+        | AttestationError::Expired => DeRwaError::AttestationRequired,
     }
 }
 

@@ -20,13 +20,18 @@
 //! # Example
 //!
 //! ```
-//! use svs_oracle::{read_oracle, SvsOraclePrice, PRICE_SCALE};
+//! use svs_oracle::{read_oracle, SvsOraclePrice, PRICE_SCALE, SVS_ORACLE_VERSION};
 //!
 //! // An oracle account: 8-byte discriminator + the canonical header.
 //! let mut account = vec![0u8; 8];
 //! account.extend_from_slice(
-//!     &SvsOraclePrice { price: PRICE_SCALE, timestamp: 1500, sequence: 7 }
-//!         .to_header_bytes(),
+//!     &SvsOraclePrice {
+//!         version: SVS_ORACLE_VERSION,
+//!         price: PRICE_SCALE,
+//!         timestamp: 1500,
+//!         sequence: 7,
+//!     }
+//!     .to_header_bytes(),
 //! );
 //!
 //! // Generic read: validates price/staleness/monotonicity, returns the header.

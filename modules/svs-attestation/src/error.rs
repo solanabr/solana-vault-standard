@@ -11,6 +11,8 @@ pub enum AttestationError {
     WrongOwner,
     /// Account data is missing or smaller than the canonical layout.
     Malformed,
+    /// Account layout `version` byte does not match `ATTESTATION_VERSION`.
+    WrongVersion,
     /// Attestation subject does not match the expected wallet.
     SubjectMismatch,
     /// Attestation issuer does not match the configured trust anchor.
@@ -30,6 +32,7 @@ impl core::fmt::Display for AttestationError {
         match self {
             AttestationError::WrongOwner => write!(f, "attestation account has wrong owner"),
             AttestationError::Malformed => write!(f, "attestation account data is malformed"),
+            AttestationError::WrongVersion => write!(f, "attestation layout version mismatch"),
             AttestationError::SubjectMismatch => write!(f, "attestation subject mismatch"),
             AttestationError::IssuerMismatch => write!(f, "attestation issuer mismatch"),
             AttestationError::WrongType => write!(f, "attestation type mismatch"),

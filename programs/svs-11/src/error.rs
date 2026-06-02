@@ -101,15 +101,6 @@ pub enum VaultError {
     #[msg("Invalid staleness configuration")]
     InvalidStalenessConfig,
 
-    #[msg("Oracle change timelock not expired")]
-    OracleChangeTooEarly,
-
-    #[msg("No pending oracle change")]
-    OracleChangeNotRequested,
-
-    #[msg("Oracle program is not a known oracle (Pyth or Switchboard)")]
-    InvalidOracleProgram,
-
     #[msg("No pending authority transfer")]
     NoPendingTransfer,
 

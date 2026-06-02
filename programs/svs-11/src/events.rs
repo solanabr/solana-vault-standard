@@ -167,21 +167,12 @@ pub struct ModuleConfigChanged {
 }
 
 #[event]
-pub struct OracleChangeRequested {
-    pub vault: Pubkey,
-    pub pending_oracle: Pubkey,
-    pub oracle_change_at: i64,
-}
-
-#[event]
-pub struct OracleChangeApplied {
+pub struct OracleChanged {
     pub vault: Pubkey,
     pub old_oracle: Pubkey,
     pub new_oracle: Pubkey,
-}
-
-#[event]
-pub struct VaultConfigInitialized {
-    pub vault: Pubkey,
-    pub vault_config: Pubkey,
+    pub old_program: Pubkey,
+    pub new_program: Pubkey,
+    pub authority: Pubkey,
+    pub timestamp: i64,
 }

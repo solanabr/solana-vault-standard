@@ -12,6 +12,7 @@ fn map_attestation_err(e: AttestationError) -> VaultError {
         AttestationError::Revoked => VaultError::AttestationRevoked,
         AttestationError::Expired => VaultError::AttestationExpired,
         AttestationError::Malformed
+        | AttestationError::WrongVersion
         | AttestationError::SubjectMismatch
         | AttestationError::WrongType
         | AttestationError::InvalidPda => VaultError::InvalidAttestation,

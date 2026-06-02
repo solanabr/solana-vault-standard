@@ -21,6 +21,8 @@ pub enum OracleError {
     AccountTooSmall,
     /// Oracle sequence did not advance past the last-seen value (replay).
     SequenceStale,
+    /// Oracle header version byte does not match the canonical layout version.
+    WrongVersion,
 }
 
 impl core::fmt::Display for OracleError {
@@ -41,6 +43,9 @@ impl core::fmt::Display for OracleError {
                 write!(f, "oracle account smaller than the price header")
             }
             OracleError::SequenceStale => write!(f, "oracle sequence did not advance (replay)"),
+            OracleError::WrongVersion => {
+                write!(f, "oracle header version does not match canonical layout")
+            }
         }
     }
 }

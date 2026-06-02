@@ -1,8 +1,6 @@
 use anchor_lang::prelude::*;
 
-use crate::constants::{
-    INVESTMENT_REQUEST_SEED, REDEMPTION_REQUEST_SEED, VAULT_CONFIG_SEED, VAULT_SEED,
-};
+use crate::constants::{INVESTMENT_REQUEST_SEED, REDEMPTION_REQUEST_SEED, VAULT_SEED};
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, Default)]
 pub enum AccessMode {
@@ -58,7 +56,7 @@ pub struct CreditVault {
     // Pluggable oracle interface
     // =========================================================================
     //
-    // SVS-11 reads any SVS-compliant oracle through the generic 24-byte
+    // SVS-11 reads any SVS-compliant oracle through the generic 25-byte
     // `SvsOraclePrice` header (see `modules/svs-oracle`). The configured oracle
     // account address (`nav_oracle`) and its owner program (`oracle_program`)
     // identify which oracle the vault trusts; the vault enforces only generic
@@ -221,28 +219,6 @@ impl RedemptionRequest {
         1; // bump
 
     pub const SEED_PREFIX: &'static [u8] = REDEMPTION_REQUEST_SEED;
-}
-
-#[account]
-pub struct VaultConfig {
-    pub vault: Pubkey,                  // 32
-    pub pending_oracle: Pubkey,         // 32 - proposed new oracle account
-    pub pending_oracle_program: Pubkey, // 32 - proposed new oracle owner program
-    pub oracle_change_at: i64,          // 8  - when the change can be applied
-    pub bump: u8,                       // 1
-    pub _reserved: [u8; 31],            // future use
-}
-
-impl VaultConfig {
-    pub const LEN: usize = 8 + // discriminator
-        32 +  // vault
-        32 +  // pending_oracle
-        32 +  // pending_oracle_program
-        8 +   // oracle_change_at
-        1 +   // bump
-        31; // _reserved
-
-    pub const SEED_PREFIX: &'static [u8] = VAULT_CONFIG_SEED;
 }
 
 // =============================================================================

@@ -166,7 +166,7 @@ pub mod svs_11 {
         instructions::admin::update_attester_handler(ctx, new_attester, new_attestation_program)
     }
 
-    /// Update the oracle staleness window (non-address param, no timelock).
+    /// Update the oracle staleness window (non-address param).
     pub fn update_oracle_params(
         ctx: Context<UpdateOracleParams>,
         new_max_staleness: Option<i64>,
@@ -174,24 +174,14 @@ pub mod svs_11 {
         instructions::admin::update_oracle_params_handler(ctx, new_max_staleness)
     }
 
-    /// Initialize the vault config PDA for oracle timelock.
-    pub fn initialize_vault_config(ctx: Context<InitializeVaultConfig>) -> Result<()> {
-        instructions::admin::initialize_vault_config_handler(ctx)
-    }
-
-    /// Request an oracle change (starts 24h timelock). Stages both the new
-    /// oracle account and its owner program; both are applied atomically.
-    pub fn request_oracle_change(
-        ctx: Context<RequestOracleChange>,
+    /// Repoint the vault's NAV oracle (authority-gated). Atomically swaps the
+    /// oracle account and its owner program.
+    pub fn set_oracle(
+        ctx: Context<SetOracle>,
         new_oracle: Pubkey,
         new_oracle_program: Pubkey,
     ) -> Result<()> {
-        instructions::admin::request_oracle_change_handler(ctx, new_oracle, new_oracle_program)
-    }
-
-    /// Apply a pending oracle change after timelock expires.
-    pub fn apply_oracle_change(ctx: Context<ApplyOracleChange>) -> Result<()> {
-        instructions::admin::apply_oracle_change_handler(ctx)
+        instructions::admin::set_oracle_handler(ctx, new_oracle, new_oracle_program)
     }
 
     // =========================================================================

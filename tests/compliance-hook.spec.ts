@@ -637,29 +637,205 @@ describe("compliance-hook: execute (Permissioned mode)", () => {
     );
   });
 
-  // Revoked / expired / source-missing-symmetric paths land alongside a
-  // more comprehensive Permissioned-mode test pass — kept as visible
-  // skipped coverage. The two active tests above prove the load-bearing
-  // path: EAML cross-program PDA resolution + check_attestation full
-  // identity binding.
-  it.skip("transfer fails when source attestation is missing", async () => {
-    // Symmetric mirror of the active destination-missing case. Requires
-    // minting test funds to an unattested source without using a
-    // TransferHook-gated transfer path.
+  it("transfer fails when source attestation is missing", async () => {
+    // Symmetric mirror of destination-missing. mint_to does NOT fire the hook,
+    // so we can fund an unattested source; the hook rejects on the source side.
+    const unattested = Keypair.generate();
+    const sig = await connection.requestAirdrop(
+      unattested.publicKey,
+      LAMPORTS_PER_SOL,
+    );
+    await connection.confirmTransaction(sig);
+    const unattestedAta = await createAssociatedTokenAccountIdempotent(
+      connection,
+      payer,
+      mint,
+      unattested.publicKey,
+      undefined,
+      TOKEN_2022_PROGRAM_ID,
+    );
+    await mintTo(
+      connection,
+      payer,
+      mint,
+      unattestedAta,
+      source, // mint authority
+      1_000_000,
+      [],
+      undefined,
+      TOKEN_2022_PROGRAM_ID,
+    );
+
+    const ix = createTransferCheckedInstruction(
+      unattestedAta,
+      mint,
+      destinationAta,
+      unattested.publicKey,
+      100_000,
+      6,
+      [],
+      TOKEN_2022_PROGRAM_ID,
+    );
+    ix.keys.push(
+      ...resolveHookExtras({
+        complianceHookProgramId: program.programId,
+        mint,
+        sourceOwner: unattested.publicKey,
+        destinationOwner: destination.publicKey,
+        permissioned: true,
+        attestationProgram: ATTESTATION_PROGRAM_ID,
+        attestationIssuer: attester.publicKey,
+        requiredAttestationType: REQUIRED_TYPE,
+        poolPolicy,
+      }),
+    );
+
+    let errored = false;
+    try {
+      await provider.sendAndConfirm(new Transaction().add(ix), [unattested]);
+    } catch (e: unknown) {
+      errored = true;
+      const errStr = String(e);
+      // Owner-first ordering: a default-zero source_attestation fails owner
+      // (6012 InvalidAttestationProgram) or existence (6002 AttestationNotFound).
+      expect(
+        errStr.includes("AttestationNotFound") ||
+          errStr.includes("InvalidAttestationProgram") ||
+          errStr.includes("0x1772") ||
+          errStr.includes("0x177c") ||
+          errStr.includes("6002") ||
+          errStr.includes("6012"),
+        `Expected source-attestation rejection, got: ${errStr}`,
+      ).to.equal(true);
+    }
+    expect(errored).to.equal(
+      true,
+      "transfer from non-attested source should reject",
+    );
   });
 
-  it.skip("transfer fails when destination attestation is revoked", async () => {
-    // Setup: destination Attestation written with `revoked = true` (byte 83
-    // of payload after the 8-byte discriminator, per the layout locked in
-    // the v2 attestation extension). Source attestation is valid.
-    // Expected: AttestationRevoked (6003) error.
+  it("transfer fails when destination attestation is revoked", async () => {
+    const dest = Keypair.generate();
+    const destAta = await createAssociatedTokenAccountIdempotent(
+      connection,
+      payer,
+      mint,
+      dest.publicKey,
+      undefined,
+      TOKEN_2022_PROGRAM_ID,
+    );
+    const att = await createSvsAttestation(
+      mockSas,
+      payer,
+      dest.publicKey,
+      attester.publicKey,
+      REQUIRED_TYPE,
+      [66, 82],
+      FAR_FUTURE_EXPIRY,
+    );
+    await mockSas.methods
+      .revokeAttestation()
+      .accountsPartial({ authority: payer.publicKey, attestation: att })
+      .rpc();
+
+    const ix = createTransferCheckedInstruction(
+      sourceAta,
+      mint,
+      destAta,
+      source.publicKey,
+      100_000,
+      6,
+      [],
+      TOKEN_2022_PROGRAM_ID,
+    );
+    ix.keys.push(
+      ...resolveHookExtras({
+        complianceHookProgramId: program.programId,
+        mint,
+        sourceOwner: source.publicKey,
+        destinationOwner: dest.publicKey,
+        permissioned: true,
+        attestationProgram: ATTESTATION_PROGRAM_ID,
+        attestationIssuer: attester.publicKey,
+        requiredAttestationType: REQUIRED_TYPE,
+        poolPolicy,
+      }),
+    );
+
+    let errored = false;
+    try {
+      await provider.sendAndConfirm(new Transaction().add(ix), [source]);
+    } catch (e: unknown) {
+      errored = true;
+      const errStr = String(e);
+      expect(
+        errStr.includes("AttestationRevoked") ||
+          errStr.includes("0x1773") || // hex(6003)
+          errStr.includes("6003"),
+        `Expected AttestationRevoked, got: ${errStr}`,
+      ).to.equal(true);
+    }
+    expect(errored).to.equal(true, "revoked destination should reject");
   });
 
-  it.skip("transfer fails when destination attestation is expired", async () => {
-    // Setup: destination Attestation written with `expires_at` set to a
-    // unix timestamp in the past (bytes 75..83 of payload, little-endian
-    // i64). Source attestation is valid.
-    // Expected: AttestationExpired (6004) error.
+  it("transfer fails when destination attestation is expired", async () => {
+    const dest = Keypair.generate();
+    const destAta = await createAssociatedTokenAccountIdempotent(
+      connection,
+      payer,
+      mint,
+      dest.publicKey,
+      undefined,
+      TOKEN_2022_PROGRAM_ID,
+    );
+    await createSvsAttestation(
+      mockSas,
+      payer,
+      dest.publicKey,
+      attester.publicKey,
+      REQUIRED_TYPE,
+      [66, 82],
+      new BN(1_000_000), // expires_at far in the past
+    );
+
+    const ix = createTransferCheckedInstruction(
+      sourceAta,
+      mint,
+      destAta,
+      source.publicKey,
+      100_000,
+      6,
+      [],
+      TOKEN_2022_PROGRAM_ID,
+    );
+    ix.keys.push(
+      ...resolveHookExtras({
+        complianceHookProgramId: program.programId,
+        mint,
+        sourceOwner: source.publicKey,
+        destinationOwner: dest.publicKey,
+        permissioned: true,
+        attestationProgram: ATTESTATION_PROGRAM_ID,
+        attestationIssuer: attester.publicKey,
+        requiredAttestationType: REQUIRED_TYPE,
+        poolPolicy,
+      }),
+    );
+
+    let errored = false;
+    try {
+      await provider.sendAndConfirm(new Transaction().add(ix), [source]);
+    } catch (e: unknown) {
+      errored = true;
+      const errStr = String(e);
+      expect(
+        errStr.includes("AttestationExpired") ||
+          errStr.includes("0x1774") || // hex(6004)
+          errStr.includes("6004"),
+        `Expected AttestationExpired, got: ${errStr}`,
+      ).to.equal(true);
+    }
+    expect(errored).to.equal(true, "expired destination should reject");
   });
 });
 

@@ -62,6 +62,7 @@ pub fn handler(ctx: Context<InitializeNavAccount>, args: InitializeNavArgs) -> R
     drop(pool_data);
 
     let nav = &mut ctx.accounts.nav_account;
+    nav.version = NavAccount::HEADER_VERSION;
     nav.nav_net = 0;
     nav.timestamp = 0;
     nav.sequence = 0;

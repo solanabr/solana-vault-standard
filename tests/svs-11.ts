@@ -86,7 +86,6 @@ describe("svs-11 (Credit Markets Vault)", () => {
   let manager: Keypair;
   let investor: Keypair;
   let managerTokenAccount: PublicKey;
-  let vaultConfig: PublicKey;
 
   // Expected shares from 100,000 assets at 1:1 price
   // shares = assets * PRICE_SCALE / price = 100_000_000_000 * 1e9 / 1e9 = 100_000_000_000
@@ -188,7 +187,16 @@ describe("svs-11 (Credit Markets Vault)", () => {
     const navGross = navNet;
     const terBps = 0;
     const lossBps = 0;
-    const timestamp = BigInt(Math.floor(Date.now() / 1000));
+    // Stamp from the on-chain clock (slightly in the past), not wall-clock: the
+    // validator clock can lag wall-time, and read_oracle rejects any future
+    // timestamp (age < 0), so a wall-clock stamp would look stale at approve.
+    const onChainTime = await connection.getBlockTime(
+      await connection.getSlot(),
+    );
+    const baseTime = onChainTime ?? Math.floor(Date.now() / 1000);
+    // -30s: comfortably in the past for the reader (age >= 0) yet inside the
+    // writer's [now-60, now+60] window, robust to getBlockTime estimation noise.
+    const timestamp = BigInt(baseTime - 30);
 
     const payload = buildNavSigningPayload({
       pool: vault,
@@ -322,11 +330,6 @@ describe("svs-11 (Credit Markets Vault)", () => {
     [redemptionRequest] = getRedemptionRequestPDA(investor.publicKey);
     [claimableTokens] = getClaimableTokensPDA(investor.publicKey);
     [attestation] = getAttestationPDA(investor.publicKey, attester.publicKey);
-
-    [vaultConfig] = PublicKey.findProgramAddressSync(
-      [Buffer.from("vault_config"), vault.toBuffer()],
-      program.programId,
-    );
 
     depositVault = getAssociatedTokenAddressSync(
       assetMint,
@@ -580,18 +583,6 @@ describe("svs-11 (Credit Markets Vault)", () => {
       expect(vaultAccount.paused).to.equal(false);
     });
 
-    it("initializes vault config", async () => {
-      await program.methods
-        .initializeVaultConfig()
-        .accountsPartial({
-          authority: payer.publicKey,
-          vault,
-          vaultConfig,
-          payer: payer.publicKey,
-          systemProgram: SystemProgram.programId,
-        })
-        .rpc();
-    });
   });
 
   describe("Investment Window", () => {
@@ -1390,6 +1381,135 @@ describe("svs-11 (Credit Markets Vault)", () => {
         })
         .signers([newAuthority])
         .rpc();
+    });
+
+    // Two-step authority transfer (the root-of-trust path). request sets a
+    // pending authority without changing the live one; the NEW key must accept.
+    it("request sets pending without changing authority; accept swaps", async () => {
+      const newAuth = Keypair.generate();
+      const air = await connection.requestAirdrop(
+        newAuth.publicKey,
+        2 * anchor.web3.LAMPORTS_PER_SOL,
+      );
+      await connection.confirmTransaction(air);
+
+      await program.methods
+        .requestTransferAuthority(newAuth.publicKey)
+        .accountsPartial({ authority: payer.publicKey, vault })
+        .rpc();
+      let v = await program.account.creditVault.fetch(vault);
+      expect(v.pendingAuthority.toBase58()).to.equal(
+        newAuth.publicKey.toBase58(),
+      );
+      expect(v.authority.toBase58()).to.equal(payer.publicKey.toBase58());
+
+      await program.methods
+        .acceptAuthority()
+        .accountsPartial({ newAuthority: newAuth.publicKey, vault })
+        .signers([newAuth])
+        .rpc();
+      v = await program.account.creditVault.fetch(vault);
+      expect(v.authority.toBase58()).to.equal(newAuth.publicKey.toBase58());
+      expect(v.pendingAuthority.toBase58()).to.equal(
+        PublicKey.default.toBase58(),
+      );
+
+      // Restore authority -> payer via the same two-step flow.
+      await program.methods
+        .requestTransferAuthority(payer.publicKey)
+        .accountsPartial({ authority: newAuth.publicKey, vault })
+        .signers([newAuth])
+        .rpc();
+      await program.methods
+        .acceptAuthority()
+        .accountsPartial({ newAuthority: payer.publicKey, vault })
+        .rpc();
+      v = await program.account.creditVault.fetch(vault);
+      expect(v.authority.toBase58()).to.equal(payer.publicKey.toBase58());
+    });
+
+    it("non-authority cannot request a transfer (Unauthorized)", async () => {
+      const stranger = Keypair.generate();
+      const air = await connection.requestAirdrop(
+        stranger.publicKey,
+        anchor.web3.LAMPORTS_PER_SOL,
+      );
+      await connection.confirmTransaction(air);
+      try {
+        await program.methods
+          .requestTransferAuthority(stranger.publicKey)
+          .accountsPartial({ authority: stranger.publicKey, vault })
+          .signers([stranger])
+          .rpc();
+        expect.fail("should have thrown");
+      } catch (err: any) {
+        expect(err.error.errorCode.code).to.equal("Unauthorized");
+      }
+    });
+
+    it("request while a transfer is pending is rejected; cancel clears it", async () => {
+      const a = Keypair.generate();
+      await program.methods
+        .requestTransferAuthority(a.publicKey)
+        .accountsPartial({ authority: payer.publicKey, vault })
+        .rpc();
+      try {
+        await program.methods
+          .requestTransferAuthority(Keypair.generate().publicKey)
+          .accountsPartial({ authority: payer.publicKey, vault })
+          .rpc();
+        expect.fail("should have thrown");
+      } catch (err: any) {
+        expect(err.error.errorCode.code).to.equal("PendingTransferExists");
+      }
+      await program.methods
+        .cancelTransferAuthority()
+        .accountsPartial({ authority: payer.publicKey, vault })
+        .rpc();
+      const v = await program.account.creditVault.fetch(vault);
+      expect(v.pendingAuthority.toBase58()).to.equal(
+        PublicKey.default.toBase58(),
+      );
+    });
+
+    it("a non-pending signer cannot accept (InvalidPendingAuthority)", async () => {
+      const pending = Keypair.generate();
+      const wrong = Keypair.generate();
+      const air = await connection.requestAirdrop(
+        wrong.publicKey,
+        anchor.web3.LAMPORTS_PER_SOL,
+      );
+      await connection.confirmTransaction(air);
+      await program.methods
+        .requestTransferAuthority(pending.publicKey)
+        .accountsPartial({ authority: payer.publicKey, vault })
+        .rpc();
+      try {
+        await program.methods
+          .acceptAuthority()
+          .accountsPartial({ newAuthority: wrong.publicKey, vault })
+          .signers([wrong])
+          .rpc();
+        expect.fail("should have thrown");
+      } catch (err: any) {
+        expect(err.error.errorCode.code).to.equal("InvalidPendingAuthority");
+      }
+      await program.methods
+        .cancelTransferAuthority()
+        .accountsPartial({ authority: payer.publicKey, vault })
+        .rpc();
+    });
+
+    it("cancel with no pending transfer is rejected (NoPendingTransfer)", async () => {
+      try {
+        await program.methods
+          .cancelTransferAuthority()
+          .accountsPartial({ authority: payer.publicKey, vault })
+          .rpc();
+        expect.fail("should have thrown");
+      } catch (err: any) {
+        expect(err.error.errorCode.code).to.equal("NoPendingTransfer");
+      }
     });
 
     it("sets manager", async () => {
@@ -3422,47 +3542,47 @@ describe("svs-11 (Credit Markets Vault)", () => {
     });
   });
 
-  describe("Oracle change timelock (stage-time pair check)", () => {
-    // request_oracle_change cross-checks the staged (oracle account, program)
-    // pair so a mismatch fails at stage time rather than bricking approvals
-    // after the timelock. Negative cases must NOT mutate the pending_* state.
-    it("rejects a staged oracle account not owned by the staged program", async () => {
+  describe("set_oracle (immediate, authority-gated)", () => {
+    // set_oracle repoints the NAV oracle in one authority-gated tx, fail-closed
+    // on every check, seeding the replay floor from the incoming oracle's current
+    // sequence. Negative cases must NOT mutate vault.nav_oracle.
+    it("non-authority signer is rejected (Unauthorized), no mutation", async () => {
+      const stranger = Keypair.generate();
+      const sig = await connection.requestAirdrop(
+        stranger.publicKey,
+        anchor.web3.LAMPORTS_PER_SOL,
+      );
+      await connection.confirmTransaction(sig);
+      const before = (await program.account.creditVault.fetch(vault)).navOracle;
       try {
         await program.methods
-          // mockOracleData is owned by mock-oracle, not nav-oracle.
-          .requestOracleChange(mockOracleData, navOracleProgram.programId)
+          .setOracle(navAccount, navOracleProgram.programId)
           .accountsPartial({
-            authority: payer.publicKey,
+            authority: stranger.publicKey,
             vault,
-            vaultConfig,
             newOracleProgramAccount: navOracleProgram.programId,
-            newOracleAccount: mockOracleData,
-            clock: SYSVAR_CLOCK_PUBKEY,
+            newOracleAccount: navAccount,
           })
+          .signers([stranger])
           .rpc();
         expect.fail("should have thrown");
       } catch (err: any) {
-        expect(err.error.errorCode.code).to.equal("OracleInvalidProgram");
+        expect(err.error.errorCode.code).to.equal("Unauthorized");
       }
-
-      const cfg = await program.account.vaultConfig.fetch(vaultConfig);
-      expect(cfg.pendingOracle.toBase58()).to.equal(
-        PublicKey.default.toBase58(),
-      );
+      const after = (await program.account.creditVault.fetch(vault)).navOracle;
+      expect(after.toBase58()).to.equal(before.toBase58());
     });
 
-    it("rejects when the staged oracle account key != new_oracle arg", async () => {
+    it("rejects when oracle account key != new_oracle arg (InvalidAddress)", async () => {
       const stray = Keypair.generate().publicKey;
       try {
         await program.methods
-          .requestOracleChange(stray, navOracleProgram.programId)
+          .setOracle(stray, navOracleProgram.programId) // arg stray; account is navAccount
           .accountsPartial({
             authority: payer.publicKey,
             vault,
-            vaultConfig,
             newOracleProgramAccount: navOracleProgram.programId,
-            newOracleAccount: mockOracleData, // key != `stray`
-            clock: SYSVAR_CLOCK_PUBKEY,
+            newOracleAccount: navAccount,
           })
           .rpc();
         expect.fail("should have thrown");
@@ -3471,24 +3591,84 @@ describe("svs-11 (Credit Markets Vault)", () => {
       }
     });
 
-    it("stages a valid (account, program) pair", async () => {
+    it("rejects a non-executable program account (OracleInvalidProgram)", async () => {
+      // mockOracleData is a data account (not executable): key-match passes,
+      // the executable check fails.
+      try {
+        await program.methods
+          .setOracle(navAccount, mockOracleData)
+          .accountsPartial({
+            authority: payer.publicKey,
+            vault,
+            newOracleProgramAccount: mockOracleData,
+            newOracleAccount: navAccount,
+          })
+          .rpc();
+        expect.fail("should have thrown");
+      } catch (err: any) {
+        expect(err.error.errorCode.code).to.equal("OracleInvalidProgram");
+      }
+    });
+
+    it("rejects an oracle account not owned by the program (OracleInvalidProgram)", async () => {
+      // mockOracleData is owned by mock-oracle, not nav-oracle.
+      try {
+        await program.methods
+          .setOracle(mockOracleData, navOracleProgram.programId)
+          .accountsPartial({
+            authority: payer.publicKey,
+            vault,
+            newOracleProgramAccount: navOracleProgram.programId,
+            newOracleAccount: mockOracleData,
+          })
+          .rpc();
+        expect.fail("should have thrown");
+      } catch (err: any) {
+        expect(err.error.errorCode.code).to.equal("OracleInvalidProgram");
+      }
+    });
+
+    it("authority repoints the oracle; replay floor seeded from incoming sequence", async () => {
+      const navState = await navOracleProgram.account.navAccount.fetch(
+        navAccount,
+      );
       await program.methods
-        .requestOracleChange(mockOracleData, oracleProgram.programId)
+        .setOracle(navAccount, navOracleProgram.programId)
         .accountsPartial({
           authority: payer.publicKey,
           vault,
-          vaultConfig,
-          newOracleProgramAccount: oracleProgram.programId,
-          newOracleAccount: mockOracleData,
-          clock: SYSVAR_CLOCK_PUBKEY,
+          newOracleProgramAccount: navOracleProgram.programId,
+          newOracleAccount: navAccount,
         })
         .rpc();
 
-      const cfg = await program.account.vaultConfig.fetch(vaultConfig);
-      expect(cfg.pendingOracle.toBase58()).to.equal(mockOracleData.toBase58());
-      expect(cfg.pendingOracleProgram.toBase58()).to.equal(
-        oracleProgram.programId.toBase58(),
+      const v = await program.account.creditVault.fetch(vault);
+      expect(v.navOracle.toBase58()).to.equal(navAccount.toBase58());
+      expect(v.oracleProgram.toBase58()).to.equal(
+        navOracleProgram.programId.toBase58(),
       );
+      // P2: floor adopts the incoming oracle's current sequence (not blanket 0).
+      expect(v.lastSeenNavSequence.toString()).to.equal(
+        navState.sequence.toString(),
+      );
+    });
+
+    it("swapping to an unpublished oracle (sequence 0) seeds the floor to 0", async () => {
+      // mock-oracle pins the sequence-0 sentinel ("sequencing unused"), so
+      // pointing the vault at it seeds the replay floor to 0 — a fresh oracle
+      // is never bricked.
+      await program.methods
+        .setOracle(mockOracleData, oracleProgram.programId)
+        .accountsPartial({
+          authority: payer.publicKey,
+          vault,
+          newOracleProgramAccount: oracleProgram.programId,
+          newOracleAccount: mockOracleData,
+        })
+        .rpc();
+      const v = await program.account.creditVault.fetch(vault);
+      expect(v.navOracle.toBase58()).to.equal(mockOracleData.toBase58());
+      expect(v.lastSeenNavSequence.toNumber()).to.equal(0);
     });
   });
 
@@ -3539,6 +3719,309 @@ describe("svs-11 (Credit Markets Vault)", () => {
 
       const v = await program.account.creditVault.fetch(vault2);
       expect(v.maxStaleness.toNumber()).to.equal(THIRTY_DAYS.toNumber());
+    });
+  });
+
+  describe("update_oracle_params + pause gating", () => {
+    it("authority updates the staleness window", async () => {
+      const SEVEN_DAYS = new BN(604_800);
+      await program.methods
+        .updateOracleParams(SEVEN_DAYS)
+        .accountsPartial({ authority: payer.publicKey, vault })
+        .rpc();
+      const v = await program.account.creditVault.fetch(vault);
+      expect(v.maxStaleness.toNumber()).to.equal(SEVEN_DAYS.toNumber());
+    });
+
+    it("non-authority cannot update oracle params (Unauthorized)", async () => {
+      const stranger = Keypair.generate();
+      const air = await connection.requestAirdrop(
+        stranger.publicKey,
+        anchor.web3.LAMPORTS_PER_SOL,
+      );
+      await connection.confirmTransaction(air);
+      try {
+        await program.methods
+          .updateOracleParams(new BN(604_800))
+          .accountsPartial({ authority: stranger.publicKey, vault })
+          .signers([stranger])
+          .rpc();
+        expect.fail("should have thrown");
+      } catch (err: any) {
+        expect(err.error.errorCode.code).to.equal("Unauthorized");
+      }
+    });
+
+    it("rejects an out-of-bounds staleness window (InvalidStalenessConfig)", async () => {
+      try {
+        await program.methods
+          .updateOracleParams(new BN(30)) // below the 60s floor
+          .accountsPartial({ authority: payer.publicKey, vault })
+          .rpc();
+        expect.fail("should have thrown");
+      } catch (err: any) {
+        expect(err.error.errorCode.code).to.equal("InvalidStalenessConfig");
+      }
+    });
+
+    it("pause blocks the deposit and redeem entry points", async () => {
+      // Fresh investor (no prior request) so the pause gate — the FIRST line of
+      // each handler — is what rejects, not an account-already-in-use error.
+      const pInv = Keypair.generate();
+      const air = await connection.requestAirdrop(
+        pInv.publicKey,
+        2 * anchor.web3.LAMPORTS_PER_SOL,
+      );
+      await connection.confirmTransaction(air);
+      const pAssetAta = await getOrCreateAssociatedTokenAccount(
+        connection,
+        payer,
+        assetMint,
+        pInv.publicKey,
+        false,
+        undefined,
+        undefined,
+        TOKEN_PROGRAM_ID,
+      );
+      await getOrCreateAssociatedTokenAccount(
+        connection,
+        payer,
+        sharesMint,
+        pInv.publicKey,
+        false,
+        undefined,
+        undefined,
+        TOKEN_2022_PROGRAM_ID,
+      );
+      const pSharesAta = getAssociatedTokenAddressSync(
+        sharesMint,
+        pInv.publicKey,
+        false,
+        TOKEN_2022_PROGRAM_ID,
+      );
+      const [pInvReq] = getInvestmentRequestPDA(pInv.publicKey);
+      const [pRedReq] = getRedemptionRequestPDA(pInv.publicKey);
+      const [pClaimable] = getClaimableTokensPDA(pInv.publicKey);
+      const [pAtt] = getAttestationPDA(pInv.publicKey, attester.publicKey);
+
+      await program.methods
+        .pause()
+        .accountsPartial({ authority: payer.publicKey, vault })
+        .rpc();
+      try {
+        try {
+          await program.methods
+            .requestDeposit(minimumInvestment)
+            .accountsPartial({
+              investor: pInv.publicKey,
+              vault,
+              investmentRequest: pInvReq,
+              investorTokenAccount: pAssetAta.address,
+              depositVault,
+              assetMint,
+              attestation: pAtt,
+              assetTokenProgram: TOKEN_PROGRAM_ID,
+              systemProgram: SystemProgram.programId,
+              clock: SYSVAR_CLOCK_PUBKEY,
+            })
+            .signers([pInv])
+            .rpc();
+          expect.fail("deposit should have thrown");
+        } catch (err: any) {
+          expect(err.error.errorCode.code).to.equal("VaultPaused");
+        }
+
+        try {
+          await program.methods
+            .requestRedeem(new BN(1))
+            .accountsPartial({
+              investor: pInv.publicKey,
+              vault,
+              redemptionRequest: pRedReq,
+              sharesMint,
+              investorSharesAccount: pSharesAta,
+              redemptionEscrow,
+              assetMint,
+              claimableTokens: pClaimable,
+              attestation: pAtt,
+              assetTokenProgram: TOKEN_PROGRAM_ID,
+              token2022Program: TOKEN_2022_PROGRAM_ID,
+              systemProgram: SystemProgram.programId,
+              clock: SYSVAR_CLOCK_PUBKEY,
+            })
+            .remainingAccounts(requestRedeemHookExtras(pInv.publicKey))
+            .signers([pInv])
+            .rpc();
+          expect.fail("redeem should have thrown");
+        } catch (err: any) {
+          expect(err.error.errorCode.code).to.equal("VaultPaused");
+        }
+      } finally {
+        await program.methods
+          .unpause()
+          .accountsPartial({ authority: payer.publicKey, vault })
+          .rpc();
+      }
+    });
+  });
+
+  describe("Batch settlement against the real NAV oracle", () => {
+    // P1 integration regression. With the vault reading the REAL nav-oracle
+    // (non-zero, strictly-monotonic sequences — unlike mock-oracle's seq-0
+    // sentinel), a manager must be able to approve MULTIPLE queued requests
+    // against ONE published NAV. read_oracle treats the sequence as a replay
+    // FLOOR (reject strictly-older, accept equal), so the second approval at
+    // the same sequence must succeed. Exercises the approve path end-to-end
+    // against the real oracle — the gap the mock-only approval tests left open.
+    const investorA = Keypair.generate();
+    const investorB = Keypair.generate();
+    const amt = new BN(5_000_000); // 5 tokens, above minimum_investment
+    let aAta: PublicKey;
+    let bAta: PublicKey;
+    let aReq: PublicKey;
+    let bReq: PublicKey;
+    let aAtt: PublicKey;
+    let bAtt: PublicKey;
+
+    before(async () => {
+      // Point the vault at the real nav-oracle and ensure the window is open.
+      await program.methods
+        .setOracle(navAccount, navOracleProgram.programId)
+        .accountsPartial({
+          authority: payer.publicKey,
+          vault,
+          newOracleProgramAccount: navOracleProgram.programId,
+          newOracleAccount: navAccount,
+        })
+        .rpc();
+      try {
+        await program.methods
+          .openInvestmentWindow()
+          .accountsPartial({ authority: payer.publicKey, vault })
+          .rpc();
+      } catch {
+        /* already open */
+      }
+
+      // An earlier test rotated the publisher; restore it to navPublisher so
+      // publishNav (which signs with navPublisher) produces a valid signature.
+      await navOracleProgram.methods
+        .rotatePublisher()
+        .accountsPartial({
+          pool: vault,
+          navAccount,
+          authority: payer.publicKey,
+          newPublisher: navPublisher.publicKey,
+        })
+        .signers([payer])
+        .rpc();
+
+      for (const inv of [investorA, investorB]) {
+        const air = await connection.requestAirdrop(
+          inv.publicKey,
+          2 * anchor.web3.LAMPORTS_PER_SOL,
+        );
+        await connection.confirmTransaction(air);
+        const ata = await getOrCreateAssociatedTokenAccount(
+          connection,
+          payer,
+          assetMint,
+          inv.publicKey,
+          false,
+          undefined,
+          undefined,
+          TOKEN_PROGRAM_ID,
+        );
+        await mintTo(
+          connection,
+          payer,
+          assetMint,
+          ata.address,
+          payer.publicKey,
+          BigInt(amt.toString()) * 4n,
+          [],
+          undefined,
+          TOKEN_PROGRAM_ID,
+        );
+        const [att] = getAttestationPDA(inv.publicKey, attester.publicKey);
+        await attestationMockProgram.methods
+          .createAttestation(attester.publicKey, 0, [66, 82], FAR_FUTURE_EXPIRY)
+          .accountsPartial({
+            authority: payer.publicKey,
+            attestation: att,
+            subject: inv.publicKey,
+            systemProgram: SystemProgram.programId,
+          })
+          .rpc();
+        if (inv === investorA) {
+          aAta = ata.address;
+          aAtt = att;
+        } else {
+          bAta = ata.address;
+          bAtt = att;
+        }
+      }
+      [aReq] = getInvestmentRequestPDA(investorA.publicKey);
+      [bReq] = getInvestmentRequestPDA(investorB.publicKey);
+    });
+
+    it("approves two queued requests against a single published NAV", async () => {
+      const legs = [
+        { inv: investorA, ata: aAta, req: aReq, att: aAtt },
+        { inv: investorB, ata: bAta, req: bReq, att: bAtt },
+      ];
+
+      for (const { inv, ata, req, att } of legs) {
+        await program.methods
+          .requestDeposit(amt)
+          .accountsPartial({
+            investor: inv.publicKey,
+            vault,
+            investmentRequest: req,
+            investorTokenAccount: ata,
+            depositVault,
+            assetMint,
+            attestation: att,
+            assetTokenProgram: TOKEN_PROGRAM_ID,
+            systemProgram: SystemProgram.programId,
+            clock: SYSVAR_CLOCK_PUBKEY,
+          })
+          .signers([inv])
+          .rpc();
+      }
+
+      // ONE NAV publish (a single fresh monotonic sequence).
+      await publishNav(PRICE_SCALE);
+      const seq = (await navOracleProgram.account.navAccount.fetch(navAccount))
+        .sequence;
+
+      // Approve BOTH against that single published NAV (same sequence). The
+      // second approval at the same sequence must NOT revert (P1 fix).
+      for (const { inv, req, att } of legs) {
+        await program.methods
+          .approveDeposit()
+          .accountsPartial({
+            manager: manager.publicKey,
+            vault,
+            investmentRequest: req,
+            investor: inv.publicKey,
+            oracleAccount: navAccount,
+            attestation: att,
+            clock: SYSVAR_CLOCK_PUBKEY,
+          })
+          .signers([manager])
+          .rpc();
+        const r = await program.account.investmentRequest.fetch(req);
+        expect(JSON.stringify(r.status)).to.equal(
+          JSON.stringify({ approved: {} }),
+        );
+        expect(r.sharesClaimable.toNumber()).to.be.greaterThan(0);
+      }
+
+      // Replay floor sits at the single published sequence — proving both
+      // approvals settled against it.
+      const v = await program.account.creditVault.fetch(vault);
+      expect(v.lastSeenNavSequence.toString()).to.equal(seq.toString());
     });
   });
 });
