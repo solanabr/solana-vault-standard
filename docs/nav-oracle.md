@@ -56,25 +56,26 @@ Replay protection is enforced through strict sequence monotonicity, and a consec
 
 PDA seeds: `[b"nav_oracle", pool_pubkey]`, where `pool_pubkey` is the SVS-11 CreditVault PDA address.
 
-The struct **leads with the canonical 24-byte `SvsOraclePrice` header** (`nav_net`, `timestamp`, `sequence`) so SVS-11's generic `read_oracle` parses the NAV at one fixed window. All credit-market specifics follow the header. On-disk offsets below include the 8-byte Anchor discriminator; in payload space (discriminator excluded) the header occupies bytes `0..8` / `8..16` / `16..24`.
+The struct **leads with the canonical 25-byte `SvsOraclePrice` header** (`version`, `nav_net`, `timestamp`, `sequence`) so SVS-11's generic `read_oracle` parses the NAV at one fixed window. The leading `version` byte (held at `1`) lets the reader fail closed on any future layout drift. All credit-market specifics follow the header. On-disk offsets below include the 8-byte Anchor discriminator; in payload space (discriminator excluded) the header occupies bytes `0..1` (version) / `1..9` (price) / `9..17` (timestamp) / `17..25` (sequence).
 
 | Field | Type | Bytes | On-disk offset | Description |
 |-------|------|-------|----------------|-------------|
 | (discriminator) | `[u8; 8]` | 8 | 0 | Anchor account discriminator |
-| `nav_net` | `u64` | 8 | 8 | Net NAV == `SvsOraclePrice.price`; used by SVS-11 share-pricing math (header) |
-| `timestamp` | `i64` | 8 | 16 | == `SvsOraclePrice.timestamp`; Unix seconds when NAV was computed (header) |
-| `sequence` | `u64` | 8 | 24 | == `SvsOraclePrice.sequence`; strictly monotonic per pool (header) |
-| `pool` | `Pubkey` | 32 | 32 | CreditVault PDA this NAV applies to |
-| `nav_gross` | `u64` | 8 | 64 | Gross NAV before fees + loss provision |
-| `ter_bps` | `u16` | 2 | 72 | Total Expense Ratio in basis points |
-| `loss_provision_bps` | `u16` | 2 | 74 | Expected-loss provision in bps |
-| `nav_type` | `u8` | 1 | 76 | `0` = monthly close, `1` = event-driven |
-| `_padding` | `[u8; 7]` | 7 | 77 | Alignment padding (excluded from signature) |
-| `publisher` | `Pubkey` | 32 | 84 | Authorized signer for `update` |
-| `signature` | `[u8; 64]` | 64 | 116 | Ed25519 signature over canonical payload |
-| `loan_tape_merkle_root` | `[u8; 32]` | 32 | 180 | Merkle root over receivable rows |
-| `last_published_nav` | `u64` | 8 | 212 | Previous published `nav_net`; baseline for the deviation guard (`0` = genesis, guard skipped) |
-| `max_deviation_bps` | `u16` | 2 | 220 | Max allowed consecutive-publish deviation in bps; set at `initialize`, never publisher-attested |
+| `version` | `u8` | 1 | 8 | == `SvsOraclePrice.version`; canonical header version, held at `1` (header) |
+| `nav_net` | `u64` | 8 | 9 | Net NAV == `SvsOraclePrice.price`; used by SVS-11 share-pricing math (header) |
+| `timestamp` | `i64` | 8 | 17 | == `SvsOraclePrice.timestamp`; Unix seconds when NAV was computed (header) |
+| `sequence` | `u64` | 8 | 25 | == `SvsOraclePrice.sequence`; strictly monotonic per pool (header) |
+| `pool` | `Pubkey` | 32 | 33 | CreditVault PDA this NAV applies to |
+| `nav_gross` | `u64` | 8 | 65 | Gross NAV before fees + loss provision |
+| `ter_bps` | `u16` | 2 | 73 | Total Expense Ratio in basis points |
+| `loss_provision_bps` | `u16` | 2 | 75 | Expected-loss provision in bps |
+| `nav_type` | `u8` | 1 | 77 | `0` = monthly close, `1` = event-driven |
+| `_padding` | `[u8; 7]` | 7 | 78 | Alignment padding (excluded from signature) |
+| `publisher` | `Pubkey` | 32 | 85 | Authorized signer for `update` |
+| `signature` | `[u8; 64]` | 64 | 117 | Ed25519 signature over canonical payload |
+| `loan_tape_merkle_root` | `[u8; 32]` | 32 | 181 | Merkle root over receivable rows |
+| `last_published_nav` | `u64` | 8 | 213 | Previous published `nav_net`; baseline for the deviation guard (`0` = genesis, guard skipped) |
+| `max_deviation_bps` | `u16` | 2 | 221 | Max allowed consecutive-publish deviation in bps; set at `initialize`, never publisher-attested |
 
 Size constant: `NavAccount::SPACE = 222 bytes` (`8 + 8 + 8 + 8 + 32 + 8 + 2 + 2 + 1 + 7 + 32 + 64 + 32 + 8 + 2`).
 
@@ -252,19 +253,19 @@ pub struct NavUpdated {
 
 ## Integration with SVS-11
 
-nav-oracle is one implementation of the pluggable SVS oracle interface (see [SVS-11.md](./SVS-11.md)). Because `NavAccount` leads with the canonical 24-byte `SvsOraclePrice` header (`nav_net` as `price`, `timestamp`, `sequence`), SVS-11 reads it through the SAME generic `svs_oracle::read_oracle` reader it uses for any compliant oracle — there is no nav-specific reader and no `oracle_source` selector. SVS-11's `approve_deposit` / `approve_redeem` take a single `oracle_account`, validated by `key == vault.nav_oracle` and `owner == vault.oracle_program`, then parse the header at on-disk bytes 8..32 (no CPI — raw bytes). The publisher pubkey is read directly from `NavAccount.publisher`; SVS-11 stores no copy, so `rotate_publisher` cannot create a double-source-of-truth drift.
+nav-oracle is one implementation of the pluggable SVS oracle interface (see [SVS-11.md](./SVS-11.md)). Because `NavAccount` leads with the canonical 25-byte `SvsOraclePrice` header (`version`, `nav_net` as `price`, `timestamp`, `sequence`), SVS-11 reads it through the SAME generic `svs_oracle::read_oracle` reader it uses for any compliant oracle — there is no nav-specific reader and no `oracle_source` selector. SVS-11's `approve_deposit` / `approve_redeem` take a single `oracle_account`, validated by `key == vault.nav_oracle` and `owner == vault.oracle_program`, then parse the header at on-disk bytes 8..33 (no CPI — raw bytes); a header whose `version` byte does not match is rejected. The publisher pubkey is read directly from `NavAccount.publisher`; SVS-11 stores no copy, so `rotate_publisher` cannot create a double-source-of-truth drift.
 
 `read_oracle` enforces the generic invariants (positive price, `0 <= now - timestamp <= max_staleness`, sequence monotonicity vs the vault's `last_seen_nav_sequence`). After a successful approve_*, SVS-11 advances `last_seen_nav_sequence` (only when the published `sequence != 0`). The consecutive-price deviation bound is nav-oracle's own concern (`check_deviation`, above) — the vault does not re-implement it.
 
 ### Deployment sequence
 
-To use nav-oracle as a pool's price source, configure the vault's `nav_oracle` (the `NavAccount` PDA) and `oracle_program` (this program) — either at `initialize_pool` or via the oracle-change timelock (`request_oracle_change` / `apply_oracle_change`, which rotate the account and owner program together). Then:
+To use nav-oracle as a pool's price source, configure the vault's `nav_oracle` (the `NavAccount` PDA) and `oracle_program` (this program) — either at `initialize_pool` or via `set_oracle` (which rotates the account and owner program together). Then:
 
 1. nav-oracle `initialize` (creates `NavAccount` PDA, zero NAV, sets `max_deviation_bps`).
 2. Publisher submits the first nav-oracle `update` (real NAV is now on-chain; genesis publish skips the deviation guard).
 3. The pool's `approve_deposit` / `approve_redeem` read the `NavAccount` through the generic interface.
 
-Switching a live pool to a different oracle goes through the timelocked `request_oracle_change` → `apply_oracle_change` flow, which updates `nav_oracle` and `oracle_program` atomically.
+Switching a live pool to a different oracle uses the authority-gated `set_oracle`, which updates `nav_oracle` and `oracle_program` atomically.
 
 ## Constants
 

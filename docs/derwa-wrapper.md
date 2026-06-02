@@ -156,18 +156,19 @@ the hook is fully wired.
 
 ```
 payload offsets (data[8..] after Anchor discriminator):
-   0..32    subject (Pubkey)
-  32..64    issuer (Pubkey)
-  64        attestation_type (u8)
-  65..67    country_code ([u8; 2])
-  67..75    issued_at (i64)
-  75..83    expires_at (i64)        ← read by unwrap
-  83        revoked (bool)          ← read by unwrap
-  84        bump (u8)
-  85..117   _reserved
- 117..119   jurisdiction
- 119        investor_class (u8)
- 120        kyc_risk_tier (u8)
+   0        version (u8)            ← checked == ATTESTATION_VERSION
+   1..33    subject (Pubkey)
+  33..65    issuer (Pubkey)
+  65        attestation_type (u8)
+  66..68    country_code ([u8; 2])
+  68..76    issued_at (i64)
+  76..84    expires_at (i64)        ← read by unwrap
+  84        revoked (bool)          ← read by unwrap
+  85        bump (u8)
+  86..118   _reserved
+ 118..120   jurisdiction
+ 120        investor_class (u8)
+ 121        kyc_risk_tier (u8)
 ```
 
 **Params:** `amount: u64`

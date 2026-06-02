@@ -1,6 +1,6 @@
 # Solana Vault Standard (SVS)
 
-**solana-vault** is a collection of tokenized vault programs and TypeScript SDK/CLI for building and maintaining yield-bearing vaults on Solana. The SDK provides deposit/withdraw operations, share accounting, preview functions, and modular extensions for fees, caps, access control, timelocks, and multi-asset portfolios.
+**solana-vault** is a collection of tokenized vault programs and TypeScript SDK/CLI for building and maintaining yield-bearing vaults on Solana. The SDK provides deposit/withdraw operations, share accounting, preview functions, and modular extensions for fees, caps, access control, and multi-asset portfolios.
 
 The interface started off following the ERC-4626 specification adapted for Solana's account model. With time, more ERC's and features were also covered such as Centrifuge's ERC-7540, alongside novel onchain enforcements and implementations such as Tranched RWA vaults, streaming vault yield, vaults-of-vaults, and more.
 
@@ -195,7 +195,6 @@ The TypeScript SDK includes modular extensions for common vault patterns:
 | `emergency` | Emergency withdrawal with configurable penalty |
 | `access-control` | Whitelist/blacklist with merkle proof verification |
 | `multi-asset` | Portfolio allocation across multiple vaults |
-| `timelock` | Governance proposal lifecycle management |
 | `strategy` | CPI templates for deploying assets to external protocols |
 
 ## CLI

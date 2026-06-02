@@ -341,11 +341,12 @@ Shared KYC/KYB attestation interface — the attestation analogue of `svs-oracle
 
 | Name | Value | Description |
 |------|-------|-------------|
-| `ATTESTATION_ACCOUNT_LEN` | `129` | Full on-disk length (8-byte discriminator + 121-byte payload) |
-| `ATTESTATION_PAYLOAD_LEN` | `121` | Payload length after the discriminator |
+| `ATTESTATION_ACCOUNT_LEN` | `130` | Full on-disk length (8-byte discriminator + 122-byte payload) |
+| `ATTESTATION_PAYLOAD_LEN` | `122` | Payload length after the discriminator |
+| `ATTESTATION_VERSION` | `1` | Canonical layout version; `verify_attestation` rejects any other |
 | `ATTESTATION_SEED_PREFIX` | `b"attestation"` | Canonical PDA seed prefix |
 
-Payload byte offsets (after the 8-byte discriminator) are exported individually (`SUBJECT_OFFSET`, `ISSUER_OFFSET`, `ATTESTATION_TYPE_OFFSET`, `EXPIRES_AT_OFFSET`, `REVOKED_OFFSET`, `BUMP_OFFSET`, `JURISDICTION_OFFSET`, …). The layout is additive-only: new metadata fields append at the end; existing offsets never shift.
+Payload byte offsets (after the 8-byte discriminator) are exported individually (`VERSION_OFFSET` = 0, `SUBJECT_OFFSET`, `ISSUER_OFFSET`, `ATTESTATION_TYPE_OFFSET`, `EXPIRES_AT_OFFSET`, `REVOKED_OFFSET`, `BUMP_OFFSET`, `JURISDICTION_OFFSET`, …). A 1-byte `version` tag sits at payload offset 0 (a fixed position, checked before any other field is trusted); the remaining data fields are additive-only — new fields append at the end, existing offsets never shift.
 
 ### Functions
 
@@ -443,7 +444,7 @@ See [compliance-hook.md](compliance-hook.md).
 
 ### nav-oracle
 
-Per-pool NAV oracle, the reference implementation of the pluggable SVS oracle interface. Off-chain publisher signs a canonical NAV payload (gross/net NAV, TER, loss provision, sequence, timestamp, loan-tape root); the program verifies via `Ed25519Program` instruction scan, enforces a consecutive-price deviation guard, and writes the latest reading — fronted by the canonical 24-byte `SvsOraclePrice` header — into a `NavAccount` PDA with strictly monotonic sequence. SVS-11 reads it (or any compliant oracle) through a single `oracle_account` via the shared `read_oracle` in `modules/svs-oracle`.
+Per-pool NAV oracle, the reference implementation of the pluggable SVS oracle interface. Off-chain publisher signs a canonical NAV payload (gross/net NAV, TER, loss provision, sequence, timestamp, loan-tape root); the program verifies via `Ed25519Program` instruction scan, enforces a consecutive-price deviation guard, and writes the latest reading — fronted by the canonical 25-byte `SvsOraclePrice` header (a leading `version` byte + price/timestamp/sequence) — into a `NavAccount` PDA with strictly monotonic sequence. SVS-11 reads it (or any compliant oracle) through a single `oracle_account` via the shared `read_oracle` in `modules/svs-oracle`.
 
 See [nav-oracle.md](nav-oracle.md).
 

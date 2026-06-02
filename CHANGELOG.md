@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### SDK & CLI surface
+
+Brings the TypeScript SDK/CLI up to the on-chain instruction set for the
+institutional-credit programs.
+
+- **`CreditVault.setOracle(authority, newOracle, newOracleProgram)`** + `credit
+  set-oracle` CLI — repoint the pluggable NAV oracle (authority-gated).
+- **`CreditVault.updateOracleParams(authority, newMaxStaleness)`** + `credit
+  update-oracle-params` CLI — adjust the oracle staleness window (the
+  on-chain `update_oracle_params` ix that previously had no SDK surface).
+- **`CreditVault.rejectRedeem(manager, investor, reasonCode, remainingAccounts?)`**
+  + `credit reject-redeem` CLI — return escrowed shares through the cPOOL
+  transfer hook (escrow→investor direction, same extras as `cancelRedeem`).
+- **`sdk/core/src/attestation.ts`** — off-chain mirror of the canonical
+  `svs-attestation` layout: `decodeAttestation` / `checkAttestationInvariants`
+  / `verifyAttestation` (owner → version gate → invariants → canonical-PDA
+  binding) + `deriveAttestationAddress`. Byte-for-byte parity with the on-chain
+  parser, so consumers can validate attestations from any SAS-compatible issuer
+  without that issuer's IDL.
+- **Two-step authority rotation** on `CreditVault` and `TranchedVault`:
+  `requestTransferAuthority` / `acceptAuthority` / `cancelTransferAuthority`,
+  with CLI commands for both. The single-step `transferAuthority` is now
+  `@deprecated` in favor of the two-step flow.
+- **`DeRwaWrapper` multi-pool fix.** `WrapParams` / `UnwrapParams` gain an
+  optional `wrapperConfig` PDA; `wrap`/`unwrap` prefer it and fall back to
+  single-config discovery. Removed the dead positional `user` arg and the
+  misleading "pass an explicit wrapperConfig via params" error that pointed at
+  a field that did not exist.
+- **Removed the SDK timelock module + CLI subtree** (`timelock.ts`,
+  `cli/commands/timelock`). It persisted "proposals" to local config and marked
+  them executed without ever touching the chain; the on-chain oracle-change
+  timelock it shadowed no longer exists.
+
 ### Architectural refactor — audit-driven
 
 A consolidation pass over the four institutional-credit programs, landed as
@@ -35,10 +68,14 @@ hardening" pass below (noted inline where reversed).
 #### Pluggable oracle interface
 
 - **Replaced the hardcoded mock/nav `oracle_source` binary with a
-  pluggable interface.** New 24-byte `SvsOraclePrice` header
-  (`price`/`timestamp`/`sequence`) written at account bytes 8..32 by any
-  compliant oracle, plus one generic `read_oracle` reader in
-  `modules/svs-oracle`. Deleted `oracle_source`, `set_oracle_source`,
+  pluggable interface.** New 25-byte `SvsOraclePrice` header
+  (`version`/`price`/`timestamp`/`sequence`) written at account bytes 8..33 by
+  any compliant oracle, plus one generic `read_oracle` reader in
+  `modules/svs-oracle`. The leading `version` byte (`SVS_ORACLE_VERSION`) is
+  enforced by `read_oracle` (rejects mismatch with `WrongVersion`) so layout
+  drift fails closed — mirroring the `svs-attestation` version byte. Writers
+  (`nav-oracle`, `mock-oracle`) lead their account with it; svs-10 consumes
+  only the pricing-math helpers and is unaffected. Deleted `oracle_source`, `set_oracle_source`,
   `OracleSourceInvalid`, `OracleSourceChanged`, and the
   `NAV_ORACLE_SEED` / `NAV_ORACLE_PROGRAM_ID` / `ORACLE_SOURCE_*`
   constants. `approve_deposit` / `approve_redeem` take a single
@@ -47,12 +84,11 @@ hardening" pass below (noted inline where reversed).
 - Collapsed the two staleness fields into one `max_staleness` (ceiling
   raised from 24h to 45 days); deleted `max_nav_staleness_secs` and the
   now-dead `last_seen_nav_price`.
-- The oracle timelock now rotates the oracle account **and** its owner
-  program atomically (`request_oracle_change` gains a `new_oracle_program`
-  arg; `VaultConfig` gains `pending_oracle_program`). `request_oracle_change`
-  also cross-checks the (account, program) pair at stage time — the staged
-  oracle account must be owned by the staged program — so a mismatched pair
-  is rejected immediately instead of bricking approvals after the timelock.
+- `set_oracle` (authority-gated) rotates the oracle account **and** its owner
+  program atomically, cross-checking the (account, program) pair — the oracle
+  account must be owned by the named program — so a mismatched pair is rejected
+  immediately instead of bricking approvals. On rotation it seeds the replay
+  floor from the incoming oracle's current sequence.
 - **Removed the vault-derived (books-vs-oracle) deviation guard.** SVS-11 no
   longer re-derives a price from `total_assets / total_shares` to bound the
   oracle: `total_assets` tracks idle cash (draw_down deploys capital

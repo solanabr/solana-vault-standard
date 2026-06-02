@@ -26,7 +26,6 @@ SVS-11 is a manager-approved tokenized vault for credit markets and illiquid ass
 | **InvestmentRequest** | `["investment_request", vault, investor]` | Vault PDA |
 | **RedemptionRequest** | `["redemption_request", vault, investor]` | Vault PDA |
 | **ClaimableTokens** | `["claimable_tokens", vault, investor]` | Vault PDA |
-| **VaultConfig** | `["vault_config", vault]` | Authority |
 | **Attestation** | `["attestation", subject, issuer, attestation_type]` | Attestation program |
 | **FeeConfig** | `["svs_fee_config", vault]` | Vault authority |
 | **CapConfig** | `["svs_cap_config", vault]` | Vault authority |
@@ -68,22 +67,6 @@ pub struct CreditVault {
     pub _padding_oracle: [u8; 24],      // 24 bytes
 }
 // Total: 484 bytes (8-byte discriminator + 476-byte payload)
-```
-
-```rust
-#[account]
-pub struct VaultConfig {
-    pub vault: Pubkey,                  // 32 bytes
-    pub pending_oracle: Pubkey,         // 32 bytes — proposed new oracle account (timelock)
-    pub pending_oracle_program: Pubkey, // 32 bytes — proposed new oracle owner program (timelock)
-    pub oracle_change_at: i64,          // 8 bytes  — when the change can be applied
-    pub bump: u8,                       // 1 byte
-    pub _reserved: [u8; 31],            // 31 bytes
-}
-// Total: 136 bytes
-// Seeds: ["vault_config", vault]
-// Required for oracle timelock changes (rotates both the oracle account and its owner program atomically).
-// Must be initialized via `initialize_vault_config` after vault creation.
 ```
 
 ```rust
@@ -204,18 +187,24 @@ pub fn initialize_pool(
 
 NAV pricing uses a pluggable external oracle account. SVS-11 has no hardcoded
 mock/nav selector — the vault reads ANY compliant oracle through a generic
-24-byte `SvsOraclePrice` header via the shared `read_oracle` reader in
+25-byte `SvsOraclePrice` header via the shared `read_oracle` reader in
 `modules/svs-oracle` (no CPI; price data is read directly from account data).
 Any program can plug in its own oracle as long as it writes this header; oracle
 integrity stays the responsibility of each oracle program. The Credit Markets
 `nav-oracle` is the reference implementation, `mock-oracle` is an example.
 
+The header leads with a `version` byte: `read_oracle` rejects any header whose
+version does not match the canonical `SVS_ORACLE_VERSION`, so a future field
+reorder (or a third-party oracle writing an incompatible header) fails closed
+rather than silently mispricing.
+
 ```rust
-// SvsOraclePrice header — 24 bytes of payload (after the 8-byte Anchor discriminator)
+// SvsOraclePrice header — 25 bytes of payload (after the 8-byte Anchor discriminator)
 pub struct SvsOraclePrice {
-    pub price: u64,       // payload 0..8   (on-disk bytes 8..16)  — price in PRICE_SCALE (1e9)
-    pub timestamp: i64,   // payload 8..16  (on-disk bytes 16..24) — unix timestamp
-    pub sequence: u64,    // payload 16..24 (on-disk bytes 24..32) — replay floor (see validation #5)
+    pub version: u8,      // payload 0..1   (on-disk byte  8)      — canonical header version (== 1)
+    pub price: u64,       // payload 1..9   (on-disk bytes 9..17)  — price in PRICE_SCALE (1e9)
+    pub timestamp: i64,   // payload 9..17  (on-disk bytes 17..25) — unix timestamp
+    pub sequence: u64,    // payload 17..25 (on-disk bytes 25..33) — replay floor (see validation #5)
 }
 ```
 
@@ -237,20 +226,22 @@ assets = shares * price / PRICE_SCALE
 
 Where `PRICE_SCALE = 1_000_000_000` (1e9).
 
-## Oracle Timelock And Rotation
+## Oracle Rotation (`set_oracle`)
 
-Oracle changes go through a timelock (`request_oracle_change` /
-`apply_oracle_change`) recorded in `VaultConfig`. A rotation swaps BOTH the
-oracle account AND its owner program atomically: `request_oracle_change` takes a
-`new_oracle` account and a `new_oracle_program` arg, staging them into
-`pending_oracle` / `pending_oracle_program`; `apply_oracle_change` commits both
-to `vault.nav_oracle` / `vault.oracle_program` once the timelock elapses.
-`request_oracle_change` cross-checks the pair at stage time (the new oracle
-account must be owned by the new program), so a mismatched pair fails fast
-instead of bricking approvals after the timelock. This
-lets a deployment migrate from one oracle implementation (e.g. `mock-oracle`) to
-another (e.g. the Credit Markets `nav-oracle`) without changing the core
-deposit/redeem state machine.
+Oracle changes are authority-gated. `set_oracle(new_oracle, new_oracle_program)`
+swaps BOTH the oracle account AND its owner program atomically into
+`vault.nav_oracle` / `vault.oracle_program` in a single transaction signed by
+`vault.authority`.
+
+It is fail-closed: the supplied program account must equal `new_oracle_program`
+and be executable, and the oracle account must equal `new_oracle` and be owned by
+that program (else a mismatched pair would brick approvals, which re-check
+`owner == oracle_program`). On success it seeds `last_seen_nav_sequence` from the
+incoming oracle's current header sequence (0 if it has never published), so a
+fresh oracle isn't bricked and a swap-back can't replay a stale NAV. This lets a
+deployment migrate from one oracle implementation (e.g. `mock-oracle`) to another
+(e.g. the Credit Markets `nav-oracle`) without changing the core deposit/redeem
+state machine.
 
 Credit Markets deployments use the `nav-oracle` reference implementation because
 private-credit NAV needs signed publisher payloads, gross/net NAV, TER,
@@ -262,9 +253,10 @@ the generic `SvsOraclePrice` header.
 
 Every `request_deposit`, `request_redeem`, `approve_deposit`, and `approve_redeem` validates the investor's attestation account. The model is provider-agnostic — any program that writes accounts matching the canonical `Attestation` layout is supported. The layout and verification live in the shared `svs_attestation` crate (`modules/svs-attestation`, the attestation analogue of `svs-oracle`); `attestation.rs::validate_attestation` calls `svs_attestation::verify_attestation` and maps the result onto `VaultError`. `compliance-hook` and `derwa-wrapper` consume the same module.
 
-**Attestation Account Layout** (129 bytes on-disk: 8-byte discriminator + 121-byte payload):
+**Attestation Account Layout** (130 bytes on-disk: 8-byte discriminator + 122-byte payload):
 ```rust
 pub struct Attestation {
+    pub version: u8,              //  1 — canonical layout version (checked first)
     pub subject: Pubkey,          // 32 — investor being attested
     pub issuer: Pubkey,           // 32 — attester identity
     pub attestation_type: u8,     //  1 — KYC(0), Accredited(1), etc.
