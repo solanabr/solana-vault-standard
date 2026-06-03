@@ -6,7 +6,7 @@ use anchor_spl::{
 
 use crate::attestation::validate_attestation;
 use crate::constants::{
-    FROZEN_ACCOUNT_SEED, INVESTMENT_REQUEST_SEED, SHARES_MINT_SEED, VAULT_SEED,
+    COMPLIANCE_HOOK_PROGRAM_ID, INVESTMENT_REQUEST_SEED, SHARES_MINT_SEED, VAULT_SEED,
 };
 use crate::error::VaultError;
 use crate::events::InvestmentClaimed;
@@ -57,10 +57,20 @@ pub struct ClaimDeposit<'info> {
     /// CHECK: Validated in handler via validate_attestation
     pub attestation: UncheckedAccount<'info>,
 
-    /// CHECK: If data is non-empty, investor is frozen
+    /// Protocol-level singleton sanctions list (owned by compliance-hook).
     #[account(
-        seeds = [FROZEN_ACCOUNT_SEED, vault.key().as_ref(), investor.key().as_ref()],
+        seeds = [compliance_hook::state::SanctionsList::SEED_PREFIX],
         bump,
+        seeds::program = COMPLIANCE_HOOK_PROGRAM_ID,
+    )]
+    pub sanctions_list: Box<Account<'info, compliance_hook::state::SanctionsList>>,
+
+    /// CHECK: [b"frozen", investor] in compliance-hook. Existence (program-owned,
+    /// non-empty) = frozen. Validated by assert_wallet_compliant.
+    #[account(
+        seeds = [compliance_hook::state::FrozenAccount::SEED_PREFIX, investor.key().as_ref()],
+        bump,
+        seeds::program = COMPLIANCE_HOOK_PROGRAM_ID,
     )]
     pub frozen_check: UncheckedAccount<'info>,
 
@@ -68,7 +78,7 @@ pub struct ClaimDeposit<'info> {
     pub clock: Sysvar<'info, Clock>,
 }
 
-/// V5-P24: This handler intentionally does NOT check vault.paused. Already-approved
+/// This handler intentionally does NOT check vault.paused. Already-approved
 /// deposits have committed funds (assets locked in deposit_vault, shares computed).
 /// Blocking claims during a pause would trap investor funds and violate the approval
 /// guarantee. The pause mechanism is designed to halt NEW operations (requests,
@@ -80,10 +90,12 @@ pub fn handler(ctx: Context<ClaimDeposit>) -> Result<()> {
         &ctx.accounts.investor.key(),
         &ctx.accounts.clock,
     )?;
-    require!(
-        ctx.accounts.frozen_check.data_is_empty(),
-        VaultError::AccountFrozen
-    );
+
+    compliance_hook::assert_wallet_compliant(
+        &ctx.accounts.sanctions_list,
+        &ctx.accounts.frozen_check.to_account_info(),
+        &ctx.accounts.investor.key(),
+    )?;
 
     let shares = ctx.accounts.investment_request.shares_claimable;
     let amount_locked = ctx.accounts.investment_request.amount_locked;
@@ -125,7 +137,7 @@ pub fn handler(ctx: Context<ClaimDeposit>) -> Result<()> {
         .checked_add(shares)
         .ok_or(VaultError::MathOverflow)?;
 
-    // V9-P12: set_share_lock currently operates at vault-level only (no per-user PDA).
+    // set_share_lock currently operates at vault-level only (no per-user PDA).
     // It computes a locked_until timestamp from LockConfig but does not write to a
     // per-user ShareLock PDA because the hook lacks a user_key parameter and write
     // access to the ShareLock account. To enable per-user share locking on claim,

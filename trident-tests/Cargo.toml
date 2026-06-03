@@ -52,3 +52,19 @@ path = "fuzz_5/test_fuzz.rs"
 [[bin]]
 name = "fuzz_6"
 path = "fuzz_6/test_fuzz.rs"
+
+[[bin]]
+name = "fuzz_svs11_redemption"
+path = "fuzz_svs11_redemption/test_fuzz.rs"
+
+[[bin]]
+name = "fuzz_derwa_wrapper"
+path = "fuzz_derwa_wrapper/test_fuzz.rs"
+
+[[bin]]
+name = "fuzz_nav_oracle"
+path = "fuzz_nav_oracle/test_fuzz.rs"
+
+[[bin]]
+name = "fuzz_compliance_hook"
+path = "fuzz_compliance_hook/test_fuzz.rs"

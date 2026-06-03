@@ -20,6 +20,7 @@ modules/
 ├── svs-locks/          # Time-locked shares
 ├── svs-access/         # Whitelist/blacklist with merkle proofs + account freeze
 ├── svs-oracle/         # Oracle price validation (staleness, deviation)
+├── svs-attestation/    # KYC/KYB attestation interface (layout, parse, verify)
 ├── svs-rewards/        # Secondary reward token distribution (MasterChef-style)
 └── svs-module-hooks/   # Shared integration hooks, seed constants, and error types
 ```
@@ -31,6 +32,7 @@ Dependencies:
 - `svs-access` — depends on `blake3` (merkle hashing)
 - `svs-locks` — no external deps
 - `svs-oracle` — no external deps
+- `svs-attestation` — depends on `anchor-lang` (needs `Pubkey` / `AccountInfo` / canonical-PDA derivation)
 - `svs-rewards` — no external deps
 - `svs-module-hooks` — depends on `anchor-lang`, `svs-fees`, `svs-caps`, `svs-locks`, `svs-access`
 
@@ -331,6 +333,38 @@ SVS-10 (async) and SVS-11 (credit) import this crate and constrain oracle accoun
 
 ---
 
+## svs-attestation
+
+Shared KYC/KYB attestation interface — the attestation analogue of `svs-oracle`. Attestation accounts are owned by a third-party attestation program (SAS, Civic Pass, the bundled `mock-sas`, …), never by the consuming vault, so a typed Anchor `Account<T>` is impossible: consumers read the canonical layout by byte offset. Centralizing the layout + checks here means every SVS consumer enforces the same interface instead of re-deriving offsets independently.
+
+### Constants
+
+| Name | Value | Description |
+|------|-------|-------------|
+| `ATTESTATION_ACCOUNT_LEN` | `130` | Full on-disk length (8-byte discriminator + 122-byte payload) |
+| `ATTESTATION_PAYLOAD_LEN` | `122` | Payload length after the discriminator |
+| `ATTESTATION_VERSION` | `1` | Canonical layout version; `verify_attestation` rejects any other |
+| `ATTESTATION_SEED_PREFIX` | `b"attestation"` | Canonical PDA seed prefix |
+
+Payload byte offsets (after the 8-byte discriminator) are exported individually (`VERSION_OFFSET` = 0, `SUBJECT_OFFSET`, `ISSUER_OFFSET`, `ATTESTATION_TYPE_OFFSET`, `EXPIRES_AT_OFFSET`, `REVOKED_OFFSET`, `BUMP_OFFSET`, `JURISDICTION_OFFSET`, …). A 1-byte `version` tag sits at payload offset 0 (a fixed position, checked before any other field is trusted); the remaining data fields are additive-only — new fields append at the end, existing offsets never shift.
+
+### Functions
+
+**`Attestation::from_account_data(data) -> Result<Attestation, AttestationError>`**
+Offset parser; skips the discriminator, rejects buffers shorter than `ATTESTATION_ACCOUNT_LEN`.
+
+**`check_invariants(att, subject, expected_issuer, expected_type, now) -> Result<(), AttestationError>`**
+Pure invariant check (subject/issuer/type match, not revoked, strictly-future expiry). No account access — independently unit-/property-testable.
+
+**`verify_attestation(att_info, attestation_program, subject, expected_issuer, expected_type, now) -> Result<Attestation, AttestationError>`**
+Full account-level verification: owner binding + parse + `check_invariants` + canonical-PDA binding (`[b"attestation", subject, issuer, &[type], &[bump]]`). Returns the parsed attestation so callers may read `jurisdiction` / `investor_class` / `kyc_risk_tier`.
+
+### Integration
+
+SVS-11 (`validate_attestation`), `compliance-hook` (`check_attestation` in the Token-2022 hook), and `derwa-wrapper` (`validate_investor_attestation` on unwrap) all call `verify_attestation` and map the granular `AttestationError` onto their own program error codes (e.g. svs-11's `InvalidAttester` vs compliance-hook's `InvalidAttestationIssuer` both originate from `IssuerMismatch`). `mock-sas` is the reference writer; third-party attestation programs write accounts conforming to the same layout.
+
+---
+
 ## svs-rewards
 
 Secondary reward token distribution proportional to share holdings. Uses a MasterChef-style accumulator.
@@ -395,6 +429,41 @@ Returns `(claim_amount, new_debt, 0)`. Fails with `NothingToClaim` if pending is
 ### Integration
 
 Vault exposes `fund_rewards(amount)` (reward authority deposits reward tokens), `claim_rewards` (user claims pending). `on_deposit` and `on_withdraw` are called internally during vault deposits/redeems to prevent double-counting.
+
+---
+
+## Supporting Programs
+
+These are full on-chain programs (not Rust modules). They live alongside SVS-1..SVS-12 and provide capabilities that any vault variant can integrate with. Unlike modules above, they are deployed under their own program IDs and reached via CPI or account reads — there is no Cargo `"modules"` feature flag.
+
+### compliance-hook
+
+Protocol-level compliance: single source of truth for sanctions and per-wallet freeze. Holds a singleton `SanctionsList` (`[b"sanctions_list"]`), per-wallet freeze markers (`[b"frozen", wallet]`), and a per-mint config (`FreelyTransferable` | `Permissioned`). Token-2022 invokes its `TransferHook` on every transfer of a hook-bound mint. The three hook-blind SVS-11 paths (`claim_deposit` mint, `approve_redeem` burn, derwa unwrap burn) call the shared `assert_wallet_compliant` helper directly. SVS-11 uses it to gate cPOOL/dePOOL flows; it does not freeze accounts at the vault level.
+
+See [compliance-hook.md](compliance-hook.md).
+
+### nav-oracle
+
+Per-pool NAV oracle, the reference implementation of the pluggable SVS oracle interface. Off-chain publisher signs a canonical NAV payload (gross/net NAV, TER, loss provision, sequence, timestamp, loan-tape root); the program verifies via `Ed25519Program` instruction scan, enforces a consecutive-price deviation guard, and writes the latest reading — fronted by the canonical 25-byte `SvsOraclePrice` header (a leading `version` byte + price/timestamp/sequence) — into a `NavAccount` PDA with strictly monotonic sequence. SVS-11 reads it (or any compliant oracle) through a single `oracle_account` via the shared `read_oracle` in `modules/svs-oracle`.
+
+See [nav-oracle.md](nav-oracle.md).
+
+### derwa-wrapper
+
+1:1 wrap between a closed permissioned mint and an open Token-2022 mint. Wrap is gated by holding the closed mint; unwrap is attestation-gated. SVS-11 uses it to bridge cPOOL (institutional, locked) to dePOOL (tradeable).
+
+See [derwa-wrapper.md](derwa-wrapper.md).
+
+### Integration Compatibility
+
+| Capability | compliance-hook | nav-oracle | derwa-wrapper |
+|------------|-----------------|------------|---------------|
+| SVS-1..4 | optional (bind to shares mint) | n/a | n/a |
+| SVS-10 | optional | optional | n/a |
+| SVS-11 | required (cPOOL/dePOOL gating) | required (pluggable oracle) | required for dePOOL bridging |
+| SVS-12 | optional per tranche | optional | n/a |
+
+Modules in the table above (svs-fees, svs-caps, etc.) compose freely with all three supporting programs — they operate at different layers (modules act inside the vault binary; supporting programs are reached externally).
 
 ---
 

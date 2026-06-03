@@ -6,13 +6,12 @@ use anchor_spl::token_interface::{
 
 use crate::attestation::validate_attestation;
 use crate::constants::{
-    CLAIMABLE_TOKENS_SEED, FROZEN_ACCOUNT_SEED, REDEMPTION_ESCROW_SEED, REDEMPTION_REQUEST_SEED,
-    VAULT_SEED,
+    CLAIMABLE_TOKENS_SEED, COMPLIANCE_HOOK_PROGRAM_ID, REDEMPTION_ESCROW_SEED,
+    REDEMPTION_REQUEST_SEED, VAULT_SEED,
 };
 use crate::error::VaultError;
 use crate::events::RedemptionApproved;
 use crate::math;
-use crate::oracle::read_and_validate_oracle;
 use crate::state::{CreditVault, RedemptionRequest, RequestStatus};
 
 #[cfg(feature = "modules")]
@@ -65,27 +64,39 @@ pub struct ApproveRedeem<'info> {
     #[account(constraint = asset_mint.key() == vault.asset_mint)]
     pub asset_mint: Box<InterfaceAccount<'info, Mint>>,
 
+    /// Pre-created by `request_redeem`; topped up here; closed by
+    /// `claim_redeem` / `cancel_redeem` / `reject_redeem`.
     #[account(
-        init,
-        payer = manager,
-        token::mint = asset_mint,
-        token::authority = vault,
-        token::token_program = asset_token_program,
+        mut,
         seeds = [CLAIMABLE_TOKENS_SEED, vault.key().as_ref(), investor.key().as_ref()],
         bump,
+        constraint = claimable_tokens.mint == vault.asset_mint @ VaultError::InvalidMintAccount,
+        constraint = claimable_tokens.owner == vault.key() @ VaultError::Unauthorized,
     )]
     pub claimable_tokens: Box<InterfaceAccount<'info, TokenAccount>>,
 
-    /// CHECK: Oracle account validated via read_and_validate_oracle
-    pub nav_oracle: UncheckedAccount<'info>,
+    /// CHECK: the configured oracle account. Validated in handler:
+    /// key == vault.nav_oracle, owner == vault.oracle_program, then the
+    /// generic SvsOraclePrice header is read + range-checked.
+    pub oracle_account: UncheckedAccount<'info>,
 
     /// CHECK: Attestation validated in handler via validate_attestation
     pub attestation: UncheckedAccount<'info>,
 
-    /// CHECK: If data is non-empty, investor is frozen
+    /// Protocol-level singleton sanctions list (owned by compliance-hook).
     #[account(
-        seeds = [FROZEN_ACCOUNT_SEED, vault.key().as_ref(), investor.key().as_ref()],
+        seeds = [compliance_hook::state::SanctionsList::SEED_PREFIX],
         bump,
+        seeds::program = COMPLIANCE_HOOK_PROGRAM_ID,
+    )]
+    pub sanctions_list: Box<Account<'info, compliance_hook::state::SanctionsList>>,
+
+    /// CHECK: [b"frozen", investor] in compliance-hook. Existence (program-owned,
+    /// non-empty) = frozen. Validated by assert_wallet_compliant.
+    #[account(
+        seeds = [compliance_hook::state::FrozenAccount::SEED_PREFIX, investor.key().as_ref()],
+        bump,
+        seeds::program = COMPLIANCE_HOOK_PROGRAM_ID,
     )]
     pub frozen_check: UncheckedAccount<'info>,
 
@@ -97,14 +108,19 @@ pub struct ApproveRedeem<'info> {
 
 pub fn handler(ctx: Context<ApproveRedeem>) -> Result<()> {
     require!(!ctx.accounts.vault.paused, VaultError::VaultPaused);
-    require!(
-        ctx.accounts.frozen_check.data_is_empty(),
-        VaultError::AccountFrozen
-    );
 
-    // V4-P20 FIX: Reconciliation check — verify stored total_shares matches
-    // shares_mint.supply. If they diverge, something has gone wrong and we
-    // should not proceed with a redemption based on stale share counts.
+    compliance_hook::assert_wallet_compliant(
+        &ctx.accounts.sanctions_list,
+        &ctx.accounts.frozen_check.to_account_info(),
+        &ctx.accounts.investor.key(),
+    )?;
+
+    // Reconciliation: refuse to redeem if vault.total_shares has drifted from
+    // the on-chain supply. This check is one-sided by design — it lives only on
+    // the burn path (approve_redeem), which is the only place that decrements
+    // total_shares. claim_deposit (the mint path) increments total_shares
+    // atomically with its mint_to CPI and has no independent drift source, so it
+    // does not re-derive the check.
     require!(
         ctx.accounts.vault.total_shares == ctx.accounts.shares_mint.supply,
         VaultError::MathOverflow
@@ -117,39 +133,44 @@ pub fn handler(ctx: Context<ApproveRedeem>) -> Result<()> {
         &ctx.accounts.clock,
     )?;
 
-    let price = read_and_validate_oracle(
-        &ctx.accounts.nav_oracle.to_account_info(),
-        &ctx.accounts.vault,
-        &ctx.accounts.clock,
-    )?;
+    require!(
+        ctx.accounts.oracle_account.key() == ctx.accounts.vault.nav_oracle,
+        VaultError::OracleInvalidPrice
+    );
+    require!(
+        ctx.accounts.oracle_account.owner == &ctx.accounts.vault.oracle_program,
+        VaultError::OracleInvalidProgram
+    );
+    let header = {
+        let data = ctx.accounts.oracle_account.try_borrow_data()?;
+        svs_oracle::read_oracle(
+            &data,
+            ctx.accounts.clock.unix_timestamp,
+            ctx.accounts.vault.max_staleness,
+            ctx.accounts.vault.last_seen_nav_sequence,
+        )
+        .map_err(|e| match e {
+            svs_oracle::OracleError::StalePrice => error!(VaultError::OracleStale),
+            svs_oracle::OracleError::SequenceStale => error!(VaultError::OracleSequenceStale),
+            _ => error!(VaultError::OracleInvalidPrice),
+        })?
+    };
+    let price = header.price;
 
-    // V5-P9: Deviation check — compare oracle price against vault-derived expected price.
-    // SVS-11 (credit vault) does not use ERC-4626-style virtual shares/assets (no
-    // decimals_offset), so the simple ratio (total_assets * PRICE_SCALE / total_shares)
-    // is the correct expected price. This differs from SVS-10 which uses convert_to_assets
-    // with decimals_offset to account for virtual share inflation.
-    let vault = &ctx.accounts.vault;
-    if vault.total_shares > 0 && vault.total_assets > 0 {
-        let expected_price_u128 = (vault.total_assets as u128)
-            .checked_mul(svs_oracle::PRICE_SCALE as u128)
-            .and_then(|v| v.checked_div(vault.total_shares as u128))
-            .ok_or(VaultError::MathOverflow)?;
-        require!(
-            expected_price_u128 <= u64::MAX as u128,
-            VaultError::MathOverflow
-        );
-        svs_oracle::validate_deviation(price, expected_price_u128 as u64, vault.max_deviation_bps)
-            .map_err(|_| VaultError::OracleDeviationExceeded)?;
-    }
+    // No books-vs-oracle deviation guard — see approve_deposit.
 
+    // Full-approval: burn ALL locked shares, pay out their full asset value.
     let shares_locked = ctx.accounts.redemption_request.shares_locked;
+    require!(shares_locked > 0, VaultError::ZeroAmount);
+
     let gross_assets = math::shares_to_assets(shares_locked, price)?;
 
     #[cfg(feature = "modules")]
     let net_assets = {
-        let remaining = ctx.remaining_accounts;
+        let remaining_accounts = ctx.remaining_accounts;
         let vault_key = ctx.accounts.vault.key();
-        let result = module_hooks::apply_exit_fee(remaining, &crate::ID, &vault_key, gross_assets)?;
+        let result =
+            module_hooks::apply_exit_fee(remaining_accounts, &crate::ID, &vault_key, gross_assets)?;
         result.net_assets
     };
     #[cfg(not(feature = "modules"))]
@@ -204,10 +225,11 @@ pub fn handler(ctx: Context<ApproveRedeem>) -> Result<()> {
         ctx.accounts.asset_mint.decimals,
     )?;
 
+    let now = ctx.accounts.clock.unix_timestamp;
     let request = &mut ctx.accounts.redemption_request;
-    request.status = RequestStatus::Approved;
     request.assets_claimable = net_assets;
-    request.fulfilled_at = ctx.accounts.clock.unix_timestamp;
+    request.status = RequestStatus::Approved;
+    request.fulfilled_at = now;
 
     let vault = &mut ctx.accounts.vault;
     vault.total_assets = vault
@@ -223,12 +245,18 @@ pub fn handler(ctx: Context<ApproveRedeem>) -> Result<()> {
         .checked_sub(1)
         .ok_or(VaultError::MathOverflow)?;
 
+    // sequence == 0 is the "unused" sentinel; don't advance on it.
+    if header.sequence != 0 {
+        vault.last_seen_nav_sequence = header.sequence;
+    }
+
     emit!(RedemptionApproved {
         vault: vault.key(),
         investor: ctx.accounts.investor.key(),
         shares: shares_locked,
         assets: net_assets,
         nav: price,
+        manager: ctx.accounts.manager.key(),
     });
 
     Ok(())

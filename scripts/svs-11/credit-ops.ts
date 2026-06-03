@@ -44,7 +44,6 @@ async function main() {
       depositVault: ctx.depositVault,
       investmentRequest: ctx.investmentRequest,
       attestation: ctx.attestation,
-      frozenCheck: null,
       assetTokenProgram: TOKEN_PROGRAM_ID,
       systemProgram: anchor.web3.SystemProgram.programId,
     })
@@ -58,9 +57,8 @@ async function main() {
       vault: ctx.vault,
       investmentRequest: ctx.investmentRequest,
       investor: ctx.investor.publicKey,
-      navOracle: ctx.navOracle,
+      oracleAccount: ctx.navOracle,
       attestation: ctx.attestation,
-      frozenCheck: null,
       clock: anchor.web3.SYSVAR_CLOCK_PUBKEY,
     })
     .rpc();

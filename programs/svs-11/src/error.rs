@@ -44,9 +44,6 @@ pub enum VaultError {
     #[msg("Invalid address: cannot be the zero address")]
     InvalidAddress,
 
-    #[msg("Account is frozen")]
-    AccountFrozen,
-
     #[msg("Attestation account not owned by attestation program")]
     InvalidAttestationProgram,
 
@@ -70,9 +67,6 @@ pub enum VaultError {
 
     #[msg("Oracle account owner does not match vault.oracle_program")]
     OracleInvalidProgram,
-
-    #[msg("Oracle price deviation exceeds max_deviation_bps")]
-    OracleDeviationExceeded,
 
     #[msg("Deposit would exceed global vault cap")]
     GlobalCapExceeded,
@@ -107,26 +101,6 @@ pub enum VaultError {
     #[msg("Invalid staleness configuration")]
     InvalidStalenessConfig,
 
-    #[msg("Oracle change timelock not expired")]
-    OracleChangeTooEarly,
-
-    #[msg("No pending oracle change")]
-    OracleChangeNotRequested,
-
-    #[msg("Max deviation exceeds 2000 bps")]
-    MaxDeviationTooHigh,
-
-    #[msg("Oracle program is not a known oracle (Pyth or Switchboard)")]
-    InvalidOracleProgram,
-
-    #[msg(
-        "Unauthorized compliance action: caller is not authority, manager, or compliance officer"
-    )]
-    UnauthorizedComplianceAction,
-
-    #[msg("update_oracle_config is deprecated: use request_oracle_change + apply_oracle_change for oracle address changes, and update_oracle_params for staleness/deviation settings")]
-    OracleConfigDeprecated,
-
     #[msg("No pending authority transfer")]
     NoPendingTransfer,
 
@@ -138,4 +112,18 @@ pub enum VaultError {
 
     #[msg("Cannot use deprecated transfer while a two-step transfer is pending")]
     PendingTransferExists,
+
+    // -------------------------------------------------------------------------
+    // Pluggable oracle interface error variants
+    // -------------------------------------------------------------------------
+    #[msg("Oracle sequence has not advanced (replay)")]
+    OracleSequenceStale,
+
+    #[msg("Mint account does not deserialize as a valid Token-2022 mint")]
+    InvalidMintAccount,
+
+    #[msg(
+        "remaining_accounts do not match the shares mint's ExtraAccountMetaList — wrong order, missing accounts, or stale hook config"
+    )]
+    HookExtrasMismatch,
 }

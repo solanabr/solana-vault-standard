@@ -1,17 +1,21 @@
 import { Command } from "commander";
-import { Program } from "@coral-xyz/anchor";
-import { PublicKey } from "@solana/web3.js";
+import { Program, BN } from "@coral-xyz/anchor";
 import { createContext } from "../../middleware";
 import { getGlobalOptions } from "../../index";
 import { CreditVault } from "../../../credit-vault";
 import { findIdlPath, loadIdl, resolveVaultArg } from "../../utils";
 
-export function registerFreezeAccountCommand(program: Command): void {
+export function registerUpdateOracleParamsCommand(program: Command): void {
   program
-    .command("freeze-account")
-    .description("Freeze an investor account (manager only)")
+    .command("update-oracle-params")
+    .description(
+      "Update the oracle staleness window (authority only). Oracle address/program changes use set-oracle.",
+    )
     .argument("<vault>", "Vault address or alias")
-    .requiredOption("--investor <pubkey>", "Investor account to freeze")
+    .requiredOption(
+      "--max-staleness <seconds>",
+      "New max oracle staleness in seconds",
+    )
     .option("--program-id <pubkey>", "Program ID")
     .option("--asset-mint <pubkey>", "Asset mint")
     .option("--vault-id <number>", "Vault ID", "1")
@@ -29,7 +33,7 @@ export function registerFreezeAccountCommand(program: Command): void {
         process.exit(1);
       }
 
-      const investor = new PublicKey(opts.investor);
+      const maxStaleness = new BN(opts.maxStaleness);
 
       try {
         const idl = loadIdl(idlPath);
@@ -41,7 +45,7 @@ export function registerFreezeAccountCommand(program: Command): void {
         );
 
         output.info(`Vault: ${vaultArg}`);
-        output.info(`Freezing account: ${investor.toBase58()}`);
+        output.info(`New max staleness: ${maxStaleness.toString()}s`);
 
         if (options.dryRun) {
           output.success("Dry run complete.");
@@ -59,10 +63,15 @@ export function registerFreezeAccountCommand(program: Command): void {
         const spinner = output.spinner("Sending transaction...");
         spinner.start();
 
-        const sig = await vault.freezeAccount(wallet.publicKey, investor);
+        const sig = await vault.updateOracleParams(
+          wallet.publicKey,
+          maxStaleness,
+        );
 
         spinner.succeed("Transaction confirmed");
-        output.success(`Account frozen: ${investor.toBase58()}`);
+        output.success(
+          `Oracle staleness updated to ${maxStaleness.toString()}s`,
+        );
         output.info(`Signature: ${sig}`);
 
         if (globalOpts.output === "json") {
@@ -70,13 +79,13 @@ export function registerFreezeAccountCommand(program: Command): void {
             success: true,
             signature: sig,
             vault: vaultArg,
-            operation: "freeze-account",
-            investor: investor.toBase58(),
+            operation: "update-oracle-params",
+            maxStaleness: maxStaleness.toString(),
           });
         }
       } catch (error) {
         output.error(
-          `Freeze account failed: ${error instanceof Error ? error.message : String(error)}`,
+          `Update oracle params failed: ${error instanceof Error ? error.message : String(error)}`,
         );
         process.exit(1);
       }

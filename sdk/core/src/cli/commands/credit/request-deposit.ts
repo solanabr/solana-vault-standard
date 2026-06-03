@@ -18,7 +18,6 @@ export function registerRequestDepositCommand(program: Command): void {
     .argument("<vault>", "Vault address or alias")
     .requiredOption("-a, --amount <number>", "Amount of assets to deposit")
     .requiredOption("--attestation <pubkey>", "Attestation account")
-    .option("--frozen-check <pubkey>", "Frozen account check (optional)")
     .option("--program-id <pubkey>", "Program ID")
     .option("--asset-mint <pubkey>", "Asset mint")
     .option("--vault-id <number>", "Vault ID", "1")
@@ -39,9 +38,6 @@ export function registerRequestDepositCommand(program: Command): void {
       validateAmountInput(opts.amount, "amount");
       const amount = new BN(opts.amount);
       const attestation = new PublicKey(opts.attestation);
-      const frozenCheck = opts.frozenCheck
-        ? new PublicKey(opts.frozenCheck)
-        : undefined;
 
       try {
         const idl = loadIdl(idlPath);
@@ -75,7 +71,6 @@ export function registerRequestDepositCommand(program: Command): void {
           wallet.publicKey,
           amount,
           attestation,
-          frozenCheck,
         );
 
         spinner.succeed("Transaction confirmed");

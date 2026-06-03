@@ -14,7 +14,6 @@ export function registerApproveDepositCommand(program: Command): void {
     .requiredOption("--investor <pubkey>", "Investor who requested the deposit")
     .requiredOption("--nav-oracle <pubkey>", "NAV oracle account")
     .requiredOption("--attestation <pubkey>", "Attestation account")
-    .option("--frozen-check <pubkey>", "Frozen account check (optional)")
     .option("--program-id <pubkey>", "Program ID")
     .option("--asset-mint <pubkey>", "Asset mint")
     .option("--vault-id <number>", "Vault ID", "1")
@@ -35,9 +34,6 @@ export function registerApproveDepositCommand(program: Command): void {
       const investor = new PublicKey(opts.investor);
       const navOracle = new PublicKey(opts.navOracle);
       const attestation = new PublicKey(opts.attestation);
-      const frozenCheck = opts.frozenCheck
-        ? new PublicKey(opts.frozenCheck)
-        : undefined;
 
       try {
         const idl = loadIdl(idlPath);
@@ -72,7 +68,6 @@ export function registerApproveDepositCommand(program: Command): void {
           investor,
           navOracle,
           attestation,
-          frozenCheck,
         );
 
         spinner.succeed("Transaction confirmed");

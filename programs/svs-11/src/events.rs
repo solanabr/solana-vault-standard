@@ -59,9 +59,14 @@ pub struct RedemptionRequested {
 pub struct RedemptionApproved {
     pub vault: Pubkey,
     pub investor: Pubkey,
+    /// Shares burned (== the request's `shares_locked` — full approval).
     pub shares: u64,
+    /// Assets paid out (net of exit fee).
     pub assets: u64,
+    /// NAV used for the settlement.
     pub nav: u64,
+    /// Manager pubkey that approved the redemption.
+    pub manager: Pubkey,
 }
 
 #[event]
@@ -97,19 +102,6 @@ pub struct DrawDown {
     pub vault: Pubkey,
     pub amount: u64,
     pub destination: Pubkey,
-}
-
-#[event]
-pub struct AccountFrozen {
-    pub vault: Pubkey,
-    pub investor: Pubkey,
-    pub frozen_by: Pubkey,
-}
-
-#[event]
-pub struct AccountUnfrozen {
-    pub vault: Pubkey,
-    pub investor: Pubkey,
 }
 
 #[event]
@@ -175,28 +167,12 @@ pub struct ModuleConfigChanged {
 }
 
 #[event]
-pub struct OracleChangeRequested {
-    pub vault: Pubkey,
-    pub pending_oracle: Pubkey,
-    pub oracle_change_at: i64,
-}
-
-#[event]
-pub struct OracleChangeApplied {
+pub struct OracleChanged {
     pub vault: Pubkey,
     pub old_oracle: Pubkey,
     pub new_oracle: Pubkey,
-}
-
-#[event]
-pub struct VaultConfigInitialized {
-    pub vault: Pubkey,
-    pub vault_config: Pubkey,
-}
-
-#[event]
-pub struct ComplianceOfficerUpdated {
-    pub vault: Pubkey,
-    pub old_officer: Pubkey,
-    pub new_officer: Pubkey,
+    pub old_program: Pubkey,
+    pub new_program: Pubkey,
+    pub authority: Pubkey,
+    pub timestamp: i64,
 }

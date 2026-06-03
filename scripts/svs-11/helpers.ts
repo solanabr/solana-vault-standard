@@ -35,7 +35,6 @@ import {
   getInvestmentRequestAddress,
   getRedemptionRequestAddress,
   getClaimableTokensAddress,
-  getCreditFrozenAccountAddress,
 } from "../../sdk/core/src/credit-vault-pda";
 import * as fs from "fs";
 import * as path from "path";
@@ -51,7 +50,6 @@ export {
   getInvestmentRequestAddress,
   getRedemptionRequestAddress,
   getClaimableTokensAddress,
-  getCreditFrozenAccountAddress,
 };
 
 export const PRICE_SCALE = new BN(1_000_000_000);
@@ -237,7 +235,10 @@ export async function createVaultContext(
     })
     .rpc();
 
-  // Initialize vault
+  // Initialize vault. The cPOOL mint TransferHook extension is bound
+  // to compliance-hook in this tx; compliance-hook PDA setup
+  // (MintConfig + EAML + infra attestations) is a separate follow-up
+  // tx in the deployment runbook.
   await program.methods
     .initializePool(vaultId, new BN(1_000_000), new BN(3600))
     .accountsPartial({

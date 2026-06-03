@@ -1,3 +1,11 @@
+//! mock-sas — TEST-ONLY mock of an attestation service (SAS / Civic Pass / …).
+//!
+//! NOT FOR DEPLOYMENT. It writes attestation accounts in the canonical
+//! `svs-attestation` layout with NO issuer authentication, NO real KYC, and a
+//! permissionless `create_attestation` — purely so the integration tests can
+//! mint attestations. Production deployments bind `attestation_program` to a
+//! real attestation provider; this program must never be deployed to mainnet.
+
 use anchor_lang::prelude::*;
 
 declare_id!("GTTMWDHTZibyEpqNRr33RnBhgms262U6qHaGrjoHqEXg");
@@ -13,65 +21,138 @@ pub mod mock_sas {
         country_code: [u8; 2],
         expires_at: i64,
     ) -> Result<()> {
-        let account_info = ctx.accounts.attestation.to_account_info();
-        let mut data = account_info.try_borrow_mut_data()?;
-        let clock = Clock::get()?;
+        // Backward-compatible wrapper. New metadata fields default to zero
+        // ("no policy enforcement" / infrastructure tier).
+        create_attestation_inner(
+            ctx,
+            issuer,
+            attestation_type,
+            country_code,
+            expires_at,
+            None,
+            None,
+            None,
+        )
+    }
 
-        let mut offset = 0;
-
-        // 8-byte Anchor discriminator (zeroed for mock)
-        data[offset..offset + 8].copy_from_slice(&[0u8; 8]);
-        offset += 8;
-
-        // subject (32)
-        data[offset..offset + 32].copy_from_slice(&ctx.accounts.subject.key().to_bytes());
-        offset += 32;
-
-        // issuer (32)
-        data[offset..offset + 32].copy_from_slice(&issuer.to_bytes());
-        offset += 32;
-
-        // attestation_type (1)
-        data[offset] = attestation_type;
-        offset += 1;
-
-        // country_code (2)
-        data[offset..offset + 2].copy_from_slice(&country_code);
-        offset += 2;
-
-        // issued_at (8)
-        data[offset..offset + 8].copy_from_slice(&clock.unix_timestamp.to_le_bytes());
-        offset += 8;
-
-        // expires_at (8)
-        data[offset..offset + 8].copy_from_slice(&expires_at.to_le_bytes());
-        offset += 8;
-
-        // revoked (1)
-        data[offset] = 0; // false
-        offset += 1;
-
-        // bump (1)
-        data[offset] = ctx.bumps.attestation;
-        offset += 1;
-
-        // _reserved (32)
-        data[offset..offset + 32].copy_from_slice(&[0u8; 32]);
-
-        Ok(())
+    /// Create an attestation with metadata fields (jurisdiction,
+    /// investor_class, kyc_risk_tier). Each is optional and defaults
+    /// to zero (= "no policy enforcement"); pass `Some(...)` to set
+    /// explicit values. Mirrors the layout the ComplianceHook reads
+    /// in Permissioned mode.
+    pub fn create_attestation_with_metadata(
+        ctx: Context<CreateAttestation>,
+        issuer: Pubkey,
+        attestation_type: u8,
+        country_code: [u8; 2],
+        expires_at: i64,
+        jurisdiction: Option<[u8; 2]>,
+        investor_class: Option<u8>,
+        kyc_risk_tier: Option<u8>,
+    ) -> Result<()> {
+        create_attestation_inner(
+            ctx,
+            issuer,
+            attestation_type,
+            country_code,
+            expires_at,
+            jurisdiction,
+            investor_class,
+            kyc_risk_tier,
+        )
     }
 
     pub fn revoke_attestation(ctx: Context<RevokeAttestation>) -> Result<()> {
         let account_info = ctx.accounts.attestation.to_account_info();
         let mut data = account_info.try_borrow_mut_data()?;
-        // revoked field is at offset: 8 (disc) + 32 (subject) + 32 (issuer) + 1 (type) + 2 (country) + 8 (issued_at) + 8 (expires_at) = 91
-        data[91] = 1; // true
+        // revoked on-disk offset: 8 (disc) + 1 (version) + 32 (subject) + 32 (issuer)
+        // + 1 (type) + 2 (country) + 8 (issued_at) + 8 (expires_at) = 92
+        data[92] = 1; // true
         Ok(())
     }
 }
 
-// Account size: 8 (disc) + 32 + 32 + 1 + 2 + 8 + 8 + 1 + 1 + 32 = 125
-const ATTESTATION_ACCOUNT_SIZE: usize = 125;
+fn create_attestation_inner(
+    ctx: Context<CreateAttestation>,
+    issuer: Pubkey,
+    attestation_type: u8,
+    country_code: [u8; 2],
+    expires_at: i64,
+    jurisdiction: Option<[u8; 2]>,
+    investor_class: Option<u8>,
+    kyc_risk_tier: Option<u8>,
+) -> Result<()> {
+    let account_info = ctx.accounts.attestation.to_account_info();
+    let mut data = account_info.try_borrow_mut_data()?;
+    let clock = Clock::get()?;
+
+    let mut offset = 0;
+
+    // 8-byte Anchor discriminator (zeroed for mock)
+    data[offset..offset + 8].copy_from_slice(&[0u8; 8]);
+    offset += 8;
+
+    // version (1) — canonical attestation layout version (ATTESTATION_VERSION)
+    data[offset] = 1;
+    offset += 1;
+
+    // subject (32)
+    data[offset..offset + 32].copy_from_slice(&ctx.accounts.subject.key().to_bytes());
+    offset += 32;
+
+    // issuer (32)
+    data[offset..offset + 32].copy_from_slice(&issuer.to_bytes());
+    offset += 32;
+
+    // attestation_type (1)
+    data[offset] = attestation_type;
+    offset += 1;
+
+    // country_code (2)
+    data[offset..offset + 2].copy_from_slice(&country_code);
+    offset += 2;
+
+    // issued_at (8)
+    data[offset..offset + 8].copy_from_slice(&clock.unix_timestamp.to_le_bytes());
+    offset += 8;
+
+    // expires_at (8)
+    data[offset..offset + 8].copy_from_slice(&expires_at.to_le_bytes());
+    offset += 8;
+
+    // revoked (1)
+    data[offset] = 0; // false
+    offset += 1;
+
+    // bump (1)
+    data[offset] = ctx.bumps.attestation;
+    offset += 1;
+
+    // _reserved (32)
+    data[offset..offset + 32].copy_from_slice(&[0u8; 32]);
+    offset += 32;
+
+    // ↓ Metadata extension (4 bytes total). Default-zero values mean
+    // "no policy enforcement" / infrastructure tier; the ComplianceHook
+    // treats zeros as wildcards.
+    // jurisdiction (2)
+    data[offset..offset + 2].copy_from_slice(&jurisdiction.unwrap_or([0u8; 2]));
+    offset += 2;
+
+    // investor_class (1)
+    data[offset] = investor_class.unwrap_or(0);
+    offset += 1;
+
+    // kyc_risk_tier (1)
+    data[offset] = kyc_risk_tier.unwrap_or(0);
+
+    Ok(())
+}
+
+// Account size: 8 (disc) + 1 (version) + 32 + 32 + 1 + 2 + 8 + 8 + 1 + 1 + 32 + 2 + 1 + 1 = 130
+// Layout: a 1-byte version tag at payload offset 0, then the canonical fields,
+// then the metadata extension (jurisdiction, investor_class, kyc_risk_tier).
+const ATTESTATION_ACCOUNT_SIZE: usize = 130;
 
 #[derive(Accounts)]
 #[instruction(issuer: Pubkey, attestation_type: u8)]

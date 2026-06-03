@@ -65,7 +65,6 @@ async function main() {
       depositVault: ctx.depositVault,
       investmentRequest: ctx.investmentRequest,
       attestation: ctx.attestation,
-      frozenCheck: null,
       assetTokenProgram: TOKEN_PROGRAM_ID,
       systemProgram: anchor.web3.SystemProgram.programId,
     })
@@ -81,9 +80,8 @@ async function main() {
       vault: ctx.vault,
       investmentRequest: ctx.investmentRequest,
       investor: ctx.investor.publicKey,
-      navOracle: ctx.navOracle,
+      oracleAccount: ctx.navOracle,
       attestation: ctx.attestation,
-      frozenCheck: null,
       clock: anchor.web3.SYSVAR_CLOCK_PUBKEY,
     })
     .rpc();
@@ -141,8 +139,10 @@ async function main() {
       investorSharesAccount: ctx.investorSharesAta,
       redemptionEscrow: ctx.redemptionEscrow,
       redemptionRequest: ctx.redemptionRequest,
+      assetMint: ctx.assetMint,
+      claimableTokens: ctx.claimableTokens,
       attestation: ctx.attestation,
-      frozenCheck: null,
+      assetTokenProgram: TOKEN_PROGRAM_ID,
       token2022Program: TOKEN_2022_PROGRAM_ID,
       systemProgram: anchor.web3.SystemProgram.programId,
     })
@@ -151,6 +151,8 @@ async function main() {
 
   console.log(`  Request redeem: ${explorerUrl(reqRedSig)}`);
 
+  // Pass 1e18 ratio + 0 next-settlement to preserve full-fulfillment
+  // semantics in this smoke-test script.
   const appRedSig = await program.methods
     .approveRedeem()
     .accountsPartial({
@@ -163,9 +165,8 @@ async function main() {
       sharesMint: ctx.sharesMint,
       redemptionEscrow: ctx.redemptionEscrow,
       claimableTokens: ctx.claimableTokens,
-      navOracle: ctx.navOracle,
+      oracleAccount: ctx.navOracle,
       attestation: ctx.attestation,
-      frozenCheck: null,
       assetTokenProgram: TOKEN_PROGRAM_ID,
       token2022Program: TOKEN_2022_PROGRAM_ID,
       systemProgram: anchor.web3.SystemProgram.programId,

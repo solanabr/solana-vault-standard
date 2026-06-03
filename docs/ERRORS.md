@@ -137,6 +137,84 @@ When modules are enabled, additional error codes are used.
 
 ---
 
+## SVS-11 NAV Oracle Errors
+
+These errors live in the SVS-11 `VaultError` enum and back the pluggable oracle interface read path. Code numbers are Anchor-assigned in declaration order. See [nav-oracle.md](nav-oracle.md) for the adapter contract.
+
+| Name | Message | When Thrown |
+|------|---------|-------------|
+| `OracleStale` | Oracle price data is stale | Oracle timestamp older than `max_staleness` |
+| `OracleInvalidPrice` | Oracle price is invalid | Oracle reports a zero or otherwise invalid price |
+| `OracleInvalidProgram` | Oracle account owner does not match vault.oracle_program | Oracle account not owned by the configured oracle program |
+| `OracleSequenceStale` | Oracle sequence has not advanced (replay) | Oracle header sequence not strictly greater than last seen |
+| `InvalidMintAccount` | Mint account does not deserialize as a valid Token-2022 mint | Shares mint fails Token-2022 deserialization |
+| `HookExtrasMismatch` | remaining_accounts do not match the shares mint's ExtraAccountMetaList | Hook extras wrong order, missing accounts, or stale hook config |
+
+---
+
+## nav-oracle errors
+
+[nav-oracle](nav-oracle.md) errors start at 7000 to keep them disjoint from SVS vault error ranges. All codes are explicitly assigned (not Anchor auto-incremented).
+
+| Code | Name | Message | When Thrown |
+|------|------|---------|-------------|
+| 7000 | `StaleSequence` | Sequence must increment monotonically | `update` with sequence ≤ stored sequence |
+| 7001 | `InvalidSignature` | Signature does not match publisher key over canonical payload | Ed25519 precompile scan fails to find a matching `(pubkey, msg, sig)` triple |
+| 7002 | `InconsistentNav` | Self-consistency check failed: nav_net != nav_gross × (1 − ter − loss) | `update` payload fails self-consistency |
+| 7003 | `UnauthorizedRotation` | Publisher rotation requires the pool's live CreditVault.authority as signer | `rotate_publisher` without the pool's current CreditVault.authority as signer |
+| 7004 | `UnauthorizedPublisher` | Caller is not the registered publisher for this NavAccount | Update signed by a key other than `NavAccount.publisher` |
+| 7005 | `TimestampInFuture` | Timestamp must not be in the future | `update` payload timestamp > on-chain clock |
+| 7012 | `DeviationExceeded` | New NAV deviates more than max_deviation_bps from the previously published NAV | `update` where the new NAV moves beyond `max_deviation_bps` vs the prior published NAV |
+| 7013 | `InvalidDeviationConfig` | max_deviation_bps must be > 0 (a zero ceiling rejects every consecutive publish) | `initialize` with `max_deviation_bps = 0` |
+
+---
+
+## compliance-hook errors
+
+[compliance-hook](compliance-hook.md) errors start at 6000 (the program is independent of any SVS vault, so its range can overlap freely without ambiguity — clients disambiguate by program id).
+
+| Code | Name | Message | When Thrown |
+|------|------|---------|-------------|
+| 6000 | `SanctionedAddress` | Source or destination address is on the sanctions list | `execute` with either wallet on the global `SanctionsList` |
+| 6001 | `AccountFrozen` | Source or destination account is frozen | `execute` with a `FrozenAccount` PDA present for either wallet |
+| 6002 | `AttestationNotFound` | Destination wallet does not have a valid attestation | `Permissioned` mode transfer without attestation on destination |
+| 6003 | `AttestationRevoked` | Destination attestation is revoked | Destination attestation `revoked` flag set |
+| 6004 | `AttestationExpired` | Destination attestation has expired | Destination attestation past expiry |
+| 6005 | `SanctionsListFull` | Sanctions list update would exceed max capacity | `update_sanctions_list` would push past `MAX_ADDRESSES` |
+| 6006 | `UnauthorizedAuthority` | Update authority does not match SanctionsList authority | `update_sanctions_list` signed by wrong key |
+| 6007 | `InvestorClassTooLow` | Pool policy requires higher investor class than attestation provides | `Permissioned` transfer where attestation class < pool policy |
+| 6008 | `JurisdictionNotPermitted` | Pool policy does not permit this jurisdiction | `Permissioned` transfer where attestation jurisdiction is excluded |
+| 6009 | `InvalidMintAccount` | Mint account does not deserialize as a valid Token-2022 mint | `initialize_mint_config` with non-Token-2022 mint |
+| 6010 | `MissingPoolPolicyForPermissioned` | Permissioned mode requires a pool_policy | `initialize_mint_config` with `Permissioned` mode and no policy |
+| 6011 | `PoolPolicySetOnFreelyTransferable` | FreelyTransferable mode rejects a pool_policy (must be None) | `initialize_mint_config` with `FreelyTransferable` mode and a policy supplied |
+| 6012 | `InvalidAttestationProgram` | Attestation account is not owned by the mint-configured attestation program | Permissioned transfer with wrong attestation owner |
+| 6013 | `InvalidAttestationSubject` | Attestation subject does not match the source/destination ATA owner | Permissioned transfer with foreign attestation |
+| 6014 | `InvalidAttestationIssuer` | Attestation issuer does not match the mint-configured issuer | Permissioned transfer with wrong issuer |
+| 6015 | `InvalidAttestationType` | Attestation type does not match the mint-required type | Permissioned transfer with wrong attestation tier/type |
+| 6016 | `InvalidAttestationPda` | Attestation account address does not match canonical PDA derivation | Permissioned transfer with misderived attestation PDA |
+| 6017 | `InvalidAttestationConfig` | Permissioned trust anchors are missing/default | Permissioned MintConfig with unset attestation program or issuer |
+
+---
+
+## derwa-wrapper errors
+
+[derwa-wrapper](derwa-wrapper.md) errors start at 8000 to keep its range distinct from SVS vault and compliance-hook error spaces.
+
+| Code | Name | Message | When Thrown |
+|------|------|---------|-------------|
+| 8000 | `ZeroAmount` | wrap amount must be greater than zero | `wrap` or `unwrap` with `amount = 0` |
+| 8001 | `AttestationRequired` | unwrap requires a valid attestation on the destination wallet | `unwrap` without a valid (non-revoked, non-expired) attestation for the cPOOL recipient |
+| 8002 | `InsufficientLockedSupply` | locked supply mismatch: cannot unwrap more than locked | `unwrap` would push `locked_supply` negative |
+| 8003 | `MintMismatch` | permissioned mint does not match wrapper config | `wrap` / `unwrap` with cPOOL mint != `WrapperConfig.permissioned_mint` |
+| 8004 | `InvalidAttestationProgram` | attestation account owner does not match the wrapper-configured attestation program | `unwrap` with an attestation from the wrong program |
+| 8005 | `InvalidAttestationSubject` | attestation subject does not match the unwrap destination wallet | `unwrap` with another wallet's attestation |
+| 8006 | `InvalidAttestationIssuer` | attestation issuer does not match the wrapper-configured issuer | `unwrap` with wrong issuer |
+| 8007 | `InvalidAttestationType` | attestation type does not match the wrapper-required type | `unwrap` with wrong attestation tier/type |
+| 8008 | `InvalidAttestationPda` | attestation account address does not match canonical PDA derivation | `unwrap` with a misderived attestation PDA |
+| 8009 | `InvalidAttestationConfig` | wrapper trust anchors are missing/default | `initialize` with unset attestation program or issuer |
+
+---
+
 ## Error Handling in Client Code
 
 ### TypeScript/Anchor SDK
@@ -252,8 +330,12 @@ Error: AnchorError: Vault is paused. Error Code: VaultPaused.
 | SVS-2 | 6000-6015 | Core + sync errors |
 | SVS-3 | 6000-6030 | Core + confidential errors |
 | SVS-4 | 6000-6030 | Core + sync + confidential errors |
+| SVS-11 | 6000-6xxx | CreditVault (Anchor-assigned, includes NAV oracle adapter codes) |
 | svs-fees | 6100-6109 | Fee module errors |
 | svs-caps | 6110-6119 | Cap module errors |
 | svs-locks | 6120-6129 | Lock module errors |
 | svs-access | 6130-6139 | Access control errors |
 | svs-rewards | 6140-6149 | Rewards module errors |
+| compliance-hook | 6000-6018 | TransferHook compliance errors (Token-2022) |
+| nav-oracle | 7000-7013 | Per-pool NAV oracle errors |
+| derwa-wrapper | 8000-8011 | cPOOL ↔ dePOOL wrap errors |

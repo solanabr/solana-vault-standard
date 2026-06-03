@@ -24,6 +24,46 @@
 ### 6. Fake Proof Context Injection (SVS-3, SVS-4)
 **Mitigation:** Proof context accounts validated via owner check (`account.owner == zk_elgamal_proof_program::id()`). Prevents passing arbitrary accounts as "verified" proofs.
 
+### 7. NAV Oracle Replay (nav-oracle)
+**Vector:** An attacker re-submits an old (lower-sequence) signed NAV payload to manipulate share pricing.
+
+**Mitigation:** `nav_oracle.update` requires `args.sequence > nav.sequence` (strictly increasing). SVS-11's shared oracle reader (`svs_oracle::read_oracle`) additionally enforces `header.sequence > vault.last_seen_nav_sequence` so a single replay across approve_deposit/approve_redeem is rejected.
+
+### 8. Wrong Publisher Signature (nav-oracle)
+**Vector:** An attacker submits a NAV update signed by a key OTHER than the publisher stored on `NavAccount`.
+
+**Mitigation:** `nav_oracle.update` reconstructs the canonical 133-byte payload from `args` + on-chain `pool` + on-chain `publisher` and compares it byte-for-byte with the message inside the preceding `Ed25519Program` verify instruction. If the on-chain publisher doesn't match the signing key, payload reconstruction differs and the verify fails. Publisher rotation (`rotate_publisher`) is gated by the pool's live `CreditVault.authority` (typically a multisig) so a compromised publisher cannot rotate itself.
+
+### 9. Wrong Authority on Sanctions / Mint Config (compliance-hook)
+**Vector:** A non-authority account attempts to mutate the sanctions list or mint config.
+
+**Mitigation:** `update_sanctions_list` enforces `authority == sanctions_list.authority`. `initialize_mint_config` enforces signer matches the Token-2022 mint authority (read via `Mint::unpack`). Both checks are signer-required and use Anchor `accountsStrict` to prevent extra account injection.
+
+### 10. TransferHook Bypass via Wrong MintConfig Mode (compliance-hook)
+**Vector:** A `Permissioned` mint is created without the `pool_policy` (or vice versa for `FreelyTransferable`), making the hook either unenforceable or panicky at transfer time.
+
+**Mitigation:** `initialize_mint_config` rejects the `(Permissioned, no pool_policy)` and `(FreelyTransferable, with pool_policy)` combinations at init time. The `execute` handler also reads `MintConfig.mode` via Anchor `Account` constraint (program-owner-checked), so callers cannot pass a forged config account.
+
+### 11. Wrap/Unwrap Supply Conservation (derwa-wrapper)
+**Vector:** An attacker manipulates wrap or unwrap to mint more dePOOL than the locked cPOOL backing, or to extract more cPOOL than they wrapped.
+
+**Mitigation:** `WrapperConfig.locked_supply` is incremented atomically with `dePOOL.mint` on wrap and decremented atomically with `dePOOL.burn` on unwrap. The on-chain invariant `locked_supply == dePOOL.supply` is preserved across every transaction. The wrapper has NO mint authority on cPOOL — unwrap transfers cPOOL OUT of the wrapper-owned escrow, never mints new cPOOL.
+
+### 12. Unwrap Without Attestation (derwa-wrapper)
+**Vector:** A dePOOL holder unwraps to cPOOL into a wallet that has not passed KYC/compliance, defeating the cPOOL gating.
+
+**Mitigation:** `unwrap` requires a valid `Attestation` PDA for the destination wallet (subject = destination, non-revoked, non-expired) before transferring cPOOL out of escrow.
+
+### 13. Stale Oracle Pricing (svs-11 + pluggable oracle)
+**Vector:** The configured `oracle_account` is initialized but never updated; SVS-11 approves deposits/redemptions against an arbitrarily old price.
+
+**Mitigation:** `CreditVault.max_staleness` (configurable) gates `approve_deposit` / `approve_redeem` for every oracle, regardless of implementation. The shared `svs_oracle::read_oracle` reads the canonical `SvsOraclePrice` header and trips `OracleStale` when `now - header.timestamp > max_staleness`. Operators must monitor publisher health and rotate or pause if price publication stops.
+
+### 14. Oracle Rotation Hygiene (svs-11)
+**Vector:** A vault is repointed to a malicious or unprovisioned oracle account/program out from under in-flight requests.
+
+**Mitigation:** Oracle rotation is a single authority-gated, atomic instruction: `set_oracle`. It requires `authority == vault.authority` (a `Signer`, typically a multisig), so a non-authority cannot repoint the vault. Before landing the swap it fail-fasts on the incoming pair: the supplied program account must match the `new_oracle_program` arg and be `executable`, the supplied oracle account must match the `new_oracle` arg and be `owner`ed by that program, and its data must deserialize into a version-compatible `SvsOraclePrice` header (`header.version == SVS_ORACLE_VERSION`) — a malformed or wrong-version oracle is rejected rather than bricking later approvals. On success it updates `vault.nav_oracle` and `vault.oracle_program` together (never one without the other) and seeds the replay floor `vault.last_seen_nav_sequence` from the incoming header's sequence (0 if unpublished), so a fresh oracle isn't bricked and a swap-back cannot replay an older NAV. Freshness is intentionally NOT required at rotation (a valid oracle may be stale/unpublished at swap time; `max_staleness` gates reads, not rotation). The staleness window updates separately via `update_oracle_params` (price-deviation integrity is the oracle's own concern, not a vault parameter). Each read still validates `oracle_account.key() == vault.nav_oracle` and `oracle_account.owner == vault.oracle_program`.
+
 ---
 
 ## Solana Security Checklist

@@ -1,11 +1,11 @@
 pub mod admin;
 pub mod approve_deposit;
 pub mod approve_redeem;
+pub mod bootstrap_shares_compliance;
 pub mod cancel_deposit;
 pub mod cancel_redeem;
 pub mod claim_deposit;
 pub mod claim_redeem;
-pub mod compliance;
 pub mod draw_down;
 pub mod initialize_pool;
 pub mod investment_window;
@@ -25,6 +25,8 @@ pub use approve_deposit::*;
 #[allow(ambiguous_glob_reexports)]
 pub use approve_redeem::*;
 #[allow(ambiguous_glob_reexports)]
+pub use bootstrap_shares_compliance::*;
+#[allow(ambiguous_glob_reexports)]
 pub use cancel_deposit::*;
 #[allow(ambiguous_glob_reexports)]
 pub use cancel_redeem::*;
@@ -32,8 +34,6 @@ pub use cancel_redeem::*;
 pub use claim_deposit::*;
 #[allow(ambiguous_glob_reexports)]
 pub use claim_redeem::*;
-#[allow(ambiguous_glob_reexports)]
-pub use compliance::*;
 #[allow(ambiguous_glob_reexports)]
 pub use draw_down::*;
 #[allow(ambiguous_glob_reexports)]

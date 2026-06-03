@@ -1,6 +1,6 @@
 import { Command } from "commander";
 import { Program, BN } from "@coral-xyz/anchor";
-import { PublicKey } from "@solana/web3.js";
+import { PublicKey, type AccountMeta } from "@solana/web3.js";
 import { createContext } from "../../middleware";
 import { getGlobalOptions } from "../../index";
 import { CreditVault } from "../../../credit-vault";
@@ -10,6 +10,19 @@ import {
   resolveVaultArg,
   validateAmountInput,
 } from "../../utils";
+
+function parseReadonlyAccounts(input: string | undefined): AccountMeta[] {
+  if (!input) return [];
+  return input
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0)
+    .map((pubkey) => ({
+      pubkey: new PublicKey(pubkey),
+      isSigner: false,
+      isWritable: false,
+    }));
+}
 
 export function registerRequestRedeemCommand(program: Command): void {
   program
@@ -21,6 +34,10 @@ export function registerRequestRedeemCommand(program: Command): void {
     .option("--program-id <pubkey>", "Program ID")
     .option("--asset-mint <pubkey>", "Asset mint")
     .option("--vault-id <number>", "Vault ID", "1")
+    .option(
+      "--remaining-accounts <pubkeys>",
+      "Comma-separated hook extra accounts for the cPOOL redemption transfer CPI (readonly, non-signer)",
+    )
     .action(async (vaultArg, opts) => {
       const globalOpts = getGlobalOptions(program);
       const ctx = await createContext(globalOpts, opts, true, true);
@@ -38,6 +55,7 @@ export function registerRequestRedeemCommand(program: Command): void {
       validateAmountInput(opts.shares, "shares");
       const shares = new BN(opts.shares);
       const attestation = new PublicKey(opts.attestation);
+      const remainingAccounts = parseReadonlyAccounts(opts.remainingAccounts);
 
       try {
         const idl = loadIdl(idlPath);
@@ -50,6 +68,7 @@ export function registerRequestRedeemCommand(program: Command): void {
 
         output.info(`Vault: ${vaultArg}`);
         output.info(`Requesting redeem: ${shares.toString()} shares`);
+        output.info(`Hook extras: ${remainingAccounts.length}`);
 
         if (options.dryRun) {
           output.success("Dry run complete.");
@@ -71,6 +90,7 @@ export function registerRequestRedeemCommand(program: Command): void {
           wallet.publicKey,
           shares,
           attestation,
+          remainingAccounts,
         );
 
         spinner.succeed("Transaction confirmed");

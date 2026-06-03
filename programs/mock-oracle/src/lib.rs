@@ -25,6 +25,7 @@ pub mod mock_oracle {
 
         oracle.price_per_share = price;
         oracle.updated_at = Clock::get()?.unix_timestamp;
+        oracle.sequence = 0;
 
         Ok(())
     }
@@ -103,17 +104,24 @@ pub struct TransferAuthority<'info> {
     pub oracle_data: Account<'info, OracleData>,
 }
 
+/// Leads with the canonical `SvsOraclePrice` header so SVS-11's generic
+/// `read_oracle` parses it at the fixed `[8..33]` on-disk window:
+///   version payload 0..1, price_per_share (price) 1..9, updated_at
+///   (timestamp) 9..17, sequence 17..25. `version` is held at 1 to match
+///   `svs_oracle::SVS_ORACLE_VERSION`. mock-oracle never advances `sequence`
+///   (always 0 — the sentinel that disables the vault's monotonicity check).
 #[account]
 pub struct OracleData {
+    pub version: u8,
     pub price_per_share: u64,
     pub updated_at: i64,
+    pub sequence: u64,
     pub vault: Pubkey,
     pub authority: Pubkey,
-    pub version: u8,
 }
 
 impl OracleData {
-    pub const LEN: usize = 8 + 8 + 32 + 32 + 1;
+    pub const LEN: usize = 1 + 8 + 8 + 8 + 32 + 32;
 }
 
 #[error_code]

@@ -4,9 +4,9 @@ pub mod attestation;
 pub mod constants;
 pub mod error;
 pub mod events;
+pub mod hook_extras;
 pub mod instructions;
 pub mod math;
-pub mod oracle;
 pub mod state;
 
 use instructions::*;
@@ -25,6 +25,22 @@ pub mod svs_11 {
         max_staleness: i64,
     ) -> Result<()> {
         instructions::initialize_pool::handler(ctx, vault_id, minimum_investment, max_staleness)
+    }
+
+    /// Bootstrap the compliance-hook PDAs (`MintConfig` + `ExtraAccountMetaList`)
+    /// for a CreditVault's cPOOL shares mint. CPIs into compliance-hook
+    /// with `vault_seeds` so the vault PDA — which is the cPOOL mint
+    /// authority — satisfies compliance-hook's `Signer == mint_authority`
+    /// constraint. Must be called once per pool, after `initialize_pool`,
+    /// before any cPOOL transfer can succeed (Token-2022 invokes the hook
+    /// on every transfer, and the hook handler reads MintConfig + EAML).
+    /// See `instructions/bootstrap_shares_compliance.rs` for the full
+    /// architectural rationale.
+    pub fn bootstrap_shares_compliance(
+        ctx: Context<BootstrapSharesCompliance>,
+        args: BootstrapSharesComplianceArgs,
+    ) -> Result<()> {
+        instructions::bootstrap_shares_compliance::handler(ctx, args)
     }
 
     /// Open the investment window for deposit and redeem requests.
@@ -63,11 +79,14 @@ pub mod svs_11 {
     }
 
     /// Request a redemption of vault shares.
-    pub fn request_redeem(ctx: Context<RequestRedeem>, shares: u64) -> Result<()> {
+    pub fn request_redeem<'info>(
+        ctx: Context<'_, '_, '_, 'info, RequestRedeem<'info>>,
+        shares: u64,
+    ) -> Result<()> {
         instructions::request_redeem::handler(ctx, shares)
     }
 
-    /// Manager approves a pending redemption request.
+    /// Manager approves a pending redemption request, fully and atomically.
     pub fn approve_redeem(ctx: Context<ApproveRedeem>) -> Result<()> {
         instructions::approve_redeem::handler(ctx)
     }
@@ -78,12 +97,17 @@ pub mod svs_11 {
     }
 
     /// Manager rejects a pending redemption request.
-    pub fn reject_redeem(ctx: Context<RejectRedeem>, reason_code: u8) -> Result<()> {
+    pub fn reject_redeem<'info>(
+        ctx: Context<'_, '_, '_, 'info, RejectRedeem<'info>>,
+        reason_code: u8,
+    ) -> Result<()> {
         instructions::reject_redeem::handler(ctx, reason_code)
     }
 
     /// Investor cancels their pending redemption request.
-    pub fn cancel_redeem(ctx: Context<CancelRedeem>) -> Result<()> {
+    pub fn cancel_redeem<'info>(
+        ctx: Context<'_, '_, '_, 'info, CancelRedeem<'info>>,
+    ) -> Result<()> {
         instructions::cancel_redeem::handler(ctx)
     }
 
@@ -95,16 +119,6 @@ pub mod svs_11 {
     /// Manager draws down capital from the vault.
     pub fn draw_down(ctx: Context<DrawDown>, amount: u64) -> Result<()> {
         instructions::draw_down::handler(ctx, amount)
-    }
-
-    /// Freeze an investor account for compliance.
-    pub fn freeze_account(ctx: Context<FreezeAccount>) -> Result<()> {
-        instructions::compliance::freeze_handler(ctx)
-    }
-
-    /// Unfreeze a previously frozen investor account.
-    pub fn unfreeze_account(ctx: Context<UnfreezeAccount>) -> Result<()> {
-        instructions::compliance::unfreeze_handler(ctx)
     }
 
     /// Pause the vault, halting approvals and capital movements.
@@ -152,64 +166,22 @@ pub mod svs_11 {
         instructions::admin::update_attester_handler(ctx, new_attester, new_attestation_program)
     }
 
-    /// Update the NAV oracle configuration.
-    /// DEPRECATED: Bypasses 24h oracle timelock. Always returns an error.
-    /// Use `request_oracle_change` + `apply_oracle_change` for oracle address changes,
-    /// and `update_oracle_params` for staleness/deviation settings.
-    #[allow(deprecated)]
-    pub fn update_oracle_config(
-        ctx: Context<UpdateOracleConfig>,
-        new_nav_oracle: Pubkey,
-        new_oracle_program: Pubkey,
-        new_max_staleness: i64,
-        new_max_deviation_bps: Option<u16>,
-    ) -> Result<()> {
-        instructions::admin::update_oracle_config_handler(
-            ctx,
-            new_nav_oracle,
-            new_oracle_program,
-            new_max_staleness,
-            new_max_deviation_bps,
-        )
-    }
-
-    /// Update oracle non-address parameters (staleness, deviation) without timelock.
+    /// Update the oracle staleness window (non-address param).
     pub fn update_oracle_params(
         ctx: Context<UpdateOracleParams>,
         new_max_staleness: Option<i64>,
-        new_max_deviation_bps: Option<u16>,
     ) -> Result<()> {
-        instructions::admin::update_oracle_params_handler(
-            ctx,
-            new_max_staleness,
-            new_max_deviation_bps,
-        )
+        instructions::admin::update_oracle_params_handler(ctx, new_max_staleness)
     }
 
-    /// Initialize the vault config PDA for oracle timelock.
-    pub fn initialize_vault_config(ctx: Context<InitializeVaultConfig>) -> Result<()> {
-        instructions::admin::initialize_vault_config_handler(ctx)
-    }
-
-    /// Request an oracle change (starts 24h timelock).
-    pub fn request_oracle_change(
-        ctx: Context<RequestOracleChange>,
+    /// Repoint the vault's NAV oracle (authority-gated). Atomically swaps the
+    /// oracle account and its owner program.
+    pub fn set_oracle(
+        ctx: Context<SetOracle>,
         new_oracle: Pubkey,
+        new_oracle_program: Pubkey,
     ) -> Result<()> {
-        instructions::admin::request_oracle_change_handler(ctx, new_oracle)
-    }
-
-    /// Apply a pending oracle change after timelock expires.
-    pub fn apply_oracle_change(ctx: Context<ApplyOracleChange>) -> Result<()> {
-        instructions::admin::apply_oracle_change_handler(ctx)
-    }
-
-    /// Set or update the compliance officer for freeze/unfreeze operations.
-    pub fn set_compliance_officer(
-        ctx: Context<SetComplianceOfficer>,
-        new_officer: Pubkey,
-    ) -> Result<()> {
-        instructions::admin::set_compliance_officer_handler(ctx, new_officer)
+        instructions::admin::set_oracle_handler(ctx, new_oracle, new_oracle_program)
     }
 
     // =========================================================================

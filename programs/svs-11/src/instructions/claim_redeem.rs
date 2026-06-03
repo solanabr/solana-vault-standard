@@ -5,9 +5,7 @@ use anchor_spl::token_interface::{
 };
 
 use crate::attestation::validate_attestation;
-use crate::constants::{
-    CLAIMABLE_TOKENS_SEED, FROZEN_ACCOUNT_SEED, REDEMPTION_REQUEST_SEED, VAULT_SEED,
-};
+use crate::constants::{CLAIMABLE_TOKENS_SEED, REDEMPTION_REQUEST_SEED, VAULT_SEED};
 use crate::error::VaultError;
 use crate::events::RedemptionClaimed;
 use crate::state::{CreditVault, RedemptionRequest, RequestStatus};
@@ -54,19 +52,12 @@ pub struct ClaimRedeem<'info> {
     /// CHECK: Validated in handler via validate_attestation
     pub attestation: UncheckedAccount<'info>,
 
-    /// CHECK: If data is non-empty, investor is frozen
-    #[account(
-        seeds = [FROZEN_ACCOUNT_SEED, vault.key().as_ref(), investor.key().as_ref()],
-        bump,
-    )]
-    pub frozen_check: UncheckedAccount<'info>,
-
     pub asset_token_program: Interface<'info, TokenInterface>,
     pub system_program: Program<'info, System>,
     pub clock: Sysvar<'info, Clock>,
 }
 
-/// V5-P24: This handler intentionally does NOT check vault.paused. Already-approved
+/// This handler intentionally does NOT check vault.paused. Already-approved
 /// redemptions have committed assets (claimable_tokens funded, shares burned).
 /// Blocking claims during a pause would trap investor funds and violate the approval
 /// guarantee. The pause mechanism is designed to halt NEW operations (requests,
@@ -78,10 +69,6 @@ pub fn handler(ctx: Context<ClaimRedeem>) -> Result<()> {
         &ctx.accounts.investor.key(),
         &ctx.accounts.clock,
     )?;
-    require!(
-        ctx.accounts.frozen_check.data_is_empty(),
-        VaultError::AccountFrozen
-    );
 
     let assets = ctx.accounts.redemption_request.assets_claimable;
 

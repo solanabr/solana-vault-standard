@@ -6,12 +6,16 @@ import { getGlobalOptions } from "../../index";
 import { CreditVault } from "../../../credit-vault";
 import { findIdlPath, loadIdl, resolveVaultArg } from "../../utils";
 
-export function registerUnfreezeAccountCommand(program: Command): void {
+export function registerSetOracleCommand(program: Command): void {
   program
-    .command("unfreeze-account")
-    .description("Unfreeze an investor account (manager only)")
+    .command("set-oracle")
+    .description("Repoint the vault's NAV oracle (authority only, immediate)")
     .argument("<vault>", "Vault address or alias")
-    .requiredOption("--investor <pubkey>", "Investor account to unfreeze")
+    .requiredOption("--new-oracle <pubkey>", "New oracle account")
+    .requiredOption(
+      "--new-oracle-program <pubkey>",
+      "Program that owns the new oracle account",
+    )
     .option("--program-id <pubkey>", "Program ID")
     .option("--asset-mint <pubkey>", "Asset mint")
     .option("--vault-id <number>", "Vault ID", "1")
@@ -29,7 +33,8 @@ export function registerUnfreezeAccountCommand(program: Command): void {
         process.exit(1);
       }
 
-      const investor = new PublicKey(opts.investor);
+      const newOracle = new PublicKey(opts.newOracle);
+      const newOracleProgram = new PublicKey(opts.newOracleProgram);
 
       try {
         const idl = loadIdl(idlPath);
@@ -41,7 +46,8 @@ export function registerUnfreezeAccountCommand(program: Command): void {
         );
 
         output.info(`Vault: ${vaultArg}`);
-        output.info(`Unfreezing account: ${investor.toBase58()}`);
+        output.info(`New oracle: ${newOracle.toBase58()}`);
+        output.info(`New oracle program: ${newOracleProgram.toBase58()}`);
 
         if (options.dryRun) {
           output.success("Dry run complete.");
@@ -59,10 +65,14 @@ export function registerUnfreezeAccountCommand(program: Command): void {
         const spinner = output.spinner("Sending transaction...");
         spinner.start();
 
-        const sig = await vault.unfreezeAccount(wallet.publicKey, investor);
+        const sig = await vault.setOracle(
+          wallet.publicKey,
+          newOracle,
+          newOracleProgram,
+        );
 
         spinner.succeed("Transaction confirmed");
-        output.success(`Account unfrozen: ${investor.toBase58()}`);
+        output.success(`Oracle repointed to ${newOracle.toBase58()}`);
         output.info(`Signature: ${sig}`);
 
         if (globalOpts.output === "json") {
@@ -70,13 +80,14 @@ export function registerUnfreezeAccountCommand(program: Command): void {
             success: true,
             signature: sig,
             vault: vaultArg,
-            operation: "unfreeze-account",
-            investor: investor.toBase58(),
+            operation: "set-oracle",
+            newOracle: newOracle.toBase58(),
+            newOracleProgram: newOracleProgram.toBase58(),
           });
         }
       } catch (error) {
         output.error(
-          `Unfreeze account failed: ${error instanceof Error ? error.message : String(error)}`,
+          `Set oracle failed: ${error instanceof Error ? error.message : String(error)}`,
         );
         process.exit(1);
       }

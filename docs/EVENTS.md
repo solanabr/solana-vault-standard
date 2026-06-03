@@ -283,6 +283,71 @@ pub struct RewardsClaimed {
 
 ---
 
+## nav-oracle
+
+### NavUpdated
+
+Emitted by [nav-oracle](nav-oracle.md) on every successful `update`. Captures the full NAV snapshot persisted into the per-pool `NavAccount` PDA after Ed25519 signature verification, sequence monotonicity, and self-consistency checks pass.
+
+```rust
+#[event]
+pub struct NavUpdated {
+    pub pool: Pubkey,                       // Pool the NAV belongs to
+    pub nav_net: u64,                       // NAV after fees/loss provision
+    pub nav_gross: u64,                     // Gross NAV before deductions
+    pub ter_bps: u16,                       // Total expense ratio (bps)
+    pub loss_provision_bps: u16,            // Loss provision (bps)
+    pub nav_type: u8,                       // NAV variant tag
+    pub timestamp: i64,                     // Publisher-supplied timestamp
+    pub sequence: u64,                      // Monotonic sequence
+    pub publisher: Pubkey,                  // Publisher key that signed
+    pub loan_tape_merkle_root: [u8; 32],    // Loan-tape commitment
+}
+```
+
+**Emitted by**: `update`
+
+**Use cases**:
+- Drive front-end NAV history charts
+- Reconcile loan-tape commitments off-chain
+- Alert on stale or skipped sequences
+
+---
+
+## compliance-hook
+
+### SanctionsListUpdated
+
+Emitted by [compliance-hook](compliance-hook.md) after every successful `update_sanctions_list`. The list is global across every mint that binds the hook. `version` increments by one per update — consumers should treat versions as a monotonic checkpoint for cache invalidation.
+
+```rust
+#[event]
+pub struct SanctionsListUpdated {
+    pub version: u64,           // New list version (monotonic)
+    pub added: Vec<Pubkey>,     // Addresses appended (deduplicated)
+    pub removed: Vec<Pubkey>,   // Addresses removed
+    pub authority: Pubkey,      // Update authority that signed
+    pub updated_at: i64,        // Wall-clock timestamp at update
+}
+```
+
+**Emitted by**: `update_sanctions_list`
+
+**Use cases**:
+- Mirror the sanctions list off-chain for pre-flight checks
+- Audit trail for compliance ops
+- Trigger re-screening of existing holders
+
+The hook's `execute` instruction (transfer-time enforcement) does not emit events — failure is surfaced via `ComplianceHookError` codes. Initialization instructions (`initialize_sanctions_list`, `initialize_mint_config`, `initialize_extra_account_meta_list`) also do not emit events.
+
+---
+
+## derwa-wrapper
+
+[derwa-wrapper](derwa-wrapper.md) emits no events. Wrap and unwrap activity is observed through the standard SPL Token-2022 mint/burn and transfer log records on the cPOOL and dePOOL mints, plus the wrapper-PDA escrow ATA. The on-chain invariant `WrapperConfig.locked_supply == dePOOL.supply` can be reconstructed from those primitives without a dedicated event.
+
+---
+
 ## Parsing Events
 
 ### TypeScript with Anchor

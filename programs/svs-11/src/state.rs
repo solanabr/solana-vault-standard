@@ -1,9 +1,6 @@
 use anchor_lang::prelude::*;
 
-use crate::constants::{
-    FROZEN_ACCOUNT_SEED, INVESTMENT_REQUEST_SEED, REDEMPTION_REQUEST_SEED, VAULT_CONFIG_SEED,
-    VAULT_SEED,
-};
+use crate::constants::{INVESTMENT_REQUEST_SEED, REDEMPTION_REQUEST_SEED, VAULT_SEED};
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, Default)]
 pub enum AccessMode {
@@ -28,11 +25,11 @@ pub struct CreditVault {
     pub attestation_program: Pubkey,
     pub vault_id: u64,
     pub total_assets: u64,
-    /// V4-P20: Cached share count. Updated atomically with mint/burn CPIs in
-    /// claim_deposit (+) and approve_redeem (-). Used for NAV deviation checks
-    /// in approve_deposit/approve_redeem. Callers with access to shares_mint
-    /// should prefer shares_mint.supply as the canonical source. A reconciliation
-    /// check is enforced in approve_redeem (which has shares_mint in its context).
+    /// Cached share count. Updated atomically with mint/burn CPIs in
+    /// claim_deposit (+) and approve_redeem (-). Drives share/asset conversion
+    /// and the reconciliation check in approve_redeem (which has shares_mint in
+    /// its context); callers with access to shares_mint should prefer
+    /// shares_mint.supply as the canonical source.
     pub total_shares: u64,
     pub total_pending_deposits: u64,
     pub minimum_investment: u64,
@@ -44,7 +41,6 @@ pub struct CreditVault {
     pub redemption_escrow_bump: u8,
     pub paused: bool,
     pub total_approved_deposits: u64,
-    pub max_deviation_bps: u16,
     /// Pending authority for two-step transfer (default = Pubkey::default() means none)
     pub pending_authority: Pubkey,
     /// Number of pending (not yet approved/rejected/cancelled) redemption requests
@@ -55,6 +51,26 @@ pub struct CreditVault {
     /// (e.g. accredited investor) when the attester issues multiple types.
     pub required_attestation_type: u8,
     pub _reserved: [u8; 23],
+
+    // =========================================================================
+    // Pluggable oracle interface
+    // =========================================================================
+    //
+    // SVS-11 reads any SVS-compliant oracle through the generic 25-byte
+    // `SvsOraclePrice` header (see `modules/svs-oracle`). The configured oracle
+    // account address (`nav_oracle`) and its owner program (`oracle_program`)
+    // identify which oracle the vault trusts; the vault enforces only generic
+    // invariants (positive price, staleness, sequence monotonicity). Per-oracle
+    // integrity (e.g. consecutive-price deviation) lives in the oracle program.
+    /// Last oracle `sequence` the vault has consumed. Updated atomically by
+    /// approve_deposit + approve_redeem after a successful oracle read.
+    /// 0 on initialize_pool means "no sequence consumed yet". A sentinel
+    /// `sequence == 0` from the oracle skips the monotonicity check.
+    pub last_seen_nav_sequence: u64,
+
+    /// Padding so the trailing block stays a clean multiple of 8. Reclaims the
+    /// bytes freed by removing the legacy oracle-selector fields.
+    pub _padding_oracle: [u8; 24],
 }
 
 impl CreditVault {
@@ -80,13 +96,71 @@ impl CreditVault {
         1 +   // redemption_escrow_bump
         1 +   // paused
         8 +   // total_approved_deposits
-        2 +   // max_deviation_bps
         32 +  // pending_authority
         8 +   // total_pending_redeems
         1 +   // required_attestation_type
-        23; // _reserved
+        23 +  // _reserved
+        // ---- pluggable oracle interface (+32 bytes) ----
+        8 +   // last_seen_nav_sequence
+        24; // _padding_oracle
+
+    /// Audit-friendly alias matching the spec language. Identical to `LEN`.
+    pub const SPACE: usize = Self::LEN;
 
     pub const SEED_PREFIX: &'static [u8] = VAULT_SEED;
+}
+
+#[cfg(test)]
+mod credit_vault_layout_tests {
+    use super::*;
+    use anchor_lang::AnchorSerialize;
+
+    /// `nav-oracle::initialize` reads `CreditVault.authority` at on-disk
+    /// bytes 8..40 (= post-discriminator payload bytes 0..32) to gate
+    /// per-pool init against the squat-race attack. If this layout drifts
+    /// — e.g. someone reorders the first field of `CreditVault` — the
+    /// nav-oracle gate becomes a silent no-op (the byte slice still
+    /// parses as 32 bytes, just into the wrong field). This test guards
+    /// that invariant. Same shape as the layout test in `attestation.rs`.
+    #[test]
+    fn credit_vault_authority_offset_stable_for_nav_oracle_gate() {
+        let authority = Pubkey::new_unique();
+        let cv = CreditVault {
+            authority,
+            manager: Pubkey::new_unique(),
+            asset_mint: Pubkey::new_unique(),
+            shares_mint: Pubkey::new_unique(),
+            deposit_vault: Pubkey::new_unique(),
+            redemption_escrow: Pubkey::new_unique(),
+            nav_oracle: Pubkey::new_unique(),
+            oracle_program: Pubkey::new_unique(),
+            max_staleness: 300,
+            attester: Pubkey::new_unique(),
+            attestation_program: Pubkey::new_unique(),
+            vault_id: 1,
+            total_assets: 0,
+            total_shares: 0,
+            total_pending_deposits: 0,
+            minimum_investment: 0,
+            investment_window_open: false,
+            bump: 255,
+            redemption_escrow_bump: 254,
+            paused: false,
+            total_approved_deposits: 0,
+            pending_authority: Pubkey::default(),
+            total_pending_redeems: 0,
+            required_attestation_type: 0,
+            _reserved: [0u8; 23],
+            last_seen_nav_sequence: 0,
+            _padding_oracle: [0u8; 24],
+        };
+        let bytes = cv.try_to_vec().expect("serialize");
+        assert_eq!(
+            &bytes[0..32],
+            authority.as_ref(),
+            "CreditVault.authority must remain at payload offset 0 (on-disk byte 8) — nav-oracle::initialize reads here"
+        );
+    }
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq)]
@@ -145,48 +219,6 @@ impl RedemptionRequest {
         1; // bump
 
     pub const SEED_PREFIX: &'static [u8] = REDEMPTION_REQUEST_SEED;
-}
-
-#[account]
-pub struct FrozenAccount {
-    pub investor: Pubkey,
-    pub vault: Pubkey,
-    pub frozen_by: Pubkey,
-    pub frozen_at: i64,
-    pub bump: u8,
-}
-
-impl FrozenAccount {
-    pub const LEN: usize = 8 +  // discriminator
-        32 +  // investor
-        32 +  // vault
-        32 +  // frozen_by
-        8 +   // frozen_at
-        1; // bump
-
-    pub const SEED_PREFIX: &'static [u8] = FROZEN_ACCOUNT_SEED;
-}
-
-#[account]
-pub struct VaultConfig {
-    pub vault: Pubkey,              // 32
-    pub pending_oracle: Pubkey,     // 32 - proposed new oracle
-    pub oracle_change_at: i64,      // 8  - when the change can be applied
-    pub compliance_officer: Pubkey, // 32 - separate compliance officer for freeze/unfreeze
-    pub bump: u8,                   // 1
-    pub _reserved: [u8; 31],        // future use (63 - 32 = 31)
-}
-
-impl VaultConfig {
-    pub const LEN: usize = 8 + // discriminator
-        32 +  // vault
-        32 +  // pending_oracle
-        8 +   // oracle_change_at
-        32 +  // compliance_officer
-        1 +   // bump
-        31; // _reserved
-
-    pub const SEED_PREFIX: &'static [u8] = VAULT_CONFIG_SEED;
 }
 
 // =============================================================================

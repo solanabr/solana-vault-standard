@@ -1,35 +1,50 @@
-//! SVS Oracle - Price oracle module for Solana Vault Standard programs.
+//! SVS Oracle - the pluggable price-oracle interface for Solana Vault Standard.
 //!
-//! This crate provides oracle price validation for SVS vaults:
-//! - Staleness checks: Ensure price is fresh
-//! - Price validation: Non-zero, within deviation bounds
-//! - Conversion helpers: Assets <-> shares using oracle price
+//! SVS vaults do not bind to a specific oracle implementation. Instead, any
+//! SVS-compliant oracle writes a canonical 24-byte [`SvsOraclePrice`] header
+//! (`price` / `timestamp` / `sequence`) at the start of its account payload
+//! (immediately after the 8-byte Anchor discriminator); implementation-specific
+//! data lives after byte 24 and the consuming vault never reads it. The vault
+//! reads the header through one generic [`read_oracle`] function and enforces
+//! only the universal invariants — positive price, staleness bound, and
+//! sequence monotonicity (replay protection). Per-oracle integrity (e.g.
+//! signature verification, consecutive-price deviation) is the oracle
+//! program's responsibility.
 //!
-//! Used primarily by async vaults (SVS-10/11) where deposits/withdrawals
-//! are processed asynchronously using oracle prices.
+//! This crate also provides the supporting helpers: freshness/price/deviation
+//! validators and assets <-> shares conversion. Used by async vaults
+//! (SVS-10/11) where deposits/withdrawals settle against an oracle price.
+//! `nav-oracle` is the credit-markets reference implementation; `mock-oracle`
+//! is a minimal example; third parties plug in their own.
 //!
 //! # Example
 //!
 //! ```
-//! use svs_oracle::{validate_oracle, assets_to_shares, PRICE_SCALE};
+//! use svs_oracle::{read_oracle, SvsOraclePrice, PRICE_SCALE, SVS_ORACLE_VERSION};
 //!
-//! // Validate oracle is fresh and valid
-//! let price = PRICE_SCALE;  // 1.0
-//! let updated_at = 1000;
-//! let current = 1500;
-//! let max_staleness = 3600;
+//! // An oracle account: 8-byte discriminator + the canonical header.
+//! let mut account = vec![0u8; 8];
+//! account.extend_from_slice(
+//!     &SvsOraclePrice {
+//!         version: SVS_ORACLE_VERSION,
+//!         price: PRICE_SCALE,
+//!         timestamp: 1500,
+//!         sequence: 7,
+//!     }
+//!     .to_header_bytes(),
+//! );
 //!
-//! assert!(validate_oracle(price, updated_at, current, max_staleness).is_ok());
-//!
-//! // Convert using oracle price
-//! let shares = assets_to_shares(1000, price).unwrap();
-//! assert_eq!(shares, 1000);
+//! // Generic read: validates price/staleness/monotonicity, returns the header.
+//! let header = read_oracle(&account, 1500, 3600, 6).unwrap();
+//! assert_eq!(header.price, PRICE_SCALE);
 //! ```
 
 mod constants;
 mod error;
 mod functions;
+mod price;
 
 pub use constants::*;
 pub use error::OracleError;
 pub use functions::*;
+pub use price::*;
