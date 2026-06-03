@@ -69,9 +69,7 @@ export function registerTranchedAdminCommand(parent: Command): void {
 
   admin
     .command("transfer-authority")
-    .description(
-      "[legacy single-step] Transfer vault authority. Prefer request-transfer-authority + accept-authority.",
-    )
+    .description("Transfer vault authority")
     .requiredOption("--asset-mint <pubkey>", "Asset mint address")
     .option("--vault-id <number>", "Vault ID", "1")
     .requiredOption("--new-authority <pubkey>", "New authority address")
@@ -100,102 +98,6 @@ export function registerTranchedAdminCommand(parent: Command): void {
           new PublicKey(opts.newAuthority),
         );
         output.success(`Authority transferred. Signature: ${sig}`);
-      } catch (error) {
-        output.error(
-          `Failed: ${error instanceof Error ? error.message : String(error)}`,
-        );
-        process.exit(1);
-      }
-    });
-
-  admin
-    .command("request-transfer-authority")
-    .description(
-      "Step 1/2: nominate a new authority as pending (current authority only)",
-    )
-    .requiredOption("--asset-mint <pubkey>", "Asset mint address")
-    .option("--vault-id <number>", "Vault ID", "1")
-    .requiredOption("--new-authority <pubkey>", "Address to nominate")
-    .action(async (opts) => {
-      const globalOpts = getGlobalOptions(parent.parent!);
-      const ctx = await createContext(globalOpts, opts, true, true);
-      const { output, provider, wallet } = ctx;
-
-      try {
-        const idl = loadIdl(findIdlPath("svs-12")!);
-        const prog = new Program(idl as any, provider);
-        const vault = await TranchedVault.load(
-          prog,
-          new PublicKey(opts.assetMint),
-          new BN(opts.vaultId),
-        );
-        const sig = await vault.requestTransferAuthority(
-          wallet.publicKey,
-          new PublicKey(opts.newAuthority),
-        );
-        output.success(
-          `Pending authority set. The nominee must run accept-authority. Signature: ${sig}`,
-        );
-      } catch (error) {
-        output.error(
-          `Failed: ${error instanceof Error ? error.message : String(error)}`,
-        );
-        process.exit(1);
-      }
-    });
-
-  admin
-    .command("accept-authority")
-    .description(
-      "Step 2/2: accept a pending authority transfer (nominee signs)",
-    )
-    .requiredOption("--asset-mint <pubkey>", "Asset mint address")
-    .option("--vault-id <number>", "Vault ID", "1")
-    .action(async (opts) => {
-      const globalOpts = getGlobalOptions(parent.parent!);
-      const ctx = await createContext(globalOpts, opts, true, true);
-      const { output, provider, wallet } = ctx;
-
-      try {
-        const idl = loadIdl(findIdlPath("svs-12")!);
-        const prog = new Program(idl as any, provider);
-        const vault = await TranchedVault.load(
-          prog,
-          new PublicKey(opts.assetMint),
-          new BN(opts.vaultId),
-        );
-        const sig = await vault.acceptAuthority(wallet.publicKey);
-        output.success(
-          `Authority is now ${wallet.publicKey.toBase58()}. Signature: ${sig}`,
-        );
-      } catch (error) {
-        output.error(
-          `Failed: ${error instanceof Error ? error.message : String(error)}`,
-        );
-        process.exit(1);
-      }
-    });
-
-  admin
-    .command("cancel-transfer-authority")
-    .description("Clear a pending authority transfer (current authority only)")
-    .requiredOption("--asset-mint <pubkey>", "Asset mint address")
-    .option("--vault-id <number>", "Vault ID", "1")
-    .action(async (opts) => {
-      const globalOpts = getGlobalOptions(parent.parent!);
-      const ctx = await createContext(globalOpts, opts, true, true);
-      const { output, provider, wallet } = ctx;
-
-      try {
-        const idl = loadIdl(findIdlPath("svs-12")!);
-        const prog = new Program(idl as any, provider);
-        const vault = await TranchedVault.load(
-          prog,
-          new PublicKey(opts.assetMint),
-          new BN(opts.vaultId),
-        );
-        const sig = await vault.cancelTransferAuthority(wallet.publicKey);
-        output.success(`Pending authority transfer cleared. Signature: ${sig}`);
       } catch (error) {
         output.error(
           `Failed: ${error instanceof Error ? error.message : String(error)}`,

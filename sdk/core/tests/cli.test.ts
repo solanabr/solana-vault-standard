@@ -83,6 +83,7 @@ describe("CLI Module", () => {
       expect(commands).to.include("cap");
       expect(commands).to.include("access");
       expect(commands).to.include("emergency");
+      expect(commands).to.include("timelock");
       expect(commands).to.include("strategy");
       expect(commands).to.include("portfolio");
     });
@@ -797,6 +798,22 @@ describe("CLI Module", () => {
       expect(subcommands).to.include("configure");
       expect(subcommands).to.include("preview");
       expect(subcommands).to.include("withdraw");
+      expect(subcommands).to.include("clear");
+    });
+
+    it("timelock command has subcommands", () => {
+      const program = createCli();
+      const timelockCmd = program.commands.find((c) => c.name() === "timelock");
+
+      expect(timelockCmd).to.exist;
+
+      const subcommands = timelockCmd!.commands.map((c) => c.name());
+      expect(subcommands).to.include("show");
+      expect(subcommands).to.include("configure");
+      expect(subcommands).to.include("propose");
+      expect(subcommands).to.include("execute");
+      expect(subcommands).to.include("cancel");
+      expect(subcommands).to.include("list");
       expect(subcommands).to.include("clear");
     });
 

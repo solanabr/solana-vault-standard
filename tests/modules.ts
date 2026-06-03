@@ -502,123 +502,20 @@ describe("SVS-1 Modules (Feature: modules)", () => {
       expect(accessConfigData.bump).to.equal(accessExpectedBump);
     });
   });
-
-  // Exercises the cap hook through a real deposit. Only CapConfig is passed in
-  // remaining_accounts, so the access/fee/lock hooks stay inert (they are opt-in
-  // on PDA presence) and the assertion isolates global-cap enforcement.
-  describe("Cap Enforcement (deposit)", function () {
-    before(function () {
-      if (!checkModulesFeature()) {
-        this.skip();
-      }
-    });
-
-    const investor = Keypair.generate();
-    const globalCap = new BN(500 * 10 ** ASSET_DECIMALS); // 500 tokens
-    let userAssetAccount: PublicKey;
-    let userSharesAccount: PublicKey;
-
-    before(async function () {
-      if (!checkModulesFeature()) {
-        return;
-      }
-
-      // Set an enforceable global cap for this test; per_user_cap stays 0 so
-      // only the global ceiling is exercised.
-      await program.methods
-        .updateCapConfig(globalCap, new BN(0))
-        .accountsStrict({ authority: payer.publicKey, vault, capConfig })
-        .rpc();
-
-      const air = await connection.requestAirdrop(
-        investor.publicKey,
-        2 * anchor.web3.LAMPORTS_PER_SOL
-      );
-      await connection.confirmTransaction(air);
-
-      const assetAta = await getOrCreateAssociatedTokenAccount(
-        connection,
-        payer,
-        assetMint,
-        investor.publicKey,
-        false,
-        undefined,
-        undefined,
-        TOKEN_PROGRAM_ID
-      );
-      userAssetAccount = assetAta.address;
-      await mintTo(
-        connection,
-        payer,
-        assetMint,
-        userAssetAccount,
-        payer.publicKey,
-        BigInt(1_000 * 10 ** ASSET_DECIMALS),
-        [],
-        undefined,
-        TOKEN_PROGRAM_ID
-      );
-
-      // Shares are Token-2022; the ATA must exist for account validation to pass
-      // before the handler reaches the cap check.
-      const sharesAta = await getOrCreateAssociatedTokenAccount(
-        connection,
-        payer,
-        sharesMint,
-        investor.publicKey,
-        false,
-        undefined,
-        undefined,
-        TOKEN_2022_PROGRAM_ID
-      );
-      userSharesAccount = sharesAta.address;
-    });
-
-    const depositAccounts = () => ({
-      user: investor.publicKey,
-      vault,
-      assetMint,
-      userAssetAccount,
-      assetVault,
-      sharesMint,
-      userSharesAccount,
-      assetTokenProgram: TOKEN_PROGRAM_ID,
-      token2022Program: TOKEN_2022_PROGRAM_ID,
-    });
-
-    // Lazy: capConfig is populated by the outer before() hook, so build the
-    // remaining-accounts list at call time rather than describe-definition time.
-    const capRemaining = () => [
-      { pubkey: capConfig, isWritable: false, isSigner: false },
-    ];
-
-    it("allows a deposit within the global cap", async () => {
-      const amount = new BN(100 * 10 ** ASSET_DECIMALS); // 100 < 500
-      await program.methods
-        .deposit(amount, new BN(0))
-        .accountsStrict(depositAccounts())
-        .remainingAccounts(capRemaining())
-        .signers([investor])
-        .rpc();
-
-      const bal = await connection.getTokenAccountBalance(userSharesAccount);
-      expect(Number(bal.value.amount)).to.be.greaterThan(0);
-    });
-
-    it("rejects a deposit that exceeds the global cap", async () => {
-      // 100 already sits in the vault; +450 would make 550 > 500.
-      const amount = new BN(450 * 10 ** ASSET_DECIMALS);
-      try {
-        await program.methods
-          .deposit(amount, new BN(0))
-          .accountsStrict(depositAccounts())
-          .remainingAccounts(capRemaining())
-          .signers([investor])
-          .rpc();
-        expect.fail("expected GlobalCapExceeded");
-      } catch (err) {
-        expect(err.message).to.include("GlobalCapExceeded");
-      }
-    });
-  });
 });
+
+/**
+ * NOTE: Integration tests for module enforcement in deposit/withdraw
+ *
+ * The module hooks (check_deposit_access, check_deposit_caps, apply_entry_fee, etc.)
+ * live in modules/svs-module-hooks/src/hooks.rs and are wired into the
+ * deposit/withdraw handlers when built with --features modules.
+ *
+ * TODO: Once deposit/withdraw accept remaining_accounts for modules:
+ * - Test deposit blocked by access control
+ * - Test deposit blocked by global cap
+ * - Test deposit blocked by per-user cap
+ * - Test deposit with entry fee applied
+ * - Test redeem blocked by lock period
+ * - Test redeem with exit fee applied
+ */

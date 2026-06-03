@@ -13,7 +13,7 @@ TypeScript SDK and CLI for the Solana Vault Standard (SVS). Build yield-bearing 
 - **Vault-Favoring Rounding** - All operations round to protect vault solvency
 - **Multi-Vault Support** - Multiple vaults per asset via `vault_id`
 - **CLI Tool** - Full-featured command-line interface for vault management
-- **Modular Extensions** - Fees, caps, access control, strategies
+- **Modular Extensions** - Fees, caps, access control, timelocks, strategies
 
 ## Installation
 
@@ -93,6 +93,7 @@ export * from "./cap";            // Global and per-user deposit caps
 export * from "./emergency";      // Emergency withdrawal with penalty
 export * from "./access-control"; // Whitelist/blacklist + merkle proofs
 export * from "./multi-asset";    // Multi-vault portfolio allocation
+export * from "./timelock";       // Governance proposal lifecycle
 export * from "./strategy";       // DeFi strategy deployment
 ```
 
@@ -131,6 +132,7 @@ export * from "./strategy";       // DeFi strategy deployment
 - `cap show|configure|check` - Deposit caps
 - `access show|set-mode|add|remove` - Access control
 - `emergency show|configure|withdraw` - Emergency withdrawal
+- `timelock show|propose|execute|cancel` - Timelocked governance
 - `strategy show|add|deploy|recall` - DeFi strategies
 - `portfolio show|deposit|redeem|rebalance` - Multi-vault portfolios
 - `ct configure|apply-pending|status` - Confidential transfers (SVS-3/4)

@@ -66,6 +66,7 @@ export * from "./cap";
 export * from "./emergency";
 export * from "./access-control";
 export * from "./multi-asset";
+export * from "./timelock";
 export * from "./strategy";
 
 export * from "./async-vault";

@@ -26,19 +26,15 @@ institutional-credit programs.
   binding) + `deriveAttestationAddress`. Byte-for-byte parity with the on-chain
   parser, so consumers can validate attestations from any SAS-compatible issuer
   without that issuer's IDL.
-- **Two-step authority rotation** on `CreditVault` and `TranchedVault`:
+- **Two-step authority rotation** on `CreditVault`:
   `requestTransferAuthority` / `acceptAuthority` / `cancelTransferAuthority`,
-  with CLI commands for both. The single-step `transferAuthority` is now
+  with matching CLI commands. The single-step `transferAuthority` is now
   `@deprecated` in favor of the two-step flow.
 - **`DeRwaWrapper` multi-pool fix.** `WrapParams` / `UnwrapParams` gain an
   optional `wrapperConfig` PDA; `wrap`/`unwrap` prefer it and fall back to
   single-config discovery. Removed the dead positional `user` arg and the
   misleading "pass an explicit wrapperConfig via params" error that pointed at
   a field that did not exist.
-- **Removed the SDK timelock module + CLI subtree** (`timelock.ts`,
-  `cli/commands/timelock`). It persisted "proposals" to local config and marked
-  them executed without ever touching the chain; the on-chain oracle-change
-  timelock it shadowed no longer exists.
 
 ### Architectural refactor — audit-driven
 

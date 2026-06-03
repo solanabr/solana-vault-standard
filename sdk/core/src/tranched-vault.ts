@@ -448,53 +448,12 @@ export class TranchedVault {
       .rpc();
   }
 
-  /**
-   * @deprecated Single-step transfer hands the root of trust to `newAuthority`
-   * in one transaction with no acceptance step. Prefer the two-step
-   * {@link requestTransferAuthority} + {@link acceptAuthority} pattern. The
-   * on-chain single-step path also refuses to run while a two-step transfer
-   * is pending.
-   */
   async transferAuthority(
     authority: PublicKey,
     newAuthority: PublicKey,
   ): Promise<string> {
     return this.program.methods
       .transferAuthority(newAuthority)
-      .accountsStrict({ authority, vault: this.vault })
-      .rpc();
-  }
-
-  /**
-   * Step 1 of the safe authority rotation: the current `authority` nominates
-   * `newAuthority` as pending. Completes only when `newAuthority` calls
-   * {@link acceptAuthority}; {@link cancelTransferAuthority} clears it.
-   */
-  async requestTransferAuthority(
-    authority: PublicKey,
-    newAuthority: PublicKey,
-  ): Promise<string> {
-    return this.program.methods
-      .requestTransferAuthority(newAuthority)
-      .accountsStrict({ authority, vault: this.vault })
-      .rpc();
-  }
-
-  /**
-   * Step 2 of the safe authority rotation: the pending `newAuthority` signs to
-   * accept, proving it controls the key before the root of trust moves.
-   */
-  async acceptAuthority(newAuthority: PublicKey): Promise<string> {
-    return this.program.methods
-      .acceptAuthority()
-      .accountsStrict({ newAuthority, vault: this.vault })
-      .rpc();
-  }
-
-  /** Clears a pending two-step authority transfer (current authority only). */
-  async cancelTransferAuthority(authority: PublicKey): Promise<string> {
-    return this.program.methods
-      .cancelTransferAuthority()
       .accountsStrict({ authority, vault: this.vault })
       .rpc();
   }

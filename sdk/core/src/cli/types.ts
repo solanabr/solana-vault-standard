@@ -264,6 +264,8 @@ export interface CliConfig {
   access?: Record<string, unknown>;
   /** Emergency withdrawal configuration per vault */
   emergency?: Record<string, unknown>;
+  /** Timelock configuration per vault */
+  timelock?: Record<string, unknown>;
   /** Strategy configuration per vault */
   strategies?: Record<string, unknown>;
   /** Multi-vault portfolio configuration */
